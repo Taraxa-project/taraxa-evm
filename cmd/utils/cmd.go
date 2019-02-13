@@ -17,6 +17,7 @@
 // Package utils contains internal helper functions for go-ethereum commands.
 package utils
 
+// TODO remove redundant tasks
 import (
 	"compress/gzip"
 	"fmt"

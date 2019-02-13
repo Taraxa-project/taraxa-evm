@@ -11,6 +11,9 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+evm:
+	build/env.sh go run build/ci.go install ./cmd/evm
+
 geth:
 	build/env.sh go run build/ci.go install ./cmd/geth
 	@echo "Done building."
