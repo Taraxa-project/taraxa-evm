@@ -17,15 +17,10 @@
 package rpc
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -34,17 +29,9 @@ const (
 	serviceMethodSeparator   = "_"
 	subscribeMethodSuffix    = "_subscribe"
 	unsubscribeMethodSuffix  = "_unsubscribe"
-	notificationMethodSuffix = "_subscription"
-
-	defaultWriteTimeout = 10 * time.Second // used if context has no deadline
 )
 
 var null = json.RawMessage("null")
-
-type subscriptionResult struct {
-	ID     string          `json:"subscription"`
-	Result json.RawMessage `json:"result,omitempty"`
-}
 
 // A value of this type can a JSON-RPC request, notification, successful response or
 // error response. Which one it is depends on the fields.
@@ -146,185 +133,4 @@ type Conn interface {
 // description is used in log messages.
 type ConnRemoteAddr interface {
 	RemoteAddr() string
-}
-
-// connWithRemoteAddr overrides the remote address of a connection.
-type connWithRemoteAddr struct {
-	Conn
-	addr string
-}
-
-func (c connWithRemoteAddr) RemoteAddr() string { return c.addr }
-
-// jsonCodec reads and writes JSON-RPC messages to the underlying connection. It also has
-// support for parsing arguments and serializing (result) objects.
-type jsonCodec struct {
-	remoteAddr string
-	closer     sync.Once                 // close closed channel once
-	closed     chan interface{}          // closed on Close
-	decode     func(v interface{}) error // decoder to allow multiple transports
-	encMu      sync.Mutex                // guards the encoder
-	encode     func(v interface{}) error // encoder to allow multiple transports
-	conn       Conn
-}
-
-// NewCodec creates a new RPC server codec with support for JSON-RPC 2.0 based
-// on explicitly given encoding and decoding methods.
-func NewCodec(conn Conn, encode, decode func(v interface{}) error) ServerCodec {
-	codec := &jsonCodec{
-		closed: make(chan interface{}),
-		encode: encode,
-		decode: decode,
-		conn:   conn,
-	}
-	if ra, ok := conn.(ConnRemoteAddr); ok {
-		codec.remoteAddr = ra.RemoteAddr()
-	}
-	return codec
-}
-
-// NewJSONCodec creates a new RPC server codec with support for JSON-RPC 2.0.
-func NewJSONCodec(conn Conn) ServerCodec {
-	enc := json.NewEncoder(conn)
-	dec := json.NewDecoder(conn)
-	dec.UseNumber()
-	return NewCodec(conn, enc.Encode, dec.Decode)
-}
-
-func (c *jsonCodec) RemoteAddr() string {
-	return c.remoteAddr
-}
-
-func (c *jsonCodec) Read() (msg []*jsonrpcMessage, batch bool, err error) {
-	// Decode the next JSON object in the input stream.
-	// This verifies basic syntax, etc.
-	var rawmsg json.RawMessage
-	if err := c.decode(&rawmsg); err != nil {
-		return nil, false, err
-	}
-	msg, batch = parseMessage(rawmsg)
-	return msg, batch, nil
-}
-
-// Write sends a message to client.
-func (c *jsonCodec) Write(ctx context.Context, v interface{}) error {
-	c.encMu.Lock()
-	defer c.encMu.Unlock()
-
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(defaultWriteTimeout)
-	}
-	c.conn.SetWriteDeadline(deadline)
-	return c.encode(v)
-}
-
-// Close the underlying connection
-func (c *jsonCodec) Close() {
-	c.closer.Do(func() {
-		close(c.closed)
-		c.conn.Close()
-	})
-}
-
-// Closed returns a channel which will be closed when Close is called
-func (c *jsonCodec) Closed() <-chan interface{} {
-	return c.closed
-}
-
-// parseMessage parses raw bytes as a (batch of) JSON-RPC message(s). There are no error
-// checks in this function because the raw message has already been syntax-checked when it
-// is called. Any non-JSON-RPC messages in the input return the zero value of
-// jsonrpcMessage.
-func parseMessage(raw json.RawMessage) ([]*jsonrpcMessage, bool) {
-	if !isBatch(raw) {
-		msgs := []*jsonrpcMessage{{}}
-		json.Unmarshal(raw, &msgs[0])
-		return msgs, false
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.Token() // skip '['
-	var msgs []*jsonrpcMessage
-	for dec.More() {
-		msgs = append(msgs, new(jsonrpcMessage))
-		dec.Decode(&msgs[len(msgs)-1])
-	}
-	return msgs, true
-}
-
-// isBatch returns true when the first non-whitespace characters is '['
-func isBatch(raw json.RawMessage) bool {
-	for _, c := range raw {
-		// skip insignificant whitespace (http://www.ietf.org/rfc/rfc4627.txt)
-		if c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d {
-			continue
-		}
-		return c == '['
-	}
-	return false
-}
-
-// parsePositionalArguments tries to parse the given args to an array of values with the
-// given types. It returns the parsed values or an error when the args could not be
-// parsed. Missing optional arguments are returned as reflect.Zero values.
-func parsePositionalArguments(rawArgs json.RawMessage, types []reflect.Type) ([]reflect.Value, error) {
-	dec := json.NewDecoder(bytes.NewReader(rawArgs))
-	var args []reflect.Value
-	tok, err := dec.Token()
-	switch {
-	case err == io.EOF || tok == nil && err == nil:
-		// "params" is optional and may be empty. Also allow "params":null even though it's
-		// not in the spec because our own client used to send it.
-	case err != nil:
-		return nil, err
-	case tok == json.Delim('['):
-		// Read argument array.
-		if args, err = parseArgumentArray(dec, types); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.New("non-array args")
-	}
-	// Set any missing args to nil.
-	for i := len(args); i < len(types); i++ {
-		if types[i].Kind() != reflect.Ptr {
-			return nil, fmt.Errorf("missing value for required argument %d", i)
-		}
-		args = append(args, reflect.Zero(types[i]))
-	}
-	return args, nil
-}
-
-func parseArgumentArray(dec *json.Decoder, types []reflect.Type) ([]reflect.Value, error) {
-	args := make([]reflect.Value, 0, len(types))
-	for i := 0; dec.More(); i++ {
-		if i >= len(types) {
-			return args, fmt.Errorf("too many arguments, want at most %d", len(types))
-		}
-		argval := reflect.New(types[i])
-		if err := dec.Decode(argval.Interface()); err != nil {
-			return args, fmt.Errorf("invalid argument %d: %v", i, err)
-		}
-		if argval.IsNil() && types[i].Kind() != reflect.Ptr {
-			return args, fmt.Errorf("missing value for required argument %d", i)
-		}
-		args = append(args, argval.Elem())
-	}
-	// Read end of args array.
-	_, err := dec.Token()
-	return args, err
-}
-
-// parseSubscriptionName extracts the subscription name from an encoded argument array.
-func parseSubscriptionName(rawArgs json.RawMessage) (string, error) {
-	dec := json.NewDecoder(bytes.NewReader(rawArgs))
-	if tok, _ := dec.Token(); tok != json.Delim('[') {
-		return "", errors.New("non-array args")
-	}
-	v, _ := dec.Token()
-	method, ok := v.(string)
-	if !ok {
-		return "", errors.New("expected subscription name as first argument")
-	}
-	return method, nil
 }
