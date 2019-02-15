@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -95,12 +94,6 @@ func Render(templateFile, outputFile string, outputPerm os.FileMode, x interface
 	render(tpl, outputFile, outputPerm, x)
 }
 
-// RenderString renders the given template string into outputFile.
-func RenderString(templateContent, outputFile string, outputPerm os.FileMode, x interface{}) {
-	tpl := template.Must(template.New("").Parse(templateContent))
-	render(tpl, outputFile, outputPerm, x)
-}
-
 func render(tpl *template.Template, outputFile string, outputPerm os.FileMode, x interface{}) {
 	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
 		log.Fatal(err)
@@ -113,28 +106,6 @@ func render(tpl *template.Template, outputFile string, outputPerm os.FileMode, x
 		log.Fatal(err)
 	}
 	if err := out.Close(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// CopyFile copies a file.
-func CopyFile(dst, src string, mode os.FileMode) {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		log.Fatal(err)
-	}
-	destFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer destFile.Close()
-
-	srcFile, err := os.Open(src)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer srcFile.Close()
-
-	if _, err := io.Copy(destFile, srcFile); err != nil {
 		log.Fatal(err)
 	}
 }
