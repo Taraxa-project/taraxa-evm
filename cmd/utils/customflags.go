@@ -122,15 +122,6 @@ func (f TextMarshalerFlag) Apply(set *flag.FlagSet) {
 	})
 }
 
-// GlobalTextMarshaler returns the value of a TextMarshalerFlag from the global flag set.
-func GlobalTextMarshaler(ctx *cli.Context, name string) TextMarshaler {
-	val := ctx.GlobalGeneric(name)
-	if val == nil {
-		return nil
-	}
-	return val.(textMarshalerVal).v
-}
-
 // BigFlag is a command line flag that accepts 256 bit big integers in decimal or
 // hexadecimal syntax.
 type BigFlag struct {
@@ -150,11 +141,11 @@ func (b *bigValue) String() string {
 }
 
 func (b *bigValue) Set(s string) error {
-	int, ok := math.ParseBig256(s)
+	i, ok := math.ParseBig256(s)
 	if !ok {
 		return errors.New("invalid integer syntax")
 	}
-	*b = (bigValue)(*int)
+	*b = (bigValue)(*i)
 	return nil
 }
 
