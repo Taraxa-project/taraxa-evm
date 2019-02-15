@@ -36,7 +36,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/ethereum/go-ethereum/internal/build"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
@@ -46,6 +45,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/internal/build"
 )
 
 var (
