@@ -19,7 +19,7 @@ package params
 import "math/big"
 
 const (
-	GenesisGasLimit      uint64 = 4712388 // Gas limit of the Genesis block.
+	GenesisGasLimit uint64 = 4712388 // Gas limit of the Genesis block.
 
 	CallValueTransferGas  uint64 = 9000  // Paid for CALL when the value transfer is non-zero.
 	CallNewAccountGas     uint64 = 25000 // Paid for CALL when the destination address didn't exist prior.
@@ -80,5 +80,5 @@ const (
 )
 
 var (
-	GenesisDifficulty      = big.NewInt(131072) // Difficulty of the Genesis block.
+	GenesisDifficulty = big.NewInt(131072) // Difficulty of the Genesis block.
 )

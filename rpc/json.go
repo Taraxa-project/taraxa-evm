@@ -25,10 +25,10 @@ import (
 )
 
 const (
-	vsn                      = "2.0"
-	serviceMethodSeparator   = "_"
-	subscribeMethodSuffix    = "_subscribe"
-	unsubscribeMethodSuffix  = "_unsubscribe"
+	vsn                     = "2.0"
+	serviceMethodSeparator  = "_"
+	subscribeMethodSuffix   = "_subscribe"
+	unsubscribeMethodSuffix = "_unsubscribe"
 )
 
 var null = json.RawMessage("null")

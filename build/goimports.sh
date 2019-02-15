@@ -3,7 +3,7 @@
 find_files() {
   find . ! \( \
       \( \
-        -path '.github' \
+        -path '.' \
         -o -path './build/_workspace' \
         -o -path './build/bin' \
         -o -path './crypto/bn256' \
