@@ -12,4 +12,4 @@ or
 
     make all
 
-The exexutable named `evm` will appear in the `cmd` directory.
+The exexutable named `evm` will appear in the `build/bin` directory.
