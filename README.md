@@ -13,3 +13,11 @@ or
     make all
 
 The exexutable named `evm` will appear in the `build/bin` directory.
+
+## Run integration tests
+
+```
+make tests_integration
+```
+
+For the detailed instruction consult [the readme](tests_integration/README.md)

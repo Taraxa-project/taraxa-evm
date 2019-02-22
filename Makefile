@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: evm all test clean
+.PHONY: evm all test tests_integration clean
 
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
@@ -15,6 +15,9 @@ all:
 
 test: all
 	build/env.sh go run build/ci.go test
+
+tests_integration: evm
+	cd tests_integration && cmake . && make && ./tests_integration
 
 lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
