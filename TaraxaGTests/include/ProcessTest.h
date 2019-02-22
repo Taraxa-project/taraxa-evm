@@ -6,13 +6,15 @@
 
 using namespace std;
 
+const string evmBin = "../build/bin/evm";
+
 string TestBlindAuction() {
     // OK
-    const char* cmd = "../evm --codefile ../clear_contracts/BlindAuction.bin --json run";
+    string cmd = evmBin + " --codefile clear_contracts/BlindAuction.bin --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -29,11 +31,11 @@ string TestBlindAuction() {
 
 string TestAcknowledger() {
     // OK
-    const char* cmd = "../evm --codefile ../clear_contracts/Acknowledger.bin --json run";
+    string cmd = evmBin + " --codefile clear_contracts/Acknowledger.bin --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -50,11 +52,11 @@ string TestAcknowledger() {
 
 string TestCodeVerify() {
     // verify code
-    const char* cmd = "../evm --codefile ../crash_contracts/unverify.bin --json run";
+    string cmd = evmBin + " --codefile crash_contracts/unverify.bin --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -71,11 +73,11 @@ string TestCodeVerify() {
 
 string TestVulnerabilityRecursive() {
     // crash vulnerability
-    const char* cmd = "../evm --codefile ../crash_contracts/recursive.bin --json run";
+    string cmd = evmBin + " --codefile crash_contracts/recursive.bin --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -92,11 +94,11 @@ string TestVulnerabilityRecursive() {
 
 string TestVulnerabilityLoop() {
     // crash vulnerability
-    const char* cmd = "../evm --codefile ../crash_contracts/loop.bin --json run";
+    string cmd = evmBin + " --codefile crash_contracts/loop.bin --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -113,11 +115,11 @@ string TestVulnerabilityLoop() {
 
 string TestGasOK() {
     // OK gas
-    const char* cmd = "../evm --code 6040 --json run";
+    string cmd = evmBin + " --code 6040 --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());
@@ -134,11 +136,11 @@ string TestGasOK() {
 
 string TestOutOfGas() {
     // out of gas
-    const char* cmd = "../evm --code 6040 --gas 0x1 --price 0x3 --json run";
+    string cmd = evmBin + " --code 6040 --gas 0x1 --price 0x3 --json run";
 
     Document doc;
     evmJsonOutput output;
-    output.Exec(cmd);
+    output.Exec(cmd.c_str());
     cout << "Result: " << output.GetRegexResult() << endl;
 
     doc.Parse(output.GetRegexResult().c_str());

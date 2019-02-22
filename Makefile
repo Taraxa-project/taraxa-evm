@@ -2,8 +2,10 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: evm all test clean
+.PHONY: evm all test gtest clean
 
+GTBIN = TaraxaGTests
+GTEST = $(shell pwd)/$(GTBIN)
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
@@ -15,6 +17,9 @@ all:
 
 test: all
 	build/env.sh go run build/ci.go test
+
+gtest: evm
+	cd $(GTEST) && cmake . && make && ./$(GTBIN)
 
 lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
