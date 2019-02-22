@@ -1,7 +1,6 @@
 **Dependencies**
 
-- google test
-- rapidjson
+- cmake
 
 **Build**
 

@@ -4,8 +4,6 @@
 
 .PHONY: evm all test gtest clean
 
-GTBIN = TaraxaGTests
-GTEST = $(shell pwd)/$(GTBIN)
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
@@ -18,8 +16,8 @@ all:
 test: all
 	build/env.sh go run build/ci.go test
 
-gtest: evm
-	cd $(GTEST) && cmake . && make && ./$(GTBIN)
+tests_integration: evm
+	cd tests_integration && cmake . && make && ./tests_integration
 
 lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
