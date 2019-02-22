@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: evm all test gtest clean
+.PHONY: evm all test tests_integration clean
 
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
