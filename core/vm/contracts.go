@@ -21,11 +21,11 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/bn256"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/math"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/crypto/bn256"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"golang.org/x/crypto/ripemd160"
 )
 

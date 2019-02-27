@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/Taraxa-project/taraxa-evm/metrics"
 )
 
 type exp struct {

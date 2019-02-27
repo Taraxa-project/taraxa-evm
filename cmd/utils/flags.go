@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"gopkg.in/urfave/cli.v1"
 )
 

@@ -17,7 +17,7 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 )
 
 // txSenderCacherRequest is a request for recovering transaction senders with a

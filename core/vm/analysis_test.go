@@ -19,7 +19,7 @@ package vm
 import (
 	"testing"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
 func TestJumpDestAnalysis(t *testing.T) {
