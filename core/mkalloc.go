@@ -34,8 +34,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Taraxa-project/taraxa-evm/core"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
 type allocItem struct{ Addr, Balance *big.Int }

@@ -46,7 +46,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/internal/build"
+	"github.com/Taraxa-project/taraxa-evm/internal/build"
 )
 
 var (
