@@ -8,19 +8,19 @@ GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
 evm:
-	build/env.sh go run build/ci.go install ./cmd/evm
+	go run build/ci.go install ./cmd/evm
 
 all:
-	build/env.sh go run build/ci.go install
+	go run build/ci.go install
 
 test: all
-	build/env.sh go run build/ci.go test
+	go run build/ci.go test
 
 tests_integration: evm
 	cd tests_integration && cmake . && make && ./tests_integration
 
 lint: ## Run linters.
-	build/env.sh go run build/ci.go lint
+	go run build/ci.go lint
 
 clean:
 	./build/clean_go_build_cache.sh
