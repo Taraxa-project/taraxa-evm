@@ -3,21 +3,26 @@ import platform
 import shutil
 import sys
 from os import path
-from os.path import join, abspath
+from os.path import join
+from pathlib import Path
 from subprocess import call
 
 PROJECT_NAME = 'go-ethereum'
 
-THIS_DIR = path.dirname(path.abspath(__file__))
-ROOT_DIR = join(THIS_DIR, path.pardir)
-DEV_DEPS_DIR = join(THIS_DIR, 'dependencies')
-PIP_DEPS_DIR = join(DEV_DEPS_DIR, 'pip')
-PROTOC_DIR = join(DEV_DEPS_DIR, 'protoc')
-PROTOC_EXECUTABLE = join(PROTOC_DIR, 'bin', 'protoc')
-BIN_DIR = join(THIS_DIR, 'bin')
-MAIN_PACKAGE = join(ROOT_DIR, 'main')
-API_PACKAGE = join(MAIN_PACKAGE, 'api')
-FINAL_EXECUTABLE = join(BIN_DIR, 'evm')
+THIS_DIR = Path(__file__).parent.absolute()
+ROOT_DIR = Path(THIS_DIR).parent
+DEV_DEPS_DIR = Path(THIS_DIR, 'dependencies')
+PIP_DEPS_DIR = Path(DEV_DEPS_DIR, 'pip')
+PROTOC_DIR = Path(DEV_DEPS_DIR, 'protoc')
+PROTOC_EXECUTABLE = Path(PROTOC_DIR, 'bin', 'protoc')
+BIN_DIR = Path(THIS_DIR, 'bin')
+GRPC_ROOT = Path(ROOT_DIR, 'grpc')
+PROTOBUF_ROOT = Path(GRPC_ROOT, 'protobuf')
+GRPC_GO_PACKAGE = Path(GRPC_ROOT, 'grpc_go')
+GRPC_CPP_PACKAGE = Path(GRPC_ROOT, 'grpc_cpp')
+CMD_DIR = Path(ROOT_DIR).joinpath('cmd')
+EVM_CMD_DIR = Path(CMD_DIR, 'evm')
+FINAL_EXECUTABLE = Path(BIN_DIR, 'evm')
 
 PROTOC_VERSION = '3.6.1'
 
@@ -42,19 +47,19 @@ def _call(*args, **kwargs):
 
 @command()
 def clean_tmp():
-    from glob import iglob
     for line in open(join(ROOT_DIR, '.tmp_files')).readlines():
         path_pattern = line.split('# ')[0].strip()
         if path_pattern.startswith('/'):
             path_pattern = path_pattern[1:]
         if not path_pattern or path_pattern == '#':
             continue
-        for file_path in iglob(abspath(join(ROOT_DIR, path_pattern)), recursive=True):
-            print(f'Removing {file_path}')
-            if path.isdir(file_path):
-                shutil.rmtree(file_path)
+        for p in Path(ROOT_DIR).glob(path_pattern):
+            path_str = str(p.absolute())
+            print(f'Removing {path_str}')
+            if p.is_dir():
+                shutil.rmtree(path_str)
             else:
-                os.remove(file_path)
+                os.remove(path_str)
 
 
 @command()
@@ -63,6 +68,7 @@ def install_protoc():
     from zipfile import ZipFile
     from urllib.request import urlopen
     import stat
+    # TODO more platforms
     os_map = {
         'Darwin': 'osx'
     }
@@ -77,17 +83,30 @@ def install_protoc():
     r = urlopen(url)
     ZipFile(BytesIO(r.read())).extractall(PROTOC_DIR)
     os.chmod(PROTOC_EXECUTABLE, os.stat(PROTOC_EXECUTABLE).st_mode | stat.S_IEXEC)
+    print(f'Installed protoc to {PROTOC_DIR}')
 
 
 @command()
 def grpc_compile():
-    _call(PROTOC_EXECUTABLE, 'api.proto', '--go_out=plugins=grpc:.', cwd=API_PACKAGE)
+    print(f'Compiling .proto files at {PROTOBUF_ROOT}')
+    for proto_file in Path(PROTOBUF_ROOT).glob("**/*.proto"):
+        proto_package = proto_file.parent
+        rel_package = proto_package.relative_to(PROTOBUF_ROOT)
+        go_package, cpp_package = (Path(grpc_package).joinpath(rel_package).absolute()
+                                   for grpc_package in (GRPC_GO_PACKAGE, GRPC_CPP_PACKAGE))
+        for dir in go_package, cpp_package:
+            if not dir.exists():
+                dir.mkdir(parents=True)
+        _call(PROTOC_EXECUTABLE, proto_file.name, f'--go_out=plugins=grpc:{go_package}', f'--cpp_out={cpp_package}',
+              cwd=str(proto_package))
 
 
 @command()
 def executable():
-    # _call('go', 'build', '-o', FINAL_EXECUTABLE, cwd=MAIN_PACKAGE)
-    _call('build/env.sh', 'go', 'run', 'build/ci.go', 'install', './cmd/evm', cwd=ROOT_DIR)
+    print(f'Building evm')
+    # _call('go', 'build', '-o', FINAL_EXECUTABLE, cwd=EVM_CMD_DIR)
+    _call('go', 'run', 'build/ci.go', 'install', './cmd/evm', cwd=ROOT_DIR)
+    print(f'Installed evm executable to {BIN_DIR}')
 
 
 @command()

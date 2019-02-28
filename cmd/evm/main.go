@@ -115,6 +115,11 @@ var (
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
 	}
+	RpcDatabaseAddressFlag = cli.StringFlag{
+		Name:  "statedb.address",
+		Usage: "External EVM state database via GRPC (default = in-memory database)",
+		Value: "",
+	}
 )
 
 func init() {
@@ -139,6 +144,7 @@ func init() {
 		DisableMemoryFlag,
 		DisableStackFlag,
 		EVMInterpreterFlag,
+		RpcDatabaseAddressFlag,
 	}
 	app.Commands = []cli.Command{
 		compileCommand,
