@@ -44,6 +44,7 @@ func (rpcDatabase *RpcDatabase) Close() {
 
 func (rpcDatabase *RpcDatabase) NewBatch() Batch {
 	return &MemBatch{
-		db: rpcDatabase,
+		putter:  rpcDatabase,
+		deleter: rpcDatabase,
 	}
 }
