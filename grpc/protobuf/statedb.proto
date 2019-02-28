@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package taraxa.vm.statedb;
+
+option go_package = "grpc_go";
+
+import "google/protobuf/empty.proto";
+
+message BytesMessage {
+    bytes value = 1;
+}
+
+message BoolMessage {
+    bool value = 1;
+}
+
+service StateDB {
+    rpc Put (BytesMessage) returns (google.protobuf.Empty);
+    rpc Delete (BytesMessage) returns (google.protobuf.Empty);
+    rpc Get (BytesMessage) returns (BytesMessage);
+    rpc Has (BytesMessage) returns (BoolMessage);
+    rpc Close (google.protobuf.Empty) returns (google.protobuf.Empty);
+}

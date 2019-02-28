@@ -37,7 +37,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	cli "gopkg.in/urfave/cli.v1"
+	"google.golang.org/grpc"
+	"gopkg.in/urfave/cli.v1"
 )
 
 var runCommand = cli.Command{
@@ -96,15 +97,25 @@ func runCmd(ctx *cli.Context) error {
 	} else {
 		debugLogger = vm.NewStructLogger(logconfig)
 	}
+	dbAddress := ctx.GlobalString(RpcDatabaseAddressFlag.Name)
+	var db ethdb.Database
+	if len(dbAddress) > 0 {
+		conn, err := grpc.Dial(dbAddress, grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		db = ethdb.NewRpcDatabase(conn)
+	} else {
+		db = ethdb.NewMemDatabase()
+	}
 	if ctx.GlobalString(GenesisFlag.Name) != "" {
 		gen := readGenesis(ctx.GlobalString(GenesisFlag.Name))
 		genesisConfig = gen
-		db := ethdb.NewMemDatabase()
 		genesis := gen.ToBlock(db)
 		statedb, _ = state.New(genesis.Root(), state.NewDatabase(db))
 		chainConfig = gen.Config
 	} else {
-		statedb, _ = state.New(common.Hash{}, state.NewDatabase(ethdb.NewMemDatabase()))
+		statedb, _ = state.New(common.Hash{}, state.NewDatabase(db))
 		genesisConfig = new(core.Genesis)
 	}
 	if ctx.GlobalString(SenderFlag.Name) != "" {
