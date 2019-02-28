@@ -90,9 +90,25 @@ func (db *MemDatabase) Delete(key []byte) error {
 
 func (db *MemDatabase) Close() {}
 
+type mapWriter struct {
+	db *MemDatabase
+}
+
+func (w *mapWriter) Put(key []byte, value []byte) error {
+	w.db.db[string(key)] = common.CopyBytes(value)
+	return nil
+}
+
+func (w *mapWriter) Delete(key []byte) error {
+	delete(w.db.db, string(key))
+	return nil
+}
+
 func (db *MemDatabase) NewBatch() Batch {
+	writer := &mapWriter{db: db}
 	return &MemBatch{
-		db:         db,
+		putter:     writer,
+		deleter:    writer,
 		commitLock: &db.lock,
 	}
 }
@@ -105,7 +121,8 @@ type kv struct {
 }
 
 type MemBatch struct {
-	db         Database
+	putter     Putter
+	deleter    Deleter
 	commitLock *sync.RWMutex
 	writes     []kv
 	size       int
@@ -130,13 +147,13 @@ func (b *MemBatch) Write() (err error) {
 	}
 	for _, kv := range b.writes {
 		if kv.del {
-			err = b.db.Delete(kv.k)
+			err = b.deleter.Delete(kv.k)
 			if err != nil {
 				return
 			}
 			continue
 		}
-		err = b.db.Put(kv.k, kv.v)
+		err = b.putter.Put(kv.k, kv.v)
 		if err != nil {
 			return
 		}
