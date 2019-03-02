@@ -33,7 +33,7 @@ include_directories(
 )
 link_directories(${GTEST_DIR}/lib)
 
-add_executable(tests_integration main.cpp ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/statedb.pb.h ${PROTO_DIR}/statedb.grpc.pb.cc ${PROTO_DIR}/statedb.grpc.pb.h)
+add_executable(tests_integration main.cpp ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/common.pb.cc ${PROTO_DIR}/statedb.grpc.pb.cc include/grpcServer.h)
 add_dependencies(tests_integration googletest rapidjson)
 target_link_libraries(tests_integration gtest_main gtest Threads::Threads)
 
