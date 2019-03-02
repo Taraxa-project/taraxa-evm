@@ -120,6 +120,11 @@ var (
 		Usage: "External EVM state database via GRPC (default = in-memory database)",
 		Value: "",
 	}
+	ProcessIdFlag = cli.StringFlag{
+		Name:  "vm.pid",
+		Usage: "External EVM state database via GRPC (default = in-memory database)",
+		Value: "",
+	}
 )
 
 func init() {
@@ -145,6 +150,7 @@ func init() {
 		DisableStackFlag,
 		EVMInterpreterFlag,
 		RpcDatabaseAddressFlag,
+		ProcessIdFlag,
 	}
 	app.Commands = []cli.Command{
 		compileCommand,
