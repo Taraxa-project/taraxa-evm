@@ -38,10 +38,7 @@ using statedb::VmId;
 using statedb::StateDB;
 
 class grpcServerImpl final : public StateDB::Service {
-public:
-    grpcServerImpl() {
 
-    }
 public:
     Status Put(ServerContext* context, const ::statedb::BytesMessage* request, ::google::protobuf::Empty* response) {
         if (!request->has_vmid())
