@@ -24,87 +24,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
-type BytesMessage struct {
-	Value                []byte   `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *BytesMessage) Reset()         { *m = BytesMessage{} }
-func (m *BytesMessage) String() string { return proto.CompactTextString(m) }
-func (*BytesMessage) ProtoMessage()    {}
-func (*BytesMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_statedb_39048c983d5df06d, []int{0}
-}
-func (m *BytesMessage) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_BytesMessage.Unmarshal(m, b)
-}
-func (m *BytesMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_BytesMessage.Marshal(b, m, deterministic)
-}
-func (dst *BytesMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BytesMessage.Merge(dst, src)
-}
-func (m *BytesMessage) XXX_Size() int {
-	return xxx_messageInfo_BytesMessage.Size(m)
-}
-func (m *BytesMessage) XXX_DiscardUnknown() {
-	xxx_messageInfo_BytesMessage.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_BytesMessage proto.InternalMessageInfo
-
-func (m *BytesMessage) GetValue() []byte {
-	if m != nil {
-		return m.Value
-	}
-	return nil
-}
-
-type BoolMessage struct {
-	Value                bool     `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *BoolMessage) Reset()         { *m = BoolMessage{} }
-func (m *BoolMessage) String() string { return proto.CompactTextString(m) }
-func (*BoolMessage) ProtoMessage()    {}
-func (*BoolMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_statedb_39048c983d5df06d, []int{1}
-}
-func (m *BoolMessage) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_BoolMessage.Unmarshal(m, b)
-}
-func (m *BoolMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_BoolMessage.Marshal(b, m, deterministic)
-}
-func (dst *BoolMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BoolMessage.Merge(dst, src)
-}
-func (m *BoolMessage) XXX_Size() int {
-	return xxx_messageInfo_BoolMessage.Size(m)
-}
-func (m *BoolMessage) XXX_DiscardUnknown() {
-	xxx_messageInfo_BoolMessage.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_BoolMessage proto.InternalMessageInfo
-
-func (m *BoolMessage) GetValue() bool {
-	if m != nil {
-		return m.Value
-	}
-	return false
-}
-
-func init() {
-	proto.RegisterType((*BytesMessage)(nil), "taraxa.vm.statedb.BytesMessage")
-	proto.RegisterType((*BoolMessage)(nil), "taraxa.vm.statedb.BoolMessage")
-}
-
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
 var _ grpc.ClientConn
@@ -121,7 +40,7 @@ type StateDBClient interface {
 	Delete(ctx context.Context, in *BytesMessage, opts ...grpc.CallOption) (*empty.Empty, error)
 	Get(ctx context.Context, in *BytesMessage, opts ...grpc.CallOption) (*BytesMessage, error)
 	Has(ctx context.Context, in *BytesMessage, opts ...grpc.CallOption) (*BoolMessage, error)
-	Close(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
+	Close(ctx context.Context, in *VmId, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type stateDBClient struct {
@@ -168,7 +87,7 @@ func (c *stateDBClient) Has(ctx context.Context, in *BytesMessage, opts ...grpc.
 	return out, nil
 }
 
-func (c *stateDBClient) Close(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *stateDBClient) Close(ctx context.Context, in *VmId, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/taraxa.vm.statedb.StateDB/Close", in, out, opts...)
 	if err != nil {
@@ -183,7 +102,7 @@ type StateDBServer interface {
 	Delete(context.Context, *BytesMessage) (*empty.Empty, error)
 	Get(context.Context, *BytesMessage) (*BytesMessage, error)
 	Has(context.Context, *BytesMessage) (*BoolMessage, error)
-	Close(context.Context, *empty.Empty) (*empty.Empty, error)
+	Close(context.Context, *VmId) (*empty.Empty, error)
 }
 
 func RegisterStateDBServer(s *grpc.Server, srv StateDBServer) {
@@ -263,7 +182,7 @@ func _StateDB_Has_Handler(srv interface{}, ctx context.Context, dec func(interfa
 }
 
 func _StateDB_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(VmId)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -275,7 +194,7 @@ func _StateDB_Close_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/taraxa.vm.statedb.StateDB/Close",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StateDBServer).Close(ctx, req.(*empty.Empty))
+		return srv.(StateDBServer).Close(ctx, req.(*VmId))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -309,23 +228,21 @@ var _StateDB_serviceDesc = grpc.ServiceDesc{
 	Metadata: "statedb.proto",
 }
 
-func init() { proto.RegisterFile("statedb.proto", fileDescriptor_statedb_39048c983d5df06d) }
+func init() { proto.RegisterFile("statedb.proto", fileDescriptor_statedb_d23b3a739d5b4cd5) }
 
-var fileDescriptor_statedb_39048c983d5df06d = []byte{
-	// 228 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_statedb_d23b3a739d5b4cd5 = []byte{
+	// 207 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2d, 0x2e, 0x49, 0x2c,
 	0x49, 0x4d, 0x49, 0xd2, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x2c, 0x49, 0x2c, 0x4a, 0xac,
 	0x48, 0xd4, 0x2b, 0xcb, 0xd5, 0x83, 0x4a, 0x48, 0x49, 0xa7, 0xe7, 0xe7, 0xa7, 0xe7, 0xa4, 0xea,
-	0x83, 0x15, 0x24, 0x95, 0xa6, 0xe9, 0xa7, 0xe6, 0x16, 0x94, 0x54, 0x42, 0xd4, 0x2b, 0xa9, 0x70,
-	0xf1, 0x38, 0x55, 0x96, 0xa4, 0x16, 0xfb, 0xa6, 0x16, 0x17, 0x27, 0xa6, 0xa7, 0x0a, 0x89, 0x70,
-	0xb1, 0x96, 0x25, 0xe6, 0x94, 0xa6, 0x4a, 0x30, 0x2a, 0x30, 0x6a, 0xf0, 0x04, 0x41, 0x38, 0x4a,
-	0xca, 0x5c, 0xdc, 0x4e, 0xf9, 0xf9, 0x39, 0x58, 0x15, 0x71, 0x40, 0x15, 0x19, 0x5d, 0x63, 0xe2,
-	0x62, 0x0f, 0x06, 0xd9, 0xe9, 0xe2, 0x24, 0x64, 0xc7, 0xc5, 0x1c, 0x50, 0x5a, 0x22, 0x24, 0xaf,
-	0x87, 0xe1, 0x1c, 0x3d, 0x64, 0xeb, 0xa4, 0xc4, 0xf4, 0x20, 0x8e, 0xd3, 0x83, 0x39, 0x4e, 0xcf,
-	0x15, 0xe4, 0x38, 0x21, 0x47, 0x2e, 0x36, 0x97, 0xd4, 0x9c, 0xd4, 0x92, 0x54, 0xf2, 0x8d, 0x70,
-	0xe7, 0x62, 0x76, 0x4f, 0x25, 0xc2, 0x09, 0x84, 0x14, 0x08, 0xb9, 0x71, 0x31, 0x7b, 0x24, 0x16,
-	0x13, 0x36, 0x48, 0x0e, 0x9b, 0x02, 0xa4, 0x50, 0x33, 0xe7, 0x62, 0x75, 0xce, 0xc9, 0x2f, 0x4e,
-	0x15, 0xc2, 0xe1, 0x62, 0x5c, 0x3e, 0x71, 0xe2, 0x8c, 0x62, 0x4f, 0x2f, 0x2a, 0x48, 0x8e, 0x4f,
-	0xcf, 0x4f, 0x62, 0x03, 0x4b, 0x19, 0x03, 0x02, 0x00, 0x00, 0xff, 0xff, 0xa8, 0xf8, 0xda, 0x69,
-	0xf6, 0x01, 0x00, 0x00,
+	0x83, 0x15, 0x24, 0x95, 0xa6, 0xe9, 0xa7, 0xe6, 0x16, 0x94, 0x54, 0x42, 0xd4, 0x4b, 0xf1, 0x24,
+	0xe7, 0xe7, 0xe6, 0xe6, 0xe7, 0x41, 0x78, 0x46, 0xd7, 0x99, 0xb8, 0xd8, 0x83, 0x41, 0xda, 0x5c,
+	0x9c, 0x84, 0xec, 0xb8, 0x98, 0x03, 0x4a, 0x4b, 0x84, 0xe4, 0xf5, 0x30, 0x4c, 0xd4, 0x73, 0xaa,
+	0x2c, 0x49, 0x2d, 0xf6, 0x4d, 0x2d, 0x2e, 0x4e, 0x4c, 0x4f, 0x95, 0x12, 0xd3, 0x83, 0x98, 0xaf,
+	0x07, 0x33, 0x5f, 0xcf, 0x15, 0x64, 0xbe, 0x90, 0x23, 0x17, 0x9b, 0x4b, 0x6a, 0x4e, 0x6a, 0x49,
+	0x2a, 0xf9, 0x46, 0xb8, 0x73, 0x31, 0xbb, 0xa7, 0x12, 0xe1, 0x04, 0x42, 0x0a, 0x84, 0xdc, 0xb8,
+	0x98, 0x3d, 0x12, 0x8b, 0x09, 0x1b, 0x24, 0x87, 0x4d, 0x41, 0x7e, 0x7e, 0x0e, 0xcc, 0x1c, 0x0b,
+	0x2e, 0x56, 0xe7, 0x9c, 0xfc, 0xe2, 0x54, 0x21, 0x71, 0x2c, 0x0a, 0xc3, 0x72, 0x3d, 0x53, 0x70,
+	0x79, 0xc5, 0x89, 0x33, 0x8a, 0x3d, 0xbd, 0xa8, 0x20, 0x39, 0x3e, 0x3d, 0x3f, 0x89, 0x0d, 0x2c,
+	0x65, 0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0x16, 0x5e, 0x3c, 0xff, 0xba, 0x01, 0x00, 0x00,
 }
