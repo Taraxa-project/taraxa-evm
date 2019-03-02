@@ -6,153 +6,39 @@
 
 using namespace std;
 
-const string evmBin = "../build/bin/evm";
-
 string TestBlindAuction() {
     // OK
-    string cmd = evmBin + " --codefile clear_contracts/BlindAuction.bin --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --codefile clear_contracts/BlindAuction.bin --json run");
 }
 
 string TestAcknowledger() {
     // OK
-    string cmd = evmBin + " --codefile clear_contracts/Acknowledger.bin --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --codefile clear_contracts/Acknowledger.bin --json run");
 }
 
 string TestCodeVerify() {
     // verify code
-    string cmd = evmBin + " --codefile crash_contracts/unverify.bin --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --codefile crash_contracts/unverify.bin --json run");
 }
 
 string TestVulnerabilityRecursive() {
     // crash vulnerability
-    string cmd = evmBin + " --codefile crash_contracts/recursive.bin --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --codefile crash_contracts/recursive.bin --json run");
 }
 
 string TestVulnerabilityLoop() {
     // crash vulnerability
-    string cmd = evmBin + " --codefile crash_contracts/loop.bin --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --codefile crash_contracts/loop.bin --json run");
 }
 
 string TestGasOK() {
     // OK gas
-    string cmd = evmBin + " --code 6040 --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --code 6040 --json run");
 }
 
 string TestOutOfGas() {
     // out of gas
-    string cmd = evmBin + " --code 6040 --gas 0x1 --price 0x3 --json run";
-
-    Document doc;
-    evmJsonOutput output;
-    output.Exec(cmd.c_str());
-    cout << "Result: " << output.GetRegexResult() << endl;
-
-    doc.Parse(output.GetRegexResult().c_str());
-
-    evmJsonOutput result = output.fromJSON(doc);
-
-    cout << "Output: " << result.getOutput() << endl;
-    cout << "gasUsed: " << result.getGasUsed() << endl;
-    cout << "Time Execution, ns: " << result.getTime() << endl;
-    cout << "Error message: " << result.getError() << endl;
-
-    return result.getError();
+    return RunTest(" --code 6040 --gas 0x1 --price 0x3 --json run");
 }
 
 #endif //TARAXAGTESTS_PROCESSTEST_H

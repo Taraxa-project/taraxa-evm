@@ -6,6 +6,7 @@ include(ExternalProject)
 set(DEPS_DIR ${PROJECT_SOURCE_DIR}/deps)
 set(GTEST_DIR ${DEPS_DIR}/googletest)
 set(RAPIDJSON_DIR ${DEPS_DIR}/rapidjson)
+set(PROTO_DIR ../grpc/grpc_cpp)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -28,10 +29,11 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${GTEST_DIR}/include
         ${RAPIDJSON_DIR}/src/rapidjson/include
+        ${PROTO_DIR}
 )
 link_directories(${GTEST_DIR}/lib)
 
-add_executable(tests_integration main.cpp)
+add_executable(tests_integration main.cpp ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/statedb.pb.h ${PROTO_DIR}/statedb.grpc.pb.cc ${PROTO_DIR}/statedb.grpc.pb.h)
 add_dependencies(tests_integration googletest rapidjson)
 target_link_libraries(tests_integration gtest_main gtest Threads::Threads)
 

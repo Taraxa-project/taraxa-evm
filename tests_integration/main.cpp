@@ -1,6 +1,5 @@
 #include <iostream>
 #include <gtest/gtest.h>
-#include "include/Process.h"
 #include "include/ProcessTest.h"
 #include <rapidjson/document.h>
 

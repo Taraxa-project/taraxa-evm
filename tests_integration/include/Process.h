@@ -12,6 +12,8 @@
 using namespace std;
 using namespace rapidjson;
 
+const string BIN = "../build/bin/evm";
+
 class Process {
 
 public:
@@ -123,64 +125,27 @@ class evmJsonOutput: public Process {
 
     };
 
-class evmStateJsonOutput: public Process {
+static string RunTest(const string args) {
 
-public:
-    evmStateJsonOutput() {
-        this->pattern = "";
-    };
-    evmStateJsonOutput(string name, bool pass, string fork)
-    :name(name),
-    pass(pass),
-    fork(fork)
-    {
-        this->pattern = "";
-    };
-    ~evmStateJsonOutput() {};
+    string cmd = BIN + args;
 
-    void setName(string name) {
-        this->name = name;
-    }
-    void setPass(bool pass) {
-        this->pass = pass;
-    }
-    void setFork(string fork) {
-        this->fork = fork;
-    }
+    Document doc;
+    evmJsonOutput output;
+    output.Exec(cmd.c_str());
+    cout << "Result: " << output.GetRegexResult() << endl;
 
-    string getName() {
-        return this->name;
-    }
-    bool getPass() {
-        return this->pass;
-    }
-    string getFork() {
-        return this->fork;
-    }
+    doc.Parse(output.GetRegexResult().c_str());
 
-    static evmStateJsonOutput fromJSON(Document& doc) {
-        if(!doc.IsArray())
-            throw runtime_error("document should be an array");
+    evmJsonOutput result = output.fromJSON(doc);
 
-        static const char* members[] = { "name", "pass", "fork" };
-        for(size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++)
-            if(!doc.HasMember(members[i]))
-                throw runtime_error("missing fields");
+    cout << "Output: " << result.getOutput() << endl;
+    cout << "gasUsed: " << result.getGasUsed() << endl;
+    cout << "Time Execution, ns: " << result.getTime() << endl;
+    cout << "Error message: " << result.getError() << endl;
 
-        string name = doc[members[0]].GetString();
-        bool pass = doc[members[1]].GetBool();
-        string fork = doc[members[2]].GetString();
+    return result.getError();
 
-        evmStateJsonOutput result(name, pass, fork);
-        return result;
-    }
-
-private:
-    string name;
-    bool pass;
-    string fork;
-
-};
+}
 
 
 #endif //TARAXAGTESTS_PROCESS_H
