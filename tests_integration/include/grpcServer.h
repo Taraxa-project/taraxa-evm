@@ -41,19 +41,19 @@ public:
     Status Put(ServerContext* context, const ::statedb::BytesMessage* request, ::google::protobuf::Empty* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        messages.emplace(request->vmid(), *request);
+        messages.emplace(getKeyFromVmId(request->vmid()), *request);
         return Status::OK;
     }
     Status Delete(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::google::protobuf::Empty* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        messages.erase(request->vmid());
+        messages.erase(getKeyFromVmId(request->vmid()));
         return Status::OK;
     };
     Status Get(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BytesMessage* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        auto it = messages.find(request->vmid());
+        auto it = messages.find(getKeyFromVmId(request->vmid()));
         if (it != messages.end()) {
             response->CopyFrom((*it).second);
         } else {
@@ -64,18 +64,21 @@ public:
     Status Has(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BoolMessage* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        //response->vmid().CopyFrom(request->vmid());
-        auto it = messages.find(request->vmid());
+        auto it = messages.find(getKeyFromVmId(request->vmid()));
         response->set_value(!(it == messages.end()));
         return Status::OK;
     };
     Status Close(::grpc::ServerContext* context, const ::taraxa::vm::statedb::VmId* request, ::google::protobuf::Empty* response) {
-        messages.erase(*request);
+        messages.erase(getKeyFromVmId(*request));
         return Status::OK;
     };
 
 private:
-    std::map<::statedb::VmId, ::statedb::BytesMessage> messages;
+    std::map<std::string, ::statedb::BytesMessage> messages;
+
+    std::string getKeyFromVmId(const ::statedb::VmId vmId) {
+        return vmId.processid() + vmId.contractaddr();
+    }
 };
 
 void RunServer() {
