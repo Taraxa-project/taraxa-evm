@@ -38,48 +38,10 @@ using statedb::BoolMessage;
 using statedb::VmId;
 using statedb::StateDB;
 
-class grpcIntegrity : public grpcClient {
-public:
-    grpcIntegrity(std::shared_ptr<Channel> channel)
-    :grpcClient(channel)
-    {}
-
-    void DoTest() {
-        ::google::protobuf::Empty response;
-        ClientContext context;
-        ::statedb::BytesMessage request;
-        request.set_value("1234567890");
-        auto vmid = request.mutable_vmid();
-        vmid->set_contractaddr("0987654321");
-        vmid->set_processid("999");
-
-        Status s = stub_->Put(&context, request, &response);
-        EXPECT_TRUE(s.ok());
-
-        BoolMessage has_responce;
-        s = stub_->Has(&context, request, &has_responce);
-        EXPECT_TRUE(has_responce.value());
-
-        BytesMessage get_responce;
-        s = stub_->Get(&context, request, &get_responce);
-        EXPECT_TRUE(s.ok());
-        EXPECT_TRUE(get_responce.value() == "1234567890");
-
-        s = stub_->Delete(&context, request, &response);
-        EXPECT_TRUE(s.ok());
-
-        s = stub_->Has(&context, request, &has_responce);
-        EXPECT_FALSE(has_responce.value());
-
-    }
-
-};
-
 void DoTest() {
     grpcClient client(grpc::CreateChannel(
             "0.0.0.0:50051", grpc::InsecureChannelCredentials()));
-    ::google::protobuf::Empty response;
-    ClientContext context;
+
     ::statedb::BytesMessage request;
     request.set_value("1234567890");
     auto vmid = request.mutable_vmid();
@@ -87,20 +49,26 @@ void DoTest() {
     vmid->set_processid("999");
 
     Status s = client.Put(request);
+    cout << "Put " << request.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr() << endl;
+    cout << boolalpha << "Status: " << s.ok() << endl;
     EXPECT_TRUE(s.ok());
 
     BoolMessage has_responce;
     has_responce = client.Has(request);
+    cout << boolalpha << "Has " << has_responce.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr() << endl;
     EXPECT_TRUE(has_responce.value());
 
     BytesMessage get_responce;
     get_responce = client.Get(request);
+    cout << "Get " << get_responce.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr() << endl;
     EXPECT_TRUE(get_responce.value() == "1234567890");
 
     s = client.Delete(request);
+    cout << boolalpha << "Delete " << request.value() << " ,Status: " << s.ok() << endl;
     EXPECT_TRUE(s.ok());
 
     has_responce = client.Has(request);
+    cout << boolalpha << "Has " << has_responce.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr() << endl;
     EXPECT_FALSE(has_responce.value());
 }
 
