@@ -35,9 +35,49 @@ using statedb::StateDB;
 
 class grpcClient {
 public:
-    grpcClient(std::shared_ptr<Channel> channel, const std::string& db)
+    grpcClient(std::shared_ptr<Channel> channel)
     : stub_(StateDB::NewStub(channel)) {
     }
+
+    Status Put(const ::statedb::BytesMessage& message) {
+        ::google::protobuf::Empty response;
+        ClientContext context;
+        Status status = stub_->Put(&context, message, &response);
+        return status;
+    }
+
+    Status Delete(const ::statedb::BytesMessage& message) {
+        ::google::protobuf::Empty response;
+        ClientContext context;
+        Status status = stub_->Delete(&context, message, &response);
+        return status;
+    }
+
+    ::statedb::BytesMessage Get(const ::statedb::BytesMessage& message) {
+        ::statedb::BytesMessage response;
+        ClientContext context;
+        Status status = stub_->Get(&context, message, &response);
+        if (status != Status::OK)
+            cout << "Error getter status"
+        return response;
+    }
+
+    ::statedb::BoolMessage* Has(const ::statedb::BytesMessage& message) {
+        ::statedb::BoolMessage response;
+        ClientContext context;
+        stub_->Has(&context, message, &response);
+        return &response;
+    }
+
+    Status Close(const ::statedb::BytesMessage& message) {
+        ::google::protobuf::Empty response;
+        ClientContext context;
+        Status status = stub_->Close(&context, message, &response);
+        return status;
+    }
+
+private:
+    std::unique_ptr<StateDB::Stub> stub_;
 
 };
 

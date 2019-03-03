@@ -55,7 +55,7 @@ public:
             return Status::CANCELLED;
         auto it = messages.find(request->vmid());
         if (it != messages.end()) {
-            response->operator=((*it).second);
+            response->CopyFrom((*it).second);
         } else {
             return Status::CANCELLED;
         }
@@ -64,7 +64,7 @@ public:
     Status Has(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BoolMessage* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        response->vmid().MergeFrom(request->vmid());
+        response->vmid().CopyFrom(request->vmid());
         auto it = messages.find(request->vmid());
         response->set_value(!(it == messages.end()));
         return Status::OK;
@@ -75,7 +75,7 @@ public:
     };
 
 private:
-    std::map<::taraxa::vm::statedb::VmId, ::taraxa::vm::statedb::BytesMessage> messages;
+    std::map<::statedb::VmId, ::statedb::BytesMessage> messages;
 };
 
 void RunServer(const std::string& db_path) {
