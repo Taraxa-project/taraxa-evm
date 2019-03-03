@@ -8,43 +8,32 @@ set(SRC_DIR ${PROJECT_SOURCE_DIR}/src)
 set(THIRDPARTY_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
 set(GTEST_DIR ${THIRDPARTY_DIR}/googletest)
 set(RAPIDJSON_DIR ${THIRDPARTY_DIR}/rapidjson)
-#set(QTBASE_DIR ${THIRDPARTY_DIR}/qtbase)
 set(BOOST_DIR ${THIRDPARTY_DIR}/boost)
-set(PROTOBUF_DIR ${THIRDPARTY_DIR}/protobuf)
 set(GRPC_DIR ${THIRDPARTY_DIR}/grpc)
 set(GRPC_GEN_DIR ${PROJECT_SOURCE_DIR}/../grpc/grpc_cpp)
 
 
 find_package(Threads REQUIRED)
 ExternalProject_Add(
-        googletest
+        googletest_project
         PREFIX ${GTEST_DIR}
         GIT_REPOSITORY https://github.com/google/googletest
+        GIT_TAG v1.8.1
         TEST_COMMAND ""
 )
 ExternalProject_Add(
-        rapidjson
+        rapidjson_project
         PREFIX ${RAPIDJSON_DIR}
         GIT_REPOSITORY https://github.com/Tencent/rapidjson
+        GIT_TAG v1.1.0
         INSTALL_COMMAND ""
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ""
         TEST_COMMAND ""
 )
 
-#ExternalProject_Add(
-#        qtbase
-#        PREFIX ${QTBASE_DIR}
-#        GIT_REPOSITORY https://github.com/qt/qtbase
-#        GIT_TAG v5.12.1
-#        INSTALL_COMMAND ""
-#        CONFIGURE_COMMAND ""
-#        BUILD_COMMAND ""
-#        TEST_COMMAND ""
-#)
-
 ExternalProject_Add(
-        boost
+        boost_project
         PREFIX ${BOOST_DIR}
         GIT_REPOSITORY https://github.com/boostorg/boost
         GIT_TAG boost-1.69.0
@@ -58,23 +47,11 @@ ExternalProject_Add(
         TEST_COMMAND ""
 )
 
-#ExternalProject_Add(
-#        protobuf
-#        PREFIX ${PROTOBUF_DIR}
-#        GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-#        CONFIGURE_COMMAND ${CMAKE_COMMAND} ${PROTOBUF_DIR}/src/protobuf/cmake
-#        TEST_COMMAND ""
-#        #        CMAKE_CACHE_ARGS
-#        #        -Dprotobuf_BUILD_TESTS:BOOL=OFF
-#        #        -Dprotobuf_WITH_ZLIB:BOOL=OFF
-#        #        -Dprotobuf_MSVC_STATIC_RUNTIME:BOOL=OFF
-#        #        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/protobuf
-#)
-
 ExternalProject_Add(
         grpc_project
         PREFIX ${GRPC_DIR}
         GIT_REPOSITORY https://github.com/grpc/grpc
+        GIT_TAG v1.19.0
         INSTALL_COMMAND ""
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ""
@@ -97,7 +74,6 @@ FILE(GLOB GRPC_GEN_FILES ${GRPC_GEN_DIR}/*)
 MESSAGE(${BOOST_INCLUDE_PATHS})
 
 include_directories(
-        #        ${QTBASE_DIR}/src/qtbase/src/corelib/io
         ${BOOST_INCLUDE_PATHS}
         ${RAPIDJSON_DIR}/src/rapidjson/include
         ${GTEST_DIR}/include
@@ -105,48 +81,23 @@ include_directories(
         ${PROJECT_SOURCE_DIR}
 )
 
-add_executable(tests_integration ${BOOST_FILESYSTEM_SRC} ${SRC_DIR}/vm_tests.cpp)
+add_executable(
+        ${PROJECT_NAME}
+        ${BOOST_FILESYSTEM_SRC}
+        ${GRPC_GEN_FILES}
+        ${SRC_DIR}/main.cpp
+)
 
 target_link_libraries(
-        tests_integration
+        ${PROJECT_NAME}
         gtest_main
         gtest
-        Threads::Threads
-)
-
-add_executable(
-        tests_grpc
-        ${SRC_DIR}/grpc_tests.cpp
-        ${GRPC_GEN_FILES}
-)
-
-target_link_libraries(
-        tests_grpc
         grpc++_reflection
         libprotobuf
-        gtest_main
-        gtest
         Threads::Threads
 )
 
-add_executable(
-        test_server
-        ${SRC_DIR}/server.cpp
-        ${GRPC_GEN_FILES}
-)
-
-target_link_libraries(
-        test_server
-        grpc++_reflection
-        libprotobuf
-        gtest_main
-        gtest
-        Threads::Threads
-)
-
-add_dependencies(tests_integration googletest rapidjson boost grpc)
-add_dependencies(tests_grpc googletest rapidjson boost grpc)
-add_dependencies(test_server googletest rapidjson boost grpc)
+add_dependencies(${PROJECT_NAME} googletest_project rapidjson_project boost_project grpc_project)
 
 enable_testing()
 add_test(tests_integration "./tests_integration")

@@ -1,7 +1,9 @@
 #include <iostream>
 #include <gtest/gtest.h>
-#include "include/Process.h"
+#include <gmock/gmock.h>
 #include <rapidjson/document.h>
+#include "include/Process.h"
+#include "include/grpcIntegrity.h"
 
 using namespace std;
 using namespace rapidjson;
@@ -33,6 +35,7 @@ TEST(EVM, TestVulnerabilityLoop_Negative_Test) {
 TEST(EVM, TestOutOfGas_Negative_Test) {
     ASSERT_NE("", RunTest("--code 6040 --gas 0x1 --price 0x3 --json run"));
 }
+
 
 int main(int argc, char **argv) {
     testing::InitGoogleTest(&argc, argv);
