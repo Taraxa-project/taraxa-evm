@@ -20,7 +20,7 @@
 #include "statedb.pb.h"
 #include "statedb.grpc.pb.h"
 
-using namespace taraxa::vm
+using namespace taraxa::vm;
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -64,13 +64,13 @@ public:
     Status Has(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BoolMessage* response) {
         if (!request->has_vmid())
             return Status::CANCELLED;
-        response->vmid().CopyFrom(request->vmid());
+        //response->vmid().CopyFrom(request->vmid());
         auto it = messages.find(request->vmid());
         response->set_value(!(it == messages.end()));
         return Status::OK;
     };
     Status Close(::grpc::ServerContext* context, const ::taraxa::vm::statedb::VmId* request, ::google::protobuf::Empty* response) {
-        messages.erase(request->vmid());
+        messages.erase(*request);
         return Status::OK;
     };
 
@@ -78,7 +78,7 @@ private:
     std::map<::statedb::VmId, ::statedb::BytesMessage> messages;
 };
 
-void RunServer(const std::string& db_path) {
+void RunServer() {
     std::string server_address("0.0.0.0:50051");
     grpcServerImpl service;
 

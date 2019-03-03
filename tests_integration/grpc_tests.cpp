@@ -8,10 +8,12 @@
 #include "grpcIntegrity.h"
 
 using namespace std;
-using namespace rapidjson;
-
 
 int main(int argc, char** argv) {
     testing::InitGoogleTest(&argc, argv);
+
+    thread task(RunServer);
+    task.join();
+
     return RUN_ALL_TESTS();
 }

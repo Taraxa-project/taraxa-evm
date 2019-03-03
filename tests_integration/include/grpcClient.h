@@ -18,8 +18,8 @@
 #include "statedb.pb.h"
 #include "statedb.grpc.pb.h"
 
-using namespace std
-using namespace taraxa::vm
+using namespace std;
+using namespace taraxa::vm;
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -57,19 +57,19 @@ public:
         ::statedb::BytesMessage response;
         ClientContext context;
         Status status = stub_->Get(&context, message, &response);
-        if (status != Status::OK)
+        if (!status.ok())
             cout << "Error getter status" << endl;
         return response;
     }
 
-    ::statedb::BoolMessage* Has(const ::statedb::BytesMessage& message) {
+    ::statedb::BoolMessage Has(const ::statedb::BytesMessage& message) {
         ::statedb::BoolMessage response;
         ClientContext context;
         stub_->Has(&context, message, &response);
-        return &response;
+        return response;
     }
 
-    Status Close(const ::statedb::BytesMessage& message) {
+    Status Close(const ::statedb::VmId& message) {
         ::google::protobuf::Empty response;
         ClientContext context;
         Status status = stub_->Close(&context, message, &response);
