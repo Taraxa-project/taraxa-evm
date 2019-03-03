@@ -71,18 +71,21 @@ target_link_libraries(tests_integration
         )
 
 # grpc/protobuf sync client/server testing
-#add_executable(tests_grpc grpc_tests.cpp  include/grpcClient.h  include/grpcServer.h
-#        ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/common.pb.cc ${PROTO_DIR}/statedb.grpc.pb.cc)
-#
-#target_link_libraries(tests_grpc
-#        gtest_main
-#        gtest
-#        Threads::Threads
-#        gRPC::grpc++_reflection
-#        protobuf::libprotobuf
-#        )
+add_executable(tests_grpc grpc_tests.cpp
+        include/grpcClient.h
+        include/grpcServer.h
+        ${PROTO_SRC_DIR}/statedb.pb.cc ${PROTO_SRC_DIR}/common.pb.cc ${PROTO_SRC_DIR}/statedb.grpc.pb.cc
+        include/grpcIntegrity.h)
+
+target_link_libraries(tests_grpc
+        gtest_main
+        gtest
+        Threads::Threads
+        gRPC::grpc++_reflection
+        protobuf::libprotobuf
+        )
 
 enable_testing()
 add_test(tests_integration "./tests_integration")
-#add_test(tests_grpc "./tests_grpc")
+add_test(tests_grpc "./tests_grpc")
 

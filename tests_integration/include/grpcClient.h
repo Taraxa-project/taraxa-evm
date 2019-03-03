@@ -58,7 +58,7 @@ public:
         ClientContext context;
         Status status = stub_->Get(&context, message, &response);
         if (status != Status::OK)
-            cout << "Error getter status"
+            cout << "Error getter status" << endl;
         return response;
     }
 
