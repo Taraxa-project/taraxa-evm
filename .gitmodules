@@ -1,9 +1,0 @@
-[submodule "thirdparty/grpc"]
-	path = thirdparty/grpc
-	url = https://github.com/grpc/grpc
-	branch = v1.19.0
-
-[submodule "thirdparty/boost"]
-	path = thirdparty/boost
-	url = https://github.com/boostorg/boost
-	branch = boost-1.69.0
