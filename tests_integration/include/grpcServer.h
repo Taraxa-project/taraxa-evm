@@ -82,7 +82,7 @@ private:
 
 void RunServer(const std::string& db_path) {
     std::string server_address("0.0.0.0:50051");
-    grpcServerImpl service();
+    grpcServerImpl service;
 
     ServerBuilder builder;
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
