@@ -7,4 +7,5 @@ test_server
 Makefile
 CTestTestfile.cmake
 cmake_install.cmake
-deps
+build
+thirdparty
