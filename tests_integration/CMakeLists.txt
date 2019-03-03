@@ -47,23 +47,23 @@ ExternalProject_Add(
         TEST_COMMAND ""
 )
 
-ExternalProject_Add(
-        grpc_project
-        PREFIX ${GRPC_DIR}
-        GIT_REPOSITORY https://github.com/grpc/grpc
-        GIT_TAG v1.19.0
-        INSTALL_COMMAND ""
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND ""
-        TEST_COMMAND ""
-        #        CMAKE_CACHE_ARGS
-        #        -Dprotobuf_BUILD_TESTS:BOOL=OFF
-        #        -Dprotobuf_WITH_ZLIB:BOOL=OFF
-        #        -Dprotobuf_MSVC_STATIC_RUNTIME:BOOL=OFF
-        #        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/protobuf
-)
+#ExternalProject_Add(
+#        grpc_project
+#        PREFIX ${GRPC_DIR}
+#        GIT_REPOSITORY https://github.com/grpc/grpc
+#        GIT_TAG v1.19.0
+#        INSTALL_COMMAND ""
+#        CONFIGURE_COMMAND ""
+#        BUILD_COMMAND ""
+#        TEST_COMMAND ""
+#        #        CMAKE_CACHE_ARGS
+#        #        -Dprotobuf_BUILD_TESTS:BOOL=OFF
+#        #        -Dprotobuf_WITH_ZLIB:BOOL=OFF
+#        #        -Dprotobuf_MSVC_STATIC_RUNTIME:BOOL=OFF
+#        #        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/protobuf
+#)
 
-add_subdirectory(${GRPC_DIR}/src/grpc)
+add_subdirectory(${PROJECT_SOURCE_DIR}/../thirdparty/grpc)
 
 #find_package(Protobuf REQUIRED)
 #find_package(GRPC REQUIRED)
