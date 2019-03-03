@@ -80,7 +80,7 @@ private:
     std::map<std::string, ::statedb::BytesMessage> messages;
 
     std::string getKeyFromVmId(const ::statedb::VmId vmId) {
-        return vmId.processid() + vmId.contractaddr();
+        return vmId.processid() + "_" + vmId.contractaddr();
     }
 };
 

@@ -73,6 +73,7 @@ public:
         return status;
     }
 
+private:
     std::unique_ptr<StateDB::Stub> stub_;
 
 };
