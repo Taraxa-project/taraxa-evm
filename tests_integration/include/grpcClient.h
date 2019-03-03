@@ -1,7 +1,4 @@
-//
-// Created by ibox on 3/3/19.
-//
-
+// client exmple
 #ifndef TESTS_INTEGRATION_GRPCCLIENT_H
 #define TESTS_INTEGRATION_GRPCCLIENT_H
 
@@ -76,7 +73,6 @@ public:
         return status;
     }
 
-private:
     std::unique_ptr<StateDB::Stub> stub_;
 
 };

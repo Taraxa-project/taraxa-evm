@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD 11)
 # GRPC and Protocol Buffers libraries location
 # change if needed by OS completition
 # Debian example
-list(APPEND CMAKE_PREFIX_PATH "/usr/local")
+#list(APPEND CMAKE_PREFIX_PATH "/usr/local")
 
 # Cmake find modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -72,17 +72,18 @@ target_link_libraries(tests_integration
 
 # grpc/protobuf sync client/server testing
 add_executable(tests_grpc grpc_tests.cpp
+        include/grpcIntegrity.h
         include/grpcClient.h
         include/grpcServer.h
         ${PROTO_SRC_DIR}/statedb.pb.cc ${PROTO_SRC_DIR}/common.pb.cc ${PROTO_SRC_DIR}/statedb.grpc.pb.cc
-        include/grpcIntegrity.h)
+        )
 
 target_link_libraries(tests_grpc
+        gRPC::grpc++_reflection
+        protobuf::libprotobuf
         gtest_main
         gtest
         Threads::Threads
-        gRPC::grpc++_reflection
-        protobuf::libprotobuf
         )
 
 enable_testing()

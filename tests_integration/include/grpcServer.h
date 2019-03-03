@@ -1,7 +1,4 @@
-//
-// Created by ibox on 3/2/19.
-//
-
+// server example
 #ifndef TESTS_INTEGRATION_GRPCSERVER_H
 #define TESTS_INTEGRATION_GRPCSERVER_H
 
@@ -94,7 +91,16 @@ Server* Start() {
 }
 
 void RunServer(Server* server) {
+    std::cout << "Running..." << std::endl;
     server->Wait();
+    std::cout << "Stop..." << std::endl;
 }
+
+// Example running server in separate thread
+//auto server_ = Start();
+//thread task(RunServer, server_);
+//cout << boolalpha << task.get_id() << " joinable " << task.joinable() << endl;
+//server_->Shutdown();
+//task.join();
 
 #endif //TESTS_INTEGRATION_GRPCSERVER_H
