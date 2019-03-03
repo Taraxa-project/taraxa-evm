@@ -16,8 +16,6 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
-// auto generate by protoc -I . --grpc_out=generate_mock_code=true:. --plugin=protoc-gen-grpc=`which grpc_cpp_plugin` statedb.proto
-//#include "statedb_mock.grpc.pb.h"
 #include "grpcClient.h"
 #include "grpcServer.h"
 
@@ -49,8 +47,8 @@ void DoTest() {
     vmid->set_processid("999");
 
     Status s = client.Put(request);
-    cout << "Put " << request.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr() << endl;
-    cout << boolalpha << "Status: " << s.ok() << endl;
+    cout << "Put " << request.value() << " ,vmid " << request.vmid().processid() << "," << request.vmid().contractaddr();
+    cout << boolalpha << " ,Status: " << s.ok() << endl;
     EXPECT_TRUE(s.ok());
 
     BoolMessage has_responce;
