@@ -6,15 +6,21 @@ include(ExternalProject)
 set(DEPS_DIR ${PROJECT_SOURCE_DIR}/deps)
 set(GTEST_DIR ${DEPS_DIR}/googletest)
 set(RAPIDJSON_DIR ${DEPS_DIR}/rapidjson)
-set(PROTO_DIR ../grpc/grpc_cpp)
+# set protobuf files
+set(PROTO_COMMON ../grpc/protobuf/common.proto)
+set(PROTO_STATEDB ../grpc/protobuf/statedb.proto)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 11)
 
+# GRPC and Protocol Buffers libraries location
+# change if needed by OS completition
+# Debian example
 list(APPEND CMAKE_PREFIX_PATH "/usr/local")
 
 # Cmake find modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
+# threads and gtests for all tests
 find_package(Threads REQUIRED)
 ExternalProject_Add(googletest
     GIT_REPOSITORY https://github.com/google/googletest
@@ -30,45 +36,53 @@ ExternalProject_Add(rapidjson
     PREFIX ${RAPIDJSON_DIR}
 )
 
-# This branch assumes that gRPC and all its dependencies are already installed
-# on this system, so they can be located by find_package().
+### This branch assumes that gRPC and all its dependencies are already installed
+### on this system, so they can be located by find_package().
 
-# Find Protobuf installation
-# Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
-set(protobuf_MODULE_COMPATIBLE TRUE)
 find_package(Protobuf REQUIRED)
-message(STATUS "Using protobuf ${protobuf_VERSION}")
-
-set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
-set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
-
-# Find gRPC installation
-# Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
 find_package(GRPC REQUIRED)
-message(STATUS "Using gRPC ${gRPC_VERSION}")
 
-set(_GRPC_GRPCPP_UNSECURE GRPC::grpc++_unsecure)
-set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:GRPC::grpc_cpp_plugin>)
+set(PROTO_SRC_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto-src)
+file(MAKE_DIRECTORY ${PROTO_SRC_DIR})
 
+### end grpc protobuf branch
 
+# add headers
 include_directories(
         ${PROJECT_SOURCE_DIR}/include
         ${GTEST_DIR}/include
         ${RAPIDJSON_DIR}/src/rapidjson/include
-        ${PROTO_DIR}
+        ${PROTO_SRC_DIR}
 )
 link_directories(${GTEST_DIR}/lib)
 
-add_executable(tests_integration main.cpp ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/common.pb.cc ${PROTO_DIR}/statedb.grpc.pb.cc include/grpcServer.h)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_SRC_DIR} ${PROTO_COMMON})
+grpc_generate_cpp(GRPC_SRCS GRPC_HDRS ${PROTO_SRC_DIR} ${PROTO_COMMON})
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_SRC_DIR} ${PROTO_STATEDB})
+grpc_generate_cpp(GRPC_SRCS GRPC_HDRS ${PROTO_SRC_DIR} ${PROTO_STATEDB})
+
+# solidity contracts vm runnable testing
+add_executable(tests_integration vm_tests.cpp)
 add_dependencies(tests_integration googletest rapidjson)
 target_link_libraries(tests_integration
         gtest_main
         gtest
         Threads::Threads
-        gRPC::grpc++_reflection
-        protobuf::libprotobuf
         )
+
+# grpc/protobuf sync client/server testing
+#add_executable(tests_grpc grpc_tests.cpp
+#        ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/common.pb.cc ${PROTO_DIR}/statedb.grpc.pb.cc)
+#
+#target_link_libraries(tests_grpc
+#        gtest_main
+#        gtest
+#        Threads::Threads
+#        gRPC::grpc++_reflection
+#        protobuf::libprotobuf
+#        )
 
 enable_testing()
 add_test(tests_integration "./tests_integration")
+#add_test(tests_grpc "./tests_grpc")
 

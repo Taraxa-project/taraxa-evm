@@ -6,8 +6,6 @@
 #define TESTS_INTEGRATION_GRPCSERVER_H
 
 #include <algorithm>
-#include <chrono>
-#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
