@@ -45,7 +45,6 @@ public:
     {}
 
     void DoTest() {
-        cout << "1" << endl;
         ::google::protobuf::Empty response;
         ClientContext context;
         ::statedb::BytesMessage request;
@@ -77,9 +76,32 @@ public:
 };
 
 void DoTest() {
-    grpcIntegrity client(grpc::CreateChannel(
-            "localhost:50051", grpc::InsecureChannelCredentials()));
-    client.DoTest();
+    grpcClient client(grpc::CreateChannel(
+            "0.0.0.0:50051", grpc::InsecureChannelCredentials()));
+    ::google::protobuf::Empty response;
+    ClientContext context;
+    ::statedb::BytesMessage request;
+    request.set_value("1234567890");
+    auto vmid = request.mutable_vmid();
+    vmid->set_contractaddr("0987654321");
+    vmid->set_processid("999");
+
+    Status s = client.Put(request);
+    EXPECT_TRUE(s.ok());
+
+    BoolMessage has_responce;
+    has_responce = client.Has(request);
+    EXPECT_TRUE(has_responce.value());
+
+    BytesMessage get_responce;
+    get_responce = client.Get(request);
+    EXPECT_TRUE(get_responce.value() == "1234567890");
+
+    s = client.Delete(request);
+    EXPECT_TRUE(s.ok());
+
+    has_responce = client.Has(request);
+    EXPECT_FALSE(has_responce.value());
 }
 
 TEST(DoTest, SimpleRpc) {

@@ -86,6 +86,19 @@ target_link_libraries(tests_grpc
         Threads::Threads
         )
 
+add_executable(test_server server.cpp
+        include/grpcServer.h
+        ${PROTO_SRC_DIR}/statedb.pb.cc ${PROTO_SRC_DIR}/common.pb.cc ${PROTO_SRC_DIR}/statedb.grpc.pb.cc
+        )
+
+target_link_libraries(test_server
+        gRPC::grpc++_reflection
+        protobuf::libprotobuf
+        gtest_main
+        gtest
+        Threads::Threads
+        )
+
 enable_testing()
 add_test(tests_integration "./tests_integration")
 add_test(tests_grpc "./tests_grpc")
