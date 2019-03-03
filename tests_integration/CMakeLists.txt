@@ -71,7 +71,7 @@ target_link_libraries(tests_integration
         )
 
 # grpc/protobuf sync client/server testing
-#add_executable(tests_grpc grpc_tests.cpp
+#add_executable(tests_grpc grpc_tests.cpp  include/grpcClient.h  include/grpcServer.h
 #        ${PROTO_DIR}/statedb.pb.cc ${PROTO_DIR}/common.pb.cc ${PROTO_DIR}/statedb.grpc.pb.cc)
 #
 #target_link_libraries(tests_grpc
