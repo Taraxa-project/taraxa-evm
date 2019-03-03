@@ -81,7 +81,7 @@ private:
     }
 };
 
-void RunServer() {
+Server* Start() {
     std::string server_address("0.0.0.0:50051");
     grpcServerImpl service;
 
@@ -90,6 +90,10 @@ void RunServer() {
     builder.RegisterService(&service);
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
+    return server.get();
+}
+
+void RunServer(Server* server) {
     server->Wait();
 }
 
