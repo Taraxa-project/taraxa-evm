@@ -19,9 +19,6 @@
 #endif
 // @@protoc_insertion_point(includes)
 
-namespace protobuf_common_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_common_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_VmId;
-}  // namespace protobuf_common_2eproto
 namespace taraxa {
 namespace vm {
 namespace statedb {
@@ -69,9 +66,8 @@ static void InitDefaultsBytesMessage() {
   ::taraxa::vm::statedb::BytesMessage::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_BytesMessage =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsBytesMessage}, {
-      &protobuf_common_2eproto::scc_info_VmId.base,}};
+::google::protobuf::internal::SCCInfo<0> scc_info_BytesMessage =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsBytesMessage}, {}};
 
 static void InitDefaultsBoolMessage() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -84,9 +80,8 @@ static void InitDefaultsBoolMessage() {
   ::taraxa::vm::statedb::BoolMessage::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_BoolMessage =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsBoolMessage}, {
-      &protobuf_common_2eproto::scc_info_VmId.base,}};
+::google::protobuf::internal::SCCInfo<0> scc_info_BoolMessage =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsBoolMessage}, {}};
 
 void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_VmId.base);
@@ -102,27 +97,25 @@ const ::google::protobuf::uint32 TableStruct::offsets[] GOOGLE_PROTOBUF_ATTRIBUT
   ~0u,  // no _extensions_
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
-  GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::VmId, contractaddr_),
+  GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::VmId, contractaddress_),
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::VmId, processid_),
   ~0u,  // no _has_bits_
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BytesMessage, _internal_metadata_),
   ~0u,  // no _extensions_
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
-  GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BytesMessage, vmid_),
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BytesMessage, value_),
   ~0u,  // no _has_bits_
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BoolMessage, _internal_metadata_),
   ~0u,  // no _extensions_
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
-  GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BoolMessage, vmid_),
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::taraxa::vm::statedb::BoolMessage, value_),
 };
 static const ::google::protobuf::internal::MigrationSchema schemas[] GOOGLE_PROTOBUF_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::taraxa::vm::statedb::VmId)},
   { 7, -1, sizeof(::taraxa::vm::statedb::BytesMessage)},
-  { 14, -1, sizeof(::taraxa::vm::statedb::BoolMessage)},
+  { 13, -1, sizeof(::taraxa::vm::statedb::BoolMessage)},
 };
 
 static ::google::protobuf::Message const * const file_default_instances[] = {
@@ -152,15 +145,14 @@ void protobuf_RegisterTypes(const ::std::string&) {
 void AddDescriptorsImpl() {
   InitDefaults();
   static const char descriptor[] GOOGLE_PROTOBUF_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
-      "\n\014common.proto\022\021taraxa.vm.statedb\"/\n\004VmI"
-      "d\022\024\n\014contractAddr\030\001 \001(\014\022\021\n\tprocessId\030\002 \001"
-      "(\t\"D\n\014BytesMessage\022%\n\004vmId\030\001 \001(\0132\027.tarax"
-      "a.vm.statedb.VmId\022\r\n\005value\030\002 \001(\014\"C\n\013Bool"
-      "Message\022%\n\004vmId\030\001 \001(\0132\027.taraxa.vm.stated"
-      "b.VmId\022\r\n\005value\030\002 \001(\010B\tZ\007grpc_gob\006proto3"
+      "\n\014common.proto\022\021taraxa.vm.statedb\"2\n\004VmI"
+      "d\022\027\n\017contractAddress\030\001 \001(\014\022\021\n\tprocessId\030"
+      "\002 \001(\t\"\035\n\014BytesMessage\022\r\n\005value\030\001 \001(\014\"\034\n\013"
+      "BoolMessage\022\r\n\005value\030\001 \001(\010B\tZ\007grpc_gob\006p"
+      "roto3"
   };
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
-      descriptor, 240);
+      descriptor, 165);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "common.proto", &protobuf_RegisterTypes);
 }
@@ -185,7 +177,7 @@ namespace statedb {
 void VmId::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int VmId::kContractAddrFieldNumber;
+const int VmId::kContractAddressFieldNumber;
 const int VmId::kProcessIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -200,9 +192,9 @@ VmId::VmId(const VmId& from)
   : ::google::protobuf::Message(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  contractaddr_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.contractaddr().size() > 0) {
-    contractaddr_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.contractaddr_);
+  contractaddress_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.contractaddress().size() > 0) {
+    contractaddress_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.contractaddress_);
   }
   processid_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.processid().size() > 0) {
@@ -212,7 +204,7 @@ VmId::VmId(const VmId& from)
 }
 
 void VmId::SharedCtor() {
-  contractaddr_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  contractaddress_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   processid_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
@@ -222,7 +214,7 @@ VmId::~VmId() {
 }
 
 void VmId::SharedDtor() {
-  contractaddr_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  contractaddress_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   processid_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
@@ -246,7 +238,7 @@ void VmId::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  contractaddr_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  contractaddress_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   processid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   _internal_metadata_.Clear();
 }
@@ -261,12 +253,12 @@ bool VmId::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // bytes contractAddr = 1;
+      // bytes contractAddress = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
-                input, this->mutable_contractaddr()));
+                input, this->mutable_contractaddress()));
         } else {
           goto handle_unusual;
         }
@@ -315,10 +307,10 @@ void VmId::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // bytes contractAddr = 1;
-  if (this->contractaddr().size() > 0) {
+  // bytes contractAddress = 1;
+  if (this->contractaddress().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      1, this->contractaddr(), output);
+      1, this->contractaddress(), output);
   }
 
   // string processId = 2;
@@ -345,11 +337,11 @@ void VmId::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // bytes contractAddr = 1;
-  if (this->contractaddr().size() > 0) {
+  // bytes contractAddress = 1;
+  if (this->contractaddress().size() > 0) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        1, this->contractaddr(), target);
+        1, this->contractaddress(), target);
   }
 
   // string processId = 2;
@@ -380,11 +372,11 @@ size_t VmId::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()));
   }
-  // bytes contractAddr = 1;
-  if (this->contractaddr().size() > 0) {
+  // bytes contractAddress = 1;
+  if (this->contractaddress().size() > 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
-        this->contractaddr());
+        this->contractaddress());
   }
 
   // string processId = 2;
@@ -421,9 +413,9 @@ void VmId::MergeFrom(const VmId& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from.contractaddr().size() > 0) {
+  if (from.contractaddress().size() > 0) {
 
-    contractaddr_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.contractaddr_);
+    contractaddress_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.contractaddress_);
   }
   if (from.processid().size() > 0) {
 
@@ -455,7 +447,7 @@ void VmId::Swap(VmId* other) {
 }
 void VmId::InternalSwap(VmId* other) {
   using std::swap;
-  contractaddr_.Swap(&other->contractaddr_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  contractaddress_.Swap(&other->contractaddress_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   processid_.Swap(&other->processid_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
@@ -471,11 +463,8 @@ void VmId::InternalSwap(VmId* other) {
 // ===================================================================
 
 void BytesMessage::InitAsDefaultInstance() {
-  ::taraxa::vm::statedb::_BytesMessage_default_instance_._instance.get_mutable()->vmid_ = const_cast< ::taraxa::vm::statedb::VmId*>(
-      ::taraxa::vm::statedb::VmId::internal_default_instance());
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int BytesMessage::kVmIdFieldNumber;
 const int BytesMessage::kValueFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -494,17 +483,11 @@ BytesMessage::BytesMessage(const BytesMessage& from)
   if (from.value().size() > 0) {
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
-  if (from.has_vmid()) {
-    vmid_ = new ::taraxa::vm::statedb::VmId(*from.vmid_);
-  } else {
-    vmid_ = NULL;
-  }
   // @@protoc_insertion_point(copy_constructor:taraxa.vm.statedb.BytesMessage)
 }
 
 void BytesMessage::SharedCtor() {
   value_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  vmid_ = NULL;
 }
 
 BytesMessage::~BytesMessage() {
@@ -514,7 +497,6 @@ BytesMessage::~BytesMessage() {
 
 void BytesMessage::SharedDtor() {
   value_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (this != internal_default_instance()) delete vmid_;
 }
 
 void BytesMessage::SetCachedSize(int size) const {
@@ -538,10 +520,6 @@ void BytesMessage::Clear() {
   (void) cached_has_bits;
 
   value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (GetArenaNoVirtual() == NULL && vmid_ != NULL) {
-    delete vmid_;
-  }
-  vmid_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -555,22 +533,10 @@ bool BytesMessage::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // .taraxa.vm.statedb.VmId vmId = 1;
+      // bytes value = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_vmid()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // bytes value = 2;
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_value()));
         } else {
@@ -605,16 +571,10 @@ void BytesMessage::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->_internal_vmid(), output);
-  }
-
-  // bytes value = 2;
+  // bytes value = 1;
   if (this->value().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      2, this->value(), output);
+      1, this->value(), output);
   }
 
   if ((_internal_metadata_.have_unknown_fields() &&  ::google::protobuf::internal::GetProto3PreserveUnknownsDefault())) {
@@ -631,18 +591,11 @@ void BytesMessage::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      InternalWriteMessageToArray(
-        1, this->_internal_vmid(), deterministic, target);
-  }
-
-  // bytes value = 2;
+  // bytes value = 1;
   if (this->value().size() > 0) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        2, this->value(), target);
+        1, this->value(), target);
   }
 
   if ((_internal_metadata_.have_unknown_fields() &&  ::google::protobuf::internal::GetProto3PreserveUnknownsDefault())) {
@@ -662,18 +615,11 @@ size_t BytesMessage::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()));
   }
-  // bytes value = 2;
+  // bytes value = 1;
   if (this->value().size() > 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->value());
-  }
-
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *vmid_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -707,9 +653,6 @@ void BytesMessage::MergeFrom(const BytesMessage& from) {
 
     value_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.value_);
   }
-  if (from.has_vmid()) {
-    mutable_vmid()->::taraxa::vm::statedb::VmId::MergeFrom(from.vmid());
-  }
 }
 
 void BytesMessage::CopyFrom(const ::google::protobuf::Message& from) {
@@ -738,7 +681,6 @@ void BytesMessage::InternalSwap(BytesMessage* other) {
   using std::swap;
   value_.Swap(&other->value_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
-  swap(vmid_, other->vmid_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -751,11 +693,8 @@ void BytesMessage::InternalSwap(BytesMessage* other) {
 // ===================================================================
 
 void BoolMessage::InitAsDefaultInstance() {
-  ::taraxa::vm::statedb::_BoolMessage_default_instance_._instance.get_mutable()->vmid_ = const_cast< ::taraxa::vm::statedb::VmId*>(
-      ::taraxa::vm::statedb::VmId::internal_default_instance());
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int BoolMessage::kVmIdFieldNumber;
 const int BoolMessage::kValueFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -770,19 +709,12 @@ BoolMessage::BoolMessage(const BoolMessage& from)
   : ::google::protobuf::Message(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  if (from.has_vmid()) {
-    vmid_ = new ::taraxa::vm::statedb::VmId(*from.vmid_);
-  } else {
-    vmid_ = NULL;
-  }
   value_ = from.value_;
   // @@protoc_insertion_point(copy_constructor:taraxa.vm.statedb.BoolMessage)
 }
 
 void BoolMessage::SharedCtor() {
-  ::memset(&vmid_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&value_) -
-      reinterpret_cast<char*>(&vmid_)) + sizeof(value_));
+  value_ = false;
 }
 
 BoolMessage::~BoolMessage() {
@@ -791,7 +723,6 @@ BoolMessage::~BoolMessage() {
 }
 
 void BoolMessage::SharedDtor() {
-  if (this != internal_default_instance()) delete vmid_;
 }
 
 void BoolMessage::SetCachedSize(int size) const {
@@ -814,10 +745,6 @@ void BoolMessage::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  if (GetArenaNoVirtual() == NULL && vmid_ != NULL) {
-    delete vmid_;
-  }
-  vmid_ = NULL;
   value_ = false;
   _internal_metadata_.Clear();
 }
@@ -832,22 +759,10 @@ bool BoolMessage::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // .taraxa.vm.statedb.VmId vmId = 1;
+      // bool value = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_vmid()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // bool value = 2;
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
@@ -884,15 +799,9 @@ void BoolMessage::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->_internal_vmid(), output);
-  }
-
-  // bool value = 2;
+  // bool value = 1;
   if (this->value() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->value(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteBool(1, this->value(), output);
   }
 
   if ((_internal_metadata_.have_unknown_fields() &&  ::google::protobuf::internal::GetProto3PreserveUnknownsDefault())) {
@@ -909,16 +818,9 @@ void BoolMessage::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      InternalWriteMessageToArray(
-        1, this->_internal_vmid(), deterministic, target);
-  }
-
-  // bool value = 2;
+  // bool value = 1;
   if (this->value() != 0) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->value(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(1, this->value(), target);
   }
 
   if ((_internal_metadata_.have_unknown_fields() &&  ::google::protobuf::internal::GetProto3PreserveUnknownsDefault())) {
@@ -938,14 +840,7 @@ size_t BoolMessage::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()));
   }
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  if (this->has_vmid()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *vmid_);
-  }
-
-  // bool value = 2;
+  // bool value = 1;
   if (this->value() != 0) {
     total_size += 1 + 1;
   }
@@ -977,9 +872,6 @@ void BoolMessage::MergeFrom(const BoolMessage& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from.has_vmid()) {
-    mutable_vmid()->::taraxa::vm::statedb::VmId::MergeFrom(from.vmid());
-  }
   if (from.value() != 0) {
     set_value(from.value());
   }
@@ -1009,7 +901,6 @@ void BoolMessage::Swap(BoolMessage* other) {
 }
 void BoolMessage::InternalSwap(BoolMessage* other) {
   using std::swap;
-  swap(vmid_, other->vmid_);
   swap(value_, other->value_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

@@ -115,8 +115,8 @@ func runCmd(ctx *cli.Context) error {
 		}
 		processId := ctx.GlobalString(ProcessIdFlag.Name)
 		db = ethdb.NewRpcDatabase(conn, &ethdb.VmId{
-			ContractAddr: contractAddress.Bytes(),
-			ProcessId:    processId,
+			ContractAddress: contractAddress.Bytes(),
+			ProcessId:       processId,
 		})
 	} else {
 		db = ethdb.NewMemDatabase()

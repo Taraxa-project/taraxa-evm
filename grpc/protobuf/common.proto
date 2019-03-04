@@ -5,16 +5,15 @@ package taraxa.vm.statedb;
 option go_package = "grpc_go";
 
 message VmId {
-    bytes contractAddr = 1;
+    bytes contractAddress = 1;
     string processId = 2;
 }
 
 message BytesMessage {
-    VmId vmId = 1;
-    bytes value = 2;
+    bytes value = 1;
 }
 
 message BoolMessage {
-    VmId vmId = 1;
-    bool value = 2;
+    bool value = 1;
 }
+

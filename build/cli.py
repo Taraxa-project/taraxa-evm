@@ -97,9 +97,12 @@ def grpc_compile():
         for dir in go_package, cpp_package:
             if not dir.exists():
                 dir.mkdir(parents=True)
+        # TODO NOT READY
         _call(PROTOC_EXECUTABLE, proto_file.name,
               f'--go_out=plugins=grpc:{go_package}',
               f'--cpp_out={cpp_package}',
+              f'--grpc_out={cpp_package}',
+              f'--plugin=protoc-gen-grpc=TODO',
               f'--proto_path={PROTOBUF_ROOT}',
               cwd=str(proto_package))
 

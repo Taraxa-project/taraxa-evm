@@ -160,19 +160,19 @@ class VmId : public ::google::protobuf::Message /* @@protoc_insertion_point(clas
 
   // accessors -------------------------------------------------------
 
-  // bytes contractAddr = 1;
-  void clear_contractaddr();
-  static const int kContractAddrFieldNumber = 1;
-  const ::std::string& contractaddr() const;
-  void set_contractaddr(const ::std::string& value);
+  // bytes contractAddress = 1;
+  void clear_contractaddress();
+  static const int kContractAddressFieldNumber = 1;
+  const ::std::string& contractaddress() const;
+  void set_contractaddress(const ::std::string& value);
   #if LANG_CXX11
-  void set_contractaddr(::std::string&& value);
+  void set_contractaddress(::std::string&& value);
   #endif
-  void set_contractaddr(const char* value);
-  void set_contractaddr(const void* value, size_t size);
-  ::std::string* mutable_contractaddr();
-  ::std::string* release_contractaddr();
-  void set_allocated_contractaddr(::std::string* contractaddr);
+  void set_contractaddress(const char* value);
+  void set_contractaddress(const void* value, size_t size);
+  ::std::string* mutable_contractaddress();
+  ::std::string* release_contractaddress();
+  void set_allocated_contractaddress(::std::string* contractaddress);
 
   // string processId = 2;
   void clear_processid();
@@ -192,7 +192,7 @@ class VmId : public ::google::protobuf::Message /* @@protoc_insertion_point(clas
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::internal::ArenaStringPtr contractaddr_;
+  ::google::protobuf::internal::ArenaStringPtr contractaddress_;
   ::google::protobuf::internal::ArenaStringPtr processid_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_common_2eproto::TableStruct;
@@ -286,9 +286,9 @@ class BytesMessage : public ::google::protobuf::Message /* @@protoc_insertion_po
 
   // accessors -------------------------------------------------------
 
-  // bytes value = 2;
+  // bytes value = 1;
   void clear_value();
-  static const int kValueFieldNumber = 2;
+  static const int kValueFieldNumber = 1;
   const ::std::string& value() const;
   void set_value(const ::std::string& value);
   #if LANG_CXX11
@@ -300,24 +300,11 @@ class BytesMessage : public ::google::protobuf::Message /* @@protoc_insertion_po
   ::std::string* release_value();
   void set_allocated_value(::std::string* value);
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  bool has_vmid() const;
-  void clear_vmid();
-  static const int kVmIdFieldNumber = 1;
-  private:
-  const ::taraxa::vm::statedb::VmId& _internal_vmid() const;
-  public:
-  const ::taraxa::vm::statedb::VmId& vmid() const;
-  ::taraxa::vm::statedb::VmId* release_vmid();
-  ::taraxa::vm::statedb::VmId* mutable_vmid();
-  void set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid);
-
   // @@protoc_insertion_point(class_scope:taraxa.vm.statedb.BytesMessage)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr value_;
-  ::taraxa::vm::statedb::VmId* vmid_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_common_2eproto::TableStruct;
 };
@@ -410,21 +397,9 @@ class BoolMessage : public ::google::protobuf::Message /* @@protoc_insertion_poi
 
   // accessors -------------------------------------------------------
 
-  // .taraxa.vm.statedb.VmId vmId = 1;
-  bool has_vmid() const;
-  void clear_vmid();
-  static const int kVmIdFieldNumber = 1;
-  private:
-  const ::taraxa::vm::statedb::VmId& _internal_vmid() const;
-  public:
-  const ::taraxa::vm::statedb::VmId& vmid() const;
-  ::taraxa::vm::statedb::VmId* release_vmid();
-  ::taraxa::vm::statedb::VmId* mutable_vmid();
-  void set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid);
-
-  // bool value = 2;
+  // bool value = 1;
   void clear_value();
-  static const int kValueFieldNumber = 2;
+  static const int kValueFieldNumber = 1;
   bool value() const;
   void set_value(bool value);
 
@@ -432,7 +407,6 @@ class BoolMessage : public ::google::protobuf::Message /* @@protoc_insertion_poi
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::taraxa::vm::statedb::VmId* vmid_;
   bool value_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_common_2eproto::TableStruct;
@@ -448,57 +422,57 @@ class BoolMessage : public ::google::protobuf::Message /* @@protoc_insertion_poi
 #endif  // __GNUC__
 // VmId
 
-// bytes contractAddr = 1;
-inline void VmId::clear_contractaddr() {
-  contractaddr_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// bytes contractAddress = 1;
+inline void VmId::clear_contractaddress() {
+  contractaddress_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& VmId::contractaddr() const {
-  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.VmId.contractAddr)
-  return contractaddr_.GetNoArena();
+inline const ::std::string& VmId::contractaddress() const {
+  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.VmId.contractAddress)
+  return contractaddress_.GetNoArena();
 }
-inline void VmId::set_contractaddr(const ::std::string& value) {
+inline void VmId::set_contractaddress(const ::std::string& value) {
   
-  contractaddr_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:taraxa.vm.statedb.VmId.contractAddr)
+  contractaddress_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:taraxa.vm.statedb.VmId.contractAddress)
 }
 #if LANG_CXX11
-inline void VmId::set_contractaddr(::std::string&& value) {
+inline void VmId::set_contractaddress(::std::string&& value) {
   
-  contractaddr_.SetNoArena(
+  contractaddress_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:taraxa.vm.statedb.VmId.contractAddr)
+  // @@protoc_insertion_point(field_set_rvalue:taraxa.vm.statedb.VmId.contractAddress)
 }
 #endif
-inline void VmId::set_contractaddr(const char* value) {
+inline void VmId::set_contractaddress(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  contractaddr_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:taraxa.vm.statedb.VmId.contractAddr)
+  contractaddress_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:taraxa.vm.statedb.VmId.contractAddress)
 }
-inline void VmId::set_contractaddr(const void* value, size_t size) {
+inline void VmId::set_contractaddress(const void* value, size_t size) {
   
-  contractaddr_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  contractaddress_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:taraxa.vm.statedb.VmId.contractAddr)
+  // @@protoc_insertion_point(field_set_pointer:taraxa.vm.statedb.VmId.contractAddress)
 }
-inline ::std::string* VmId::mutable_contractaddr() {
+inline ::std::string* VmId::mutable_contractaddress() {
   
-  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.VmId.contractAddr)
-  return contractaddr_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.VmId.contractAddress)
+  return contractaddress_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* VmId::release_contractaddr() {
-  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.VmId.contractAddr)
+inline ::std::string* VmId::release_contractaddress() {
+  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.VmId.contractAddress)
   
-  return contractaddr_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return contractaddress_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void VmId::set_allocated_contractaddr(::std::string* contractaddr) {
-  if (contractaddr != NULL) {
+inline void VmId::set_allocated_contractaddress(::std::string* contractaddress) {
+  if (contractaddress != NULL) {
     
   } else {
     
   }
-  contractaddr_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), contractaddr);
-  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.VmId.contractAddr)
+  contractaddress_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), contractaddress);
+  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.VmId.contractAddress)
 }
 
 // string processId = 2;
@@ -558,61 +532,7 @@ inline void VmId::set_allocated_processid(::std::string* processid) {
 
 // BytesMessage
 
-// .taraxa.vm.statedb.VmId vmId = 1;
-inline bool BytesMessage::has_vmid() const {
-  return this != internal_default_instance() && vmid_ != NULL;
-}
-inline void BytesMessage::clear_vmid() {
-  if (GetArenaNoVirtual() == NULL && vmid_ != NULL) {
-    delete vmid_;
-  }
-  vmid_ = NULL;
-}
-inline const ::taraxa::vm::statedb::VmId& BytesMessage::_internal_vmid() const {
-  return *vmid_;
-}
-inline const ::taraxa::vm::statedb::VmId& BytesMessage::vmid() const {
-  const ::taraxa::vm::statedb::VmId* p = vmid_;
-  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.BytesMessage.vmId)
-  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::VmId*>(
-      &::taraxa::vm::statedb::_VmId_default_instance_);
-}
-inline ::taraxa::vm::statedb::VmId* BytesMessage::release_vmid() {
-  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.BytesMessage.vmId)
-  
-  ::taraxa::vm::statedb::VmId* temp = vmid_;
-  vmid_ = NULL;
-  return temp;
-}
-inline ::taraxa::vm::statedb::VmId* BytesMessage::mutable_vmid() {
-  
-  if (vmid_ == NULL) {
-    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::VmId>(GetArenaNoVirtual());
-    vmid_ = p;
-  }
-  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.BytesMessage.vmId)
-  return vmid_;
-}
-inline void BytesMessage::set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  if (message_arena == NULL) {
-    delete vmid_;
-  }
-  if (vmid) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      vmid = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, vmid, submessage_arena);
-    }
-    
-  } else {
-    
-  }
-  vmid_ = vmid;
-  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.BytesMessage.vmId)
-}
-
-// bytes value = 2;
+// bytes value = 1;
 inline void BytesMessage::clear_value() {
   value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -669,61 +589,7 @@ inline void BytesMessage::set_allocated_value(::std::string* value) {
 
 // BoolMessage
 
-// .taraxa.vm.statedb.VmId vmId = 1;
-inline bool BoolMessage::has_vmid() const {
-  return this != internal_default_instance() && vmid_ != NULL;
-}
-inline void BoolMessage::clear_vmid() {
-  if (GetArenaNoVirtual() == NULL && vmid_ != NULL) {
-    delete vmid_;
-  }
-  vmid_ = NULL;
-}
-inline const ::taraxa::vm::statedb::VmId& BoolMessage::_internal_vmid() const {
-  return *vmid_;
-}
-inline const ::taraxa::vm::statedb::VmId& BoolMessage::vmid() const {
-  const ::taraxa::vm::statedb::VmId* p = vmid_;
-  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.BoolMessage.vmId)
-  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::VmId*>(
-      &::taraxa::vm::statedb::_VmId_default_instance_);
-}
-inline ::taraxa::vm::statedb::VmId* BoolMessage::release_vmid() {
-  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.BoolMessage.vmId)
-  
-  ::taraxa::vm::statedb::VmId* temp = vmid_;
-  vmid_ = NULL;
-  return temp;
-}
-inline ::taraxa::vm::statedb::VmId* BoolMessage::mutable_vmid() {
-  
-  if (vmid_ == NULL) {
-    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::VmId>(GetArenaNoVirtual());
-    vmid_ = p;
-  }
-  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.BoolMessage.vmId)
-  return vmid_;
-}
-inline void BoolMessage::set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  if (message_arena == NULL) {
-    delete vmid_;
-  }
-  if (vmid) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      vmid = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, vmid, submessage_arena);
-    }
-    
-  } else {
-    
-  }
-  vmid_ = vmid;
-  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.BoolMessage.vmId)
-}
-
-// bool value = 2;
+// bool value = 1;
 inline void BoolMessage::clear_value() {
   value_ = false;
 }

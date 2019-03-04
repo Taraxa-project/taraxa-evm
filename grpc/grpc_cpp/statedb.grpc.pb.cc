@@ -42,67 +42,67 @@ StateDB::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel)
   , rpcmethod_Close_(StateDB_method_names[4], ::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
 
-::grpc::Status StateDB::Stub::Put(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::google::protobuf::Empty* response) {
+::grpc::Status StateDB::Stub::Put(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyAndValueMessage& request, ::google::protobuf::Empty* response) {
   return ::grpc::internal::BlockingUnaryCall(channel_.get(), rpcmethod_Put_, context, request, response);
 }
 
-void StateDB::Stub::experimental_async::Put(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::google::protobuf::Empty* response, std::function<void(::grpc::Status)> f) {
+void StateDB::Stub::experimental_async::Put(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyAndValueMessage* request, ::google::protobuf::Empty* response, std::function<void(::grpc::Status)> f) {
   return ::grpc::internal::CallbackUnaryCall(stub_->channel_.get(), stub_->rpcmethod_Put_, context, request, response, std::move(f));
 }
 
-::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::AsyncPutRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::AsyncPutRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyAndValueMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::google::protobuf::Empty>::Create(channel_.get(), cq, rpcmethod_Put_, context, request, true);
 }
 
-::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::PrepareAsyncPutRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::PrepareAsyncPutRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyAndValueMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::google::protobuf::Empty>::Create(channel_.get(), cq, rpcmethod_Put_, context, request, false);
 }
 
-::grpc::Status StateDB::Stub::Delete(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::google::protobuf::Empty* response) {
+::grpc::Status StateDB::Stub::Delete(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::google::protobuf::Empty* response) {
   return ::grpc::internal::BlockingUnaryCall(channel_.get(), rpcmethod_Delete_, context, request, response);
 }
 
-void StateDB::Stub::experimental_async::Delete(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::google::protobuf::Empty* response, std::function<void(::grpc::Status)> f) {
+void StateDB::Stub::experimental_async::Delete(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::google::protobuf::Empty* response, std::function<void(::grpc::Status)> f) {
   return ::grpc::internal::CallbackUnaryCall(stub_->channel_.get(), stub_->rpcmethod_Delete_, context, request, response, std::move(f));
 }
 
-::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::AsyncDeleteRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::AsyncDeleteRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::google::protobuf::Empty>::Create(channel_.get(), cq, rpcmethod_Delete_, context, request, true);
 }
 
-::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::PrepareAsyncDeleteRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::google::protobuf::Empty>* StateDB::Stub::PrepareAsyncDeleteRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::google::protobuf::Empty>::Create(channel_.get(), cq, rpcmethod_Delete_, context, request, false);
 }
 
-::grpc::Status StateDB::Stub::Get(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::taraxa::vm::statedb::BytesMessage* response) {
+::grpc::Status StateDB::Stub::Get(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::taraxa::vm::statedb::BytesMessage* response) {
   return ::grpc::internal::BlockingUnaryCall(channel_.get(), rpcmethod_Get_, context, request, response);
 }
 
-void StateDB::Stub::experimental_async::Get(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BytesMessage* response, std::function<void(::grpc::Status)> f) {
+void StateDB::Stub::experimental_async::Get(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::taraxa::vm::statedb::BytesMessage* response, std::function<void(::grpc::Status)> f) {
   return ::grpc::internal::CallbackUnaryCall(stub_->channel_.get(), stub_->rpcmethod_Get_, context, request, response, std::move(f));
 }
 
-::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BytesMessage>* StateDB::Stub::AsyncGetRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BytesMessage>* StateDB::Stub::AsyncGetRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::taraxa::vm::statedb::BytesMessage>::Create(channel_.get(), cq, rpcmethod_Get_, context, request, true);
 }
 
-::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BytesMessage>* StateDB::Stub::PrepareAsyncGetRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BytesMessage>* StateDB::Stub::PrepareAsyncGetRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::taraxa::vm::statedb::BytesMessage>::Create(channel_.get(), cq, rpcmethod_Get_, context, request, false);
 }
 
-::grpc::Status StateDB::Stub::Has(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::taraxa::vm::statedb::BoolMessage* response) {
+::grpc::Status StateDB::Stub::Has(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::taraxa::vm::statedb::BoolMessage* response) {
   return ::grpc::internal::BlockingUnaryCall(channel_.get(), rpcmethod_Has_, context, request, response);
 }
 
-void StateDB::Stub::experimental_async::Has(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BoolMessage* response, std::function<void(::grpc::Status)> f) {
+void StateDB::Stub::experimental_async::Has(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::taraxa::vm::statedb::BoolMessage* response, std::function<void(::grpc::Status)> f) {
   return ::grpc::internal::CallbackUnaryCall(stub_->channel_.get(), stub_->rpcmethod_Has_, context, request, response, std::move(f));
 }
 
-::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BoolMessage>* StateDB::Stub::AsyncHasRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BoolMessage>* StateDB::Stub::AsyncHasRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::taraxa::vm::statedb::BoolMessage>::Create(channel_.get(), cq, rpcmethod_Has_, context, request, true);
 }
 
-::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BoolMessage>* StateDB::Stub::PrepareAsyncHasRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::BytesMessage& request, ::grpc::CompletionQueue* cq) {
+::grpc::ClientAsyncResponseReader< ::taraxa::vm::statedb::BoolMessage>* StateDB::Stub::PrepareAsyncHasRaw(::grpc::ClientContext* context, const ::taraxa::vm::statedb::KeyMessage& request, ::grpc::CompletionQueue* cq) {
   return ::grpc::internal::ClientAsyncResponseReaderFactory< ::taraxa::vm::statedb::BoolMessage>::Create(channel_.get(), cq, rpcmethod_Has_, context, request, false);
 }
 
@@ -126,22 +126,22 @@ StateDB::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StateDB_method_names[0],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::BytesMessage, ::google::protobuf::Empty>(
+      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::KeyAndValueMessage, ::google::protobuf::Empty>(
           std::mem_fn(&StateDB::Service::Put), this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StateDB_method_names[1],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::BytesMessage, ::google::protobuf::Empty>(
+      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::KeyMessage, ::google::protobuf::Empty>(
           std::mem_fn(&StateDB::Service::Delete), this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StateDB_method_names[2],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::BytesMessage, ::taraxa::vm::statedb::BytesMessage>(
+      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::KeyMessage, ::taraxa::vm::statedb::BytesMessage>(
           std::mem_fn(&StateDB::Service::Get), this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StateDB_method_names[3],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::BytesMessage, ::taraxa::vm::statedb::BoolMessage>(
+      new ::grpc::internal::RpcMethodHandler< StateDB::Service, ::taraxa::vm::statedb::KeyMessage, ::taraxa::vm::statedb::BoolMessage>(
           std::mem_fn(&StateDB::Service::Has), this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StateDB_method_names[4],
@@ -153,28 +153,28 @@ StateDB::Service::Service() {
 StateDB::Service::~Service() {
 }
 
-::grpc::Status StateDB::Service::Put(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::google::protobuf::Empty* response) {
+::grpc::Status StateDB::Service::Put(::grpc::ServerContext* context, const ::taraxa::vm::statedb::KeyAndValueMessage* request, ::google::protobuf::Empty* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status StateDB::Service::Delete(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::google::protobuf::Empty* response) {
+::grpc::Status StateDB::Service::Delete(::grpc::ServerContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::google::protobuf::Empty* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status StateDB::Service::Get(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BytesMessage* response) {
+::grpc::Status StateDB::Service::Get(::grpc::ServerContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::taraxa::vm::statedb::BytesMessage* response) {
   (void) context;
   (void) request;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
-::grpc::Status StateDB::Service::Has(::grpc::ServerContext* context, const ::taraxa::vm::statedb::BytesMessage* request, ::taraxa::vm::statedb::BoolMessage* response) {
+::grpc::Status StateDB::Service::Has(::grpc::ServerContext* context, const ::taraxa::vm::statedb::KeyMessage* request, ::taraxa::vm::statedb::BoolMessage* response) {
   (void) context;
   (void) request;
   (void) response;

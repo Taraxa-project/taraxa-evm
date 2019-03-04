@@ -30,51 +30,53 @@ using statedb::BoolMessage;
 using statedb::BytesMessage;
 using statedb::StateDB;
 
-class grpcClient {
+class StateDBClient {
+
 public:
-    grpcClient(std::shared_ptr<Channel> channel)
-    : stub_(StateDB::NewStub(channel)) {
+
+    explicit StateDBClient(const std::shared_ptr<Channel> &channel)
+            : grpcClient(StateDB::NewStub(channel)) {
     }
 
-    Status Put(const ::statedb::BytesMessage& message) {
+    Status Put(const ::statedb::KeyAndValueMessage &message) {
         ::google::protobuf::Empty response;
         ClientContext context;
-        Status status = stub_->Put(&context, message, &response);
+        Status status = grpcClient->Put(&context, message, &response);
         return status;
     }
 
-    Status Delete(const ::statedb::BytesMessage& message) {
+    Status Delete(const ::statedb::KeyMessage &message) {
         ::google::protobuf::Empty response;
         ClientContext context;
-        Status status = stub_->Delete(&context, message, &response);
+        Status status = grpcClient->Delete(&context, message, &response);
         return status;
     }
 
-    ::statedb::BytesMessage Get(const ::statedb::BytesMessage& message) {
+    ::statedb::BytesMessage Get(const ::statedb::KeyMessage &message) {
         ::statedb::BytesMessage response;
         ClientContext context;
-        Status status = stub_->Get(&context, message, &response);
+        Status status = grpcClient->Get(&context, message, &response);
         if (!status.ok())
             cout << "Error getter status" << endl;
         return response;
     }
 
-    ::statedb::BoolMessage Has(const ::statedb::BytesMessage& message) {
+    ::statedb::BoolMessage Has(const ::statedb::KeyMessage &message) {
         ::statedb::BoolMessage response;
         ClientContext context;
-        stub_->Has(&context, message, &response);
+        grpcClient->Has(&context, message, &response);
         return response;
     }
 
-    Status Close(const ::statedb::VmId& message) {
+    Status Close(const ::statedb::VmId &message) {
         ::google::protobuf::Empty response;
         ClientContext context;
-        Status status = stub_->Close(&context, message, &response);
-        return status;
+        return grpcClient->Close(&context, message, &response);
     }
 
 private:
-    std::unique_ptr<StateDB::Stub> stub_;
+
+    std::unique_ptr<StateDB::Stub> grpcClient;
 
 };
 

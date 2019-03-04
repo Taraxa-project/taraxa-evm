@@ -26,8 +26,10 @@
 #include <google/protobuf/generated_message_util.h>
 #include <google/protobuf/inlined_string_field.h>
 #include <google/protobuf/metadata.h>
+#include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/unknown_field_set.h>
 #include <google/protobuf/empty.pb.h>
 #include "common.pb.h"
 // @@protoc_insertion_point(includes)
@@ -38,7 +40,7 @@ namespace protobuf_statedb_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[1];
+  static const ::google::protobuf::internal::ParseTable schema[2];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -48,16 +50,269 @@ void AddDescriptors();
 namespace taraxa {
 namespace vm {
 namespace statedb {
+class KeyAndValueMessage;
+class KeyAndValueMessageDefaultTypeInternal;
+extern KeyAndValueMessageDefaultTypeInternal _KeyAndValueMessage_default_instance_;
+class KeyMessage;
+class KeyMessageDefaultTypeInternal;
+extern KeyMessageDefaultTypeInternal _KeyMessage_default_instance_;
 }  // namespace statedb
 }  // namespace vm
 }  // namespace taraxa
+namespace google {
+namespace protobuf {
+template<> ::taraxa::vm::statedb::KeyAndValueMessage* Arena::CreateMaybeMessage<::taraxa::vm::statedb::KeyAndValueMessage>(Arena*);
+template<> ::taraxa::vm::statedb::KeyMessage* Arena::CreateMaybeMessage<::taraxa::vm::statedb::KeyMessage>(Arena*);
+}  // namespace protobuf
+}  // namespace google
 namespace taraxa {
 namespace vm {
 namespace statedb {
 
 // ===================================================================
 
+class KeyMessage : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:taraxa.vm.statedb.KeyMessage) */ {
+ public:
+  KeyMessage();
+  virtual ~KeyMessage();
 
+  KeyMessage(const KeyMessage& from);
+
+  inline KeyMessage& operator=(const KeyMessage& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  KeyMessage(KeyMessage&& from) noexcept
+    : KeyMessage() {
+    *this = ::std::move(from);
+  }
+
+  inline KeyMessage& operator=(KeyMessage&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const KeyMessage& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const KeyMessage* internal_default_instance() {
+    return reinterpret_cast<const KeyMessage*>(
+               &_KeyMessage_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    0;
+
+  void Swap(KeyMessage* other);
+  friend void swap(KeyMessage& a, KeyMessage& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline KeyMessage* New() const final {
+    return CreateMaybeMessage<KeyMessage>(NULL);
+  }
+
+  KeyMessage* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<KeyMessage>(arena);
+  }
+  void CopyFrom(const ::google::protobuf::Message& from) final;
+  void MergeFrom(const ::google::protobuf::Message& from) final;
+  void CopyFrom(const KeyMessage& from);
+  void MergeFrom(const KeyMessage& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(KeyMessage* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // .taraxa.vm.statedb.VmId vmId = 1;
+  bool has_vmid() const;
+  void clear_vmid();
+  static const int kVmIdFieldNumber = 1;
+  private:
+  const ::taraxa::vm::statedb::VmId& _internal_vmid() const;
+  public:
+  const ::taraxa::vm::statedb::VmId& vmid() const;
+  ::taraxa::vm::statedb::VmId* release_vmid();
+  ::taraxa::vm::statedb::VmId* mutable_vmid();
+  void set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid);
+
+  // .taraxa.vm.statedb.BytesMessage memoryAddress = 2;
+  bool has_memoryaddress() const;
+  void clear_memoryaddress();
+  static const int kMemoryAddressFieldNumber = 2;
+  private:
+  const ::taraxa::vm::statedb::BytesMessage& _internal_memoryaddress() const;
+  public:
+  const ::taraxa::vm::statedb::BytesMessage& memoryaddress() const;
+  ::taraxa::vm::statedb::BytesMessage* release_memoryaddress();
+  ::taraxa::vm::statedb::BytesMessage* mutable_memoryaddress();
+  void set_allocated_memoryaddress(::taraxa::vm::statedb::BytesMessage* memoryaddress);
+
+  // @@protoc_insertion_point(class_scope:taraxa.vm.statedb.KeyMessage)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::taraxa::vm::statedb::VmId* vmid_;
+  ::taraxa::vm::statedb::BytesMessage* memoryaddress_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_statedb_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class KeyAndValueMessage : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:taraxa.vm.statedb.KeyAndValueMessage) */ {
+ public:
+  KeyAndValueMessage();
+  virtual ~KeyAndValueMessage();
+
+  KeyAndValueMessage(const KeyAndValueMessage& from);
+
+  inline KeyAndValueMessage& operator=(const KeyAndValueMessage& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  KeyAndValueMessage(KeyAndValueMessage&& from) noexcept
+    : KeyAndValueMessage() {
+    *this = ::std::move(from);
+  }
+
+  inline KeyAndValueMessage& operator=(KeyAndValueMessage&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const KeyAndValueMessage& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const KeyAndValueMessage* internal_default_instance() {
+    return reinterpret_cast<const KeyAndValueMessage*>(
+               &_KeyAndValueMessage_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    1;
+
+  void Swap(KeyAndValueMessage* other);
+  friend void swap(KeyAndValueMessage& a, KeyAndValueMessage& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline KeyAndValueMessage* New() const final {
+    return CreateMaybeMessage<KeyAndValueMessage>(NULL);
+  }
+
+  KeyAndValueMessage* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<KeyAndValueMessage>(arena);
+  }
+  void CopyFrom(const ::google::protobuf::Message& from) final;
+  void MergeFrom(const ::google::protobuf::Message& from) final;
+  void CopyFrom(const KeyAndValueMessage& from);
+  void MergeFrom(const KeyAndValueMessage& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(KeyAndValueMessage* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // .taraxa.vm.statedb.KeyMessage key = 1;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  private:
+  const ::taraxa::vm::statedb::KeyMessage& _internal_key() const;
+  public:
+  const ::taraxa::vm::statedb::KeyMessage& key() const;
+  ::taraxa::vm::statedb::KeyMessage* release_key();
+  ::taraxa::vm::statedb::KeyMessage* mutable_key();
+  void set_allocated_key(::taraxa::vm::statedb::KeyMessage* key);
+
+  // .taraxa.vm.statedb.BytesMessage value = 2;
+  bool has_value() const;
+  void clear_value();
+  static const int kValueFieldNumber = 2;
+  private:
+  const ::taraxa::vm::statedb::BytesMessage& _internal_value() const;
+  public:
+  const ::taraxa::vm::statedb::BytesMessage& value() const;
+  ::taraxa::vm::statedb::BytesMessage* release_value();
+  ::taraxa::vm::statedb::BytesMessage* mutable_value();
+  void set_allocated_value(::taraxa::vm::statedb::BytesMessage* value);
+
+  // @@protoc_insertion_point(class_scope:taraxa.vm.statedb.KeyAndValueMessage)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::taraxa::vm::statedb::KeyMessage* key_;
+  ::taraxa::vm::statedb::BytesMessage* value_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_statedb_2eproto::TableStruct;
+};
 // ===================================================================
 
 
@@ -67,9 +322,215 @@ namespace statedb {
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
+// KeyMessage
+
+// .taraxa.vm.statedb.VmId vmId = 1;
+inline bool KeyMessage::has_vmid() const {
+  return this != internal_default_instance() && vmid_ != NULL;
+}
+inline const ::taraxa::vm::statedb::VmId& KeyMessage::_internal_vmid() const {
+  return *vmid_;
+}
+inline const ::taraxa::vm::statedb::VmId& KeyMessage::vmid() const {
+  const ::taraxa::vm::statedb::VmId* p = vmid_;
+  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.KeyMessage.vmId)
+  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::VmId*>(
+      &::taraxa::vm::statedb::_VmId_default_instance_);
+}
+inline ::taraxa::vm::statedb::VmId* KeyMessage::release_vmid() {
+  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.KeyMessage.vmId)
+  
+  ::taraxa::vm::statedb::VmId* temp = vmid_;
+  vmid_ = NULL;
+  return temp;
+}
+inline ::taraxa::vm::statedb::VmId* KeyMessage::mutable_vmid() {
+  
+  if (vmid_ == NULL) {
+    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::VmId>(GetArenaNoVirtual());
+    vmid_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.KeyMessage.vmId)
+  return vmid_;
+}
+inline void KeyMessage::set_allocated_vmid(::taraxa::vm::statedb::VmId* vmid) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(vmid_);
+  }
+  if (vmid) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      vmid = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, vmid, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  vmid_ = vmid;
+  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.KeyMessage.vmId)
+}
+
+// .taraxa.vm.statedb.BytesMessage memoryAddress = 2;
+inline bool KeyMessage::has_memoryaddress() const {
+  return this != internal_default_instance() && memoryaddress_ != NULL;
+}
+inline const ::taraxa::vm::statedb::BytesMessage& KeyMessage::_internal_memoryaddress() const {
+  return *memoryaddress_;
+}
+inline const ::taraxa::vm::statedb::BytesMessage& KeyMessage::memoryaddress() const {
+  const ::taraxa::vm::statedb::BytesMessage* p = memoryaddress_;
+  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.KeyMessage.memoryAddress)
+  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::BytesMessage*>(
+      &::taraxa::vm::statedb::_BytesMessage_default_instance_);
+}
+inline ::taraxa::vm::statedb::BytesMessage* KeyMessage::release_memoryaddress() {
+  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.KeyMessage.memoryAddress)
+  
+  ::taraxa::vm::statedb::BytesMessage* temp = memoryaddress_;
+  memoryaddress_ = NULL;
+  return temp;
+}
+inline ::taraxa::vm::statedb::BytesMessage* KeyMessage::mutable_memoryaddress() {
+  
+  if (memoryaddress_ == NULL) {
+    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::BytesMessage>(GetArenaNoVirtual());
+    memoryaddress_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.KeyMessage.memoryAddress)
+  return memoryaddress_;
+}
+inline void KeyMessage::set_allocated_memoryaddress(::taraxa::vm::statedb::BytesMessage* memoryaddress) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(memoryaddress_);
+  }
+  if (memoryaddress) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      memoryaddress = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, memoryaddress, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  memoryaddress_ = memoryaddress;
+  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.KeyMessage.memoryAddress)
+}
+
+// -------------------------------------------------------------------
+
+// KeyAndValueMessage
+
+// .taraxa.vm.statedb.KeyMessage key = 1;
+inline bool KeyAndValueMessage::has_key() const {
+  return this != internal_default_instance() && key_ != NULL;
+}
+inline void KeyAndValueMessage::clear_key() {
+  if (GetArenaNoVirtual() == NULL && key_ != NULL) {
+    delete key_;
+  }
+  key_ = NULL;
+}
+inline const ::taraxa::vm::statedb::KeyMessage& KeyAndValueMessage::_internal_key() const {
+  return *key_;
+}
+inline const ::taraxa::vm::statedb::KeyMessage& KeyAndValueMessage::key() const {
+  const ::taraxa::vm::statedb::KeyMessage* p = key_;
+  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.KeyAndValueMessage.key)
+  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::KeyMessage*>(
+      &::taraxa::vm::statedb::_KeyMessage_default_instance_);
+}
+inline ::taraxa::vm::statedb::KeyMessage* KeyAndValueMessage::release_key() {
+  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.KeyAndValueMessage.key)
+  
+  ::taraxa::vm::statedb::KeyMessage* temp = key_;
+  key_ = NULL;
+  return temp;
+}
+inline ::taraxa::vm::statedb::KeyMessage* KeyAndValueMessage::mutable_key() {
+  
+  if (key_ == NULL) {
+    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::KeyMessage>(GetArenaNoVirtual());
+    key_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.KeyAndValueMessage.key)
+  return key_;
+}
+inline void KeyAndValueMessage::set_allocated_key(::taraxa::vm::statedb::KeyMessage* key) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete key_;
+  }
+  if (key) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      key = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, key, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  key_ = key;
+  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.KeyAndValueMessage.key)
+}
+
+// .taraxa.vm.statedb.BytesMessage value = 2;
+inline bool KeyAndValueMessage::has_value() const {
+  return this != internal_default_instance() && value_ != NULL;
+}
+inline const ::taraxa::vm::statedb::BytesMessage& KeyAndValueMessage::_internal_value() const {
+  return *value_;
+}
+inline const ::taraxa::vm::statedb::BytesMessage& KeyAndValueMessage::value() const {
+  const ::taraxa::vm::statedb::BytesMessage* p = value_;
+  // @@protoc_insertion_point(field_get:taraxa.vm.statedb.KeyAndValueMessage.value)
+  return p != NULL ? *p : *reinterpret_cast<const ::taraxa::vm::statedb::BytesMessage*>(
+      &::taraxa::vm::statedb::_BytesMessage_default_instance_);
+}
+inline ::taraxa::vm::statedb::BytesMessage* KeyAndValueMessage::release_value() {
+  // @@protoc_insertion_point(field_release:taraxa.vm.statedb.KeyAndValueMessage.value)
+  
+  ::taraxa::vm::statedb::BytesMessage* temp = value_;
+  value_ = NULL;
+  return temp;
+}
+inline ::taraxa::vm::statedb::BytesMessage* KeyAndValueMessage::mutable_value() {
+  
+  if (value_ == NULL) {
+    auto* p = CreateMaybeMessage<::taraxa::vm::statedb::BytesMessage>(GetArenaNoVirtual());
+    value_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:taraxa.vm.statedb.KeyAndValueMessage.value)
+  return value_;
+}
+inline void KeyAndValueMessage::set_allocated_value(::taraxa::vm::statedb::BytesMessage* value) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(value_);
+  }
+  if (value) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, value, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  value_ = value;
+  // @@protoc_insertion_point(field_set_allocated:taraxa.vm.statedb.KeyAndValueMessage.value)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 
 // @@protoc_insertion_point(namespace_scope)
 
