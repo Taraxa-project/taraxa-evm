@@ -37,7 +37,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	cli "gopkg.in/urfave/cli.v1"
+	"google.golang.org/grpc"
+	"gopkg.in/urfave/cli.v1"
 )
 
 var runCommand = cli.Command{
@@ -78,16 +79,8 @@ func runCmd(ctx *cli.Context) error {
 		DisableStack:  ctx.GlobalBool(DisableStackFlag.Name),
 		Debug:         ctx.GlobalBool(DebugFlag.Name),
 	}
-
-	var (
-		tracer        vm.Tracer
-		debugLogger   *vm.StructLogger
-		statedb       *state.StateDB
-		chainConfig   *params.ChainConfig
-		sender        = common.BytesToAddress([]byte("sender"))
-		receiver      = common.BytesToAddress([]byte("receiver"))
-		genesisConfig *core.Genesis
-	)
+	var tracer vm.Tracer
+	var debugLogger *vm.StructLogger
 	if ctx.GlobalBool(MachineFlag.Name) {
 		tracer = vm.NewJSONLogger(logconfig, os.Stdout)
 	} else if ctx.GlobalBool(DebugFlag.Name) {
@@ -96,25 +89,54 @@ func runCmd(ctx *cli.Context) error {
 	} else {
 		debugLogger = vm.NewStructLogger(logconfig)
 	}
+
+	isCreateOperation := ctx.GlobalBool(CreateFlag.Name)
+	sender := common.BytesToAddress([]byte("sender"))
+	senderFlag := ctx.GlobalString(SenderFlag.Name)
+	if senderFlag != "" {
+		sender = common.HexToAddress(senderFlag)
+	}
+	receiver := common.BytesToAddress([]byte("receiver"))
+	receiverFlag := ctx.GlobalString(ReceiverFlag.Name)
+	if receiverFlag != "" {
+		receiver = common.HexToAddress(receiverFlag)
+	}
+
+	var db ethdb.Database
+	dbAddress := ctx.GlobalString(RpcDatabaseAddressFlag.Name)
+	if len(dbAddress) > 0 {
+		conn, err := grpc.Dial(dbAddress, grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		contractAddress := receiver
+		if isCreateOperation {
+			contractAddress = sender
+		}
+		instanceId := ctx.GlobalString(InstanceIdFlag.Name)
+		db = ethdb.NewRpcDatabase(conn, &ethdb.VmId{
+			ContractAddress: contractAddress.Bytes(),
+			ProcessId:       instanceId,
+		})
+		log.Info("Starting with rpc db, server address: " + dbAddress)
+	} else {
+		db = ethdb.NewMemDatabase()
+		log.Info("Starting with in-memory db")
+	}
+	var statedb *state.StateDB
+	var chainConfig *params.ChainConfig
+	var genesisConfig *core.Genesis
 	if ctx.GlobalString(GenesisFlag.Name) != "" {
 		gen := readGenesis(ctx.GlobalString(GenesisFlag.Name))
 		genesisConfig = gen
-		db := ethdb.NewMemDatabase()
 		genesis := gen.ToBlock(db)
 		statedb, _ = state.New(genesis.Root(), state.NewDatabase(db))
 		chainConfig = gen.Config
 	} else {
-		statedb, _ = state.New(common.Hash{}, state.NewDatabase(ethdb.NewMemDatabase()))
+		statedb, _ = state.New(common.Hash{}, state.NewDatabase(db))
 		genesisConfig = new(core.Genesis)
 	}
-	if ctx.GlobalString(SenderFlag.Name) != "" {
-		sender = common.HexToAddress(ctx.GlobalString(SenderFlag.Name))
-	}
 	statedb.CreateAccount(sender)
-
-	if ctx.GlobalString(ReceiverFlag.Name) != "" {
-		receiver = common.HexToAddress(ctx.GlobalString(ReceiverFlag.Name))
-	}
 
 	var (
 		code []byte
@@ -176,6 +198,9 @@ func runCmd(ctx *cli.Context) error {
 			EVMInterpreter: ctx.GlobalString(EVMInterpreterFlag.Name),
 		},
 	}
+	if chainConfig != nil {
+		runtimeConfig.ChainConfig = chainConfig
+	}
 
 	if cpuProfilePath := ctx.GlobalString(CPUProfileFlag.Name); cpuProfilePath != "" {
 		f, err := os.Create(cpuProfilePath)
@@ -190,12 +215,9 @@ func runCmd(ctx *cli.Context) error {
 		defer pprof.StopCPUProfile()
 	}
 
-	if chainConfig != nil {
-		runtimeConfig.ChainConfig = chainConfig
-	}
 	tstart := time.Now()
 	var leftOverGas uint64
-	if ctx.GlobalBool(CreateFlag.Name) {
+	if isCreateOperation {
 		input := append(code, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name))...)
 		ret, _, leftOverGas, err = runtime.Create(input, &runtimeConfig)
 	} else {
@@ -204,6 +226,8 @@ func runCmd(ctx *cli.Context) error {
 		}
 		ret, leftOverGas, err = runtime.Call(receiver, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name)), &runtimeConfig)
 	}
+	Flush(statedb)
+
 	execTime := time.Since(tstart)
 
 	if ctx.GlobalBool(DumpFlag.Name) {

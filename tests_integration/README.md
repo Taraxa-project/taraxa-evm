@@ -6,14 +6,29 @@
 
 cd [Project Root]
 
-make gtest
+make tests_integration
 
 **Local run**
 
+_evm tests_
+
 cd [Project Root]
 
-cd TaraxaGTests
+cd tests_integration
 
-./TaraxaGTests vargs...
+./tests_integration vargs...
+
+- vargs - see google test dev doc
+
+_grpc tests_
+
+cd [Project Root]
+
+cd tests_integration
+
+starting test server:
+./test_server
+
+./tests_grpc vargs...
 
 - vargs - see google test dev doc

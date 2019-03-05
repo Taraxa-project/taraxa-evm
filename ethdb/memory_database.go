@@ -90,8 +90,27 @@ func (db *MemDatabase) Delete(key []byte) error {
 
 func (db *MemDatabase) Close() {}
 
+type mapWriter struct {
+	db *MemDatabase
+}
+
+func (w *mapWriter) Put(key []byte, value []byte) error {
+	w.db.db[string(key)] = common.CopyBytes(value)
+	return nil
+}
+
+func (w *mapWriter) Delete(key []byte) error {
+	delete(w.db.db, string(key))
+	return nil
+}
+
 func (db *MemDatabase) NewBatch() Batch {
-	return &memBatch{db: db}
+	writer := &mapWriter{db: db}
+	return &MemBatch{
+		putter:     writer,
+		deleter:    writer,
+		commitLock: &db.lock,
+	}
 }
 
 func (db *MemDatabase) Len() int { return len(db.db) }
@@ -101,43 +120,52 @@ type kv struct {
 	del  bool
 }
 
-type memBatch struct {
-	db     *MemDatabase
-	writes []kv
-	size   int
+type MemBatch struct {
+	putter     Putter
+	deleter    Deleter
+	commitLock *sync.RWMutex
+	writes     []kv
+	size       int
 }
 
-func (b *memBatch) Put(key, value []byte) error {
+func (b *MemBatch) Put(key, value []byte) error {
 	b.writes = append(b.writes, kv{common.CopyBytes(key), common.CopyBytes(value), false})
 	b.size += len(value)
 	return nil
 }
 
-func (b *memBatch) Delete(key []byte) error {
+func (b *MemBatch) Delete(key []byte) error {
 	b.writes = append(b.writes, kv{common.CopyBytes(key), nil, true})
 	b.size += 1
 	return nil
 }
 
-func (b *memBatch) Write() error {
-	b.db.lock.Lock()
-	defer b.db.lock.Unlock()
-
+func (b *MemBatch) Write() (err error) {
+	if b.commitLock != nil {
+		b.commitLock.Lock()
+		defer b.commitLock.Unlock()
+	}
 	for _, kv := range b.writes {
 		if kv.del {
-			delete(b.db.db, string(kv.k))
+			err = b.deleter.Delete(kv.k)
+			if err != nil {
+				return
+			}
 			continue
 		}
-		b.db.db[string(kv.k)] = kv.v
+		err = b.putter.Put(kv.k, kv.v)
+		if err != nil {
+			return
+		}
 	}
 	return nil
 }
 
-func (b *memBatch) ValueSize() int {
+func (b *MemBatch) ValueSize() int {
 	return b.size
 }
 
-func (b *memBatch) Reset() {
+func (b *MemBatch) Reset() {
 	b.writes = b.writes[:0]
 	b.size = 0
 }
