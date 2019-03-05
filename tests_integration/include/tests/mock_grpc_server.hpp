@@ -28,14 +28,10 @@ TEST(DoTest, SimpleRpc) {
     StateDBMockServer stateDBMockServer;
     auto serverAddress = "0.0.0.0:50051";
     auto server = startGRPCService(&stateDBMockServer, serverAddress);
+    cout << "Server listening on " << serverAddress << std::endl;
     StateDBClient client(grpc::CreateChannel(serverAddress, grpc::InsecureChannelCredentials()));
-    thread serverThread([&]() {
-        cout << "Running. Server listening on " << serverAddress << std::endl;
-        server->Wait();
-        cout << "Server at " << serverAddress << " has stopped." << std::endl;
-    });
 
-    KeyAndValueMessage putRequest;
+    KeyAndValueMessage putRequest{};
     putRequest.mutable_value()->set_value("1234567890");
     auto key = putRequest.mutable_key();
     auto vmid = key->mutable_vmid();
@@ -50,7 +46,7 @@ TEST(DoTest, SimpleRpc) {
     EXPECT_FALSE(client.Has(putRequest.key()).value());
 
     server->Shutdown();
-    serverThread.join();
+    server->Wait();
 }
 
 #endif //TESTS_INTEGRATION_GRPCINTEGRITY_H

@@ -2,10 +2,26 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
+#include "include/StateDBClient.h"
+#include "include/StateDBMockServer.h"
+#include "include/grpc_util.hpp"
+
 #include "include/Process.h"
 
 using namespace std;
 using namespace rapidjson;
+
+TEST(EVM_RPC_DB, create_contract_single_var_init_value) {
+    StateDBMockServer stateDBMockServer;
+    auto serverAddress = "0.0.0.0:50051";
+    auto server = startGRPCService(&stateDBMockServer, serverAddress);
+    ASSERT_EQ("", RunCodeFile(
+            "contracts/single_variable.bin",
+            string("--create --verbosity 3 --statedb.address=") + serverAddress
+    ));
+    server->Shutdown();
+    server->Wait();
+}
 
 TEST(EVM, TestBlindAuction_Positive_Test) {
     ASSERT_EQ("", RunCodeFile("clear_contracts/BlindAuction.bin"));

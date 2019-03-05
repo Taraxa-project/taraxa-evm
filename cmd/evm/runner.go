@@ -113,13 +113,15 @@ func runCmd(ctx *cli.Context) error {
 		if isCreateOperation {
 			contractAddress = sender
 		}
-		processId := ctx.GlobalString(ProcessIdFlag.Name)
+		instanceId := ctx.GlobalString(InstanceIdFlag.Name)
 		db = ethdb.NewRpcDatabase(conn, &ethdb.VmId{
 			ContractAddress: contractAddress.Bytes(),
-			ProcessId:       processId,
+			ProcessId:       instanceId,
 		})
+		log.Info("Starting with rpc db, server address: " + dbAddress)
 	} else {
 		db = ethdb.NewMemDatabase()
+		log.Info("Starting with in-memory db")
 	}
 	var statedb *state.StateDB
 	var chainConfig *params.ChainConfig
@@ -215,7 +217,6 @@ func runCmd(ctx *cli.Context) error {
 
 	tstart := time.Now()
 	var leftOverGas uint64
-	// TODO
 	if isCreateOperation {
 		input := append(code, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name))...)
 		ret, _, leftOverGas, err = runtime.Create(input, &runtimeConfig)
@@ -225,6 +226,8 @@ func runCmd(ctx *cli.Context) error {
 		}
 		ret, leftOverGas, err = runtime.Call(receiver, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name)), &runtimeConfig)
 	}
+	Flush(statedb)
+
 	execTime := time.Since(tstart)
 
 	if ctx.GlobalBool(DumpFlag.Name) {

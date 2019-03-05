@@ -4,8 +4,10 @@ package taraxa.vm.statedb;
 
 option go_package = "grpc_go";
 
+// TODO rename to ExecutionId
 message VmId {
     bytes contractAddress = 1;
+//    TODO rename to vmInstanceId
     string processId = 2;
 }
 

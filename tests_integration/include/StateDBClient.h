@@ -32,6 +32,8 @@ using statedb::StateDB;
 
 class StateDBClient {
 
+    std::unique_ptr<StateDB::Stub> grpcClient;
+
 public:
 
     explicit StateDBClient(const std::shared_ptr<Channel> &channel)
@@ -56,8 +58,6 @@ public:
         ::statedb::BytesMessage response;
         ClientContext context;
         Status status = grpcClient->Get(&context, message, &response);
-        if (!status.ok())
-            cout << "Error getter status" << endl;
         return response;
     }
 
@@ -73,10 +73,6 @@ public:
         ClientContext context;
         return grpcClient->Close(&context, message, &response);
     }
-
-private:
-
-    std::unique_ptr<StateDB::Stub> grpcClient;
 
 };
 

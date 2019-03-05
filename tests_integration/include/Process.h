@@ -142,8 +142,8 @@ private:
 };
 
 
-static string RunTest(const string args) {
-    string cmd = paths::EVM_EXECUTABLE.string() + " " + args;
+static string RunTest(const string &args) {
+    string cmd = paths::EVM_EXECUTABLE.string() + " --verbosity 3 " + args;
     Document doc;
     evmJsonOutput output;
     output.Exec(cmd.c_str());
@@ -158,8 +158,8 @@ static string RunTest(const string args) {
 
 }
 
-static string RunCodeFile(const string &codeFile) {
-    return RunTest("--codefile " + (paths::RESOURCES_DIR / codeFile).string() + " --json run");
+static string RunCodeFile(const string &codeFile, const string &args = "") {
+    return RunTest("--codefile " + (paths::RESOURCES_DIR / codeFile).string() + " --json " + args + " run");
 }
 
 #endif //TARAXAGTESTS_PROCESS_H

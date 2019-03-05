@@ -13,6 +13,7 @@ unique_ptr<Server> startGRPCService(grpc::Service *service, const string &server
     grpc::ServerBuilder serverBuilder;
     serverBuilder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     serverBuilder.RegisterService(service);
+    cout << "Starting server on " << server_address << endl;
     return serverBuilder.BuildAndStart();
 }
 

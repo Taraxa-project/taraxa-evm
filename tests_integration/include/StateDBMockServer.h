@@ -35,9 +35,16 @@ using statedb::StateDB;
 
 class StateDBMockServer final : public StateDB::Service {
 
-private:
-
     std::map<std::string, ::statedb::BytesMessage> messages;
+
+
+    static std::string to_str(const ::statedb::VmId &vmid) {
+        return vmid.processid() + "_" + vmid.contractaddress();
+    }
+
+    static std::string to_str(const ::statedb::KeyMessage &keyMessage) {
+        return to_str(keyMessage.vmid()) + "_" + keyMessage.memoryaddress().value();
+    }
 
 public:
 
@@ -46,7 +53,7 @@ public:
                ::google::protobuf::Empty *response) {
         auto key_str = to_str(request->key());
         auto value = request->value();
-        cout << "PUT key: " << key_str << ", value: " << value.value() << endl;
+        cout << "RPC PUT key: " << key_str << ", value: " << value.value() << endl;
         messages.emplace(key_str, value);
         return Status::OK;
     }
@@ -55,7 +62,7 @@ public:
                   const ::taraxa::vm::statedb::KeyMessage *request,
                   ::google::protobuf::Empty *response) {
         auto key_str = to_str(*request);
-        cout << "DELETE key: " << key_str << endl;
+        cout << "RPC DELETE key: " << key_str << endl;
         messages.erase(key_str);
         return Status::OK;
     };
@@ -68,7 +75,7 @@ public:
         if (entry != messages.end()) {
             response->CopyFrom(entry->second);
         }
-        cout << "GET key: " << key_str << ", value : " << response->value() << endl;
+        cout << "RPC GET key: " << key_str << ", value : " << response->value() << endl;
         return Status::OK;
     };
 
@@ -77,26 +84,16 @@ public:
                ::taraxa::vm::statedb::BoolMessage *response) {
         auto key_str = to_str(*request);
         response->set_value(messages.find(key_str) != messages.end());
-        cout << boolalpha << "HAS key: " << key_str << ", value : " << response->value() << endl;
+        cout << boolalpha << "RPC HAS key: " << key_str << ", value : " << response->value() << endl;
         return Status::OK;
     };
 
     Status Close(::grpc::ServerContext *context,
                  const ::taraxa::vm::statedb::VmId *request,
                  ::google::protobuf::Empty *response) {
-        cout << "CLOSE vmid: " << to_str(*request) << endl;
+        cout << "RPC CLOSE vmid: " << to_str(*request) << endl;
         return Status::OK;
     };
-
-private:
-
-    static std::string to_str(const ::statedb::VmId &vmid) {
-        return vmid.processid() + "_" + vmid.contractaddress();
-    }
-
-    static std::string to_str(const ::statedb::KeyMessage &keyMessage) {
-        return to_str(keyMessage.vmid()) + "_" + keyMessage.memoryaddress().value();
-    }
 
 };
 
