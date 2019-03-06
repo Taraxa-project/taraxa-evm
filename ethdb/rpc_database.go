@@ -65,7 +65,6 @@ func (rpcDatabase *RpcDatabase) Close() {
 
 func (rpcDatabase *RpcDatabase) NewBatch() Batch {
 	return &MemBatch{
-		putter:  rpcDatabase,
-		deleter: rpcDatabase,
+		writer: rpcDatabase,
 	}
 }

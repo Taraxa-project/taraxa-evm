@@ -107,8 +107,7 @@ func (w *mapWriter) Delete(key []byte) error {
 func (db *MemDatabase) NewBatch() Batch {
 	writer := &mapWriter{db: db}
 	return &MemBatch{
-		putter:     writer,
-		deleter:    writer,
+		writer:     writer,
 		commitLock: &db.lock,
 	}
 }
@@ -120,9 +119,13 @@ type kv struct {
 	del  bool
 }
 
+type putterAndDeleter interface {
+	Putter
+	Deleter
+}
+
 type MemBatch struct {
-	putter     Putter
-	deleter    Deleter
+	writer     putterAndDeleter
 	commitLock *sync.RWMutex
 	writes     []kv
 	size       int
@@ -147,13 +150,13 @@ func (b *MemBatch) Write() (err error) {
 	}
 	for _, kv := range b.writes {
 		if kv.del {
-			err = b.deleter.Delete(kv.k)
+			err = b.writer.Delete(kv.k)
 			if err != nil {
 				return
 			}
 			continue
 		}
-		err = b.putter.Put(kv.k, kv.v)
+		err = b.writer.Put(kv.k, kv.v)
 		if err != nil {
 			return
 		}
