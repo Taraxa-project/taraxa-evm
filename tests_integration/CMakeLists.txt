@@ -26,8 +26,9 @@ endmacro()
 
 # TODO latest version
 git_dependency(boost_cmake https://github.com/Orphis/boost-cmake v1.67.0)
-add_subdirectory(${boost_cmake_SOURCE_DIR})
-#set(BOOST_ROOT ${BOOST_SOURCE}) TODO
+add_subdirectory(${boost_cmake_SOURCE_DIR} EXCLUDE_FROM_ALL)
+set(BOOST_ROOT ${BOOST_SOURCE})
+# TODO
 #foreach (lib regex filesystem unit_test_framework program_options system)
 #    string(TOUPPER ${lib} lib_upper)
 #    set(Boost_${lib_upper}_FOUND ON)
@@ -46,9 +47,7 @@ endforeach (p)
 
 find_package(Threads REQUIRED)
 
-file(GLOB BOOST_FILESYSTEM_SRC ${boost_project_SOURCE_DIR}/libs/filesystem/src/*)
-file(GLOB BOOST_SYSTEM_SRC ${boost_project_SOURCE_DIR}/libs/system/src/*)
-file(GLOB GRPC_GEN_FILES ${GRPC_GEN_DIR}/*)
+file(GLOB GRPC_GEN_SRC_FILES ${GRPC_GEN_DIR}/*.cc)
 
 include_directories(
         ${BOOST_SOURCE}
@@ -56,21 +55,33 @@ include_directories(
         ${googletest_project_SOURCE_DIR}/googletest/include
         ${googletest_project_SOURCE_DIR}/googlemock/include
         ${GRPC_GEN_DIR}
-        ${PROJECT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/include
 )
 
 add_executable(
         ${PROJECT_NAME}
-        ${BOOST_FILESYSTEM_SRC}
-        ${BOOST_SYSTEM_SRC}
-        ${GRPC_GEN_FILES}
-        ${SRC_DIR}/main.cpp
+        ${GRPC_GEN_SRC_FILES}
+        ${PROJECT_SOURCE_DIR}/src/tests.cpp
 )
 
 target_link_libraries(
         ${PROJECT_NAME}
         gtest_main
         gtest
+        grpc++_reflection
+        libprotobuf
+        Threads::Threads
+        Boost::filesystem
+)
+
+add_executable(
+        ${PROJECT_NAME}-mock_server
+        ${GRPC_GEN_SRC_FILES}
+        ${PROJECT_SOURCE_DIR}/src/mock_server.cpp
+)
+
+target_link_libraries(
+        ${PROJECT_NAME}-mock_server
         grpc++_reflection
         libprotobuf
         Threads::Threads

@@ -1,0 +1,16 @@
+/**/*.git
+**/.idea
+**/*.iml
+**/*.md
+**/node_modules
+
+/docker
+
+/build/bin
+/build/dependencies
+
+/tests_integration/build
+/tests_integration/thirdparty
+
+/tests/testdata
+!/tests/testdata/*Tests

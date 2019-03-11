@@ -2,6 +2,8 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
+# TODO get rid of this altogether
+
 .PHONY: evm all test tests_integration clean
 
 GOBIN = $(shell pwd)/build/bin
@@ -16,8 +18,10 @@ all:
 test: all
 	go run build/ci.go test
 
+# TODO this is too fat and unusable
 tests_integration: evm
-	cd tests_integration && cmake . && make && ./tests_integration
+	cd tests_integration/contracts && npm i && cd .. && mkdir -p build && cd build && cmake .. \
+	&& cmake --build . --target tests_integration && ./tests_integration
 
 lint: ## Run linters.
 	go run build/ci.go lint

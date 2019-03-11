@@ -15,6 +15,9 @@ build/dependencies
 */**/*tx_database*
 */**/*dapps*
 
+
+node_modules
+
 #*
 .#*
 *#

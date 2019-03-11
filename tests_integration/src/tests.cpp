@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
-
-#include "include/tests/mock_grpc_server.hpp"
-#include "include/tests/evm_cli_mem_db.hpp"
+#include "taraxa/tests/index.hpp"
 
 int main(int argc, char **argv) {
     testing::InitGoogleTest(&argc, argv);
