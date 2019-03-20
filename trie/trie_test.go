@@ -61,7 +61,8 @@ func TestNull(t *testing.T) {
 	key := make([]byte, 32)
 	value := []byte("test")
 	trie.Update(key, value)
-	if !bytes.Equal(trie.Get(key), value) {
+	val, _ := trie.TryGet(key)
+	if !bytes.Equal(val, value) {
 		t.Fatal("wrong value")
 	}
 }
@@ -426,7 +427,7 @@ func runRandTest(rt randTest) bool {
 			tr.Delete(step.key)
 			delete(values, string(step.key))
 		case opGet:
-			v := tr.Get(step.key)
+			v, _ := tr.TryGet(step.key)
 			want := values[string(step.key)]
 			if string(v) != want {
 				rt[i].err = fmt.Errorf("mismatch for key 0x%x, got 0x%x want 0x%x", step.key, v, want)
@@ -535,7 +536,7 @@ func benchGet(b *testing.B, commit bool) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		trie.Get(k)
+		trie.TryGet(k)
 	}
 	b.StopTimer()
 
@@ -604,7 +605,8 @@ func tempDB() (string, *Database) {
 }
 
 func getString(trie *Trie, k string) []byte {
-	return trie.Get([]byte(k))
+	v, _ := trie.TryGet([]byte(k))
+	return v
 }
 
 func updateString(trie *Trie, k, v string) {

@@ -2,7 +2,7 @@ pragma solidity >=0.4.0;
 
 contract SingleVariable {
 
-    int value = 2;
+    int value = 5;
 
     function set(int _value) public {
         value = _value;

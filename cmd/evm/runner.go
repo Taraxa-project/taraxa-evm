@@ -17,17 +17,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"math/big"
-	"os"
-	goruntime "runtime"
-	"runtime/pprof"
-	"time"
-
-	"github.com/Taraxa-project/taraxa-evm/cmd/evm/internal/compiler"
 	"github.com/Taraxa-project/taraxa-evm/cmd/utils"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
@@ -36,41 +26,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm/runtime"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/log"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"google.golang.org/grpc"
 	"gopkg.in/urfave/cli.v1"
+	"math/big"
+	"os"
 )
 
-var runCommand = cli.Command{
-	Action:      runCmd,
-	Name:        "run",
-	Usage:       "run arbitrary evm binary",
-	ArgsUsage:   "<code>",
-	Description: `The run command runs arbitrary EVM code.`,
-}
-
-// readGenesis will read the given JSON format genesis file and return
-// the initialized Genesis structure
-func readGenesis(genesisPath string) *core.Genesis {
-	// Make sure we have a valid genesis JSON
-	//genesisPath := ctx.Args().First()
-	if len(genesisPath) == 0 {
-		utils.Fatalf("Must supply path to genesis JSON file")
-	}
-	file, err := os.Open(genesisPath)
-	if err != nil {
-		utils.Fatalf("Failed to read genesis file: %v", err)
-	}
-	defer file.Close()
-
-	genesis := new(core.Genesis)
-	if err := json.NewDecoder(file).Decode(genesis); err != nil {
-		utils.Fatalf("invalid genesis file: %v", err)
-	}
-	return genesis
-}
-
-func runCmd(ctx *cli.Context) error {
+func runCmd(ctx *cli.Context) (ret []byte, leftOverGas uint64, err error) {
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 	glogger.Verbosity(log.Lvl(ctx.GlobalInt(VerbosityFlag.Name)))
 	log.Root().SetHandler(glogger)
@@ -83,105 +45,38 @@ func runCmd(ctx *cli.Context) error {
 	var debugLogger *vm.StructLogger
 	if ctx.GlobalBool(MachineFlag.Name) {
 		tracer = vm.NewJSONLogger(logconfig, os.Stdout)
-	} else if ctx.GlobalBool(DebugFlag.Name) {
+	} else if logconfig.Debug {
 		debugLogger = vm.NewStructLogger(logconfig)
 		tracer = debugLogger
 	} else {
 		debugLogger = vm.NewStructLogger(logconfig)
 	}
-
 	isCreateOperation := ctx.GlobalBool(CreateFlag.Name)
-	sender := common.BytesToAddress([]byte("sender"))
-	senderFlag := ctx.GlobalString(SenderFlag.Name)
-	if senderFlag != "" {
-		sender = common.HexToAddress(senderFlag)
-	}
-	receiver := common.BytesToAddress([]byte("receiver"))
-	receiverFlag := ctx.GlobalString(ReceiverFlag.Name)
-	if receiverFlag != "" {
-		receiver = common.HexToAddress(receiverFlag)
-	}
-
-	var db ethdb.Database
+	sender := common.HexToAddress(ctx.GlobalString(SenderFlag.Name))
+	receiver := common.HexToAddress(ctx.GlobalString(ReceiverFlag.Name))
 	dbAddress := ctx.GlobalString(RpcDatabaseAddressFlag.Name)
-	if len(dbAddress) > 0 {
-		conn, err := grpc.Dial(dbAddress, grpc.WithInsecure())
-		if err != nil {
-			return err
-		}
-		contractAddress := receiver
-		if isCreateOperation {
-			contractAddress = sender
-		}
-		instanceId := ctx.GlobalString(InstanceIdFlag.Name)
-		db = ethdb.NewRpcDatabase(conn, &ethdb.VmId{
-			ContractAddress: contractAddress.Bytes(),
-			ProcessId:       instanceId,
-		})
-		log.Info("Starting with rpc db, server address: " + dbAddress)
-	} else {
-		db = ethdb.NewMemDatabase()
-		log.Info("Starting with in-memory db")
+	conn, err := grpc.Dial(dbAddress, grpc.WithInsecure())
+	if err != nil {
+		return
 	}
-	var statedb *state.StateDB
-	var chainConfig *params.ChainConfig
-	var genesisConfig *core.Genesis
-	if ctx.GlobalString(GenesisFlag.Name) != "" {
-		gen := readGenesis(ctx.GlobalString(GenesisFlag.Name))
-		genesisConfig = gen
-		genesis := gen.ToBlock(db)
-		statedb, _ = state.New(genesis.Root(), state.NewDatabase(db))
-		chainConfig = gen.Config
-	} else {
-		statedb, _ = state.New(common.Hash{}, state.NewDatabase(db))
-		genesisConfig = new(core.Genesis)
+	contractAddress := receiver
+	if isCreateOperation {
+		contractAddress = sender
+	}
+	db := ethdb.NewRpcDatabase(conn, &ethdb.VmId{
+		ContractAddress: contractAddress.Bytes(),
+		ProcessId:       ctx.GlobalString(InstanceIdFlag.Name),
+	})
+	log.Info("Starting with rpc db, server address: " + dbAddress)
+	stateRoot := common.HexToHash(ctx.GlobalString(StateRootFlag.Name))
+	statedb, err := state.New(stateRoot, state.NewDatabase(db))
+	if err != nil {
+		return
 	}
 	statedb.CreateAccount(sender)
-
-	var (
-		code []byte
-		ret  []byte
-		err  error
-	)
-	// The '--code' or '--codefile' flag overrides code in state
-	if ctx.GlobalString(CodeFileFlag.Name) != "" {
-		var hexcode []byte
-		var err error
-		// If - is specified, it means that code comes from stdin
-		if ctx.GlobalString(CodeFileFlag.Name) == "-" {
-			//Try reading from stdin
-			if hexcode, err = ioutil.ReadAll(os.Stdin); err != nil {
-				fmt.Printf("Could not load code from stdin: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			// Codefile with hex assembly
-			if hexcode, err = ioutil.ReadFile(ctx.GlobalString(CodeFileFlag.Name)); err != nil {
-				fmt.Printf("Could not load code from file: %v\n", err)
-				os.Exit(1)
-			}
-		}
-		code = common.Hex2Bytes(string(bytes.TrimRight(hexcode, "\n")))
-
-	} else if ctx.GlobalString(CodeFlag.Name) != "" {
-		code = common.Hex2Bytes(ctx.GlobalString(CodeFlag.Name))
-	} else if fn := ctx.Args().First(); len(fn) > 0 {
-		// EASM-file to compile
-		src, err := ioutil.ReadFile(fn)
-		if err != nil {
-			return err
-		}
-		bin, err := compiler.Compile(fn, src, false)
-		if err != nil {
-			return err
-		}
-		code = common.Hex2Bytes(bin)
-	}
-
+	input := common.Hex2Bytes(ctx.GlobalString(InputFlag.Name))
 	initialGas := ctx.GlobalUint64(GasFlag.Name)
-	if genesisConfig.GasLimit != 0 {
-		initialGas = genesisConfig.GasLimit
-	}
+	genesisConfig := new(core.Genesis)
 	runtimeConfig := runtime.Config{
 		Origin:      sender,
 		State:       statedb,
@@ -194,62 +89,25 @@ func runCmd(ctx *cli.Context) error {
 		BlockNumber: new(big.Int).SetUint64(genesisConfig.Number),
 		EVMConfig: vm.Config{
 			Tracer:         tracer,
-			Debug:          ctx.GlobalBool(DebugFlag.Name) || ctx.GlobalBool(MachineFlag.Name),
+			Debug:          logconfig.Debug || ctx.GlobalBool(MachineFlag.Name),
 			EVMInterpreter: ctx.GlobalString(EVMInterpreterFlag.Name),
 		},
 	}
-	if chainConfig != nil {
-		runtimeConfig.ChainConfig = chainConfig
-	}
-
-	if cpuProfilePath := ctx.GlobalString(CPUProfileFlag.Name); cpuProfilePath != "" {
-		f, err := os.Create(cpuProfilePath)
-		if err != nil {
-			fmt.Println("could not create CPU profile: ", err)
-			os.Exit(1)
-		}
-		if err := pprof.StartCPUProfile(f); err != nil {
-			fmt.Println("could not start CPU profile: ", err)
-			os.Exit(1)
-		}
-		defer pprof.StopCPUProfile()
-	}
-
-	tstart := time.Now()
-	var leftOverGas uint64
 	if isCreateOperation {
-		input := append(code, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name))...)
 		ret, _, leftOverGas, err = runtime.Create(input, &runtimeConfig)
 	} else {
-		if len(code) > 0 {
-			statedb.SetCode(receiver, code)
-		}
-		ret, leftOverGas, err = runtime.Call(receiver, common.Hex2Bytes(ctx.GlobalString(InputFlag.Name)), &runtimeConfig)
+		ret, leftOverGas, err = runtime.Call(receiver, input, &runtimeConfig)
 	}
-	Flush(statedb)
-
-	execTime := time.Since(tstart)
-
-	if ctx.GlobalBool(DumpFlag.Name) {
-		statedb.Commit(true)
-		statedb.IntermediateRoot(true)
-		fmt.Println(string(statedb.Dump()))
+	if err != nil {
+		return
 	}
-
-	if memProfilePath := ctx.GlobalString(MemProfileFlag.Name); memProfilePath != "" {
-		f, err := os.Create(memProfilePath)
-		if err != nil {
-			fmt.Println("could not create memory profile: ", err)
-			os.Exit(1)
-		}
-		if err := pprof.WriteHeapProfile(f); err != nil {
-			fmt.Println("could not write memory profile: ", err)
-			os.Exit(1)
-		}
-		f.Close()
+	rootHash, err := Flush(statedb, nil)
+	if err != nil {
+		return
 	}
-
-	if ctx.GlobalBool(DebugFlag.Name) {
+	fmt.Println("stateRoot: " + rootHash.String())
+	fmt.Println("ret:  " + common.Bytes2Hex(ret))
+	if logconfig.Debug {
 		if debugLogger != nil {
 			fmt.Fprintln(os.Stderr, "#### TRACE ####")
 			vm.WriteTrace(os.Stderr, debugLogger.StructLogs())
@@ -257,25 +115,5 @@ func runCmd(ctx *cli.Context) error {
 		fmt.Fprintln(os.Stderr, "#### LOGS ####")
 		vm.WriteLogs(os.Stderr, statedb.Logs())
 	}
-
-	if ctx.GlobalBool(StatDumpFlag.Name) {
-		var mem goruntime.MemStats
-		goruntime.ReadMemStats(&mem)
-		fmt.Fprintf(os.Stderr, `evm execution time: %v
-heap objects:       %d
-allocations:        %d
-total allocations:  %d
-GC calls:           %d
-Gas used:           %d
-
-`, execTime, mem.HeapObjects, mem.Alloc, mem.TotalAlloc, mem.NumGC, initialGas-leftOverGas)
-	}
-	if tracer == nil {
-		fmt.Printf("0x%x\n", ret)
-		if err != nil {
-			fmt.Printf(" error: %v\n", err)
-		}
-	}
-
-	return nil
+	return
 }

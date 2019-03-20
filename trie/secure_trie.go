@@ -63,16 +63,6 @@ func NewSecure(root common.Hash, db *Database, cachelimit uint16) (*SecureTrie, 
 	return &SecureTrie{trie: *trie}, nil
 }
 
-// Get returns the value for key stored in the trie.
-// The value bytes must not be modified by the caller.
-func (t *SecureTrie) Get(key []byte) []byte {
-	res, err := t.TryGet(key)
-	if err != nil {
-		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
-	}
-	return res
-}
-
 // TryGet returns the value for key stored in the trie.
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
@@ -123,16 +113,6 @@ func (t *SecureTrie) TryDelete(key []byte) error {
 	hk := t.hashKey(key)
 	delete(t.getSecKeyCache(), string(hk))
 	return t.trie.TryDelete(hk)
-}
-
-// GetKey returns the sha3 preimage of a hashed key that was
-// previously used to store a value.
-func (t *SecureTrie) GetKey(shaKey []byte) []byte {
-	if key, ok := t.getSecKeyCache()[string(shaKey)]; ok {
-		return key
-	}
-	key, _ := t.trie.db.preimage(common.BytesToHash(shaKey))
-	return key
 }
 
 // Commit writes all nodes and the secure hash pre-images to the trie's database.

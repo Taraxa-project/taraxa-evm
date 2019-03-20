@@ -26,9 +26,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"testing/quick"
-
-	check "gopkg.in/check.v1"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -164,17 +161,6 @@ func TestCopy(t *testing.T) {
 		if want := big.NewInt(4 * int64(i)); copyObj.Balance().Cmp(want) != 0 {
 			t.Errorf("copy obj %d: balance mismatch: have %v, want %v", i, copyObj.Balance(), want)
 		}
-	}
-}
-
-func TestSnapshotRandom(t *testing.T) {
-	config := &quick.Config{MaxCount: 1000}
-	err := quick.Check((*snapshotTest).run, config)
-	if cerr, ok := err.(*quick.CheckError); ok {
-		test := cerr.In[0].(*snapshotTest)
-		t.Errorf("%v:\n%s", test.err, test)
-	} else if err != nil {
-		t.Error(err)
 	}
 }
 
@@ -337,97 +323,6 @@ func (test *snapshotTest) String() string {
 		fmt.Fprintf(out, "%4d: %s\n", i, action.name)
 	}
 	return out.String()
-}
-
-func (test *snapshotTest) run() bool {
-	// Run all actions and create snapshots.
-	var (
-		state, _     = New(common.Hash{}, NewDatabase(ethdb.NewMemDatabase()))
-		snapshotRevs = make([]int, len(test.snapshots))
-		sindex       = 0
-	)
-	for i, action := range test.actions {
-		if len(test.snapshots) > sindex && i == test.snapshots[sindex] {
-			snapshotRevs[sindex] = state.Snapshot()
-			sindex++
-		}
-		action.fn(action, state)
-	}
-	// Revert all snapshots in reverse order. Each revert must yield a state
-	// that is equivalent to fresh state with all actions up the snapshot applied.
-	for sindex--; sindex >= 0; sindex-- {
-		checkstate, _ := New(common.Hash{}, state.Database())
-		for _, action := range test.actions[:test.snapshots[sindex]] {
-			action.fn(action, checkstate)
-		}
-		state.RevertToSnapshot(snapshotRevs[sindex])
-		if err := test.checkEqual(state, checkstate); err != nil {
-			test.err = fmt.Errorf("state mismatch after revert to snapshot %d\n%v", sindex, err)
-			return false
-		}
-	}
-	return true
-}
-
-// checkEqual checks that methods of state and checkstate return the same values.
-func (test *snapshotTest) checkEqual(state, checkstate *StateDB) error {
-	for _, addr := range test.addrs {
-		var err error
-		checkeq := func(op string, a, b interface{}) bool {
-			if err == nil && !reflect.DeepEqual(a, b) {
-				err = fmt.Errorf("got %s(%s) == %v, want %v", op, addr.Hex(), a, b)
-				return false
-			}
-			return true
-		}
-		// Check basic accessor methods.
-		checkeq("Exist", state.Exist(addr), checkstate.Exist(addr))
-		checkeq("HasSuicided", state.HasSuicided(addr), checkstate.HasSuicided(addr))
-		checkeq("GetBalance", state.GetBalance(addr), checkstate.GetBalance(addr))
-		checkeq("GetNonce", state.GetNonce(addr), checkstate.GetNonce(addr))
-		checkeq("GetCode", state.GetCode(addr), checkstate.GetCode(addr))
-		checkeq("GetCodeHash", state.GetCodeHash(addr), checkstate.GetCodeHash(addr))
-		checkeq("GetCodeSize", state.GetCodeSize(addr), checkstate.GetCodeSize(addr))
-		// Check storage.
-		if obj := state.getStateObject(addr); obj != nil {
-			state.ForEachStorage(addr, func(key, value common.Hash) bool {
-				return checkeq("GetState("+key.Hex()+")", checkstate.GetState(addr, key), value)
-			})
-			checkstate.ForEachStorage(addr, func(key, value common.Hash) bool {
-				return checkeq("GetState("+key.Hex()+")", checkstate.GetState(addr, key), value)
-			})
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	if state.GetRefund() != checkstate.GetRefund() {
-		return fmt.Errorf("got GetRefund() == %d, want GetRefund() == %d",
-			state.GetRefund(), checkstate.GetRefund())
-	}
-	if !reflect.DeepEqual(state.GetLogs(common.Hash{}), checkstate.GetLogs(common.Hash{})) {
-		return fmt.Errorf("got GetLogs(common.Hash{}) == %v, want GetLogs(common.Hash{}) == %v",
-			state.GetLogs(common.Hash{}), checkstate.GetLogs(common.Hash{}))
-	}
-	return nil
-}
-
-func (s *StateSuite) TestTouchDelete(c *check.C) {
-	s.state.GetOrNewStateObject(common.Address{})
-	root, _ := s.state.Commit(false)
-	s.state.Reset(root)
-
-	snapshot := s.state.Snapshot()
-	s.state.AddBalance(common.Address{}, new(big.Int))
-
-	if len(s.state.journal.dirties) != 1 {
-		c.Fatal("expected one dirty state object")
-	}
-	s.state.RevertToSnapshot(snapshot)
-	if len(s.state.journal.dirties) != 0 {
-		c.Fatal("expected no dirty state object")
-	}
 }
 
 // TestCopyOfCopy tests that modified objects are carried over to the copy, and the copy of the copy.

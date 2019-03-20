@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"math/big"
 	"os"
 
@@ -97,10 +98,12 @@ var (
 	SenderFlag = cli.StringFlag{
 		Name:  "sender",
 		Usage: "The transaction origin",
+		Value: common.Bytes2Hex([]byte("sender")),
 	}
 	ReceiverFlag = cli.StringFlag{
 		Name:  "receiver",
 		Usage: "The transaction receiver (execution context)",
+		Value: common.Bytes2Hex([]byte("receiver")),
 	}
 	DisableMemoryFlag = cli.BoolFlag{
 		Name:  "nomemory",
@@ -123,6 +126,11 @@ var (
 	InstanceIdFlag = cli.StringFlag{
 		Name:  "vm.instid",
 		Usage: "EVM instance id",
+		Value: "",
+	}
+	StateRootFlag = cli.StringFlag{
+		Name:  "stateRoot",
+		Usage: "State root",
 		Value: "",
 	}
 )
@@ -151,12 +159,16 @@ func init() {
 		EVMInterpreterFlag,
 		RpcDatabaseAddressFlag,
 		InstanceIdFlag,
+		StateRootFlag,
 	}
 	app.Commands = []cli.Command{
-		compileCommand,
-		disasmCommand,
-		runCommand,
-		stateTestCommand,
+		cli.Command{
+			Action:      runCmd,
+			Name:        "run",
+			Usage:       "Expects json config file passed to the stdin",
+			ArgsUsage:   "<code>",
+			Description: `Run arbitrary ethereum transaction.`,
+		},
 	}
 }
 

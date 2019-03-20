@@ -17,12 +17,7 @@
 package state
 
 import (
-	"bytes"
-	"math/big"
-	"testing"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	checker "gopkg.in/check.v1"
 )
@@ -35,56 +30,6 @@ type StateSuite struct {
 var _ = checker.Suite(&StateSuite{})
 
 var toAddr = common.BytesToAddress
-
-func (s *StateSuite) TestDump(c *checker.C) {
-	// generate a few entries
-	obj1 := s.state.GetOrNewStateObject(toAddr([]byte{0x01}))
-	obj1.AddBalance(big.NewInt(22))
-	obj2 := s.state.GetOrNewStateObject(toAddr([]byte{0x01, 0x02}))
-	obj2.SetCode(crypto.Keccak256Hash([]byte{3, 3, 3, 3, 3, 3, 3}), []byte{3, 3, 3, 3, 3, 3, 3})
-	obj3 := s.state.GetOrNewStateObject(toAddr([]byte{0x02}))
-	obj3.SetBalance(big.NewInt(44))
-
-	// write some of them to the trie
-	s.state.updateStateObject(obj1)
-	s.state.updateStateObject(obj2)
-	s.state.Commit(false)
-
-	// check that dump contains the state objects that are in trie
-	got := string(s.state.Dump())
-	want := `{
-    "root": "71edff0130dd2385947095001c73d9e28d862fc286fca2b922ca6f6f3cddfdd2",
-    "accounts": {
-        "0000000000000000000000000000000000000001": {
-            "balance": "22",
-            "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-            "codeHash": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-            "code": "",
-            "storage": {}
-        },
-        "0000000000000000000000000000000000000002": {
-            "balance": "44",
-            "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-            "codeHash": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-            "code": "",
-            "storage": {}
-        },
-        "0000000000000000000000000000000000000102": {
-            "balance": "0",
-            "nonce": 0,
-            "root": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-            "codeHash": "87874902497a5bb968da31a2998d8f22e949d1ef6214bcdedd8bae24cca4b9e3",
-            "code": "03030303030303",
-            "storage": {}
-        }
-    }
-}`
-	if got != want {
-		c.Errorf("dump mismatch:\ngot: %s\nwant: %s\n", got, want)
-	}
-}
 
 func (s *StateSuite) SetUpTest(c *checker.C) {
 	s.db = ethdb.NewMemDatabase()
@@ -136,110 +81,4 @@ func (s *StateSuite) TestSnapshot(c *checker.C) {
 
 func (s *StateSuite) TestSnapshotEmpty(c *checker.C) {
 	s.state.RevertToSnapshot(s.state.Snapshot())
-}
-
-// use testing instead of checker because checker does not support
-// printing/logging in tests (-check.vv does not work)
-func TestSnapshot2(t *testing.T) {
-	state, _ := New(common.Hash{}, NewDatabase(ethdb.NewMemDatabase()))
-
-	stateobjaddr0 := toAddr([]byte("so0"))
-	stateobjaddr1 := toAddr([]byte("so1"))
-	var storageaddr common.Hash
-
-	data0 := common.BytesToHash([]byte{17})
-	data1 := common.BytesToHash([]byte{18})
-
-	state.SetState(stateobjaddr0, storageaddr, data0)
-	state.SetState(stateobjaddr1, storageaddr, data1)
-
-	// db, trie are already non-empty values
-	so0 := state.getStateObject(stateobjaddr0)
-	so0.SetBalance(big.NewInt(42))
-	so0.SetNonce(43)
-	so0.SetCode(crypto.Keccak256Hash([]byte{'c', 'a', 'f', 'e'}), []byte{'c', 'a', 'f', 'e'})
-	so0.suicided = false
-	so0.deleted = false
-	state.setStateObject(so0)
-
-	root, _ := state.Commit(false)
-	state.Reset(root)
-
-	// and one with deleted == true
-	so1 := state.getStateObject(stateobjaddr1)
-	so1.SetBalance(big.NewInt(52))
-	so1.SetNonce(53)
-	so1.SetCode(crypto.Keccak256Hash([]byte{'c', 'a', 'f', 'e', '2'}), []byte{'c', 'a', 'f', 'e', '2'})
-	so1.suicided = true
-	so1.deleted = true
-	state.setStateObject(so1)
-
-	so1 = state.getStateObject(stateobjaddr1)
-	if so1 != nil {
-		t.Fatalf("deleted object not nil when getting")
-	}
-
-	snapshot := state.Snapshot()
-	state.RevertToSnapshot(snapshot)
-
-	so0Restored := state.getStateObject(stateobjaddr0)
-	// Update lazily-loaded values before comparing.
-	so0Restored.GetState(state.db, storageaddr)
-	so0Restored.Code(state.db)
-	// non-deleted is equal (restored)
-	compareStateObjects(so0Restored, so0, t)
-
-	// deleted should be nil, both before and after restore of state copy
-	so1Restored := state.getStateObject(stateobjaddr1)
-	if so1Restored != nil {
-		t.Fatalf("deleted object not nil after restoring snapshot: %+v", so1Restored)
-	}
-}
-
-func compareStateObjects(so0, so1 *stateObject, t *testing.T) {
-	if so0.Address() != so1.Address() {
-		t.Fatalf("Address mismatch: have %v, want %v", so0.address, so1.address)
-	}
-	if so0.Balance().Cmp(so1.Balance()) != 0 {
-		t.Fatalf("Balance mismatch: have %v, want %v", so0.Balance(), so1.Balance())
-	}
-	if so0.Nonce() != so1.Nonce() {
-		t.Fatalf("Nonce mismatch: have %v, want %v", so0.Nonce(), so1.Nonce())
-	}
-	if so0.data.Root != so1.data.Root {
-		t.Errorf("Root mismatch: have %x, want %x", so0.data.Root[:], so1.data.Root[:])
-	}
-	if !bytes.Equal(so0.CodeHash(), so1.CodeHash()) {
-		t.Fatalf("CodeHash mismatch: have %v, want %v", so0.CodeHash(), so1.CodeHash())
-	}
-	if !bytes.Equal(so0.code, so1.code) {
-		t.Fatalf("Code mismatch: have %v, want %v", so0.code, so1.code)
-	}
-
-	if len(so1.dirtyStorage) != len(so0.dirtyStorage) {
-		t.Errorf("Dirty storage size mismatch: have %d, want %d", len(so1.dirtyStorage), len(so0.dirtyStorage))
-	}
-	for k, v := range so1.dirtyStorage {
-		if so0.dirtyStorage[k] != v {
-			t.Errorf("Dirty storage key %x mismatch: have %v, want %v", k, so0.dirtyStorage[k], v)
-		}
-	}
-	for k, v := range so0.dirtyStorage {
-		if so1.dirtyStorage[k] != v {
-			t.Errorf("Dirty storage key %x mismatch: have %v, want none.", k, v)
-		}
-	}
-	if len(so1.originStorage) != len(so0.originStorage) {
-		t.Errorf("Origin storage size mismatch: have %d, want %d", len(so1.originStorage), len(so0.originStorage))
-	}
-	for k, v := range so1.originStorage {
-		if so0.originStorage[k] != v {
-			t.Errorf("Origin storage key %x mismatch: have %v, want %v", k, so0.originStorage[k], v)
-		}
-	}
-	for k, v := range so0.originStorage {
-		if so1.originStorage[k] != v {
-			t.Errorf("Origin storage key %x mismatch: have %v, want none.", k, v)
-		}
-	}
 }

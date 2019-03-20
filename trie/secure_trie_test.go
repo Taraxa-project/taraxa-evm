@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 )
 
@@ -96,14 +95,11 @@ func TestSecureGetKey(t *testing.T) {
 
 	key := []byte("foo")
 	value := []byte("bar")
-	seckey := crypto.Keccak256(key)
 
-	if !bytes.Equal(trie.Get(key), value) {
+	if v, _ := trie.TryGet(key); !bytes.Equal(v, value) {
 		t.Errorf("Get did not return bar")
 	}
-	if k := trie.GetKey(seckey); !bytes.Equal(k, key) {
-		t.Errorf("GetKey returned %q, want %q", k, key)
-	}
+
 }
 
 func TestSecureTrieConcurrency(t *testing.T) {
