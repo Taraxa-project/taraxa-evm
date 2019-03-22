@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"io/ioutil"
 	"os/exec"
 	"regexp"
@@ -51,7 +52,7 @@ type ContractInfo struct {
 	CompilerOptions string      `json:"compilerOptions"`
 	SrcMap          string      `json:"srcMap"`
 	SrcMapRuntime   string      `json:"srcMapRuntime"`
-	AbiDefinition   interface{} `json:"abiDefinition"`
+	AbiDefinition   abi.ABI     `json:"abiDefinition"`
 	UserDoc         interface{} `json:"userDoc"`
 	DeveloperDoc    interface{} `json:"developerDoc"`
 	Metadata        string      `json:"metadata"`
@@ -176,8 +177,8 @@ func ParseCombinedJSON(combinedJSON []byte, source string, languageVersion strin
 	contracts := make(map[string]*Contract)
 	for name, info := range output.Contracts {
 		// Parse the individual compilation results.
-		var abi interface{}
-		if err := json.Unmarshal([]byte(info.Abi), &abi); err != nil {
+		a, err := abi.JSON(strings.NewReader(info.Abi))
+		if err != nil {
 			return nil, fmt.Errorf("solc: error reading abi definition (%v)", err)
 		}
 		var userdoc interface{}
@@ -199,7 +200,7 @@ func ParseCombinedJSON(combinedJSON []byte, source string, languageVersion strin
 				CompilerOptions: compilerOptions,
 				SrcMap:          info.SrcMap,
 				SrcMapRuntime:   info.SrcMapRuntime,
-				AbiDefinition:   abi,
+				AbiDefinition:   a,
 				UserDoc:         userdoc,
 				DeveloperDoc:    devdoc,
 				Metadata:        info.Metadata,
