@@ -23,6 +23,7 @@ type TransactionData struct {
 	Data     []byte
 }
 
+// TODO eliminate this as it's not needed by taraxa protocol???
 type BlockData struct {
 	Coinbase   common.Address
 	Number     *big.Int
@@ -32,7 +33,7 @@ type BlockData struct {
 	Hash       common.Hash
 }
 
-type Config struct {
+type StateTransition struct {
 	StateRoot  common.Hash
 	BlockData    *BlockData
 	Transactions []*TransactionData
@@ -51,7 +52,7 @@ type Result struct {
 	UsedGas   uint64
 }
 
-func Process(persistentDB ethdb.Database, config *Config, setOpts func(*Opts)) (result Result, err error) {
+func Process(persistentDB ethdb.Database, config *StateTransition, setOpts func(*Opts)) (result Result, err error) {
 	opts := Opts{
 		getBlockHashByNumber: func(u uint64) common.Hash {
 			return common.BigToHash(big.NewInt(int64(u)))
@@ -105,8 +106,8 @@ func Process(persistentDB ethdb.Database, config *Config, setOpts func(*Opts)) (
 			return
 		}
 		result.UsedGas += gas
-		root := commonStateDB.IntermediateRoot(true)
-		receipt := types.NewReceipt(root.Bytes(), false, result.UsedGas)
+		intermediateRoot := commonStateDB.IntermediateRoot(true)
+		receipt := types.NewReceipt(intermediateRoot.Bytes(), false, result.UsedGas)
 		receipt.TxHash = txHash;
 		receipt.GasUsed = gas
 		if tx.To() == nil {

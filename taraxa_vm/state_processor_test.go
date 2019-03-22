@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func TestFoo(t *testing.T) {
+func TestConflictDetection(t *testing.T) {
 	SingleVariable := compile(`
 pragma solidity ^0.5.6;
 
@@ -61,7 +61,7 @@ contract SingleVariable {
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
 
-	result1, err := Process(db, &Config{
+	result1, err := Process(db, &StateTransition{
 		StateRoot: common.Hash{},
 		BlockData: &blockData,
 		Transactions: []*TransactionData{
@@ -71,7 +71,10 @@ contract SingleVariable {
 	}, nil)
 	failOn(err)
 
-	result2, err := Process(db, &Config{
+	conflicts1 := result1.Conflicts.GetConflictingTransactions()
+	assert.True(t, len(conflicts1) == 0)
+
+	result2, err := Process(db, &StateTransition{
 		StateRoot: result1.StateRoot,
 		BlockData: &blockData,
 		Transactions: []*TransactionData{
@@ -106,10 +109,7 @@ contract SingleVariable {
 	}, nil)
 	failOn(err)
 
-	conflicts1 := result1.Conflicts.GetConflictingTransactions()
 	conflicts2 := result2.Conflicts.GetConflictingTransactions()
-
-	assert.True(t, len(conflicts1) == 0)
 	assert.Equal(t, conflicts2, []conflict_tracking.TxId{1, 2})
 }
 
