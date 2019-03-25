@@ -85,13 +85,15 @@ func Process(config *RunConfig) (result Result, err error) {
 	util.FailOnErr(flushErr)
 	result.StateRoot = finalRoot
 
+	// TODO remove
 	in, err := json.Marshal(config)
 	util.FailOnErr(err)
 	fmt.Println("IN: " + string(in))
 
+	// TODO remove
 	out, err := json.Marshal(result)
 	util.FailOnErr(err)
-	fmt.Println(string(out))
+	fmt.Println("OUT: " + string(out))
 
 	return
 }
