@@ -1,6 +1,6 @@
 package conflict_tracking
 
-type TxId = int
+type TxId = uint64
 type DUMMY = int
 
 const dummy DUMMY = 0

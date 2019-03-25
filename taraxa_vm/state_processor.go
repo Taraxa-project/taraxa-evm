@@ -1,7 +1,8 @@
-package taraxa_vm
+package main
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
+	"encoding/json"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -10,58 +11,25 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/conflict_tracking"
+	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/external"
+	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/util"
 	"math/big"
 )
 
-type TransactionData struct {
-	To       *common.Address
-	From     common.Address
-	Nonce    uint64
-	Amount   *big.Int
-	GasLimit uint64
-	GasPrice *big.Int
-	Data     []byte
-}
-
-// TODO eliminate this as it's not needed by taraxa protocol???
-type BlockData struct {
-	Coinbase   common.Address
-	Number     *big.Int
-	Time       *big.Int
-	Difficulty *big.Int
-	GasLimit   uint64
-	Hash       common.Hash
-}
-
-type StateTransition struct {
-	StateRoot  common.Hash
-	BlockData    *BlockData
-	Transactions []*TransactionData
-	//dbAddress    string
-}
-
-type Opts struct {
-	getBlockHashByNumber func(uint64) common.Hash
-}
-
-type Result struct {
-	StateRoot common.Hash
-	Conflicts *conflict_tracking.Conflicts
-	Receipts  types.Receipts
-	AllLogs   []*types.Log
-	UsedGas   uint64
-}
-
-func Process(persistentDB ethdb.Database, config *StateTransition, setOpts func(*Opts)) (result Result, err error) {
-	opts := Opts{
-		getBlockHashByNumber: func(u uint64) common.Hash {
-			return common.BigToHash(big.NewInt(int64(u)))
-		},
-	}
-	if setOpts != nil {
-		setOpts(&opts)
-	}
-	result.Conflicts = new(conflict_tracking.Conflicts).Init()
+func Process(config *RunConfig) (result Result, err error) {
+	defer util.RecoverErr(func(caught error) {
+		result.Error = caught
+		err = caught
+	})
+	ldbConfig := config.LDBConfig
+	ldbDatabase, ldbErr := ethdb.NewLDBDatabase(ldbConfig.File, ldbConfig.Cache, ldbConfig.Handles)
+	util.FailOnErr(ldbErr)
+	defer ldbDatabase.Close()
+	commonStateDB, stateDbErr := state.New(config.StateRoot, state.NewDatabase(ldbDatabase))
+	util.FailOnErr(stateDbErr)
+	gasPool := new(core.GasPool).AddGas(config.Block.GasLimit);
+	evmConfig := vm.Config{}
+	conflicts := new(conflict_tracking.Conflicts).Init()
 	chainConfig := &params.ChainConfig{
 		ChainID:             big.NewInt(0),
 		HomesteadBlock:      big.NewInt(0),
@@ -73,38 +41,29 @@ func Process(persistentDB ethdb.Database, config *StateTransition, setOpts func(
 		PetersburgBlock:     big.NewInt(0),
 		Ethash:              new(params.EthashConfig),
 	}
-	evmConfig := vm.Config{}
-	gasPool := new(core.GasPool).AddGas(config.BlockData.GasLimit);
-	commonStateDB, err := state.New(config.StateRoot, state.NewDatabase(persistentDB))
-	if err != nil {
-		return
-	}
 	for ordinal, txData := range config.Transactions {
-		txLocalDB := new(conflict_tracking.ConflictTrackingStateDB).Init(ordinal, commonStateDB, result.Conflicts)
+		txLocalDB := new(conflict_tracking.ConflictTrackingStateDB).Init(uint64(ordinal), commonStateDB, conflicts)
 		tx := types.NewMessage(
 			txData.From, txData.To, txData.Nonce, txData.Amount,
 			txData.GasLimit, txData.GasPrice, txData.Data, true,
 		)
 		txHash := types.RlpHash(tx);
-		commonStateDB.Prepare(txHash, config.BlockData.Hash, ordinal)
+		commonStateDB.Prepare(txHash, config.Block.Hash, ordinal)
 		evmContext := vm.Context{
 			CanTransfer: core.CanTransfer,
 			Transfer:    core.Transfer,
-			GetHash:     opts.getBlockHashByNumber,
+			GetHash:     external.GetHeaderHashByBlockNumber,
 			Origin:      tx.From(),
-			Coinbase:    config.BlockData.Coinbase,
-			BlockNumber: new(big.Int).Set(config.BlockData.Number),
-			Time:        new(big.Int).Set(config.BlockData.Time),
-			Difficulty:  new(big.Int).Set(config.BlockData.Difficulty),
-			GasLimit:    config.BlockData.GasLimit,
+			Coinbase:    config.Block.Coinbase,
+			BlockNumber: new(big.Int).Set(config.Block.Number),
+			Time:        new(big.Int).Set(config.Block.Time),
+			Difficulty:  new(big.Int).Set(config.Block.Difficulty),
+			GasLimit:    config.Block.GasLimit,
 			GasPrice:    new(big.Int).Set(tx.GasPrice()),
 		}
 		vmenv := vm.NewEVM(evmContext, txLocalDB, chainConfig, evmConfig)
-		var gas uint64
-		_, gas, err = core.ApplyMessage(vmenv, tx, gasPool)
-		if err != nil {
-			return
-		}
+		returnValue, gas, txErr := core.ApplyMessage(vmenv, tx, gasPool)
+		util.FailOnErr(txErr)
 		result.UsedGas += gas
 		intermediateRoot := commonStateDB.IntermediateRoot(true)
 		receipt := types.NewReceipt(intermediateRoot.Bytes(), false, result.UsedGas)
@@ -117,9 +76,22 @@ func Process(persistentDB ethdb.Database, config *StateTransition, setOpts func(
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		result.Receipts = append(result.Receipts, receipt)
 		result.AllLogs = append(result.AllLogs, receipt.Logs...)
+		result.ReturnValues = append(result.ReturnValues, returnValue)
 	}
-	result.StateRoot, err = Flush(commonStateDB, func(opts *FlushOpts) {
-		opts.report = true
-	})
+	result.ConcurrentSchedule = &ConcurrentSchedule{
+		Sequential: conflicts.GetConflictingTransactions(),
+	}
+	finalRoot, flushErr := Flush(commonStateDB, nil)
+	util.FailOnErr(flushErr)
+	result.StateRoot = finalRoot
+
+	in, err := json.Marshal(config)
+	util.FailOnErr(err)
+	fmt.Println("IN: " + string(in))
+
+	out, err := json.Marshal(result)
+	util.FailOnErr(err)
+	fmt.Println(string(out))
+
 	return
 }

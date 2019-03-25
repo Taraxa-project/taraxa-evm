@@ -7,7 +7,8 @@ set(CMAKE_MACOSX_RPATH 1)
 include(FetchContent)
 
 set(SRC_DIR ${PROJECT_SOURCE_DIR}/src)
-set(GRPC_GEN_DIR ${PROJECT_SOURCE_DIR}/../grpc/grpc_cpp)
+set(ROOT_DIR ${PROJECT_SOURCE_DIR}/..)
+set(GRPC_GEN_DIR ${ROOT_DIR}/grpc/grpc_cpp)
 
 set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
 set(FETCHCONTENT_QUIET OFF)
@@ -56,6 +57,7 @@ include_directories(
         ${googletest_project_SOURCE_DIR}/googlemock/include
         ${GRPC_GEN_DIR}
         ${PROJECT_SOURCE_DIR}/include
+        ${ROOT_DIR}/taraxa_vm
 )
 
 add_executable(
@@ -86,6 +88,19 @@ target_link_libraries(
         libprotobuf
         Threads::Threads
         Boost::filesystem
+)
+
+add_executable(
+        ${PROJECT_NAME}-foo
+        ${SRC_DIR}/foo.cpp
+)
+
+add_library(EVM SHARED IMPORTED)
+set_target_properties(EVM PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/vm.so)
+
+target_link_libraries(
+        ${PROJECT_NAME}-foo
+        EVM
 )
 
 enable_testing()

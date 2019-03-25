@@ -1,14 +1,16 @@
-package taraxa_vm
+package main
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/compiler"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/conflict_tracking"
+	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/util"
 	"github.com/stretchr/testify/assert"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -31,9 +33,10 @@ contract SingleVariable {
 }
 	`)
 
-	db := ethdb.NewMemDatabase()
+	ldbConfig, ldbCleanup := newTestLDB()
+	defer ldbCleanup()
 
-	blockData := BlockData{
+	block := Block{
 		Number:     big.NewInt(0),
 		Time:       big.NewInt(0),
 		Difficulty: big.NewInt(0),
@@ -41,7 +44,7 @@ contract SingleVariable {
 		GasLimit:   100000000000,
 	}
 
-	contractCreatingTx1 := TransactionData{
+	contractCreatingTx1 := Transaction{
 		Nonce:    0,
 		From:     *addr(100),
 		Data:     code(SingleVariable),
@@ -51,7 +54,7 @@ contract SingleVariable {
 	}
 	contractAddr1 := crypto.CreateAddress(contractCreatingTx1.From, contractCreatingTx1.Nonce)
 
-	contractCreatingTx2 := TransactionData{
+	contractCreatingTx2 := Transaction{
 		Nonce:    0,
 		From:     *addr(101),
 		Data:     code(SingleVariable),
@@ -61,24 +64,25 @@ contract SingleVariable {
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
 
-	result1, err := Process(db, &StateTransition{
+	result1, err := Process(&RunConfig{
 		StateRoot: common.Hash{},
-		BlockData: &blockData,
-		Transactions: []*TransactionData{
+		Block:     &block,
+		LDBConfig: &ldbConfig,
+		Transactions: []*Transaction{
 			&contractCreatingTx1,
 			&contractCreatingTx2,
 		},
-	}, nil)
-	failOn(err)
+	})
+	util.FailOnErr(err)
 
-	conflicts1 := result1.Conflicts.GetConflictingTransactions()
-	assert.True(t, len(conflicts1) == 0)
+	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
 
-	result2, err := Process(db, &StateTransition{
+	result2, err := Process(&RunConfig{
 		StateRoot: result1.StateRoot,
-		BlockData: &blockData,
-		Transactions: []*TransactionData{
-			&TransactionData{
+		Block:     &block,
+		LDBConfig: &ldbConfig,
+		Transactions: []*Transaction{
+			&Transaction{
 				Nonce:    0,
 				From:     *addr(102),
 				To:       &contractAddr1,
@@ -87,7 +91,7 @@ contract SingleVariable {
 				GasPrice: big.NewInt(0),
 				GasLimit: 100000000,
 			},
-			&TransactionData{
+			&Transaction{
 				Nonce:    0,
 				From:     *addr(103),
 				To:       &contractAddr2,
@@ -96,7 +100,7 @@ contract SingleVariable {
 				GasPrice: big.NewInt(0),
 				GasLimit: 100000000,
 			},
-			&TransactionData{
+			&Transaction{
 				Nonce:    1,
 				From:     *addr(103),
 				To:       &contractAddr2,
@@ -106,11 +110,10 @@ contract SingleVariable {
 				GasLimit: 100000000,
 			},
 		},
-	}, nil)
-	failOn(err)
+	})
+	util.FailOnErr(err)
 
-	conflicts2 := result2.Conflicts.GetConflictingTransactions()
-	assert.Equal(t, conflicts2, []conflict_tracking.TxId{1, 2})
+	assert.Equal(t, result2.ConcurrentSchedule.Sequential, []conflict_tracking.TxId{1, 2})
 }
 
 func addr(n int64) *common.Address {
@@ -121,7 +124,7 @@ func addr(n int64) *common.Address {
 
 func compile(contract string) *compiler.Contract {
 	contracts, err := compiler.CompileSolidityString("solc", contract);
-	failOn(err)
+	util.FailOnErr(err)
 	for _, contract := range contracts {
 		return contract
 	}
@@ -130,19 +133,30 @@ func compile(contract string) *compiler.Contract {
 
 func code(contract *compiler.Contract) []byte {
 	code, err := hexutil.Decode(contract.Code)
-	failOn(err)
+	util.FailOnErr(err)
 	return code
 }
 
 func call(contract *compiler.Contract, method string, args ...interface{}) []byte {
 	calldata, err := contract.Info.AbiDefinition.Pack(method, args...)
-	failOn(err)
+	util.FailOnErr(err)
 	return calldata;
 }
 
-func failOn(err error) {
-	if err != nil {
-		panic(err);
+func newTestLDB() (LDBConfig, func()) {
+	dirname := "__test_ldb__"
+	if _, err := os.Stat(dirname); !os.IsNotExist(err) {
+		util.FailOnErr(os.RemoveAll(dirname))
+	}
+	util.FailOnErr(os.Mkdir(dirname, os.ModePerm))
+	absPath, err := filepath.Abs(dirname)
+	util.FailOnErr(err)
+	return LDBConfig{
+		File:    absPath,
+		Cache:   0,
+		Handles: 0,
+	}, func() {
+		util.FailOnErr(os.RemoveAll(dirname))
 	}
 }
 
