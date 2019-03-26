@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -84,16 +82,5 @@ func Process(config *RunConfiguration) (result Result, err error) {
 	finalRoot, flushErr := Flush(commonStateDB, nil)
 	util.FailOnErr(flushErr)
 	result.StateRoot = finalRoot
-
-	// TODO remove
-	in, err := json.Marshal(config)
-	util.FailOnErr(err)
-	fmt.Println("IN: " + string(in))
-
-	// TODO remove
-	out, err := json.Marshal(result)
-	util.FailOnErr(err)
-	fmt.Println("OUT: " + string(out))
-
 	return
 }
