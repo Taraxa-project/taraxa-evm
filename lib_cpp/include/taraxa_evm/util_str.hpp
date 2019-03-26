@@ -1,9 +1,5 @@
-//
-// Created by John Doe on 2019-03-10.
-//
-
-#ifndef TARAXA_EVM_STRING_UTIL_HPP
-#define TARAXA_EVM_STRING_UTIL_HPP
+#ifndef TARAXA_EVM_UTIL_STRING_HPP
+#define TARAXA_EVM_UTIL_STRING_HPP
 
 #include <string>
 #include <string.h>
@@ -37,4 +33,4 @@ namespace taraxa_evm::util_str {
     using __util_str::fmt;
 }
 
-#endif //TARAXA_EVM_STRING_UTIL_HPP
+#endif //TARAXA_EVM_UTIL_STRING_HPP

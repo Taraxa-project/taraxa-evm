@@ -1,5 +1,5 @@
-#ifndef TARAXA_EVM_IO_UTIL_HPP
-#define TARAXA_EVM_IO_UTIL_HPP
+#ifndef TARAXA_EVM_UTIL_IO_HPP
+#define TARAXA_EVM_UTIL_IO_HPP
 
 #include <sstream>
 #include <iostream>
@@ -19,4 +19,4 @@ namespace taraxa_evm::__util_io {
 namespace taraxa_evm::util_io {
     using __util_io::toString;
 }
-#endif //TARAXA_EVM_IO_UTIL_HPP
+#endif //TARAXA_EVM_UTIL_IO_HPP

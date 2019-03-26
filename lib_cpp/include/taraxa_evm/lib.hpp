@@ -1,5 +1,5 @@
-#ifndef TARAXA_EVM_EVM_HPP
-#define TARAXA_EVM_EVM_HPP
+#ifndef TARAXA_EVM_LIB_HPP
+#define TARAXA_EVM_LIB_HPP
 
 #include <vector>
 //#include <boost/format.hpp>
@@ -182,4 +182,4 @@ namespace taraxa_evm::lib {
     using __lib::Bloom;
 }
 
-#endif //TARAXA_EVM_EVM_HPP
+#endif //TARAXA_EVM_LIB_HPP
