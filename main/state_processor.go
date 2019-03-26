@@ -10,13 +10,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/conflict_tracking"
-	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/external"
-	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/util"
+	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
+	"github.com/Taraxa-project/taraxa-evm/main/external"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
 
-func Process(config *RunConfig) (result Result, err error) {
+func Process(config *RunConfiguration) (result Result, err error) {
 	defer util.RecoverErr(func(caught error) {
 		result.Error = caught
 		err = caught

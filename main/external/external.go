@@ -1,9 +1,7 @@
-//+build extern
+//TODO +build lib_cpp
 
 package external
 
-//#include <stdlib.h>
-//#include "taraxa_vm_external.h"
 import "C"
 import "github.com/Taraxa-project/taraxa-evm/common"
 
@@ -14,6 +12,7 @@ import "github.com/Taraxa-project/taraxa-evm/common"
 
 func init() {
 	GetHeaderHashByBlockNumber = func(u uint64) common.Hash {
+		return common.Hash{}
 		// TODO call C functions
 	}
 }

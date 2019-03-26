@@ -35,7 +35,7 @@ type LDBConfig struct {
 	Handles int    `json:"handles"`
 }
 
-type RunConfig struct {
+type RunConfiguration struct {
 	StateRoot          common.Hash         `json:"stateRoot"`
 	Block              *Block              `json:"block"`
 	Transactions       []*Transaction      `json:"transactions"`

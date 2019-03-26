@@ -1,12 +1,12 @@
-#ifndef TESTS_INTEGRATION_GRPC_UTIL_JSON
-#define TESTS_INTEGRATION_GRPC_UTIL_JSON
+#ifndef TARAXA_EVM_GRPC_UTIL_JSON
+#define TARAXA_EVM_GRPC_UTIL_JSON
 
 #include <functional>
 #include <stdexcept>
 #include <rapidjson/document.h>
-#include "taraxa/util_str.hpp"
+#include "taraxa_evm/util_str.hpp"
 
-namespace taraxa::__util_json {
+namespace taraxa_evm::__util_json {
 
     using namespace std;
     using namespace rapidjson;
@@ -44,8 +44,8 @@ namespace taraxa::__util_json {
     }
 
 }
-namespace taraxa::util_json {
+namespace taraxa_evm::util_json {
     using __util_json::get;
 }
 
-#endif //TESTS_INTEGRATION_GRPC_UTIL_JSON
+#endif //TARAXA_EVM_GRPC_UTIL_JSON

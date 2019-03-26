@@ -5,8 +5,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/compiler"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/conflict_tracking"
-	"github.com/Taraxa-project/taraxa-evm/taraxa_vm/util"
+	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"os"
@@ -64,7 +64,7 @@ contract SingleVariable {
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
 
-	result1, err := Process(&RunConfig{
+	result1, err := Process(&RunConfiguration{
 		StateRoot: common.Hash{},
 		Block:     &block,
 		LDBConfig: &ldbConfig,
@@ -77,7 +77,7 @@ contract SingleVariable {
 
 	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
 
-	result2, err := Process(&RunConfig{
+	result2, err := Process(&RunConfiguration{
 		StateRoot: result1.StateRoot,
 		Block:     &block,
 		LDBConfig: &ldbConfig,

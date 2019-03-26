@@ -1,5 +1,5 @@
-#ifndef TESTS_INTEGRATION_CHILD_PROCESS_HPP
-#define TESTS_INTEGRATION_CHILD_PROCESS_HPP
+#ifndef TARAXA_EVM_CHILD_PROCESS_HPP
+#define TARAXA_EVM_CHILD_PROCESS_HPP
 
 #include <string>
 #include <iostream>
@@ -38,4 +38,4 @@ namespace taraxa::contracts {
     using __contracts::getCode;
 }
 
-#endif //TESTS_INTEGRATION_CHILD_PROCESS_HPP
+#endif //TARAXA_EVM_CHILD_PROCESS_HPP

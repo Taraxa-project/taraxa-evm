@@ -2,8 +2,8 @@
 // Created by John Doe on 2019-03-10.
 //
 
-#ifndef TESTS_INTEGRATION_STRING_UTIL_HPP
-#define TESTS_INTEGRATION_STRING_UTIL_HPP
+#ifndef TARAXA_EVM_STRING_UTIL_HPP
+#define TARAXA_EVM_STRING_UTIL_HPP
 
 #include <string>
 #include <string.h>
@@ -16,7 +16,7 @@
 #include <boost/process.hpp>
 #include <boost/fusion/iterator.hpp>
 
-namespace taraxa::__util_str {
+namespace taraxa_evm::__util_str {
     using namespace std;
     using namespace boost;
     using namespace boost::fusion;
@@ -33,8 +33,8 @@ namespace taraxa::__util_str {
     }
 
 }
-namespace taraxa::util_str {
+namespace taraxa_evm::util_str {
     using __util_str::fmt;
 }
 
-#endif //TESTS_INTEGRATION_STRING_UTIL_HPP
+#endif //TARAXA_EVM_STRING_UTIL_HPP
