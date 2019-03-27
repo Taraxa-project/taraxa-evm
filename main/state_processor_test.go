@@ -131,16 +131,18 @@ func compile(contract string) *compiler.Contract {
 	panic("no contracts in the output")
 }
 
-func code(contract *compiler.Contract) []byte {
+func code(contract *compiler.Contract) *hexutil.Bytes {
+	var code hexutil.Bytes
 	code, err := hexutil.Decode(contract.Code)
 	util.FailOnErr(err)
-	return code
+	return &code
 }
 
-func call(contract *compiler.Contract, method string, args ...interface{}) []byte {
+func call(contract *compiler.Contract, method string, args ...interface{}) *hexutil.Bytes {
+	var calldata hexutil.Bytes
 	calldata, err := contract.Info.AbiDefinition.Pack(method, args...)
 	util.FailOnErr(err)
-	return calldata;
+	return &calldata;
 }
 
 func newTestLDB() (LDBConfig, func()) {

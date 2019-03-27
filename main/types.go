@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"math/big"
 )
@@ -23,7 +24,7 @@ type Transaction struct {
 	Amount   BigIntString    `json:"amount"`
 	GasLimit uint64          `json:"gasLimit"`
 	GasPrice BigIntString    `json:"gasPrice"`
-	Data     []byte          `json:"data"`
+	Data     *hexutil.Bytes  `json:"data"`
 }
 
 type Block struct {
@@ -59,6 +60,6 @@ type Result struct {
 	Receipts           types.Receipts      `json:"receipts"`
 	AllLogs            []*types.Log        `json:"allLogs"`
 	UsedGas            uint64              `json:"usedGas"`
-	ReturnValues       [][]byte            `json:"returnValues"`
+	ReturnValues       []*hexutil.Bytes    `json:"returnValues"`
 	Error              error               `json:"error"`
 }

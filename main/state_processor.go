@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -43,7 +46,7 @@ func Process(config *RunConfiguration) (result Result, err error) {
 		txLocalDB := new(conflict_tracking.ConflictTrackingStateDB).Init(uint64(ordinal), commonStateDB, conflicts)
 		tx := types.NewMessage(
 			txData.From, txData.To, txData.Nonce, BigInt(txData.Amount),
-			txData.GasLimit, BigInt(txData.GasPrice), txData.Data, true,
+			txData.GasLimit, BigInt(txData.GasPrice), *txData.Data, true,
 		)
 		txHash := types.RlpHash(tx);
 		commonStateDB.Prepare(txHash, config.Block.Hash, ordinal)
@@ -60,6 +63,7 @@ func Process(config *RunConfiguration) (result Result, err error) {
 			GasPrice:    new(big.Int).Set(tx.GasPrice()),
 		}
 		vmenv := vm.NewEVM(evmContext, txLocalDB, chainConfig, evmConfig)
+		var returnValue hexutil.Bytes
 		returnValue, gas, txErr := core.ApplyMessage(vmenv, tx, gasPool)
 		util.FailOnErr(txErr)
 		result.UsedGas += gas
@@ -74,7 +78,7 @@ func Process(config *RunConfiguration) (result Result, err error) {
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		result.Receipts = append(result.Receipts, receipt)
 		result.AllLogs = append(result.AllLogs, receipt.Logs...)
-		result.ReturnValues = append(result.ReturnValues, returnValue)
+		result.ReturnValues = append(result.ReturnValues, &returnValue)
 	}
 	result.ConcurrentSchedule = &ConcurrentSchedule{
 		Sequential: conflicts.GetConflictingTransactions(),
@@ -82,5 +86,10 @@ func Process(config *RunConfiguration) (result Result, err error) {
 	finalRoot, flushErr := Flush(commonStateDB, nil)
 	util.FailOnErr(flushErr)
 	result.StateRoot = finalRoot
+
+	c, _ := json.Marshal(config);
+	r, _ := json.Marshal(&result);
+	fmt.Println(string(c))
+	fmt.Println(string(r))
 	return
 }
