@@ -1,0 +1,12 @@
+CMakeCache.txt
+CMakeFiles
+results.lst
+tests_integration
+tests_grpc
+test_server
+Makefile
+CTestTestfile.cmake
+cmake_install.cmake
+build
+thirdparty
+cmake-build-*
