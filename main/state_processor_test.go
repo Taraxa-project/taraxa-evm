@@ -37,9 +37,9 @@ contract SingleVariable {
 	defer ldbCleanup()
 
 	block := Block{
-		Number:     big.NewInt(0),
-		Time:       big.NewInt(0),
-		Difficulty: big.NewInt(0),
+		Number:     "0",
+		Time:       "0",
+		Difficulty: "0",
 		Coinbase:   *addr(100),
 		GasLimit:   100000000000,
 	}
@@ -48,8 +48,8 @@ contract SingleVariable {
 		Nonce:    0,
 		From:     *addr(100),
 		Data:     code(SingleVariable),
-		Amount:   big.NewInt(0),
-		GasPrice: big.NewInt(0),
+		Amount:   "0",
+		GasPrice: "0",
 		GasLimit: 100000000,
 	}
 	contractAddr1 := crypto.CreateAddress(contractCreatingTx1.From, contractCreatingTx1.Nonce)
@@ -58,8 +58,8 @@ contract SingleVariable {
 		Nonce:    0,
 		From:     *addr(101),
 		Data:     code(SingleVariable),
-		Amount:   big.NewInt(0),
-		GasPrice: big.NewInt(0),
+		Amount:   "0",
+		GasPrice: "0",
 		GasLimit: 100000000,
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
@@ -87,8 +87,8 @@ contract SingleVariable {
 				From:     *addr(102),
 				To:       &contractAddr1,
 				Data:     call(SingleVariable, "set", big.NewInt(2)),
-				Amount:   big.NewInt(0),
-				GasPrice: big.NewInt(0),
+				Amount:   "0",
+				GasPrice: "0",
 				GasLimit: 100000000,
 			},
 			&Transaction{
@@ -96,8 +96,8 @@ contract SingleVariable {
 				From:     *addr(103),
 				To:       &contractAddr2,
 				Data:     call(SingleVariable, "set", big.NewInt(3)),
-				Amount:   big.NewInt(0),
-				GasPrice: big.NewInt(0),
+				Amount:   "0",
+				GasPrice: "0",
 				GasLimit: 100000000,
 			},
 			&Transaction{
@@ -105,8 +105,8 @@ contract SingleVariable {
 				From:     *addr(103),
 				To:       &contractAddr2,
 				Data:     call(SingleVariable, "get"),
-				Amount:   big.NewInt(0),
-				GasPrice: big.NewInt(0),
+				Amount:   "0",
+				GasPrice: "0",
 				GasLimit: 100000000,
 			},
 		},

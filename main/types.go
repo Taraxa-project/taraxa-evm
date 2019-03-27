@@ -1,26 +1,36 @@
 package main
 
 import (
+	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"math/big"
 )
 
+type BigIntString = string;
+
+func BigInt(str BigIntString) *big.Int {
+	if ret, success := new(big.Int).SetString(str, 10); success {
+		return ret
+	}
+	panic(errors.New("Could not convert string to bigint: " + str))
+}
+
 type Transaction struct {
 	To       *common.Address `json:"to"`
 	From     common.Address  `json:"from"`
 	Nonce    uint64          `json:"nonce"`
-	Amount   *big.Int        `json:"amount"`
+	Amount   BigIntString    `json:"amount"`
 	GasLimit uint64          `json:"gasLimit"`
-	GasPrice *big.Int        `json:"gasPrice"`
+	GasPrice BigIntString    `json:"gasPrice"`
 	Data     []byte          `json:"data"`
 }
 
 type Block struct {
 	Coinbase   common.Address `json:"coinbase"`
-	Number     *big.Int       `json:"number"`
-	Time       *big.Int       `json:"time"`
-	Difficulty *big.Int       `json:"difficulty"`
+	Number     BigIntString   `json:"number"`
+	Time       BigIntString   `json:"time"`
+	Difficulty BigIntString   `json:"difficulty"`
 	GasLimit   uint64         `json:"gasLimit"`
 	Hash       common.Hash    `json:"hash"`
 }

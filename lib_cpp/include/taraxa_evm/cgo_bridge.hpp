@@ -5,7 +5,7 @@
 
 namespace taraxa_evm::cgo_bridge {
 
-    std::string run(const std::string &);
+    std::string runEvm(const std::string &);
 
 }
 

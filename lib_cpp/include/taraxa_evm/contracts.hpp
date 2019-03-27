@@ -16,10 +16,10 @@ namespace taraxa::__contracts {
     template<class... Arg>
     string callContractCli(const string &cmd, const string &contractName, const Arg &...args) {
         ipstream stdOut;
-        child(search_path("node"), CONTRACTS_DIR.string(),
-              cmd, contractName + ".sol", contractName, args...,
-              std_out > stdOut)
-                .join();
+        child nodeProcess(search_path("node"), CONTRACTS_DIR.string(),
+                          cmd, contractName + ".sol", contractName, args...,
+                          std_out > stdOut);
+        nodeProcess.join();
         return toString(stdOut);
     }
 

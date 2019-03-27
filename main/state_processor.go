@@ -42,8 +42,8 @@ func Process(config *RunConfiguration) (result Result, err error) {
 	for ordinal, txData := range config.Transactions {
 		txLocalDB := new(conflict_tracking.ConflictTrackingStateDB).Init(uint64(ordinal), commonStateDB, conflicts)
 		tx := types.NewMessage(
-			txData.From, txData.To, txData.Nonce, txData.Amount,
-			txData.GasLimit, txData.GasPrice, txData.Data, true,
+			txData.From, txData.To, txData.Nonce, BigInt(txData.Amount),
+			txData.GasLimit, BigInt(txData.GasPrice), txData.Data, true,
 		)
 		txHash := types.RlpHash(tx);
 		commonStateDB.Prepare(txHash, config.Block.Hash, ordinal)
@@ -53,9 +53,9 @@ func Process(config *RunConfiguration) (result Result, err error) {
 			GetHash:     external.GetHeaderHashByBlockNumber,
 			Origin:      tx.From(),
 			Coinbase:    config.Block.Coinbase,
-			BlockNumber: new(big.Int).Set(config.Block.Number),
-			Time:        new(big.Int).Set(config.Block.Time),
-			Difficulty:  new(big.Int).Set(config.Block.Difficulty),
+			BlockNumber: BigInt(config.Block.Number),
+			Time:        BigInt(config.Block.Time),
+			Difficulty:  BigInt(config.Block.Difficulty),
 			GasLimit:    config.Block.GasLimit,
 			GasPrice:    new(big.Int).Set(tx.GasPrice()),
 		}
