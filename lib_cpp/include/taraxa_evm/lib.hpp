@@ -187,7 +187,7 @@ namespace taraxa_evm::__lib {
         return set(doc, obj, key, Value().Set(value));
     }
 
-    Result runEvm(const RunConfiguration &config) {
+    Result runEvm(const RunConfiguration &config, const ExternalApi &externalApi) {
         Document configDoc;
 
         auto &rootObj = configDoc.SetObject();
@@ -230,7 +230,7 @@ namespace taraxa_evm::__lib {
         StringBuffer buffer;
         Writer<StringBuffer> writer(buffer);
         configDoc.Accept(writer);
-        auto resultStr = cgo_bridge::runEvm(buffer.GetString());
+        auto resultStr = taraxa_evm::runEvm(buffer.GetString(), externalApi);
         Document resultDoc;
         resultDoc.Parse(resultStr.c_str());
         return Result::fromJson(resultDoc);
@@ -252,6 +252,7 @@ namespace taraxa_evm::lib {
     using __lib::BigInt;
     using __lib::Hash;
     using __lib::Bloom;
+    using __lib::u256;
 }
 
 #endif //TARAXA_EVM_LIB_HPP

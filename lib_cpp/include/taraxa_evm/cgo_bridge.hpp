@@ -3,9 +3,17 @@
 
 #include <string>
 
-namespace taraxa_evm::cgo_bridge {
+extern "C" {
 
-    std::string runEvm(const std::string &);
+#include "cgo_imports.h"
+
+}
+
+namespace taraxa_evm {
+
+    using ExternalApi = ExternalApi;
+
+    std::string runEvm(const std::string &, const ExternalApi &externalApi);
 
 }
 

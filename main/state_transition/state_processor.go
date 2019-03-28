@@ -1,8 +1,6 @@
-package main
+package state_transition
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
@@ -10,14 +8,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
-	"github.com/Taraxa-project/taraxa-evm/main/external"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 )
 
-func Process(config *RunConfiguration) (result Result, err error) {
+func Run(config *RunConfiguration, externalApi *ExternalApi) (result Result, err error) {
 	defer util.RecoverErr(func(caught error) {
 		result.Error = caught
 		err = caught
@@ -53,7 +50,7 @@ func Process(config *RunConfiguration) (result Result, err error) {
 		evmContext := vm.Context{
 			CanTransfer: core.CanTransfer,
 			Transfer:    core.Transfer,
-			GetHash:     external.GetHeaderHashByBlockNumber,
+			GetHash:     externalApi.GetHeaderHashByBlockNumber,
 			Origin:      tx.From(),
 			Coinbase:    config.Block.Coinbase,
 			BlockNumber: BigInt(config.Block.Number),
@@ -86,10 +83,5 @@ func Process(config *RunConfiguration) (result Result, err error) {
 	finalRoot, flushErr := Flush(commonStateDB, nil)
 	util.FailOnErr(flushErr)
 	result.StateRoot = finalRoot
-
-	c, _ := json.Marshal(config);
-	r, _ := json.Marshal(&result);
-	fmt.Println(string(c))
-	fmt.Println(string(r))
 	return
 }

@@ -7,6 +7,7 @@
 #include "paths.hpp"
 #include "util_io.hpp"
 
+// TODO not used for now
 namespace taraxa::__contracts {
     using namespace taraxa::util_io;
     using namespace boost::process;
