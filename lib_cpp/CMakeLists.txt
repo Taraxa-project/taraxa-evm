@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.11)
 project(taraxa_evm)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -28,23 +28,12 @@ macro(git_dependency name repo tag)
 endmacro()
 
 git_dependency(boost_cmake https://github.com/Orphis/boost-cmake v1.67.0)
-git_dependency(googletest_project https://github.com/google/googletest release-1.8.0 .)
 git_dependency(rapidjson_project https://github.com/Tencent/rapidjson v1.1.0 .)
+git_dependency(googletest_project https://github.com/google/googletest release-1.8.0 .)
 
 foreach (p boost_cmake googletest_project)
     add_subdirectory(${${p}_SOURCE_DIR} EXCLUDE_FROM_ALL)
 endforeach (p)
-
-#find_package(Threads REQUIRED)
-
-include_directories(
-        ${BOOST_SOURCE}
-        ${rapidjson_project_SOURCE_DIR}/include
-        ${googletest_project_SOURCE_DIR}/googletest/include
-        ${googletest_project_SOURCE_DIR}/googlemock/include
-        ${CGO_LIB_DEST}
-        ${PROJECT_SOURCE_DIR}/include
-)
 
 add_custom_target(
         ${PROJECT_NAME}_cgo_static_lib_build
@@ -57,6 +46,14 @@ set_target_properties(${PROJECT_NAME}_cgo_static_lib PROPERTIES IMPORTED_LOCATIO
 add_dependencies(${PROJECT_NAME}_cgo_static_lib ${PROJECT_NAME}_cgo_static_lib_build)
 
 add_library(${PROJECT_NAME} STATIC ${SRC_DIR}/lib.cpp)
+target_include_directories(
+        ${PROJECT_NAME}
+        PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+        ${CGO_LIB_DEST}
+        ${BOOST_SOURCE}
+        ${rapidjson_project_SOURCE_DIR}/include
+)
 target_link_libraries(
         ${PROJECT_NAME}
         ${PROJECT_NAME}_cgo_static_lib
@@ -73,13 +70,21 @@ add_executable(
         ${PROJECT_NAME}_tests
         ${SRC_DIR}/tests.cpp
 )
+target_include_directories(
+        ${PROJECT_NAME}_tests
+        PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+        ${BOOST_SOURCE}
+        ${rapidjson_project_SOURCE_DIR}/include
+        ${googletest_project_SOURCE_DIR}/googletest/include
+        ${googletest_project_SOURCE_DIR}/googlemock/include
+)
 target_link_libraries(
         ${PROJECT_NAME}_tests
         ${PROJECT_NAME}
+        Boost::filesystem
         gtest_main
         gtest
-        #        Threads::Threads
-        Boost::filesystem
 )
 
 enable_testing()

@@ -1,23 +1,10 @@
-# Go Ethereum EVM
+# Taraxa EVM
 
-## Building the source
+- [Main GO package](main/README.md)
+- [C++ library](lib_cpp/README.md)
+- [Docker builds](docker/README.md)
+- [(SUSPENDED) Python build console](build/README.md)
+- [(SUSPENDED) GRPC interfaces](grpc/README.md)
 
-Building requires both a Go (version 1.11 or later) and a C compiler.
-You can install them using your favourite package manager.
-Once the dependencies are installed, run
-
-    make evm
-
-or
-
-    make all
-
-The exexutable named `evm` will appear in the `build/bin` directory.
-
-## Run integration tests
-
-```
-make tests_integration
-```
-
-For the detailed instruction consult [the readme](tests_integration/README.md)
+## Requirements
+- go 1.11+
