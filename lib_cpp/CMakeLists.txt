@@ -47,20 +47,19 @@ include_directories(
 )
 
 add_custom_target(
-        taraxa_vm_cgo_shared_lib_build
-
+        ${PROJECT_NAME}_cgo_static_lib_build
         COMMAND go build -tags=lib_cpp -buildmode=c-archive -o ${CGO_LIB_FILE}
         WORKING_DIRECTORY ${GO_MAIN_PACKAGE}
         COMMENT "Build CGO static lib from ${GO_MAIN_PACKAGE} to ${CGO_LIB_DEST}"
 )
-add_library(taraxa_vm_cgo_shared_lib STATIC IMPORTED)
-set_target_properties(taraxa_vm_cgo_shared_lib PROPERTIES IMPORTED_LOCATION ${CGO_LIB_FILE})
-add_dependencies(taraxa_vm_cgo_shared_lib taraxa_vm_cgo_shared_lib_build)
+add_library(${PROJECT_NAME}_cgo_static_lib STATIC IMPORTED)
+set_target_properties(${PROJECT_NAME}_cgo_static_lib PROPERTIES IMPORTED_LOCATION ${CGO_LIB_FILE})
+add_dependencies(${PROJECT_NAME}_cgo_static_lib ${PROJECT_NAME}_cgo_static_lib_build)
 
 add_library(${PROJECT_NAME} STATIC ${SRC_DIR}/lib.cpp)
 target_link_libraries(
         ${PROJECT_NAME}
-        taraxa_vm_cgo_shared_lib
+        ${PROJECT_NAME}_cgo_static_lib
 )
 if (APPLE)
     target_link_libraries(

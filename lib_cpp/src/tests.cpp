@@ -1,10 +1,10 @@
+#include <functional>
+#include <iostream>
 #include <gtest/gtest.h>
 #include "taraxa_evm/util_str.hpp"
 #include "taraxa_evm/util_io.hpp"
 #include "taraxa_evm/paths.hpp"
 #include "taraxa_evm/lib.hpp"
-
-#include <iostream>
 
 using namespace std;
 using namespace taraxa_evm;
@@ -45,6 +45,10 @@ TEST(typed_api, create_contract) {
             .transactions = &transactions,
             .ldbConfig = &ldbConfig,
             .concurrentSchedule = nullptr
+    }, ExternalApi{
+            .getHeaderHashByBlockNumber = [](auto i) {
+                return "fooo";
+            }
     });
     ASSERT_EQ(result.stateRoot, "0xf274095ef03a004be6214d9b05baa1c3051f7276b5e106af21cc73e282f09148");
     ASSERT_EQ(result.receipts[0].contractAddress, "0x86c56c43a1d19b06d54971c467bad4b25e4ef59e");

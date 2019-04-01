@@ -1,4 +1,4 @@
-package main
+package state_transition
 
 import (
 	"errors"
@@ -62,4 +62,8 @@ type Result struct {
 	UsedGas            uint64              `json:"usedGas"`
 	ReturnValues       []*hexutil.Bytes    `json:"returnValues"`
 	Error              error               `json:"error"`
+}
+
+type ExternalApi struct {
+	GetHeaderHashByBlockNumber func(u uint64) common.Hash
 }

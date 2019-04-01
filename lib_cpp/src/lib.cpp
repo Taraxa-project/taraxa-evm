@@ -3,11 +3,13 @@
 
 using namespace std;
 
-namespace taraxa_evm::cgo_bridge {
+namespace taraxa_evm {
 
-    string runEvm(const string &jsonConfig) {
-        auto cStr = const_cast<char *>(jsonConfig.c_str());
-        return RunEvm(cStr);
+    string runEvm(const string &jsonConfig, const ExternalApi &externalApi) {
+        return RunEvm(
+                const_cast<char *>(jsonConfig.c_str()),
+                const_cast<ExternalApi *>(&externalApi)
+        );
     }
 
 }

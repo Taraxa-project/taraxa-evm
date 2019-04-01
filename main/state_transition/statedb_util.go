@@ -1,4 +1,4 @@
-package main
+package state_transition
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"

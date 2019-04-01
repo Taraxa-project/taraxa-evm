@@ -1,4 +1,4 @@
-package main
+package state_transition
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -36,6 +36,8 @@ contract SingleVariable {
 	ldbConfig, ldbCleanup := newTestLDB()
 	defer ldbCleanup()
 
+	externalApi := new(ExternalApi)
+
 	block := Block{
 		Number:     "0",
 		Time:       "0",
@@ -64,7 +66,7 @@ contract SingleVariable {
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
 
-	result1, err := Process(&RunConfiguration{
+	result1, err := Run(&RunConfiguration{
 		StateRoot: common.Hash{},
 		Block:     &block,
 		LDBConfig: &ldbConfig,
@@ -72,12 +74,12 @@ contract SingleVariable {
 			&contractCreatingTx1,
 			&contractCreatingTx2,
 		},
-	})
+	}, externalApi)
 	util.FailOnErr(err)
 
 	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
 
-	result2, err := Process(&RunConfiguration{
+	result2, err := Run(&RunConfiguration{
 		StateRoot: result1.StateRoot,
 		Block:     &block,
 		LDBConfig: &ldbConfig,
@@ -110,7 +112,7 @@ contract SingleVariable {
 				GasLimit: 100000000,
 			},
 		},
-	})
+	}, externalApi)
 	util.FailOnErr(err)
 
 	assert.Equal(t, result2.ConcurrentSchedule.Sequential, []conflict_tracking.TxId{1, 2})
