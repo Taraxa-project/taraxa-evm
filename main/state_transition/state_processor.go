@@ -15,16 +15,16 @@ import (
 )
 
 func Run(config *RunConfiguration, externalApi *ExternalApi) (result Result, err error) {
-	defer util.RecoverErr(func(caught error) {
-		result.Error = caught
+	defer util.Catch(func(caught error) {
 		err = caught
+		result.Error = err
 	})
 	ldbConfig := config.LDBConfig
 	ldbDatabase, ldbErr := ethdb.NewLDBDatabase(ldbConfig.File, ldbConfig.Cache, ldbConfig.Handles)
-	util.FailOnErr(ldbErr)
+	util.PanicOn(ldbErr)
 	defer ldbDatabase.Close()
 	commonStateDB, stateDbErr := state.New(config.StateRoot, state.NewDatabase(ldbDatabase))
-	util.FailOnErr(stateDbErr)
+	util.PanicOn(stateDbErr)
 	gasPool := new(core.GasPool).AddGas(config.Block.GasLimit);
 	evmConfig := vm.Config{}
 	conflicts := new(conflict_tracking.Conflicts).Init()
@@ -62,7 +62,7 @@ func Run(config *RunConfiguration, externalApi *ExternalApi) (result Result, err
 		vmenv := vm.NewEVM(evmContext, txLocalDB, chainConfig, evmConfig)
 		var returnValue hexutil.Bytes
 		returnValue, gas, txErr := core.ApplyMessage(vmenv, tx, gasPool)
-		util.FailOnErr(txErr)
+		util.PanicOn(txErr)
 		result.UsedGas += gas
 		intermediateRoot := commonStateDB.IntermediateRoot(true)
 		receipt := types.NewReceipt(intermediateRoot.Bytes(), false, result.UsedGas)
@@ -81,7 +81,7 @@ func Run(config *RunConfiguration, externalApi *ExternalApi) (result Result, err
 		Sequential: conflicts.GetConflictingTransactions(),
 	}
 	finalRoot, flushErr := Flush(commonStateDB, nil)
-	util.FailOnErr(flushErr)
+	util.PanicOn(flushErr)
 	result.StateRoot = finalRoot
 	return
 }

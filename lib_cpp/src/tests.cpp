@@ -1,5 +1,3 @@
-#include <functional>
-#include <iostream>
 #include <gtest/gtest.h>
 #include "taraxa_evm/util_str.hpp"
 #include "taraxa_evm/util_io.hpp"
@@ -13,15 +11,17 @@ using namespace taraxa_evm::util_io;
 
 TEST(typed_api, create_contract) {
     LDBConfig ldbConfig{
-            .file = createFreshTmpDir("test_typed_api_create_contract")
+            createFreshTmpDir("test_typed_api_create_contract"),
+            0,
+            0
     };
     Block block{
-            .gasLimit = 100000000000,
-            .difficulty = 0,
-            .time = 0,
-            .number = 0,
-            .hash = "0x0000000000000000000000000000000000000000000000000000000000000000",
-            .coinbase = "0x0000000000000000000000000000000000000064",
+            "0x0000000000000000000000000000000000000064",
+            0,
+            0,
+            0,
+            100000000000,
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
     };
     string contractCode = "0x6080604052600560005534801561001557600080fd5b5060a2806100246000396000f3fe6080604052348015"
                           "600f57600080fd5b506004361060325760003560e01c806360fe47b11460375780636d4ce63c146053575b6000"
@@ -30,23 +30,23 @@ TEST(typed_api, create_contract) {
                           "4edea0ac59876c8ca6aaffd5b3f22379330029";
     vector<Transaction> transactions{
             Transaction{
-                    .nonce = 0,
-                    .from = "0x0000000000000000000000000000000000000064",
-                    .to = nullptr,
-                    .data = &contractCode,
-                    .amount= 0,
-                    .gasPrice= 0,
-                    .gasLimit= 100000000,
+                    "0x0000000000000000000000000000000000000064",
+                    nullptr,
+                    0,
+                    0,
+                    100000000,
+                    0,
+                    &contractCode,
             }
     };
     auto result = runEvm(RunConfiguration{
-            .stateRoot = "0x0000000000000000000000000000000000000000000000000000000000000000",
-            .block = &block,
-            .transactions = &transactions,
-            .ldbConfig = &ldbConfig,
-            .concurrentSchedule = nullptr
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            &block,
+            &transactions,
+            &ldbConfig,
+            nullptr
     }, ExternalApi{
-            .getHeaderHashByBlockNumber = [](auto i) {
+            [](auto i) {
                 return "fooo";
             }
     });

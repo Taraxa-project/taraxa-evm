@@ -17,7 +17,7 @@ import (
 func RunEvm(input *C.char, externalApi *C.ExternalApi) *C.char {
 	runConfig := new(state_transition.RunConfiguration)
 	err := json.Unmarshal([]byte(C.GoString(input)), runConfig)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	result, _ := state_transition.Run(runConfig, &state_transition.ExternalApi{
 		GetHeaderHashByBlockNumber: func(n uint64) common.Hash {
 			c_str := C.getHeaderHashByBlockNumber(externalApi, C.uint64_t(n))
@@ -25,7 +25,7 @@ func RunEvm(input *C.char, externalApi *C.ExternalApi) *C.char {
 		},
 	})
 	bytes, err := json.Marshal(&result)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	return C.CString(string(bytes))
 }
 
