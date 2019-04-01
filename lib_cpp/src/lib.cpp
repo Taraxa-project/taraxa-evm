@@ -1,4 +1,7 @@
+extern "C" {
 #include "taraxa_evm_cgo.h"
+}
+
 #include "taraxa_evm/cgo_bridge.hpp"
 
 using namespace std;

@@ -5,12 +5,12 @@
 **/node_modules
 
 /docker
+/build
 
-/build/bin
-/build/dependencies
-
-/tests_integration/build
-/tests_integration/thirdparty
+/lib_cpp
+!/lib_cpp/src
+!/lib_cpp/include
+!/lib_cpp/CMakeLists.txt
 
 /tests/testdata
 !/tests/testdata/*Tests

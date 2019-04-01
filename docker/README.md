@@ -1,1 +1,1 @@
-To test the ubuntu build: `docker-compose up`
+To test the build: `docker-compose up` from an OS subdirectory
