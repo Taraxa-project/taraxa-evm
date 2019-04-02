@@ -75,7 +75,7 @@ contract SingleVariable {
 			&contractCreatingTx2,
 		},
 	}, externalApi)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 
 	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
 
@@ -113,7 +113,7 @@ contract SingleVariable {
 			},
 		},
 	}, externalApi)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 
 	assert.Equal(t, result2.ConcurrentSchedule.Sequential, []conflict_tracking.TxId{1, 2})
 }
@@ -126,7 +126,7 @@ func addr(n int64) *common.Address {
 
 func compile(contract string) *compiler.Contract {
 	contracts, err := compiler.CompileSolidityString("solc", contract);
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	for _, contract := range contracts {
 		return contract
 	}
@@ -136,31 +136,31 @@ func compile(contract string) *compiler.Contract {
 func code(contract *compiler.Contract) *hexutil.Bytes {
 	var code hexutil.Bytes
 	code, err := hexutil.Decode(contract.Code)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	return &code
 }
 
 func call(contract *compiler.Contract, method string, args ...interface{}) *hexutil.Bytes {
 	var calldata hexutil.Bytes
 	calldata, err := contract.Info.AbiDefinition.Pack(method, args...)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	return &calldata;
 }
 
 func newTestLDB() (LDBConfig, func()) {
 	dirname := "__test_ldb__"
 	if _, err := os.Stat(dirname); !os.IsNotExist(err) {
-		util.FailOnErr(os.RemoveAll(dirname))
+		util.PanicOn(os.RemoveAll(dirname))
 	}
-	util.FailOnErr(os.Mkdir(dirname, os.ModePerm))
+	util.PanicOn(os.Mkdir(dirname, os.ModePerm))
 	absPath, err := filepath.Abs(dirname)
-	util.FailOnErr(err)
+	util.PanicOn(err)
 	return LDBConfig{
 		File:    absPath,
 		Cache:   0,
 		Handles: 0,
 	}, func() {
-		util.FailOnErr(os.RemoveAll(dirname))
+		util.PanicOn(os.RemoveAll(dirname))
 	}
 }
 

@@ -170,43 +170,43 @@ namespace taraxa_evm::__lib {
 
     };
 
-    template<typename E, typename A>
-    GenericValue<E, A> &set(Document &doc, GenericValue<E, A> &obj, const string &key, const Value &value) {
-        obj.AddMember(StringRef(key.c_str()), const_cast<Value &>(value), doc.GetAllocator());
-        return obj[key.c_str()];
+    template<typename E, typename A, typename T, typename = typename enable_if<!is_same<T, string>::value, T>::type>
+    GenericValue<E, A> &set(Document &doc, GenericValue<E, A> &obj, const string &key, T &value) {
+        Value keyValue(key.c_str(), doc.GetAllocator());
+        return obj.AddMember(keyValue, value, doc.GetAllocator());
     }
 
     template<typename E, typename A>
     GenericValue<E, A> &set(Document &doc, GenericValue<E, A> &obj, const string &key, const string &value) {
-        return set(doc, obj, key, Value().SetString(StringRef(value.c_str())));
-    }
-
-    template<typename E, typename A, typename T, typename = typename
-            enable_if<!(is_same<T, Value>::value || is_same<T, string>::value), T>::type>
-    GenericValue<E, A> &set(Document &doc, GenericValue<E, A> &obj, const string &key, const T &value) {
-        return set(doc, obj, key, Value().Set(value));
+        Value val(value.c_str(), doc.GetAllocator());
+        return set(doc, obj, key, val);
     }
 
     Result runEvm(const RunConfiguration &config, const ExternalApi &externalApi) {
-        Document configDoc;
+        Document configDoc(kObjectType);
 
-        auto &rootObj = configDoc.SetObject();
-        set(configDoc, rootObj, "stateRoot", config.stateRoot);
+        set(configDoc, configDoc, "stateRoot", config.stateRoot);
+
         if (config.concurrentSchedule) {
-            auto &concurrentSchedule = set(configDoc, rootObj, "concurrentSchedule", Value());
-            auto &sequential = set(configDoc, concurrentSchedule, "sequential", Value(kArrayType));
+            Value concurrentSchedule(kObjectType);
+            Value sequential(kObjectType);
             for (auto &e : config.concurrentSchedule->sequential) {
                 sequential.PushBack(e, configDoc.GetAllocator());
             }
+            set(configDoc, concurrentSchedule, "sequential", sequential);
+            set(configDoc, configDoc, "concurrentSchedule", concurrentSchedule);
         }
-        auto &block = set(configDoc, rootObj, "block", Value(kObjectType));
+
+        Value block(kObjectType);
         set(configDoc, block, "coinbase", config.block->coinbase);
         set(configDoc, block, "hash", config.block->hash);
         set(configDoc, block, "number", config.block->number.str());
         set(configDoc, block, "difficulty", config.block->difficulty.str());
         set(configDoc, block, "time", config.block->time.str());
         set(configDoc, block, "gasLimit", config.block->gasLimit);
-        auto &transactions = set(configDoc, rootObj, "transactions", Value()).SetArray();
+        set(configDoc, configDoc, "block", block);
+
+        Value transactions(kArrayType);
         for (auto &e : *config.transactions) {
             Value transaction(kObjectType);
             if (e.to) {
@@ -222,10 +222,13 @@ namespace taraxa_evm::__lib {
             set(configDoc, transaction, "amount", e.amount.str());
             transactions.PushBack(transaction, configDoc.GetAllocator());
         }
-        auto &ldbConfig = set(configDoc, rootObj, "ldbConfig", Value()).SetObject();
+        set(configDoc, configDoc, "transactions", transactions);
+
+        Value ldbConfig(kObjectType);
         set(configDoc, ldbConfig, "file", config.ldbConfig->file);
         set(configDoc, ldbConfig, "handles", config.ldbConfig->handles);
         set(configDoc, ldbConfig, "cache", config.ldbConfig->cache);
+        set(configDoc, configDoc, "ldbConfig", ldbConfig);
 
         StringBuffer buffer;
         Writer<StringBuffer> writer(buffer);

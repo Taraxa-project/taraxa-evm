@@ -9,10 +9,10 @@ include(FetchContent)
 set(SRC_DIR ${PROJECT_SOURCE_DIR}/src)
 set(ROOT_DIR ${PROJECT_SOURCE_DIR}/..)
 set(GO_MAIN_PACKAGE ${ROOT_DIR}/main)
-set(CGO_LIB_DEST ${CMAKE_CURRENT_BINARY_DIR}/taraxa_evm_cgo)
-set(CGO_LIB_FILE ${CGO_LIB_DEST}/taraxa_evm_cgo.a)
+set(CGO_LIB_DEST ${CMAKE_CURRENT_BINARY_DIR}/taraxa_evm)
+set(CGO_LIB_FILE ${CGO_LIB_DEST}/taraxa_evm_cgo/taraxa_evm_cgo.a)
 
-set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
+set(FETCHCONTENT_BASE_DIR ${CMAKE_CURRENT_BINARY_DIR}/thirdparty)
 set(FETCHCONTENT_QUIET OFF)
 
 macro(git_dependency name repo tag)
@@ -32,7 +32,7 @@ git_dependency(rapidjson_project https://github.com/Tencent/rapidjson v1.1.0 .)
 git_dependency(googletest_project https://github.com/google/googletest release-1.8.0 .)
 
 foreach (p boost_cmake googletest_project)
-    add_subdirectory(${${p}_SOURCE_DIR} EXCLUDE_FROM_ALL)
+    add_subdirectory(${${p}_SOURCE_DIR} ${FETCHCONTENT_BASE_DIR}/__builds__/${p} EXCLUDE_FROM_ALL)
 endforeach (p)
 
 add_custom_target(

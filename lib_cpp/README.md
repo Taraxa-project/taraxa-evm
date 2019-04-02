@@ -10,7 +10,7 @@
 - cmake 3.13+
 - C++17-compatible compiler
 
-The library has header dependencies on `rapidjson` and `boost`.
+The library has header dependencies on `rapidjson v1.1.0` and `boost v1.67.0`.
 It installs them on it's own: downloads from github and builds from source.
 It's straightforward to use the library in Cmake builds: just add this directory as
 Cmake subdirectory, and link against `taraxa_evm` library target. It will add header dependencies
@@ -20,6 +20,9 @@ search path.
 You can use your own versions of those, or reuse the paths installed by the library:
 - `THIS_DIR/thirdparty/boost-cmake-src/boost/boost_1_67_0`
 - `THIS_DIR/thirdparty/rapidjson-project-src/include`
+
+#### Notes
+- [Don't use boost 1.69](https://stackoverflow.com/questions/54911422/are-some-libraries-in-boost-1-69-not-compatible-with-macos)
 
 ### Building
 - Choose *any* build directory, let's call it BUILD_DIR

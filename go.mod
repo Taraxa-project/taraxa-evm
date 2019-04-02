@@ -8,6 +8,7 @@ require (
 	github.com/go-stack/stack v1.8.0
 	github.com/golang/protobuf v1.3.1
 	github.com/hashicorp/golang-lru v0.5.1
+	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c
 	golang.org/x/net v0.0.0-20190327214358-63eda1eb0650
