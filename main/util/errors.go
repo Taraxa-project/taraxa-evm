@@ -3,6 +3,7 @@ package util
 import (
 	"errors"
 	"runtime/debug"
+	"strings"
 )
 
 func Catch(callback func(error)) {
@@ -19,4 +20,14 @@ func PanicOn(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func Assert(condition bool, msg ...string) {
+	if !condition {
+		panic(errors.New(strings.Join(msg, "")))
+	}
+}
+
+func AssertNotNil(i interface{}, msg ...string) {
+	Assert(i != nil, msg...)
 }

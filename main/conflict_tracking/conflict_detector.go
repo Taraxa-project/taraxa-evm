@@ -2,18 +2,18 @@ package conflict_tracking
 
 import "github.com/Taraxa-project/taraxa-evm/common"
 
-type Conflicts struct {
+type ConflictDetector struct {
 	accounts                map[common.Address]*AccountCell
 	conflictingTransactions map[TxId]DUMMY
 }
 
-func (this *Conflicts) Init() *Conflicts {
+func (this *ConflictDetector) Init() *ConflictDetector {
 	this.accounts = make(map[common.Address]*AccountCell)
 	this.conflictingTransactions = make(map[TxId]DUMMY)
 	return this
 }
 
-func (this *Conflicts) getAccount(addr common.Address) *AccountCell {
+func (this *ConflictDetector) getAccount(addr common.Address) *AccountCell {
 	if account, present := this.accounts[addr]; present {
 		return account;
 	}
@@ -22,10 +22,14 @@ func (this *Conflicts) getAccount(addr common.Address) *AccountCell {
 	return accountCell
 }
 
-func (this *Conflicts) GetConflictingTransactions() []TxId {
+func (this *ConflictDetector) Reset() []TxId {
 	result := make([]TxId, 0, len(this.conflictingTransactions))
 	for txId, _ := range this.conflictingTransactions {
 		result = append(result, txId)
 	}
 	return result
+}
+
+func (this *ConflictDetector) InConflict(id TxId) bool {
+
 }

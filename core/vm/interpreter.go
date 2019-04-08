@@ -78,6 +78,8 @@ type keccakState interface {
 	Read([]byte) (int, error)
 }
 
+type ExecutionController func(programCounter uint64) (changedProgramCounter uint64, shouldContinue bool)
+
 // EVMInterpreter represents an EVM interpreter
 type EVMInterpreter struct {
 	evm      *EVM
@@ -89,12 +91,13 @@ type EVMInterpreter struct {
 	hasher    keccakState // Keccak256 hasher instance shared across opcodes
 	hasherBuf common.Hash // Keccak256 hasher result array shared aross opcodes
 
-	readOnly   bool   // Whether to throw on stateful modifications
-	returnData []byte // Last CALL's return data for subsequent reuse
+	readOnly            bool   // Whether to throw on stateful modifications
+	returnData          []byte // Last CALL's return data for subsequent reuse
+	executionController ExecutionController
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
-func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
+func NewEVMInterpreterWithExecutionController(evm *EVM, cfg Config, ctrl ExecutionController) *EVMInterpreter {
 	// We use the STOP instruction whether to see
 	// the jump table was initialised. If it was not
 	// we'll set the default jump table.
@@ -112,10 +115,16 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	}
 
 	return &EVMInterpreter{
-		evm:      evm,
-		cfg:      cfg,
-		gasTable: evm.ChainConfig().GasTable(evm.BlockNumber),
+		evm:                 evm,
+		cfg:                 cfg,
+		gasTable:            evm.ChainConfig().GasTable(evm.BlockNumber),
+		executionController: ctrl,
 	}
+}
+
+// NewEVMInterpreter returns a new instance of the Interpreter.
+func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
+	return NewEVMInterpreterWithExecutionController(evm, cfg, nil)
 }
 
 func (in *EVMInterpreter) enforceRestrictions(op OpCode, operation operation, stack *Stack) error {
@@ -205,6 +214,13 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
 	for atomic.LoadInt32(&in.evm.abort) == 0 {
+		if in.externalPCController != nil {
+			if pcChanged, shouldContinue := in.executionController(pc); shouldContinue {
+				pc = pcChanged
+			} else {
+				break
+			}
+		}
 		if in.cfg.Debug {
 			// Capture pre-execution values for tracing.
 			logged, pcCopy, gasCopy = false, pc, contract.Gas

@@ -1,10 +1,11 @@
-package state_transition
+package api
 
 import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"math/big"
 )
 
@@ -25,6 +26,7 @@ type Transaction struct {
 	GasLimit uint64          `json:"gasLimit"`
 	GasPrice BigIntString    `json:"gasPrice"`
 	Data     *hexutil.Bytes  `json:"data"`
+	Hash     common.Hash     `json:"hash"`
 }
 
 type Block struct {
@@ -36,8 +38,14 @@ type Block struct {
 	Hash       common.Hash    `json:"hash"`
 }
 
+type StateTransition struct {
+	StateRoot    common.Hash    `json:"stateRoot"`
+	Block        *Block         `json:"block"`
+	Transactions []*Transaction `json:"transactions"`
+}
+
 type ConcurrentSchedule struct {
-	Sequential []uint64 `json:"sequential"`
+	Sequential []conflict_tracking.TxId `json:"sequential"`
 }
 
 type LDBConfig struct {
@@ -47,21 +55,28 @@ type LDBConfig struct {
 }
 
 type RunConfiguration struct {
-	StateRoot          common.Hash         `json:"stateRoot"`
-	Block              *Block              `json:"block"`
-	Transactions       []*Transaction      `json:"transactions"`
+	StateTransition
 	LDBConfig          *LDBConfig          `json:"ldbConfig"`
 	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
 }
 
+type TaraxaReceipt struct {
+	ReturnValue     *hexutil.Bytes `json:"returnValue"`
+	EthereumReceipt *types.Receipt `json:"ethereumReceipt"`
+	ContractError   error          `json:"contractError"`
+}
+
+type StateTransitionResult struct {
+	StateRoot common.Hash    `json:"stateRoot"`
+	Receipts  *TaraxaReceipt `json:"receipts"`
+	AllLogs   []*types.Log   `json:"allLogs"`
+	UsedGas   uint64         `json:"usedGas"`
+}
+
 type Result struct {
-	StateRoot          common.Hash         `json:"stateRoot"`
-	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
-	Receipts           types.Receipts      `json:"receipts"`
-	AllLogs            []*types.Log        `json:"allLogs"`
-	UsedGas            uint64              `json:"usedGas"`
-	ReturnValues       []*hexutil.Bytes    `json:"returnValues"`
-	Error              error               `json:"error"`
+	StateTransitionResult *StateTransitionResult `json:"stateTransitionResult"`
+	ConcurrentSchedule    *ConcurrentSchedule    `json:"concurrentSchedule"`
+	Error                 error                  `json:"error"`
 }
 
 type ExternalApi struct {

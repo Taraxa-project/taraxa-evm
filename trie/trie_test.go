@@ -21,6 +21,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -29,11 +31,11 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func init() {
@@ -379,7 +381,7 @@ const (
 	opReset
 	opItercheckhash
 	opCheckCacheInvariant
-	opMax // boundary value, not an actual op
+	opMax  // boundary value, not an actual op
 )
 
 func (randTest) Generate(r *rand.Rand, size int) reflect.Value {
@@ -615,4 +617,121 @@ func updateString(trie *Trie, k, v string) {
 
 func deleteString(trie *Trie, k string) {
 	trie.Delete([]byte(k))
+}
+
+func permutations(arr ...int) [][]int {
+	var helper func([]int, int)
+	res := [][]int{}
+	helper = func(arr []int, n int) {
+		if n == 1 {
+			tmp := make([]int, len(arr))
+			copy(tmp, arr)
+			res = append(res, tmp)
+		} else {
+			for i := 0; i < n; i++ {
+				helper(arr, n-1)
+				if n%2 == 1 {
+					tmp := arr[i]
+					arr[i] = arr[n-1]
+					arr[n-1] = tmp
+				} else {
+					tmp := arr[0]
+					arr[0] = arr[n-1]
+					arr[n-1] = tmp
+				}
+			}
+		}
+	}
+	helper(arr, len(arr))
+	return res
+}
+
+type PutOperation struct {
+	key   string
+	value string
+}
+
+func TestOrder(t *testing.T) {
+	transactions := [][]PutOperation{
+		{
+			{key: "foo", value: "bar"},
+			{key: "fw329uopfpwqlcmfw", value: "wed"},
+			{key: "foqeqeqq3o", value: "343423412"},
+		},
+		{
+			{key: "wefgeqd", value: "34424knojn234lnjf"},
+			{key: "efdweof3423dfw", value: "ef;kmf"},
+		},
+		{
+			{key: "fewewef", value: "ef;r43r33333"},
+			{key: "4er2ee3", value: "f4r3331;r43r33333"},
+		},
+		{
+			{key: "fdeef", value: "ef;weff"},
+			{key: "fwew", value: "f4r3433e1;wefwef"},
+		},
+		{
+			{key: "111111111", value: "ef;wefwffew"},
+			{key: "1231312313123", value: "qed32134131;r43r3"},
+		},
+		{
+			{key: "111wefwf1111133111", value: "fdewlfkwjfojqwnfl"},
+			{key: "4234", value: "f4r3331;qewdqdqepij"},
+		},
+	}
+	var indices []int
+	for i := range transactions {
+		indices = append(indices, i)
+	}
+	var root common.Hash
+	init := true
+	for _, permutation := range permutations(indices...) {
+		fmt.Println("--- PERM START ----")
+		assert.Equal(t, len(permutation), len(transactions))
+		diskDb := ethdb.NewMemDatabase()
+		intermediateRoot := common.Hash{}
+		for permIndex, txId := range permutation {
+			db := NewDatabase(diskDb)
+			txTrie, err := New(intermediateRoot, db)
+			util.PanicOn(err)
+			if permIndex > 0 {
+				prevTxId := permutation[permIndex-1]
+				for _, op := range transactions[prevTxId] {
+					val, err := txTrie.TryGet([]byte(op.key))
+					util.PanicOn(err)
+					assert.Equal(t, val, []byte(op.value))
+				}
+			}
+			fmt.Println(">> put:")
+			for _, op := range transactions[txId] {
+				fmt.Println(op.key + "<===>" + op.value)
+				txTrie.Update([]byte(op.key), []byte(op.value))
+			}
+			hash, err := txTrie.Commit(func(leaf []byte, parent common.Hash) error {
+				return nil
+			})
+			util.PanicOn(err)
+			err = db.Commit(hash, true)
+			util.PanicOn(err)
+			intermediateRoot = hash
+			fmt.Println(">> commit: " + intermediateRoot.String())
+		}
+		fmt.Println(">> internal representation:")
+		for _, key := range diskDb.Keys() {
+			v, err := diskDb.Get(key)
+			util.PanicOn(err)
+			fmt.Println(common.BytesToHash(key).String() + "<===>" + common.BytesToHash(v).String())
+		}
+		if init {
+			root = intermediateRoot
+			init = false
+		} else {
+			fmt.Println(">> roots:")
+			fmt.Println(root.String())
+			fmt.Println(intermediateRoot.String())
+			fmt.Println("--- PERM END ----")
+			assert.Equal(t, root, intermediateRoot)
+		}
+	}
+
 }

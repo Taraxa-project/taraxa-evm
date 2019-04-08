@@ -127,9 +127,10 @@ type EVM struct {
 	callGasTemp uint64
 }
 
-// NewEVM returns a new EVM. The returned EVM is not thread safe and should
-// only ever be used *once*.
-func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config) *EVM {
+func NewEVMWithInterpreter(
+	ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config,
+	createInterpreter func(*EVM) Interpreter) *EVM {
+
 	evm := &EVM{
 		Context:      ctx,
 		StateDB:      statedb,
@@ -157,10 +158,18 @@ func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmCon
 
 	// vmConfig.EVMInterpreter will be used by EVM-C, it won't be checked here
 	// as we always want to have the built-in EVM as the failover option.
-	evm.interpreters = append(evm.interpreters, NewEVMInterpreter(evm, vmConfig))
+	evm.interpreters = append(evm.interpreters, createInterpreter(evm))
 	evm.interpreter = evm.interpreters[0]
 
 	return evm
+}
+
+// NewEVM returns a new EVM. The returned EVM is not thread safe and should
+// only ever be used *once*.
+func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config) *EVM {
+	return NewEVMWithInterpreter(ctx, statedb, chainConfig, vmConfig, func(evm *EVM) Interpreter {
+		return NewEVMInterpreter(evm, vmConfig)
+	})
 }
 
 // Cancel cancels any running EVM operation. This may be called concurrently and

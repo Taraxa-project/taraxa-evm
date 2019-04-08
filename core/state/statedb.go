@@ -18,7 +18,6 @@
 package state
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"sort"
@@ -89,20 +88,32 @@ type StateDB struct {
 }
 
 // Create a new state from a given trie.
-func New(root common.Hash, db Database) (*StateDB, error) {
-	tr, err := db.OpenTrie(root)
-	if err != nil {
-		return nil, err
-	}
-	return &StateDB{
-		db:                db,
-		trie:              tr,
+func New(root common.Hash, db Database) (ret *StateDB, err error) {
+	ret = &StateDB{
 		stateObjects:      make(map[common.Address]*stateObject),
 		stateObjectsDirty: make(map[common.Address]struct{}),
 		logs:              make(map[common.Hash][]*types.Log),
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
-	}, nil
+	}
+	err = ret.Rebase(root, db)
+	if (err != nil) {
+		// to conform the previous interface
+		ret = nil
+	}
+	return
+}
+
+func (self *StateDB) Rebase(root common.Hash, db Database) error {
+	trie, err := db.OpenTrie(root)
+	if err != nil {
+		return err
+	}
+	self.db = db
+	self.trie = trie
+	for _, stateObject := range self.stateObjects {
+		stateObject.trie = nil
+	}
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -249,15 +260,16 @@ func (self *StateDB) GetProof(a common.Address) ([][]byte, error) {
 }
 
 // GetProof returns the StorageProof for given key
-func (self *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, error) {
-	var proof proofList
-	trie := self.StorageTrie(a)
-	if trie == nil {
-		return proof, errors.New("storage trie for requested address does not exist")
-	}
-	err := trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
-	return [][]byte(proof), err
-}
+// TODO unused
+//func (self *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, error) {
+//	var proof proofList
+//	trie := self.StorageTrie(a)
+//	if trie == nil {
+//		return proof, errors.New("storage trie for requested address does not exist")
+//	}
+//	err := trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
+//	return [][]byte(proof), err
+//}
 
 // GetCommittedState retrieves a value from the given account's committed storage trie.
 func (self *StateDB) GetCommittedState(addr common.Address, hash common.Hash) common.Hash {
@@ -275,14 +287,15 @@ func (self *StateDB) Database() Database {
 
 // StorageTrie returns the storage trie of an account.
 // The return value is a copy and is nil for non-existent accounts.
-func (self *StateDB) StorageTrie(addr common.Address) Trie {
-	stateObject := self.getStateObject(addr)
-	if stateObject == nil {
-		return nil
-	}
-	cpy := stateObject.deepCopy(self)
-	return cpy.updateTrie(self.db)
-}
+// TODO unused
+//func (self *StateDB) StorageTrie(addr common.Address) Trie {
+//	stateObject := self.getStateObject(addr)
+//	if stateObject == nil {
+//		return nil
+//	}
+//	cpy := stateObject.deepCopy(self)
+//	return cpy.updateTrie(self.db)
+//}
 
 func (self *StateDB) HasSuicided(addr common.Address) bool {
 	stateObject := self.getStateObject(addr)
