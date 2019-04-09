@@ -29,7 +29,7 @@ type TransactionParams struct {
 }
 
 type TransactionResult struct {
-	value        *hexutil.Bytes
+	value        hexutil.Bytes
 	gasUsed      uint64
 	logs         []*types.Log
 	contractErr  error
@@ -38,7 +38,7 @@ type TransactionResult struct {
 }
 
 func (this *TransactionExecution) Run(params *TransactionParams) *TransactionResult {
-	params.stateDB.Prepare(this.txHash, this.blockHash, this.txId)
+	params.stateDB.Prepare(this.txHash, this.blockHash, int(this.txId))
 	conflictTrackingDB := new(conflict_tracking.ConflictTrackingStateDB).Init(this.txId, params.stateDB, params.conflicts)
 	evmConfig := *this.evmConfig
 	evm := vm.NewEVMWithInterpreter(

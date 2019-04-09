@@ -12,3 +12,11 @@ func (this *MemoryCell) Init() *MemoryCell {
 	this.writes = make(map[TxId]common.Hash)
 	return this
 }
+
+func (this *MemoryCell) Read(id TxId) {
+
+}
+
+func (this *MemoryCell) Write(id TxId) {
+
+}

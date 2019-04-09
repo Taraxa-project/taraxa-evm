@@ -8,13 +8,14 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/itr"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/emirpasic/gods/sets/treeset"
-	"github.com/emirpasic/gods/utils"
+	"math/big"
 )
 
 type TaraxaEvm struct {
@@ -26,112 +27,115 @@ type TaraxaEvm struct {
 }
 
 func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err error) {
-	var fatalErr util.SharedError
-	defer fatalErr.Recover(func(e error) {
+	var ERROR util.ErrorBarrier
+	defer ERROR.Recover(func(e error) {
 		err = e
 	})
-	conflictDetector := new(conflict_tracking.ConflictDetector).Init()
-	commonRunParams := RunParams{
-		conflictDetector: conflictDetector,
-		onTxResult: func(conflict_tracking.TxId, result *TransactionResult) bool {
-			fatalErr.CheckIn(result.dbErr, result.consensusErr)
-			return true
-		},
-		onDone: func(*state.StateDB, stateDBCreateErr error) {
-			fatalErr.CheckIn(stateDBCreateErr)
-		},
-		executionControllerFactory: func(id conflict_tracking.TxId) vm.ExecutionController {
-			return ni
-		},
-	}
 	txCount := len(this.stateTransition.Transactions)
+	conflictDetector := new(conflict_tracking.ConflictDetector).Init(uint64(txCount * 60))
+	go conflictDetector.Run()
+	defer conflictDetector.SignalShutdown()
+
 	barrier := make(chan interface{}, txCount)
-	for txId := conflict_tracking.TxId(0); txId < txCount; txId++ {
+	for txId := 0; txId < txCount; txId++ {
+		txIds := itr.From(txId).Uint64()
 		go func() {
-			var conflictError util.SharedError
+			var ERROR util.ErrorBarrier
 			defer func() {
-				fatalErr.Recover()
-				conflictError.Recover()
+				ERROR.Recover()
 				barrier <- nil
 			}()
-			runParams := RunParams(commonRunParams)
-			runParams.txIds = itr.From(txId).Uint64()
-			runParams.executionControllerFactory = func(txId conflict_tracking.TxId) vm.ExecutionController {
-				return func(pc uint64) (uint64, bool) {
-					fatalErr.CheckIn()
-					if conflictDetector.InConflict(txId) {
-						conflictError.CheckIn(errors.New("CONFLICT"))
+			this.runMany(&RunParams{
+				conflictDetector: conflictDetector,
+				txIds: txIds,
+				onTxResult: func(txId conflict_tracking.TxId, result *TransactionResult) bool {
+					ERROR.CheckIn(result.dbErr, result.consensusErr)
+					return true
+				},
+				onDone: func(db *state.StateDB, stateDBCreateErr error) {
+					ERROR.CheckIn(stateDBCreateErr)
+				},
+				executionControllerFactory: func(txId conflict_tracking.TxId) vm.ExecutionController {
+					return func(pc uint64) (uint64, bool) {
+						ERROR.CheckIn()
+						if conflictDetector.IsCurrentlyInConflict(txId) {
+							ERROR.CheckIn(errors.New("CONFLICT"))
+						}
+						return pc, true
 					}
-					return pc, true
-				}
-			}
-			this.runMany(&runParams)
+				},
+			})
 		}()
 	}
 	for i := 0; i < cap(barrier); i++ {
 		<-barrier
-		fatalErr.CheckIn()
+		ERROR.CheckIn()
 	}
-	sequentialTx := treeset.NewWith(utils.UInt64Comparator)
+	sequentialTx := treeset.NewWithIntComparator()
 	for attempt := 0; true; attempt++ {
 		util.Assert(attempt <= txCount, "Too many attempts")
-		conflictingTxIds := conflictDetector.Reset()
-		if (len(conflictingTxIds) == 0) {
+		conflictDetector.SignalShutdown().Join()
+		if !conflictDetector.HaveBeenConflicts() {
 			break
 		}
-		for _, txId := range conflictingTxIds {
-			util.Assert(!sequentialTx.Contains(txId), "Detected conflicts twice for : "+txId)
+		conflictDetector.Reset(func(txId conflict_tracking.TxId) {
+			util.Assert(!sequentialTx.Contains(txId), "Detected conflicts twice for : "+string(txId))
 			sequentialTx.Add(txId)
 			result.Sequential = append(result.Sequential, txId)
-		}
-		runParams := RunParams(commonRunParams)
-		runParams.txIds = itr.FromTreeSet(sequentialTx).Uint64()
-		this.runMany(&runParams)
+		})
+		go conflictDetector.Run()
+		this.runMany(&RunParams{
+			conflictDetector: conflictDetector,
+			txIds: itr.FromTreeSet(sequentialTx).Uint64(),
+			onTxResult: func(txId conflict_tracking.TxId, result *TransactionResult) bool {
+				ERROR.CheckIn(result.dbErr, result.consensusErr)
+				return true
+			},
+			onDone: func(db *state.StateDB, stateDBCreateErr error) {
+				ERROR.CheckIn(stateDBCreateErr)
+			},
+			executionControllerFactory: func(id conflict_tracking.TxId) vm.ExecutionController {
+				return nil
+			},
+		})
 	}
 	return
 }
 
 func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret api.StateTransitionResult, err error) {
-	var sharedErr util.SharedError
-	defer sharedErr.Recover(func(e error) {
+	var ERROR util.ErrorBarrier
+	defer ERROR.Recover(func(e error) {
 		err = e
 	})
 
-	conflictDetector := new(conflict_tracking.ConflictDetector)
+	txCount := len(this.stateTransition.Transactions)
+	conflictDetector := new(conflict_tracking.ConflictDetector).Init(uint64(txCount * 60))
+	go conflictDetector.Run()
+	defer conflictDetector.SignalShutdown()
 
-	commonRunParams := RunParams{
-		conflictDetector: conflictDetector,
-		onTxResult: func(conflict_tracking.TxId, result *TransactionResult) bool {
-			fatalErr.CheckIn(result.dbErr, result.consensusErr)
-			return true
-		},
-		onDone: func(*state.StateDB, stateDBCreateErr error) {
-			fatalErr.CheckIn(stateDBCreateErr)
-		},
-		executionControllerFactory: func(id conflict_tracking.TxId) vm.ExecutionController {
-			return ni
-		},
+	sequentialTx := treeset.NewWithIntComparator()
+	// TODO non sync
+	for _, txId := range schedule.Sequential {
+		sequentialTx.Add(txId)
 	}
 
-	sequentialTx := treeset.NewWith(utils.UInt64Comparator, schedule.Sequential...)
-	txCount := len(this.stateTransition.Transactions)
 	parallelCount := txCount - sequentialTx.Size()
 
-	commitDb := state.NewDatabase(this.db.TrieDB().DiskDB())
+	commitDb := state.NewDatabase(this.db.TrieDB().DiskDB().(ethdb.Database))
 	stateDBChan := make(chan *state.StateDB, parallelCount)
 	stateRootChan := make(chan common.Hash, 1)
 	go func() {
-		defer sharedErr.Recover(func(error) {
+		defer ERROR.Recover(func(error) {
 			close(stateRootChan)
 		})
 		currentRoot := this.stateTransition.StateRoot
-		for _ := 0; _ < cap(stateDBChan); _++ {
-			// DEADLOCK, need to close statedb chan
+		for i := 0; i < cap(stateDBChan); i++ {
 			stateDb := <-stateDBChan
+			ERROR.CheckIn()
 			rebaseErr := stateDb.Rebase(currentRoot, commitDb)
-			sharedErr.CheckIn(rebaseErr)
+			ERROR.CheckIn(rebaseErr)
 			root, commitErr := stateDb.Commit(true)
-			sharedErr.CheckIn(commitErr)
+			ERROR.CheckIn(commitErr)
 			currentRoot = root
 		}
 		stateRootChan <- currentRoot
@@ -139,26 +143,29 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 
 	sequentialResultChan := make(chan *TransactionResult, sequentialTx.Size())
 	go func() {
-		defer sharedErr.Recover(func(error) {
+		defer ERROR.Recover(func(error) {
 			close(sequentialResultChan)
+			close(stateDBChan)
 		})
 		this.runMany(&RunParams{
-			txIds:            itr.FromTreeSet(sequentialTx),
+			txIds:            itr.FromTreeSet(sequentialTx).Uint64(),
 			conflictDetector: conflictDetector,
-			onTxResult: func(conflict_tracking.TxId, result *TransactionResult) bool {
-				sharedErr.CheckIn(result.dbErr, result.consensusErr)
+			onTxResult: func(txId conflict_tracking.TxId, result *TransactionResult) bool {
+				ERROR.CheckIn(result.dbErr, result.consensusErr)
 				sequentialResultChan <- result
 				return true
 			},
 			onDone: func(stateDB *state.StateDB, stateDBCreateErr error) {
-				sharedErr.CheckIn(stateDBCreateErr)
-				stateDBChan <- stateDB
+				ERROR.CheckIn(stateDBCreateErr)
+				util.Try(func() {
+					stateDBChan <- stateDB
+				})
 			},
 			executionControllerFactory: func(txId conflict_tracking.TxId) vm.ExecutionController {
 				return func(pc uint64) (uint64, bool) {
-					sharedErr.CheckIn()
-					if conflictDetector.InConflict(txId) {
-						sharedErr.CheckIn(errors.New("CONFLICT"))
+					ERROR.CheckIn()
+					if conflictDetector.HaveBeenConflicts() {
+						ERROR.CheckIn(errors.New("CONFLICT"))
 					}
 					return pc, true
 				}
@@ -176,26 +183,29 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		resultChans[txId] = resultChan
 		txId := txId
 		go func() {
-			defer sharedErr.Recover(func(error) {
+			defer ERROR.Recover(func(error) {
 				close(resultChan)
+				close(stateDBChan)
 			})
 			this.runMany(&RunParams{
-				txIds:            itr.From(txId),
+				txIds:            itr.From(txId).Uint64(),
 				conflictDetector: conflictDetector,
-				onTxResult: func(conflict_tracking.TxId, result *TransactionResult) bool {
-					sharedErr.CheckIn(result.dbErr, result.consensusErr)
+				onTxResult: func(txId conflict_tracking.TxId, result *TransactionResult) bool {
+					ERROR.CheckIn(result.dbErr, result.consensusErr)
 					resultChan <- result
 					return true
 				},
 				onDone: func(stateDB *state.StateDB, stateDBCreateErr error) {
-					sharedErr.CheckIn(stateDBCreateErr)
-					stateDBChan <- stateDB
+					ERROR.CheckIn(stateDBCreateErr)
+					util.Try(func() {
+						stateDBChan <- stateDB
+					})
 				},
-				func(txId conflict_tracking.TxId) vm.ExecutionController {
+				executionControllerFactory: func(txId conflict_tracking.TxId) vm.ExecutionController {
 					return func(pc uint64) (uint64, bool) {
-						sharedErr.CheckIn()
-						if conflictDetector.InConflict(txId) {
-							sharedErr.CheckIn(errors.New("CONFLICT"))
+						ERROR.CheckIn()
+						if conflictDetector.HaveBeenConflicts() {
+							ERROR.CheckIn(errors.New("CONFLICT"))
 						}
 						return pc, true
 					}
@@ -204,10 +214,14 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		}()
 	}
 
+	gasPool := new(core.GasPool).AddGas(this.stateTransition.Block.GasLimit)
 	for txId := 0; txId < txCount; txId++ {
 		txResult := <-resultChans[txId]
-		sharedErr.CheckIn()
+		ERROR.CheckIn()
 		txData := this.stateTransition.Transactions[txId]
+		gasLimitReachedErr := gasPool.SubGas(txData.GasLimit)
+		ERROR.CheckIn(gasLimitReachedErr)
+		gasPool.AddGas(txData.GasLimit - txResult.gasUsed)
 		ret.UsedGas += txResult.gasUsed
 		ethReceipt := types.NewReceipt(nil, txResult.contractErr != nil, ret.UsedGas)
 		if txData.To == nil {
@@ -225,10 +239,10 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
 
-	ret.StateRoot <- stateRootChan
-	sharedErr.CheckIn()
-	finalCommitErr := commitDb.TrieDB().Commit(ret.StateRoot)
-	sharedErr.CheckIn(finalCommitErr)
+	ret.StateRoot = <-stateRootChan
+	ERROR.CheckIn()
+	finalCommitErr := commitDb.TrieDB().Commit(ret.StateRoot, true)
+	ERROR.CheckIn(finalCommitErr)
 	return
 }
 
@@ -240,6 +254,7 @@ func (this *TaraxaEvm) RunOne(
 ) (
 	*TransactionResult,
 ) {
+	block := this.stateTransition.Block
 	txData := this.stateTransition.Transactions[txId]
 	gasPrice := api.BigInt(txData.GasPrice)
 	gasPool := new(core.GasPool).AddGas(block.GasLimit)
@@ -252,16 +267,16 @@ func (this *TaraxaEvm) RunOne(
 			txData.GasLimit, gasPrice, *txData.Data,
 			true,
 		),
-		evmContext: vm.Context{
+		evmContext: &vm.Context{
 			CanTransfer: core.CanTransfer,
 			Transfer:    core.Transfer,
 			GetHash:     this.externalApi.GetHeaderHashByBlockNumber,
-			Origin:      tx.From(),
+			Origin:      txData.From,
 			Coinbase:    block.Coinbase,
 			BlockNumber: api.BigInt(block.Number),
 			Time:        api.BigInt(block.Time),
 			Difficulty:  api.BigInt(block.Difficulty),
-			GasLimit:    api.block.GasLimit,
+			GasLimit:    block.GasLimit,
 			GasPrice:    new(big.Int).Set(gasPrice),
 		},
 		chainConfig: this.chainConfig,
@@ -275,9 +290,10 @@ func (this *TaraxaEvm) RunOne(
 	})
 }
 
+// TODO separate class
 type RunParams struct {
 	conflictDetector           *conflict_tracking.ConflictDetector
-	txIds                      itr.Uint64Iterator
+	txIds                      itr.IntIterator
 	executionControllerFactory func(conflict_tracking.TxId) vm.ExecutionController
 	onTxResult                 func(conflict_tracking.TxId, *TransactionResult) bool
 	onDone                     func(*state.StateDB, error)
@@ -290,8 +306,8 @@ func (this *TaraxaEvm) runMany(args *RunParams) {
 		return
 	}
 	for txId, done := args.txIds(); !done; txId, done = args.txIds() {
-		result := this.RunOne(detector, stateDB, txId, args.executionControllerFactory(txId))
-		if !args.onTxResult(result) {
+		result := this.RunOne(args.conflictDetector, stateDB, txId, args.executionControllerFactory(txId))
+		if !args.onTxResult(txId, result) {
 			break
 		}
 	}

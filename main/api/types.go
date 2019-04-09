@@ -61,22 +61,22 @@ type RunConfiguration struct {
 }
 
 type TaraxaReceipt struct {
-	ReturnValue     *hexutil.Bytes `json:"returnValue"`
+	ReturnValue     hexutil.Bytes  `json:"returnValue"`
 	EthereumReceipt *types.Receipt `json:"ethereumReceipt"`
 	ContractError   error          `json:"contractError"`
 }
 
 type StateTransitionResult struct {
-	StateRoot common.Hash    `json:"stateRoot"`
-	Receipts  *TaraxaReceipt `json:"receipts"`
-	AllLogs   []*types.Log   `json:"allLogs"`
-	UsedGas   uint64         `json:"usedGas"`
+	StateRoot common.Hash      `json:"stateRoot"`
+	Receipts  []*TaraxaReceipt `json:"receipts"`
+	AllLogs   []*types.Log     `json:"allLogs"`
+	UsedGas   uint64           `json:"usedGas"`
 }
 
 type Result struct {
-	StateTransitionResult *StateTransitionResult `json:"stateTransitionResult"`
-	ConcurrentSchedule    *ConcurrentSchedule    `json:"concurrentSchedule"`
-	Error                 error                  `json:"error"`
+	*StateTransitionResult
+	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
+	Error              error               `json:"error"`
 }
 
 type ExternalApi struct {

@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/compiler"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/stretchr/testify/assert"
@@ -36,9 +37,9 @@ contract SingleVariable {
 	ldbConfig, ldbCleanup := newTestLDB()
 	defer ldbCleanup()
 
-	externalApi := new(ExternalApi)
+	externalApi := new(api.ExternalApi)
 
-	block := Block{
+	block := api.Block{
 		Number:     "0",
 		Time:       "0",
 		Difficulty: "0",
@@ -46,7 +47,7 @@ contract SingleVariable {
 		GasLimit:   100000000000,
 	}
 
-	contractCreatingTx1 := Transaction{
+	contractCreatingTx1 := api.Transaction{
 		Nonce:    0,
 		From:     *addr(100),
 		Data:     code(SingleVariable),
@@ -56,7 +57,7 @@ contract SingleVariable {
 	}
 	contractAddr1 := crypto.CreateAddress(contractCreatingTx1.From, contractCreatingTx1.Nonce)
 
-	contractCreatingTx2 := Transaction{
+	contractCreatingTx2 := api.Transaction{
 		Nonce:    0,
 		From:     *addr(101),
 		Data:     code(SingleVariable),
@@ -66,50 +67,54 @@ contract SingleVariable {
 	}
 	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
 
-	result1, err := Run(&RunConfiguration{
-		StateRoot: common.Hash{},
-		Block:     &block,
+	result1, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,
-		Transactions: []*Transaction{
-			&contractCreatingTx1,
-			&contractCreatingTx2,
+		StateTransition: api.StateTransition{
+			StateRoot: common.Hash{},
+			Block:     &block,
+			Transactions: []*api.Transaction{
+				&contractCreatingTx1,
+				&contractCreatingTx2,
+			},
 		},
 	}, externalApi)
 	util.PanicOn(err)
 
 	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
 
-	result2, err := Run(&RunConfiguration{
-		StateRoot: result1.StateRoot,
-		Block:     &block,
+	result2, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,
-		Transactions: []*Transaction{
-			&Transaction{
-				Nonce:    0,
-				From:     *addr(102),
-				To:       &contractAddr1,
-				Data:     call(SingleVariable, "set", big.NewInt(2)),
-				Amount:   "0",
-				GasPrice: "0",
-				GasLimit: 100000000,
-			},
-			&Transaction{
-				Nonce:    0,
-				From:     *addr(103),
-				To:       &contractAddr2,
-				Data:     call(SingleVariable, "set", big.NewInt(3)),
-				Amount:   "0",
-				GasPrice: "0",
-				GasLimit: 100000000,
-			},
-			&Transaction{
-				Nonce:    1,
-				From:     *addr(103),
-				To:       &contractAddr2,
-				Data:     call(SingleVariable, "get"),
-				Amount:   "0",
-				GasPrice: "0",
-				GasLimit: 100000000,
+		StateTransition: api.StateTransition{
+			StateRoot: result1.StateRoot,
+			Block:     &block,
+			Transactions: []*api.Transaction{
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(102),
+					To:       &contractAddr1,
+					Data:     call(SingleVariable, "set", big.NewInt(2)),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(103),
+					To:       &contractAddr2,
+					Data:     call(SingleVariable, "set", big.NewInt(3)),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+				&api.Transaction{
+					Nonce:    1,
+					From:     *addr(103),
+					To:       &contractAddr2,
+					Data:     call(SingleVariable, "get"),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
 			},
 		},
 	}, externalApi)
@@ -147,7 +152,7 @@ func call(contract *compiler.Contract, method string, args ...interface{}) *hexu
 	return &calldata;
 }
 
-func newTestLDB() (LDBConfig, func()) {
+func newTestLDB() (api.LDBConfig, func()) {
 	dirname := "__test_ldb__"
 	if _, err := os.Stat(dirname); !os.IsNotExist(err) {
 		util.PanicOn(os.RemoveAll(dirname))
@@ -155,7 +160,7 @@ func newTestLDB() (LDBConfig, func()) {
 	util.PanicOn(os.Mkdir(dirname, os.ModePerm))
 	absPath, err := filepath.Abs(dirname)
 	util.PanicOn(err)
-	return LDBConfig{
+	return api.LDBConfig{
 		File:    absPath,
 		Cache:   0,
 		Handles: 0,

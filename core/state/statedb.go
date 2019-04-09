@@ -114,6 +114,7 @@ func (self *StateDB) Rebase(root common.Hash, db Database) error {
 	for _, stateObject := range self.stateObjects {
 		stateObject.trie = nil
 	}
+	return nil
 }
 
 // setError remembers the first non-nil error it is called with.

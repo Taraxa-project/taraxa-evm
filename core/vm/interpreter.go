@@ -214,7 +214,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
 	for atomic.LoadInt32(&in.evm.abort) == 0 {
-		if in.externalPCController != nil {
+		if in.executionController != nil {
 			if pcChanged, shouldContinue := in.executionController(pc); shouldContinue {
 				pc = pcChanged
 			} else {

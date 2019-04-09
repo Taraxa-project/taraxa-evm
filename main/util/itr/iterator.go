@@ -16,14 +16,14 @@ func IsEnd(val interface{}) bool {
 }
 
 type Iterator func() interface{}
-type Uint64Iterator func() (uint64, bool)
+type IntIterator func() (int, bool)
 
-func (this Iterator) Uint64() Uint64Iterator {
-	return func() (ret uint64, done bool) {
+func (this Iterator) Uint64() IntIterator {
+	return func() (ret int, done bool) {
 		if v := this(); IsEnd(v) {
 			done = true
 		} else {
-			ret = v.(uint64)
+			ret = v.(int)
 		}
 		return
 	}

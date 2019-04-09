@@ -28,6 +28,12 @@ func Assert(condition bool, msg ...string) {
 	}
 }
 
-func AssertNotNil(i interface{}, msg ...string) {
-	Assert(i != nil, msg...)
+func Try(action func()) interface{} {
+	return func() (recovered interface{}) {
+		defer func() {
+			recovered = recover()
+		}()
+		action()
+		return
+	}()
 }
