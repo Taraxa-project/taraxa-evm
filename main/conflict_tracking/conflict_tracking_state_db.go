@@ -12,13 +12,16 @@ const balance = "balance"
 const code = "code"
 const nonce = "nonce"
 
+// TODO "touch" https://github.com/ethereum/eips/issues/158
+// TODO move to StateDB
 type ConflictTrackingStateDB struct {
 	txId             TxId
 	stateDB          *state.StateDB
 	conflictDetector *ConflictDetector
 }
 
-func (this *ConflictTrackingStateDB) Init(txId TxId, commonDB *state.StateDB, conflicts *ConflictDetector) *ConflictTrackingStateDB {
+func (this *ConflictTrackingStateDB) Init(
+	txId TxId, commonDB *state.StateDB, conflicts *ConflictDetector) *ConflictTrackingStateDB {
 	this.txId = txId
 	this.stateDB = commonDB
 	this.conflictDetector = conflicts
@@ -26,159 +29,93 @@ func (this *ConflictTrackingStateDB) Init(txId TxId, commonDB *state.StateDB, co
 }
 
 func (this *ConflictTrackingStateDB) CreateAccount(addr common.Address) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-	})
+	this.onAccountWrite(addr)
 	this.stateDB.CreateAccount(addr)
 }
 
 func (this *ConflictTrackingStateDB) SubBalance(addr common.Address, value *big.Int) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-		key:     balance,
-	})
+	this.onAccountWrite(addr, balance)
 	this.stateDB.SubBalance(addr, value)
 }
 
 func (this *ConflictTrackingStateDB) AddBalance(addr common.Address, value *big.Int) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-		key:     balance,
-	})
+	this.onAccountWrite(addr, balance)
 	this.stateDB.AddBalance(addr, value)
 }
 
 func (this *ConflictTrackingStateDB) GetBalance(addr common.Address) *big.Int {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     balance,
-	})
+	this.onAccountRead(addr, balance)
 	return this.stateDB.GetBalance(addr)
 }
 
 func (this *ConflictTrackingStateDB) GetNonce(addr common.Address) uint64 {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     nonce,
-	})
+	this.onAccountRead(addr, nonce)
 	return this.stateDB.GetNonce(addr)
 }
 
 func (this *ConflictTrackingStateDB) SetNonce(addr common.Address, value uint64) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-		key:     nonce,
-	})
+	this.onAccountWrite(addr, nonce)
 	this.stateDB.SetNonce(addr, value)
 }
 
 func (this *ConflictTrackingStateDB) SetCode(addr common.Address, val []byte) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-		key:     code,
-	})
+	this.onAccountWrite(addr, code)
 	this.stateDB.SetCode(addr, val)
 }
 
 func (this *ConflictTrackingStateDB) GetCodeHash(addr common.Address) common.Hash {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     code,
-	})
+	this.onAccountRead(addr, code)
 	return this.stateDB.GetCodeHash(addr)
 }
 
 func (this *ConflictTrackingStateDB) GetCode(addr common.Address) []byte {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     code,
-	})
+	this.onAccountRead(addr, code)
 	return this.stateDB.GetCode(addr)
 }
 
 func (this *ConflictTrackingStateDB) GetCodeSize(addr common.Address) int {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     code,
-	})
+	this.onAccountRead(addr, code)
 	return this.stateDB.GetCodeSize(addr)
 }
 
 func (this *ConflictTrackingStateDB) Suicide(addr common.Address) bool {
-	// TODO???
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-	})
-	return this.stateDB.Suicide(addr)
+	this.onAccountRead(addr)
+	hasSuicided := this.stateDB.Suicide(addr)
+	if hasSuicided {
+		// read write
+		this.onAccountWrite(addr, balance)
+	}
+	return hasSuicided
 }
 
 func (this *ConflictTrackingStateDB) HasSuicided(addr common.Address) bool {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-	})
+	this.onAccountRead(addr)
 	return this.stateDB.HasSuicided(addr)
 }
 
 func (this *ConflictTrackingStateDB) Exist(addr common.Address) bool {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-	})
+	this.onAccountRead(addr)
 	return this.stateDB.Exist(addr)
 }
 
 func (this *ConflictTrackingStateDB) Empty(addr common.Address) bool {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-	})
+	this.onAccountRead(addr, nonce, balance, code)
 	return this.stateDB.Empty(addr)
 }
 
 func (this *ConflictTrackingStateDB) GetCommittedState(addr common.Address, hash common.Hash) common.Hash {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     hash.Hex(),
-	})
+	this.onAccountRead(addr, hash.Hex())
 	return this.stateDB.GetCommittedState(addr, hash)
 }
 
-func (this *ConflictTrackingStateDB) GetState(addr common.Address, key common.Hash) common.Hash {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		account: addr,
-		key:     key.Hex(),
-	})
-	return this.stateDB.GetState(addr, key)
+func (this *ConflictTrackingStateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
+	this.onAccountRead(addr, hash.Hex())
+	return this.stateDB.GetState(addr, hash)
 }
 
-func (this *ConflictTrackingStateDB) SetState(addr common.Address, key common.Hash, value common.Hash) {
-	this.conflictDetector.Submit(&operation{
-		txId:    this.txId,
-		isWrite: true,
-		account: addr,
-		key:     key.Hex(),
-	})
-	this.stateDB.SetState(addr, key, value)
+func (this *ConflictTrackingStateDB) SetState(addr common.Address, hash common.Hash, value common.Hash) {
+	this.onAccountWrite(addr, hash.Hex())
+	this.stateDB.SetState(addr, hash, value)
 }
 
 func (this *ConflictTrackingStateDB) AddLog(log *types.Log) {
@@ -209,4 +146,39 @@ func (this *ConflictTrackingStateDB) Snapshot() int {
 
 func (this *ConflictTrackingStateDB) AddPreimage(hash common.Hash, val []byte) {
 	this.stateDB.AddPreimage(hash, val)
+}
+
+func (this *ConflictTrackingStateDB) onAccountRead(address common.Address, keys ...string) {
+	accountKey := address.Hex()
+	this.conflictDetector.Submit(&Operation{
+		Author: this.txId,
+		Key:    accountKey,
+	})
+	if len(keys) > 0 && this.stateDB.Exist(address) {
+		for _, key := range keys {
+			this.conflictDetector.Submit(&Operation{
+				Author: this.txId,
+				Key:    accountKey + key,
+			})
+		}
+	}
+}
+
+func (this *ConflictTrackingStateDB) onAccountWrite(address common.Address, keys ...string) {
+	accountKey := address.Hex()
+	this.onAccountRead(address)
+	if len(keys) == 0 || !this.stateDB.Exist(address) {
+		this.conflictDetector.Submit(&Operation{
+			IsWrite: true,
+			Author:  this.txId,
+			Key:     accountKey,
+		})
+	}
+	for _, key := range keys {
+		this.conflictDetector.Submit(&Operation{
+			IsWrite: true,
+			Author:  this.txId,
+			Key:     accountKey + key,
+		})
+	}
 }

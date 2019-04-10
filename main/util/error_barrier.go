@@ -28,20 +28,23 @@ func (this *ErrorBarrier) CheckIn(errors ...error) {
 }
 
 func (this *ErrorBarrier) PanicIfPresent() {
-	if loaded := atomic.LoadPointer(&this.err); loaded != nil {
-		errPtr := (*error)(loaded)
-		panic(*errPtr)
+	PanicOn(this.Get())
+}
+
+func (this *ErrorBarrier) Get() error {
+	ptr := (*error)(atomic.LoadPointer(&this.err))
+	if ptr != nil {
+		return *ptr
 	}
+	return nil
 }
 
 func (this *ErrorBarrier) Recover(callbacks ...func(error)) {
 	if recovered := recover(); recovered != nil {
-		loaded := atomic.LoadPointer(&this.err)
-		thisErrPtr := (*error)(loaded)
-		if thisErrPtr != nil && recovered == *thisErrPtr {
-			err := recovered.(error)
-			for _, cb := range callbacks {
-				cb(err)
+		thisErr := this.Get()
+		if recovered == thisErr {
+			for _, callback := range callbacks {
+				callback(thisErr)
 			}
 		} else {
 			panic(recovered)

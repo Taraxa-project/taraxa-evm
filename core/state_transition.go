@@ -177,7 +177,7 @@ func (st *StateTransition) preCheck() error {
 	return st.buyGas()
 }
 
-func (st *StateTransition) TransitionDbReturningVmErr() (ret []byte, usedGas uint64, vmerr error, consensusErr error) {
+func (st *StateTransition) TransitionDbTaraxa() (ret []byte, usedGas uint64, vmerr error, consensusErr error) {
 	if consensusErr = st.preCheck(); consensusErr != nil {
 		return
 	}
@@ -211,7 +211,6 @@ func (st *StateTransition) TransitionDbReturningVmErr() (ret []byte, usedGas uin
 		}
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	return ret, st.gasUsed(), vmerr, consensusErr
 }
 
@@ -220,7 +219,9 @@ func (st *StateTransition) TransitionDbReturningVmErr() (ret []byte, usedGas uin
 // An error indicates a consensus issue.
 func (this *StateTransition) TransitionDb() (ret []byte, usedGas uint64, contractFailure bool, err error) {
 	var vmErr error
-	ret, usedGas, vmErr, err = this.TransitionDbReturningVmErr()
+	ret, usedGas, vmErr, err = this.TransitionDbTaraxa()
+	this.state.AddBalance(this.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(usedGas), this.gasPrice))
+
 	// vm errors do not effect consensus and are therefor
 	// not assigned to consensusErr, except for insufficient balance
 	// error.

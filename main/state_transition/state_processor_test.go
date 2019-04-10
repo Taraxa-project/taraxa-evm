@@ -43,7 +43,7 @@ contract SingleVariable {
 		Number:     "0",
 		Time:       "0",
 		Difficulty: "0",
-		Coinbase:   *addr(100),
+		Coinbase:   *addr(99),
 		GasLimit:   100000000000,
 	}
 
@@ -80,7 +80,7 @@ contract SingleVariable {
 	}, externalApi)
 	util.PanicOn(err)
 
-	assert.True(t, len(result1.ConcurrentSchedule.Sequential) == 0)
+	util.Assert(len(result1.ConcurrentSchedule.Sequential) == 0)
 
 	result2, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,

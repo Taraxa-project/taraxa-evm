@@ -18,7 +18,7 @@ func IsEnd(val interface{}) bool {
 type Iterator func() interface{}
 type IntIterator func() (int, bool)
 
-func (this Iterator) Uint64() IntIterator {
+func (this Iterator) Int() IntIterator {
 	return func() (ret int, done bool) {
 		if v := this(); IsEnd(v) {
 			done = true

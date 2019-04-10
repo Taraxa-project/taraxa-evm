@@ -1,38 +1,42 @@
 package conflict_tracking
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
 )
 
 type ConflictDetector struct {
-	inbox                 chan *operation
-	reads                 map[string]*linkedhashset.Set
-	writes                map[string]TxId
-	currentKeysInConflict *linkedhashset.Set
-	currentConflictingTx  *linkedhashset.Set
-	oldConflictingTx      *linkedhashset.Set
-	conflictMutex         sync.RWMutex
-	executionMutex        sync.Mutex
-	isRefusingWrites      uint32
+	inbox                     chan *Operation
+	reads                     map[string]*linkedhashset.Set
+	writes                    map[string]interface{}
+	keysInConflict            *linkedhashset.Set
+	currentConflictingAuthors *linkedhashset.Set
+	ignoredAuthors            *linkedhashset.Set
+	conflictMutex             sync.RWMutex
+	executionMutex            sync.Mutex
 }
 
-type operation struct {
-	txId    TxId
-	isWrite bool
-	account common.Address
-	key     string
+type Operation struct {
+	Author  interface{}
+	IsWrite bool
+	Key     string
 }
 
 func (this *ConflictDetector) Init(inboxCapacity uint64) *ConflictDetector {
-	this.inbox = make(chan *operation, inboxCapacity)
+	this.inbox = make(chan *Operation, inboxCapacity)
 	this.reads = make(map[string]*linkedhashset.Set)
-	this.writes = make(map[string]TxId)
-	this.currentKeysInConflict = linkedhashset.New()
-	this.currentConflictingTx = linkedhashset.New()
-	this.oldConflictingTx = linkedhashset.New()
+	this.writes = make(map[string]interface{})
+	this.keysInConflict = linkedhashset.New()
+	this.currentConflictingAuthors = linkedhashset.New()
+	this.ignoredAuthors = linkedhashset.New()
+	return this
+}
+
+func (this *ConflictDetector) IgnoreAuthor(author interface{}) *ConflictDetector {
+	this.executionMutex.Lock()
+	defer this.executionMutex.Unlock()
+	this.ignoredAuthors.Add(author)
 	return this
 }
 
@@ -46,11 +50,12 @@ func (this *ConflictDetector) Run() {
 		}
 		this.process(op)
 	}
+	// TODO close channel?
 	//close(this.inbox)
-	//this.inbox = make(chan *operation, cap(this.inbox))
+	//this.inbox = make(chan *Operation, cap(this.inbox))
 }
 
-func (this *ConflictDetector) SignalShutdown() *ConflictDetector {
+func (this *ConflictDetector) RequestShutdown() *ConflictDetector {
 	this.inbox <- nil
 	return this
 }
@@ -61,101 +66,85 @@ func (this *ConflictDetector) Join() *ConflictDetector {
 	return this
 }
 
-func (this *ConflictDetector) Reset(conflictReceiver func(id TxId)) {
+func (this *ConflictDetector) Reset(conflictReceiver func(author interface{})) {
 	this.executionMutex.Lock()
 	defer this.executionMutex.Unlock()
-	this.currentConflictingTx.Each(func(index int, value interface{}) {
-		txId := value.(TxId)
-		this.oldConflictingTx.Add(txId)
-		conflictReceiver(txId)
+	this.currentConflictingAuthors.Each(func(index int, author interface{}) {
+		this.ignoredAuthors.Add(author)
+		conflictReceiver(author)
 	})
-	this.currentConflictingTx.Clear()
-	this.currentKeysInConflict.Clear()
+	this.currentConflictingAuthors.Clear()
+	this.keysInConflict.Clear()
 }
 
-func (this *ConflictDetector) Submit(op *operation) {
+func (this *ConflictDetector) Submit(op *Operation) {
 	util.Assert(op != nil)
 	this.inbox <- op
+	//this.process(op)
 }
 
-func (this *ConflictDetector) IsCurrentlyInConflict(id TxId) bool {
+func (this *ConflictDetector) IsCurrentlyInConflict(author interface{}) bool {
 	this.conflictMutex.RLock()
 	defer this.conflictMutex.RUnlock()
-	return this.currentConflictingTx.Contains(id)
+	return this.currentConflictingAuthors.Contains(author)
 }
 
 func (this *ConflictDetector) HaveBeenConflicts() bool {
 	this.conflictMutex.RLock()
 	defer this.conflictMutex.RUnlock()
-	return !this.currentConflictingTx.Empty()
+	return !this.currentConflictingAuthors.Empty()
 }
 
-func (this *ConflictDetector) process(op *operation) {
-	if this.oldConflictingTx.Contains(op.txId) || this.IsCurrentlyInConflict(op.txId) {
+func (this *ConflictDetector) process(op *Operation) {
+	if this.ignoredAuthors.Contains(op.Author) || this.IsCurrentlyInConflict(op.Author) {
 		return
 	}
-	accountKey := op.account.Hex()
-	fullKey := accountKey + op.key
-	keys := []string{accountKey, fullKey}
-	for _, key := range keys {
-		if !this.checkKey(op.txId, key) {
-			return
-		}
+	if this.keysInConflict.Contains(op.Key) {
+		this.addConflictingAuthor(op.Author)
+		return
 	}
-	for _, key := range keys {
-		if op.isWrite {
-			this.processWrite(op.txId, key)
-		} else {
-			this.processRead(op.txId, key)
-		}
+	if op.IsWrite {
+		this.processWrite(op.Author, op.Key)
+	} else {
+		this.processRead(op.Author, op.Key)
 	}
 }
 
-func (this *ConflictDetector) checkKey(id TxId, key string) (conflictFound bool) {
-	if this.currentKeysInConflict.Contains(key) {
-		this.addConflictingTx(id)
-		conflictFound = true
-	}
-	return
-}
-
-func (this *ConflictDetector) processWrite(txId TxId, key string) (conflictFound bool) {
+func (this *ConflictDetector) processWrite(author interface{}, key string) {
 	reads := this.reads[key]
 	prevWriter, hasBeenWrite := this.writes[key]
-	writeConflict := hasBeenWrite && prevWriter != txId
+	writeConflict := hasBeenWrite && prevWriter != author
 	haveBeenReads := reads != nil && reads.Size() > 0
-	readConflict := haveBeenReads && !(reads.Size() == 1 && reads.Contains(txId))
+	readConflict := haveBeenReads && !(reads.Size() == 1 && reads.Contains(author))
 	if (readConflict || writeConflict) {
-		this.currentKeysInConflict.Add(key)
-		this.addConflictingTx(txId)
+		this.keysInConflict.Add(key)
+		this.addConflictingAuthor(author)
 		if writeConflict {
-			this.addConflictingTx(prevWriter)
+			this.addConflictingAuthor(prevWriter)
 		}
 		if haveBeenReads {
 			reads.Each(func(index int, value interface{}) {
-				this.addConflictingTx(value.(TxId))
+				this.addConflictingAuthor(value)
 			})
 		}
 		delete(this.writes, key)
 		delete(this.reads, key)
-		conflictFound = true
 	} else if !hasBeenWrite {
-		this.writes[key] = txId
+		this.writes[key] = author
 	}
-	return
 }
 
-func (this *ConflictDetector) processRead(txId TxId, key string) {
+func (this *ConflictDetector) processRead(author interface{}, key string) {
 	reads := this.reads[key]
 	if reads == nil {
 		reads = linkedhashset.New()
 		this.reads[key] = reads
 	}
-	reads.Add(txId)
+	reads.Add(author)
 }
 
-func (this *ConflictDetector) addConflictingTx(id TxId) {
+func (this *ConflictDetector) addConflictingAuthor(author interface{}) {
 	this.conflictMutex.Lock()
 	defer this.conflictMutex.Unlock()
-	this.currentConflictingTx.Add(id)
+	this.currentConflictingAuthors.Add(author)
 }
