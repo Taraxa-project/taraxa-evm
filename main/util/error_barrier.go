@@ -51,3 +51,16 @@ func (this *ErrorBarrier) Recover(callbacks ...func(error)) {
 		}
 	}
 }
+
+func (this *ErrorBarrier) Catch(handlers ...func(err error)) Hanlder {
+	return func(caught interface{}) bool {
+		thisErr := this.Get()
+		if caught == thisErr {
+			for _, handler := range handlers {
+				handler(thisErr)
+			}
+			return true
+		}
+		return false
+	}
+}

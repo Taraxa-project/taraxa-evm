@@ -6,37 +6,32 @@ import (
 	"sync"
 )
 
+type Author = interface{} // equals/hashcode required
+type Authors = *linkedhashset.Set
+type Key = string // equals/hashcode required
+type Keys = *linkedhashset.Set
+
 type ConflictDetector struct {
-	inbox                     chan *Operation
-	reads                     map[string]*linkedhashset.Set
-	writes                    map[string]interface{}
-	keysInConflict            *linkedhashset.Set
-	currentConflictingAuthors *linkedhashset.Set
-	ignoredAuthors            *linkedhashset.Set
-	conflictMutex             sync.RWMutex
-	executionMutex            sync.Mutex
+	inbox             chan *Operation
+	reads             map[Key]Authors
+	writes            map[Key]Author
+	keysInConflict    Keys
+	authorsInConflict Authors
+	conflictMutex     sync.RWMutex
+	executionMutex    sync.Mutex
 }
 
 type Operation struct {
-	Author  interface{}
+	Author  Author
 	IsWrite bool
-	Key     string
+	Key     Key
 }
 
 func (this *ConflictDetector) Init(inboxCapacity uint64) *ConflictDetector {
 	this.inbox = make(chan *Operation, inboxCapacity)
-	this.reads = make(map[string]*linkedhashset.Set)
-	this.writes = make(map[string]interface{})
-	this.keysInConflict = linkedhashset.New()
-	this.currentConflictingAuthors = linkedhashset.New()
-	this.ignoredAuthors = linkedhashset.New()
-	return this
-}
-
-func (this *ConflictDetector) IgnoreAuthor(author interface{}) *ConflictDetector {
-	this.executionMutex.Lock()
-	defer this.executionMutex.Unlock()
-	this.ignoredAuthors.Add(author)
+	this.reads = make(map[Key]Authors)
+	this.writes = make(map[Key]Author)
+	this.Reset()
 	return this
 }
 
@@ -66,37 +61,43 @@ func (this *ConflictDetector) Join() *ConflictDetector {
 	return this
 }
 
-func (this *ConflictDetector) Reset(conflictReceiver func(author interface{})) {
-	this.executionMutex.Lock()
-	defer this.executionMutex.Unlock()
-	this.currentConflictingAuthors.Each(func(index int, author interface{}) {
-		this.ignoredAuthors.Add(author)
-		conflictReceiver(author)
-	})
-	this.currentConflictingAuthors.Clear()
-	this.keysInConflict.Clear()
-}
-
 func (this *ConflictDetector) Submit(op *Operation) {
 	util.Assert(op != nil)
 	this.inbox <- op
 	//this.process(op)
 }
 
-func (this *ConflictDetector) IsCurrentlyInConflict(author interface{}) bool {
+func (this *ConflictDetector) Reset() (authorsInConflict Authors) {
+	this.executionMutex.Lock()
+	defer this.executionMutex.Unlock()
+	this.conflictMutex.Lock()
+	defer this.conflictMutex.Unlock()
+	authorsInConflict = this.authorsInConflict
+	this.authorsInConflict = linkedhashset.New()
+	this.keysInConflict = linkedhashset.New()
+	return
+}
+
+func (this *ConflictDetector) IsCurrentlyInConflict(author Author) bool {
 	this.conflictMutex.RLock()
 	defer this.conflictMutex.RUnlock()
-	return this.currentConflictingAuthors.Contains(author)
+	return this.authorsInConflict.Contains(author)
 }
 
 func (this *ConflictDetector) HaveBeenConflicts() bool {
 	this.conflictMutex.RLock()
 	defer this.conflictMutex.RUnlock()
-	return !this.currentConflictingAuthors.Empty()
+	return !this.authorsInConflict.Empty()
+}
+
+func (this *ConflictDetector) addConflictingAuthor(author Author) {
+	this.conflictMutex.Lock()
+	defer this.conflictMutex.Unlock()
+	this.authorsInConflict.Add(author)
 }
 
 func (this *ConflictDetector) process(op *Operation) {
-	if this.ignoredAuthors.Contains(op.Author) || this.IsCurrentlyInConflict(op.Author) {
+	if this.IsCurrentlyInConflict(op.Author) {
 		return
 	}
 	if this.keysInConflict.Contains(op.Key) {
@@ -110,7 +111,7 @@ func (this *ConflictDetector) process(op *Operation) {
 	}
 }
 
-func (this *ConflictDetector) processWrite(author interface{}, key string) {
+func (this *ConflictDetector) processWrite(author Author, key Key) {
 	reads := this.reads[key]
 	prevWriter, hasBeenWrite := this.writes[key]
 	writeConflict := hasBeenWrite && prevWriter != author
@@ -123,7 +124,7 @@ func (this *ConflictDetector) processWrite(author interface{}, key string) {
 			this.addConflictingAuthor(prevWriter)
 		}
 		if haveBeenReads {
-			reads.Each(func(index int, value interface{}) {
+			reads.Each(func(index int, value Author) {
 				this.addConflictingAuthor(value)
 			})
 		}
@@ -134,17 +135,11 @@ func (this *ConflictDetector) processWrite(author interface{}, key string) {
 	}
 }
 
-func (this *ConflictDetector) processRead(author interface{}, key string) {
+func (this *ConflictDetector) processRead(author Author, key Key) {
 	reads := this.reads[key]
 	if reads == nil {
 		reads = linkedhashset.New()
 		this.reads[key] = reads
 	}
 	reads.Add(author)
-}
-
-func (this *ConflictDetector) addConflictingAuthor(author interface{}) {
-	this.conflictMutex.Lock()
-	defer this.conflictMutex.Unlock()
-	this.currentConflictingAuthors.Add(author)
 }

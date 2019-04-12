@@ -5,10 +5,10 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"math/big"
 )
 
+type TxId = int
 type BigIntString = string;
 
 func BigInt(str BigIntString) *big.Int {
@@ -45,7 +45,7 @@ type StateTransition struct {
 }
 
 type ConcurrentSchedule struct {
-	Sequential []conflict_tracking.TxId `json:"sequential"`
+	Sequential []TxId `json:"sequential"`
 }
 
 type LDBConfig struct {

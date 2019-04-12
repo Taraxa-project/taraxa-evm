@@ -4,10 +4,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/compiler"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
-	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/emirpasic/gods/sets/treeset"
 	"github.com/stretchr/testify/assert"
 	"math/big"
 	"os"
@@ -21,14 +20,14 @@ pragma solidity ^0.5.6;
 
 contract SingleVariable {
 
-    uint value = 5;
+	mapping(uint => uint) m;
 
-	function set(uint _value) public {
-		value = _value;
+	function set(uint key, uint value) public {
+		m[key] = value;
     }
 
-    function get() public view returns (uint) {
-        return value;
+    function get(uint key) public view returns (uint) {
+        return m[key];
     }
 
 }
@@ -47,41 +46,39 @@ contract SingleVariable {
 		GasLimit:   100000000000,
 	}
 
-	contractCreatingTx1 := api.Transaction{
-		Nonce:    0,
-		From:     *addr(100),
-		Data:     code(SingleVariable),
-		Amount:   "0",
-		GasPrice: "0",
-		GasLimit: 100000000,
-	}
-	contractAddr1 := crypto.CreateAddress(contractCreatingTx1.From, contractCreatingTx1.Nonce)
-
-	contractCreatingTx2 := api.Transaction{
-		Nonce:    0,
-		From:     *addr(101),
-		Data:     code(SingleVariable),
-		Amount:   "0",
-		GasPrice: "0",
-		GasLimit: 100000000,
-	}
-	contractAddr2 := crypto.CreateAddress(contractCreatingTx2.From, contractCreatingTx2.Nonce)
-
 	result1, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,
 		StateTransition: api.StateTransition{
 			StateRoot: common.Hash{},
 			Block:     &block,
 			Transactions: []*api.Transaction{
-				&contractCreatingTx1,
-				&contractCreatingTx2,
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(100),
+					Data:     code(SingleVariable),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(101),
+					Data:     code(SingleVariable),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
 			},
 		},
 	}, externalApi)
 	util.PanicOn(err)
 
+	contractAddr1 := result1.Receipts[0].EthereumReceipt.ContractAddress
+	contractAddr2 := result1.Receipts[1].EthereumReceipt.ContractAddress
+
 	util.Assert(len(result1.ConcurrentSchedule.Sequential) == 0)
 
+	someValue := big.NewInt(66)
 	result2, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,
 		StateTransition: api.StateTransition{
@@ -92,7 +89,7 @@ contract SingleVariable {
 					Nonce:    0,
 					From:     *addr(102),
 					To:       &contractAddr1,
-					Data:     call(SingleVariable, "set", big.NewInt(2)),
+					Data:     call(SingleVariable, "set", big.NewInt(0), big.NewInt(4)),
 					Amount:   "0",
 					GasPrice: "0",
 					GasLimit: 100000000,
@@ -101,16 +98,16 @@ contract SingleVariable {
 					Nonce:    0,
 					From:     *addr(103),
 					To:       &contractAddr2,
-					Data:     call(SingleVariable, "set", big.NewInt(3)),
+					Data:     call(SingleVariable, "set", big.NewInt(3), someValue),
 					Amount:   "0",
 					GasPrice: "0",
 					GasLimit: 100000000,
 				},
 				&api.Transaction{
-					Nonce:    1,
-					From:     *addr(103),
+					Nonce:    0,
+					From:     *addr(104),
 					To:       &contractAddr2,
-					Data:     call(SingleVariable, "get"),
+					Data:     call(SingleVariable, "get", big.NewInt(3)),
 					Amount:   "0",
 					GasPrice: "0",
 					GasLimit: 100000000,
@@ -120,7 +117,61 @@ contract SingleVariable {
 	}, externalApi)
 	util.PanicOn(err)
 
-	assert.Equal(t, result2.ConcurrentSchedule.Sequential, []conflict_tracking.TxId{1, 2})
+	AssertContainsExactly(t, result2.ConcurrentSchedule.Sequential, 1, 2)
+	assert.Equal(t, result2.Receipts[2].ReturnValue, hexutil.Bytes(common.BigToHash(someValue).Bytes()))
+
+	result3, err := Run(&api.RunConfiguration{
+		LDBConfig: &ldbConfig,
+		StateTransition: api.StateTransition{
+			StateRoot: result1.StateRoot,
+			Block:     &block,
+			Transactions: []*api.Transaction{
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(102),
+					To:       &contractAddr1,
+					Data:     call(SingleVariable, "set", big.NewInt(5), big.NewInt(0)),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(103),
+					To:       &contractAddr1,
+					Data:     call(SingleVariable, "set", big.NewInt(5), big.NewInt(1)),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+				&api.Transaction{
+					Nonce:    0,
+					From:     *addr(104),
+					To:       &contractAddr2,
+					Data:     call(SingleVariable, "get", big.NewInt(0)),
+					Amount:   "0",
+					GasPrice: "0",
+					GasLimit: 100000000,
+				},
+			},
+		},
+	}, externalApi)
+	util.PanicOn(err)
+
+	AssertContainsExactly(t, result3.ConcurrentSchedule.Sequential, 0, 1)
+
+}
+
+func AssertContainsExactly(t *testing.T, left []api.TxId, right ...api.TxId) {
+	assert.Equal(t, set(right...), set(left...))
+}
+
+func set(ids ...api.TxId) []interface{} {
+	set := treeset.NewWithIntComparator()
+	for _, id := range ids {
+		set.Add(id)
+	}
+	return set.Values()
 }
 
 func addr(n int64) *common.Address {

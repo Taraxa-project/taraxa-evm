@@ -2,18 +2,58 @@ package util
 
 import (
 	"errors"
-	"runtime/debug"
 	"strings"
 )
 
-func Catch(callback func(error)) {
-	if recovered := recover(); recovered != nil {
-		if err, isErr := recovered.(error); isErr {
-			callback(errors.New(err.Error() + ". Stack trace:\n" + string(debug.Stack())))
-		} else {
-			panic(recovered)
+type Hanlder func(interface{}) bool
+type ErrorHandler func(error)
+
+func SetTo(errPtr *error) ErrorHandler {
+	return func(err error) {
+		*errPtr = err
+	}
+}
+
+func CatchAny(handlers ...func(interface{})) Hanlder {
+	return func(caught interface{}) bool {
+		for _, handler := range handlers {
+			handler(caught)
+		}
+		return true
+	}
+}
+
+func CatchAnyErr(handlers ...ErrorHandler) Hanlder {
+	return func(caught interface{}) bool {
+		if err, isErr := caught.(error); isErr {
+			for _, handler := range handlers {
+				handler(err)
+			}
+			return true
+		}
+		return false
+	}
+}
+
+func Recover(handlers ...Hanlder) (caught interface{}) {
+	if caught = recover(); caught != nil {
+		if !Handle(caught, handlers...) {
+			panic(caught)
 		}
 	}
+	return
+}
+
+func Handle(obj interface{}, handlers ...Hanlder) bool {
+	if len(handlers) == 0 {
+		return true
+	}
+	for _, handler := range handlers {
+		if handler(obj) {
+			return true
+		}
+	}
+	return false
 }
 
 func PanicOn(err error) {

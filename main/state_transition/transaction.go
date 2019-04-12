@@ -7,12 +7,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 type TransactionExecution struct {
-	txId        conflict_tracking.TxId
+	txId        api.TxId
 	txHash      common.Hash
 	blockHash   common.Hash
 	tx          core.Message
@@ -22,10 +23,11 @@ type TransactionExecution struct {
 }
 
 type TransactionParams struct {
-	stateDB       *state.StateDB
-	conflicts     *conflict_tracking.ConflictDetector
-	gasPool       *core.GasPool
-	executionCtrl vm.ExecutionController
+	conflictAuthor conflict_tracking.Author
+	stateDB        *state.StateDB
+	conflicts      *conflict_tracking.ConflictDetector
+	gasPool        *core.GasPool
+	executionCtrl  vm.ExecutionController
 }
 
 type TransactionResult struct {
@@ -39,7 +41,8 @@ type TransactionResult struct {
 
 func (this *TransactionExecution) Run(params *TransactionParams) *TransactionResult {
 	params.stateDB.Prepare(this.txHash, this.blockHash, int(this.txId))
-	conflictTrackingDB := new(conflict_tracking.ConflictTrackingStateDB).Init(this.txId, params.stateDB, params.conflicts)
+	conflictTrackingDB := new(conflict_tracking.ConflictTrackingStateDB).
+		Init(params.conflictAuthor, params.stateDB, params.conflicts)
 	evmConfig := *this.evmConfig
 	evm := vm.NewEVMWithInterpreter(
 		*this.evmContext, conflictTrackingDB, this.chainConfig, evmConfig,

@@ -4,7 +4,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
 
@@ -13,16 +12,16 @@ const code = "code"
 const nonce = "nonce"
 
 // TODO "touch" https://github.com/ethereum/eips/issues/158
-// TODO move to StateDB
+// TODO move to lower levels e.g. state.StateDB
 type ConflictTrackingStateDB struct {
-	txId             TxId
+	author           Author
 	stateDB          *state.StateDB
 	conflictDetector *ConflictDetector
 }
 
 func (this *ConflictTrackingStateDB) Init(
-	txId TxId, commonDB *state.StateDB, conflicts *ConflictDetector) *ConflictTrackingStateDB {
-	this.txId = txId
+	author Author, commonDB *state.StateDB, conflicts *ConflictDetector) *ConflictTrackingStateDB {
+	this.author = author
 	this.stateDB = commonDB
 	this.conflictDetector = conflicts
 	return this
@@ -34,17 +33,17 @@ func (this *ConflictTrackingStateDB) CreateAccount(addr common.Address) {
 }
 
 func (this *ConflictTrackingStateDB) SubBalance(addr common.Address, value *big.Int) {
-	this.onAccountWrite(addr, balance)
+	//this.onAccountWrite(addr, balance)
 	this.stateDB.SubBalance(addr, value)
 }
 
 func (this *ConflictTrackingStateDB) AddBalance(addr common.Address, value *big.Int) {
-	this.onAccountWrite(addr, balance)
+	//this.onAccountWrite(addr, balance)
 	this.stateDB.AddBalance(addr, value)
 }
 
 func (this *ConflictTrackingStateDB) GetBalance(addr common.Address) *big.Int {
-	this.onAccountRead(addr, balance)
+	//this.onAccountRead(addr, balance)
 	return this.stateDB.GetBalance(addr)
 }
 
@@ -119,7 +118,8 @@ func (this *ConflictTrackingStateDB) SetState(addr common.Address, hash common.H
 }
 
 func (this *ConflictTrackingStateDB) AddLog(log *types.Log) {
-	util.Assert(TxId(log.TxIndex) == this.txId)
+	// even though logs go into the state, they never produce conflicts because they
+	// are scoped to the transaction id (hash)
 	this.stateDB.AddLog(log)
 }
 
@@ -136,11 +136,10 @@ func (this *ConflictTrackingStateDB) GetRefund() uint64 {
 }
 
 func (this *ConflictTrackingStateDB) RevertToSnapshot(pos int) {
-	// Do nothing, because this instance is not meant to be reused
+	this.stateDB.RevertToSnapshot(pos)
 }
 
 func (this *ConflictTrackingStateDB) Snapshot() int {
-	// This is not needed, but left for compatibility
 	return this.stateDB.Snapshot()
 }
 
@@ -151,13 +150,13 @@ func (this *ConflictTrackingStateDB) AddPreimage(hash common.Hash, val []byte) {
 func (this *ConflictTrackingStateDB) onAccountRead(address common.Address, keys ...string) {
 	accountKey := address.Hex()
 	this.conflictDetector.Submit(&Operation{
-		Author: this.txId,
+		Author: this.author,
 		Key:    accountKey,
 	})
 	if len(keys) > 0 && this.stateDB.Exist(address) {
 		for _, key := range keys {
 			this.conflictDetector.Submit(&Operation{
-				Author: this.txId,
+				Author: this.author,
 				Key:    accountKey + key,
 			})
 		}
@@ -170,14 +169,14 @@ func (this *ConflictTrackingStateDB) onAccountWrite(address common.Address, keys
 	if len(keys) == 0 || !this.stateDB.Exist(address) {
 		this.conflictDetector.Submit(&Operation{
 			IsWrite: true,
-			Author:  this.txId,
+			Author:  this.author,
 			Key:     accountKey,
 		})
 	}
 	for _, key := range keys {
 		this.conflictDetector.Submit(&Operation{
 			IsWrite: true,
-			Author:  this.txId,
+			Author:  this.author,
 			Key:     accountKey + key,
 		})
 	}

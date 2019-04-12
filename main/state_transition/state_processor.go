@@ -11,10 +11,10 @@ import (
 )
 
 func Run(config *api.RunConfiguration, externalApi *api.ExternalApi) (result api.Result, err error) {
-	defer util.Catch(func(caught error) {
+	defer util.Recover(util.CatchAnyErr(func(caught error) {
 		err = caught
 		result.Error = err
-	})
+	}))
 	ldbConfig := config.LDBConfig
 	ldbDatabase, ldbErr := ethdb.NewLDBDatabase(ldbConfig.File, ldbConfig.Cache, ldbConfig.Handles)
 	util.PanicOn(ldbErr)
