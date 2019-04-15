@@ -9,7 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
-	"github.com/Taraxa-project/taraxa-evm/main/conflict_tracking"
+	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/barrier"
 	"github.com/Taraxa-project/taraxa-evm/main/util/itr"
@@ -18,8 +18,8 @@ import (
 	"math/big"
 )
 
-var all_transactions conflict_tracking.Author = "ALL_TRANSACTIONS"
-var sequential_group conflict_tracking.Author = "SEQUENTIAL_GROUP"
+var all_transactions conflict_detector.Author = "ALL_TRANSACTIONS"
+var sequential_group conflict_detector.Author = "SEQUENTIAL_GROUP"
 
 type TaraxaEvm struct {
 	externalApi     *api.ExternalApi
@@ -33,10 +33,10 @@ func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err er
 	var errFatal util.ErrorBarrier
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
 	txCount := len(this.stateTransition.Transactions)
-	conflictDetector := new(conflict_tracking.ConflictDetector).Init(uint64(txCount * 60))
+	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
-	conflictDetector.Submit(&conflict_tracking.Operation{
+	conflictDetector.Submit(&conflict_detector.Operation{
 		IsWrite: true,
 		Author:  all_transactions,
 		Key:     this.stateTransition.Block.Coinbase.Hex(),
@@ -80,11 +80,16 @@ func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err er
 	parallelRoundDone.Await()
 	errFatal.CheckIn()
 	conflictingAuthors := conflictDetector.RequestShutdown().Reset()
-	conflictingAuthors.Each(func(index int, author conflict_tracking.Author) {
+	sequentialSet := treeset.NewWithIntComparator()
+	conflictingAuthors.Each(func(index int, author conflict_detector.Author) {
 		if author == all_transactions {
 			return
 		}
-		result.Sequential = append(result.Sequential, author.(api.TxId))
+		sequentialSet.Add(author)
+	})
+	result.Sequential = make([]api.TxId, sequentialSet.Size())
+	sequentialSet.Each(func(index int, value interface{}) {
+		result.Sequential[index] = value.(api.TxId)
 	})
 	return
 }
@@ -101,10 +106,10 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 	}
 	parallelTxCount := txCount - sequentialTx.Size()
 
-	conflictDetector := new(conflict_tracking.ConflictDetector).Init(uint64(txCount * 60))
+	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
-	conflictDetector.Submit(&conflict_tracking.Operation{
+	conflictDetector.Submit(&conflict_detector.Operation{
 		IsWrite: true,
 		Author:  all_transactions,
 		Key:     this.stateTransition.Block.Coinbase.Hex(),
@@ -260,8 +265,8 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 }
 
 func (this *TaraxaEvm) RunOne(
-	conflictAuthor conflict_tracking.Author,
-	conflictDetector *conflict_tracking.ConflictDetector,
+	conflictAuthor conflict_detector.Author,
+	conflictDetector *conflict_detector.ConflictDetector,
 	stateDB *state.StateDB,
 	txId api.TxId,
 	controller vm.ExecutionController,
@@ -307,8 +312,8 @@ func (this *TaraxaEvm) RunOne(
 
 // TODO separate class
 type RunParams struct {
-	conflictDetector           *conflict_tracking.ConflictDetector
-	conflictAuthor             conflict_tracking.Author
+	conflictDetector           *conflict_detector.ConflictDetector
+	conflictAuthor             conflict_detector.Author
 	txIds                      itr.IntIterator
 	executionControllerFactory func(api.TxId) vm.ExecutionController
 	onTxResult                 func(api.TxId, *TransactionResult) bool

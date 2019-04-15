@@ -1,0 +1,5 @@
+google-cloud-bigquery
+grpcio == 1.19.0
+ethereum-etl
+pyetherchain
+boto3

@@ -204,6 +204,10 @@ func (self *StateDB) GetBalance(addr common.Address) *big.Int {
 	return common.Big0
 }
 
+func (this *StateDB) HasBalance(address common.Address, amount *big.Int) bool {
+	return this.GetBalance(address).Cmp(amount) >= 0
+}
+
 func (self *StateDB) GetNonce(addr common.Address) uint64 {
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
@@ -338,6 +342,10 @@ func (self *StateDB) SetNonce(addr common.Address, nonce uint64) {
 	if stateObject != nil {
 		stateObject.SetNonce(nonce)
 	}
+}
+
+func (this *StateDB) AddNonce(addr common.Address, value uint64) {
+	this.SetNonce(addr, this.GetNonce(addr) + value)
 }
 
 func (self *StateDB) SetCode(addr common.Address, code []byte) {

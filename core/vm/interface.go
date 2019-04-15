@@ -30,9 +30,12 @@ type StateDB interface {
 	SubBalance(common.Address, *big.Int)
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
+	HasBalance(address common.Address, amount *big.Int) bool
 
 	GetNonce(common.Address) uint64
+	// TODO leftover from the original api
 	SetNonce(common.Address, uint64)
+	AddNonce(common.Address, uint64)
 
 	GetCodeHash(common.Address) common.Hash
 	GetCode(common.Address) []byte

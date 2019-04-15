@@ -1,7 +1,8 @@
-package conflict_tracking
+package conflict_detector
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/Taraxa-project/taraxa-evm/main/util/collections"
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
 )
@@ -22,9 +23,10 @@ type ConflictDetector struct {
 }
 
 type Operation struct {
-	Author  Author
-	IsWrite bool
-	Key     Key
+	Author            Author
+	IsWrite           bool
+	DontRaiseConflict bool
+	Key               Key
 }
 
 func (this *ConflictDetector) Init(inboxCapacity uint64) *ConflictDetector {
@@ -104,42 +106,36 @@ func (this *ConflictDetector) process(op *Operation) {
 		this.addConflictingAuthor(op.Author)
 		return
 	}
-	if op.IsWrite {
-		this.processWrite(op.Author, op.Key)
-	} else {
-		this.processRead(op.Author, op.Key)
-	}
-}
-
-func (this *ConflictDetector) processWrite(author Author, key Key) {
+	key, author, isWrite := op.Key, op.Author, op.IsWrite
 	reads := this.reads[key]
-	prevWriter, hasBeenWrite := this.writes[key]
-	writeConflict := hasBeenWrite && prevWriter != author
-	haveBeenReads := reads != nil && reads.Size() > 0
-	readConflict := haveBeenReads && !(reads.Size() == 1 && reads.Contains(author))
-	if (readConflict || writeConflict) {
-		this.keysInConflict.Add(key)
-		this.addConflictingAuthor(author)
-		if writeConflict {
-			this.addConflictingAuthor(prevWriter)
+	haveBeenReads := !collections.IsEmpty(reads)
+	if !op.DontRaiseConflict {
+		prevWriter, hasBeenWrite := this.writes[key]
+		conflictFound := hasBeenWrite && prevWriter != author ||
+			isWrite && haveBeenReads && !collections.ContainsExactly(reads, author)
+		if conflictFound {
+			this.keysInConflict.Add(key)
+			this.addConflictingAuthor(author)
+			if hasBeenWrite {
+				this.addConflictingAuthor(prevWriter)
+				delete(this.writes, key)
+			}
+			if haveBeenReads {
+				reads.Each(func(index int, reader Author) {
+					this.addConflictingAuthor(reader)
+				})
+				delete(this.reads, key)
+			}
+			return
 		}
-		if haveBeenReads {
-			reads.Each(func(index int, value Author) {
-				this.addConflictingAuthor(value)
-			})
-		}
-		delete(this.writes, key)
-		delete(this.reads, key)
-	} else if !hasBeenWrite {
+	}
+	if isWrite {
 		this.writes[key] = author
+	} else {
+		if !haveBeenReads {
+			reads = linkedhashset.New()
+			this.reads[key] = reads
+		}
+		reads.Add(author)
 	}
-}
-
-func (this *ConflictDetector) processRead(author Author, key Key) {
-	reads := this.reads[key]
-	if reads == nil {
-		reads = linkedhashset.New()
-		this.reads[key] = reads
-	}
-	reads.Add(author)
 }
