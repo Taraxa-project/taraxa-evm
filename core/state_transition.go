@@ -128,8 +128,10 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).TransitionDb()
+func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (ret []byte, gasUsed uint64, isVmErr bool, err error) {
+	ret, gasUsed, vmErr, err := NewStateTransition(evm, msg, gp).TransitionDb()
+	isVmErr = vmErr != nil
+	return
 }
 
 // to returns the recipient of the message.
@@ -152,7 +154,7 @@ func (st *StateTransition) useGas(amount uint64) error {
 func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
 	// TODO post-check
-	if st.state.HasBalance(mgval) < 0 {
+	if !st.state.HasBalance(st.msg.From(), mgval) {
 		return errInsufficientBalanceForGas
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
@@ -165,19 +167,24 @@ func (st *StateTransition) buyGas() error {
 	return nil
 }
 
-func (this *StateTransition) checkNonce() error {
-	if this.msg.CheckNonce() {
-		nonce := this.state.GetNonce(st.msg.From())
-		if nonce < this.msg.Nonce() {
+func (st *StateTransition) preCheck() error {
+	// Make sure this transaction's nonce is correct.
+	if st.msg.CheckNonce() {
+		nonce := st.state.GetNonce(st.msg.From())
+		if nonce < st.msg.Nonce() {
 			return ErrNonceTooHigh
-		} else if nonce > this.msg.Nonce() {
+		} else if nonce > st.msg.Nonce() {
 			return ErrNonceTooLow
 		}
 	}
+	return st.buyGas()
 }
 
-func (st *StateTransition) TransitionDbTaraxa() (ret []byte, usedGas uint64, vmerr error, consensusErr error) {
-	if consensusErr = st.buyGas(); consensusErr != nil {
+// TransitionDb will transition the state by applying the current message and
+// returning the result including the used gas. It returns an error if failed.
+// An error indicates a consensus issue.
+func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr error, consensusErr error) {
+	if consensusErr = st.preCheck(); consensusErr != nil {
 		return
 	}
 	msg := st.msg
@@ -210,30 +217,8 @@ func (st *StateTransition) TransitionDbTaraxa() (ret []byte, usedGas uint64, vme
 		}
 	}
 	st.refundGas()
-	return ret, st.gasUsed(), vmerr, consensusErr
-}
-
-// TransitionDb will transition the state by applying the current message and
-// returning the result including the used gas. It returns an error if failed.
-// An error indicates a consensus issue.
-func (this *StateTransition) TransitionDb() (ret []byte, usedGas uint64, contractFailure bool, consensusErr error) {
-	// Make sure this transaction's nonce is correct.
-	consensusErr = this.checkNonce()
-	if consensusErr != nil {
-		return
-	}
-	var vmErr error
-	ret, usedGas, vmErr, consensusErr = this.TransitionDbTaraxa()
-	this.applyBlockGasReward(usedGas)
-	// vm errors do not effect consensus and are therefor
-	// not assigned to consensusErr, except for insufficient balance
-	// error.
-	contractFailure = vmErr != nil
-	return
-}
-
-func (this *StateTransition) applyBlockGasReward(gasAmount uint64) {
-	this.state.AddBalance(this.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(gasAmount), this.gasPrice))
+	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	return ret, st.gasUsed(), vmerr, nil
 }
 
 func (st *StateTransition) refundGas() {

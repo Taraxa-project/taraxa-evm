@@ -36,11 +36,6 @@ func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err er
 	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
-	conflictDetector.Submit(&conflict_detector.Operation{
-		IsWrite: true,
-		Author:  all_transactions,
-		Key:     this.stateTransition.Block.Coinbase.Hex(),
-	})
 	parallelRoundDone := barrier.New(txCount)
 	for txId := 0; txId < txCount; txId++ {
 		txId := txId
@@ -97,7 +92,6 @@ func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err er
 func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret api.StateTransitionResult, err error) {
 	var errFatal util.ErrorBarrier
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
-
 	txCount := len(this.stateTransition.Transactions)
 	// TODO non sync
 	sequentialTx := treeset.NewWithIntComparator()
@@ -105,15 +99,9 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		sequentialTx.Add(txId)
 	}
 	parallelTxCount := txCount - sequentialTx.Size()
-
 	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
-	conflictDetector.Submit(&conflict_detector.Operation{
-		IsWrite: true,
-		Author:  all_transactions,
-		Key:     this.stateTransition.Block.Coinbase.Hex(),
-	})
 
 	intermediateStateDbChan := make(chan *state.StateDB, parallelTxCount+1)
 	finalStateDbChan := make(chan *state.StateDB, 1)
@@ -217,7 +205,6 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 	}()
 
 	gasPool := new(core.GasPool).AddGas(this.stateTransition.Block.GasLimit)
-	beneficiaryReward := big.NewInt(0)
 	for txId := 0; txId < txCount; txId++ {
 		txResult := <-resultChans[txId]
 		errFatal.CheckIn()
@@ -225,9 +212,6 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		gasLimitReachedErr := gasPool.SubGas(txData.GasLimit)
 		errFatal.CheckIn(gasLimitReachedErr)
 		gasPool.AddGas(txData.GasLimit - txResult.gasUsed)
-
-		gasFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.gasUsed), api.BigInt(txData.GasPrice))
-		beneficiaryReward.Add(beneficiaryReward, gasFee)
 
 		ret.UsedGas += txResult.gasUsed
 		ethReceipt := types.NewReceipt(nil, txResult.contractErr != nil, ret.UsedGas)
@@ -249,7 +233,6 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 	finalStateDb := <-finalStateDbChan
 	errFatal.CheckIn()
 
-	finalStateDb.AddBalance(this.stateTransition.Block.Coinbase, beneficiaryReward)
 	finalRoot, commitErr := finalStateDb.Commit(true)
 	errFatal.CheckIn(commitErr)
 
@@ -284,7 +267,7 @@ func (this *TaraxaEvm) RunOne(
 		tx: types.NewMessage(
 			txData.From, txData.To, txData.Nonce, api.BigInt(txData.Amount),
 			txData.GasLimit, gasPrice, *txData.Data,
-			true,
+			false,
 		),
 		evmContext: &vm.Context{
 			CanTransfer: core.CanTransfer,

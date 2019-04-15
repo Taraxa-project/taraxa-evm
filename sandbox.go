@@ -2,14 +2,14 @@ package main
 
 import "fmt"
 
-func main()  {
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Println(e)
-			panic("bar")
-		}
-	}()
-	defer fmt.Println("baz")
+type s struct {
+	i uint64
+	v *uint64
+}
 
-	panic("foo")
+func main()  {
+
+	m := make(map[string]s)
+	v := m["foo"]
+	fmt.Println(v)
 }

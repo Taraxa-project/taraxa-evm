@@ -53,7 +53,7 @@ func (this *TransactionExecution) Run(params *TransactionParams) *TransactionRes
 	)
 	st := core.NewStateTransition(evm, this.tx, params.gasPool)
 	result := new(TransactionResult)
-	result.value, result.gasUsed, result.contractErr, result.consensusErr = st.TransitionDbTaraxa()
+	result.value, result.gasUsed, result.contractErr, result.consensusErr = st.TransitionDb()
 	result.dbErr = params.stateDB.Error()
 	result.logs = params.stateDB.GetLogs(this.txHash)
 	return result
