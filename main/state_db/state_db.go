@@ -16,17 +16,15 @@ const nonce = "nonce"
 // TODO "touch" https://github.com/ethereum/eips/issues/158
 // TODO move to lower levels e.g. state.StateDB
 type TaraxaStateDB struct {
-	author           conflict_detector.Author
-	conflictDetector *conflict_detector.ConflictDetector
-	stateDB          *state.StateDB
-	balanceDeltas    map[common.Address]*big.Int
-	nonceDeltas      map[common.Address]uint64
+	conflictLogger conflict_detector.Logger
+	stateDB        *state.StateDB
+	balanceDeltas  map[common.Address]*big.Int
+	nonceDeltas    map[common.Address]uint64
 }
 
-func (this *TaraxaStateDB) Init(author conflict_detector.Author, commonDB *state.StateDB, conflicts *conflict_detector.ConflictDetector) *TaraxaStateDB {
-	this.author = author
+func (this *TaraxaStateDB) Init(commonDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
 	this.stateDB = commonDB
-	this.conflictDetector = conflicts
+	this.conflictLogger = conflictLogger
 	this.balanceDeltas = make(map[common.Address]*big.Int)
 	this.nonceDeltas = make(map[common.Address]uint64)
 	return this
@@ -175,16 +173,10 @@ func (this *TaraxaStateDB) AddPreimage(hash common.Hash, val []byte) {
 
 func (this *TaraxaStateDB) onAccountRead(address common.Address, keys ...string) {
 	accountKey := address.Hex()
-	this.conflictDetector.Submit(&conflict_detector.Operation{
-		Author: this.author,
-		Key:    accountKey,
-	})
+	this.conflictLogger(conflict_detector.GET, accountKey)
 	if len(keys) > 0 && this.stateDB.Exist(address) {
 		for _, key := range keys {
-			this.conflictDetector.Submit(&conflict_detector.Operation{
-				Author: this.author,
-				Key:    accountKey + key,
-			})
+			this.conflictLogger(conflict_detector.GET, accountKey+key)
 		}
 	}
 }
@@ -193,17 +185,9 @@ func (this *TaraxaStateDB) onAccountWrite(address common.Address, keys ...string
 	accountKey := address.Hex()
 	this.onAccountRead(address)
 	if len(keys) == 0 || !this.stateDB.Exist(address) {
-		this.conflictDetector.Submit(&conflict_detector.Operation{
-			IsWrite: true,
-			Author:  this.author,
-			Key:     accountKey,
-		})
+		this.conflictLogger(conflict_detector.SET, accountKey)
 	}
 	for _, key := range keys {
-		this.conflictDetector.Submit(&conflict_detector.Operation{
-			IsWrite: true,
-			Author:  this.author,
-			Key:     accountKey + key,
-		})
+		this.conflictLogger(conflict_detector.SET, accountKey+key)
 	}
 }

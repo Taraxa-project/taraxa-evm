@@ -3,13 +3,11 @@ package main
 import "fmt"
 
 type s struct {
-	i uint64
-	v *uint64
+	m map[string]int
 }
 
-func main()  {
-
-	m := make(map[string]s)
-	v := m["foo"]
-	fmt.Println(v)
+func main() {
+	var m = make(map[string]int, 3)
+	m["ff"] = 1
+	fmt.Println(m["ff"])
 }
