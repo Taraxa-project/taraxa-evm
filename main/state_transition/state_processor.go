@@ -21,7 +21,7 @@ func Run(config *api.RunConfiguration, externalApi *api.ExternalApi) (result api
 	defer ldbDatabase.Close()
 
 	taraxaEvm := TaraxaEvm{
-		db:              state.NewDatabase(ldbDatabase),
+		readDB:          state.NewDatabase(ldbDatabase),
 		stateTransition: &config.StateTransition,
 		externalApi:     externalApi,
 		evmConfig:       new(vm.Config),

@@ -118,7 +118,7 @@ contract SingleVariable {
 	util.PanicOn(err)
 
 	AssertContainsExactly(t, result2.ConcurrentSchedule.Sequential, 1, 2)
-	assert.Equal(t, result2.Receipts[2].ReturnValue, hexutil.Bytes(common.BigToHash(someValue).Bytes()))
+	assert.Equal(t, hexutil.Bytes(common.BigToHash(someValue).Bytes()), result2.Receipts[2].ReturnValue)
 
 	result3, err := Run(&api.RunConfiguration{
 		LDBConfig: &ldbConfig,

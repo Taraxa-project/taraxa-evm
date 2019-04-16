@@ -10,6 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
+	"github.com/Taraxa-project/taraxa-evm/main/state_db"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/barrier"
 	"github.com/Taraxa-project/taraxa-evm/main/util/itr"
@@ -26,7 +27,7 @@ type TaraxaEvm struct {
 	chainConfig     *params.ChainConfig
 	evmConfig       *vm.Config
 	stateTransition *api.StateTransition
-	db              state.Database
+	readDB          state.Database
 }
 
 func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err error) {
@@ -109,7 +110,7 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		defer util.Recover(errFatal.Catch(func(err error) {
 			close(finalStateDbChan)
 		}))
-		diskDb := this.db.TrieDB().DiskDB().(ethdb.Database)
+		diskDb := this.readDB.TrieDB().DiskDB().(ethdb.Database)
 		commitDb := state.NewDatabase(diskDb)
 		currentRoot := this.stateTransition.StateRoot
 		var currentStateDB *state.StateDB
@@ -204,11 +205,18 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		})
 	}()
 
+	transientStateDB, stateDbCreateErr := state.New(this.stateTransition.StateRoot, this.readDB)
+	errFatal.CheckIn(stateDbCreateErr)
 	gasPool := new(core.GasPool).AddGas(this.stateTransition.Block.GasLimit)
 	for txId := 0; txId < txCount; txId++ {
 		txResult := <-resultChans[txId]
 		errFatal.CheckIn()
+
 		txData := this.stateTransition.Transactions[txId]
+
+		nonceErr := core.CheckNonce(transientStateDB, txData.From, txData.Nonce)
+		errFatal.CheckIn(nonceErr)
+
 		gasLimitReachedErr := gasPool.SubGas(txData.GasLimit)
 		errFatal.CheckIn(gasLimitReachedErr)
 		gasPool.AddGas(txData.GasLimit - txResult.gasUsed)
@@ -228,7 +236,21 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 			EthereumReceipt: ethReceipt,
 		})
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
+		for account, balanceDelta := range txResult.transientState.BalanceDeltas {
+			if balanceDelta.Sign() != 0 {
+				transientStateDB.AddBalance(account, balanceDelta)
+				if transientStateDB.GetBalance(account).Sign() < 0 {
+					// TODO record and replay validation events
+					errFatal.CheckIn(vm.ErrInsufficientBalance)
+				}
+			}
+		}
+		for account, nonceDelta := range txResult.transientState.NonceDeltas {
+			transientStateDB.AddNonce(account, nonceDelta)
+		}
 	}
+	// TODO
+	//intermediateStateDbChan <- transientStateDB
 
 	finalStateDb := <-finalStateDbChan
 	errFatal.CheckIn()
@@ -248,9 +270,7 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 }
 
 func (this *TaraxaEvm) RunOne(
-	conflictAuthor conflict_detector.Author,
-	conflictDetector *conflict_detector.ConflictDetector,
-	stateDB *state.StateDB,
+	taraxaDB *state_db.TaraxaStateDB,
 	txId api.TxId,
 	controller vm.ExecutionController,
 ) (
@@ -285,11 +305,9 @@ func (this *TaraxaEvm) RunOne(
 		evmConfig:   this.evmConfig,
 	}
 	return txExecution.Run(&TransactionParams{
-		stateDB:        stateDB,
-		conflictAuthor: conflictAuthor,
-		conflicts:      conflictDetector,
-		gasPool:        gasPool,
-		executionCtrl:  controller,
+		taraxaDb:      taraxaDB,
+		gasPool:       gasPool,
+		executionCtrl: controller,
 	})
 }
 
@@ -304,11 +322,12 @@ type RunParams struct {
 }
 
 func (this *TaraxaEvm) runTransactions(args *RunParams) {
-	stateDB, stateDbCreateErr := state.New(this.stateTransition.StateRoot, this.db)
+	stateDB, stateDbCreateErr := state.New(this.stateTransition.StateRoot, this.readDB)
 	defer args.onDone(stateDB, stateDbCreateErr)
 	if (stateDbCreateErr != nil) {
 		return
 	}
+	taraxaDb := state_db.NewDB(stateDB, args.conflictDetector.NewLogger(args.conflictAuthor))
 	if args.executionControllerFactory == nil {
 		args.executionControllerFactory = func(id api.TxId) vm.ExecutionController {
 			return nil
@@ -316,7 +335,7 @@ func (this *TaraxaEvm) runTransactions(args *RunParams) {
 	}
 	if (stateDbCreateErr == nil) {
 		for txId, done := args.txIds(); !done; txId, done = args.txIds() {
-			result := this.RunOne(args.conflictAuthor, args.conflictDetector, stateDB, txId, args.executionControllerFactory(txId))
+			result := this.RunOne(taraxaDb, txId, args.executionControllerFactory(txId))
 			if !args.onTxResult(txId, result) {
 				break
 			}

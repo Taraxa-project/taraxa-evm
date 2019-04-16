@@ -12,7 +12,7 @@ const (
 	SET
 	ADD            //commutative
 	// TODO consider operands of the operators
-	INITIALIZE_DEFAULT  //idempotent
+	DEFAULT_INITIALIZE  //idempotent
 	OperationType_count uint = iota
 )
 
@@ -28,9 +28,9 @@ var conflictRelations = func() conflictRelationsMap {
 	inConflict(GET, ADD)
 	inConflict(SET, SET)
 	inConflict(SET, ADD)
-	inConflict(INITIALIZE_DEFAULT, GET)
-	inConflict(INITIALIZE_DEFAULT, ADD)
-	inConflict(INITIALIZE_DEFAULT, SET)
+	inConflict(DEFAULT_INITIALIZE, GET)
+	inConflict(DEFAULT_INITIALIZE, ADD)
+	inConflict(DEFAULT_INITIALIZE, SET)
 	return ret
 }()
 

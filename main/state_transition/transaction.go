@@ -4,11 +4,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
-	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/state_db"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
@@ -24,29 +22,26 @@ type TransactionExecution struct {
 }
 
 type TransactionParams struct {
-	conflictAuthor conflict_detector.Author
-	stateDB        *state.StateDB
-	conflicts      *conflict_detector.ConflictDetector
-	gasPool        *core.GasPool
-	executionCtrl  vm.ExecutionController
+	taraxaDb      *state_db.TaraxaStateDB
+	gasPool       *core.GasPool
+	executionCtrl vm.ExecutionController
 }
 
 type TransactionResult struct {
-	value        hexutil.Bytes
-	gasUsed      uint64
-	logs         []*types.Log
-	contractErr  error
-	consensusErr error
-	dbErr        error
+	value          hexutil.Bytes
+	gasUsed        uint64
+	logs           []*types.Log
+	transientState *state_db.TransientState
+	contractErr    error
+	consensusErr   error
+	dbErr          error
 }
 
 func (this *TransactionExecution) Run(params *TransactionParams) *TransactionResult {
-	params.stateDB.Prepare(this.txHash, this.blockHash, this.txId)
-	conflictLogger := params.conflicts.NewLogger(params.conflictAuthor)
-	conflictTrackingDB := new(state_db.TaraxaStateDB).Init(params.stateDB, conflictLogger)
+	params.taraxaDb.Prepare(this.txHash, this.blockHash, this.txId)
 	evmConfig := *this.evmConfig
 	evm := vm.NewEVMWithInterpreter(
-		*this.evmContext, conflictTrackingDB, this.chainConfig, evmConfig,
+		*this.evmContext, params.taraxaDb, this.chainConfig, evmConfig,
 		func(evm *vm.EVM) vm.Interpreter {
 			return vm.NewEVMInterpreterWithExecutionController(evm, evmConfig, params.executionCtrl)
 		},
@@ -54,7 +49,8 @@ func (this *TransactionExecution) Run(params *TransactionParams) *TransactionRes
 	st := core.NewStateTransition(evm, this.tx, params.gasPool)
 	result := new(TransactionResult)
 	result.value, result.gasUsed, result.contractErr, result.consensusErr = st.TransitionDb()
-	result.dbErr = params.stateDB.Error()
-	result.logs = params.stateDB.GetLogs(this.txHash)
+	result.dbErr = params.taraxaDb.Error()
+	result.logs = params.taraxaDb.GetLogs(this.txHash)
+	result.transientState = params.taraxaDb.TransientState.Clone()
 	return result
 }
