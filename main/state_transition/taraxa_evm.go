@@ -33,7 +33,7 @@ func (this *TaraxaEvm) generateSchedule() (result api.ConcurrentSchedule, err er
 	var errFatal util.ErrorBarrier
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
 	txCount := len(this.stateTransition.Transactions)
-	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
+	conflictDetector := new(conflict_detector.ConflictDetector).Init(txCount * 60)
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
 	parallelRoundDone := barrier.New(txCount)
@@ -99,7 +99,7 @@ func (this *TaraxaEvm) transitionState(schedule *api.ConcurrentSchedule) (ret ap
 		sequentialTx.Add(txId)
 	}
 	parallelTxCount := txCount - sequentialTx.Size()
-	conflictDetector := new(conflict_detector.ConflictDetector).Init(uint64(txCount * 60))
+	conflictDetector := new(conflict_detector.ConflictDetector).Init(txCount * 60)
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
 

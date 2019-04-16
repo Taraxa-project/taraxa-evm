@@ -5,19 +5,22 @@ import (
 	"sync"
 )
 
-type operationType int
+type OperationType int
 
 const (
-	GET operationType = iota
+	GET OperationType = iota
 	SET
-	ADD
+	ADD            //commutative
+	// TODO consider operands of the operators
+	INITIALIZE_DEFAULT  //idempotent
+	OperationType_count uint = iota
 )
 
-type conflictRelationsMap = map[operationType][]operationType
+type conflictRelationsMap = map[OperationType][]OperationType
 
 var conflictRelations = func() conflictRelationsMap {
 	ret := make(conflictRelationsMap)
-	inConflict := func(left, right operationType) {
+	inConflict := func(left, right OperationType) {
 		ret[left] = append(ret[left], right)
 		ret[right] = append(ret[right], left)
 	}
@@ -25,6 +28,9 @@ var conflictRelations = func() conflictRelationsMap {
 	inConflict(GET, ADD)
 	inConflict(SET, SET)
 	inConflict(SET, ADD)
+	inConflict(INITIALIZE_DEFAULT, GET)
+	inConflict(INITIALIZE_DEFAULT, ADD)
+	inConflict(INITIALIZE_DEFAULT, SET)
 	return ret
 }()
 
@@ -32,16 +38,15 @@ type Author = interface{} // equals/hashcode required
 type Authors = *linkedhashset.Set
 type Key = string // equals/hashcode required
 type Keys = *linkedhashset.Set
+type Logger func(OperationType, Key)
 
 type operation struct {
 	Author Author
-	Type   operationType
+	Type   OperationType
 	Key    Key
 }
 
-type ops = map[operationType]map[Key]Authors
-
-type Logger func(operationType, Key)
+type ops = []map[Key]Authors
 
 type ConflictDetector struct {
 	inbox             chan *operation
@@ -52,9 +57,9 @@ type ConflictDetector struct {
 	executionMutex    sync.Mutex
 }
 
-func (this *ConflictDetector) Init(inboxCapacity uint64) *ConflictDetector {
-	this.ops = make(ops)
-	for opType := GET; opType <= ADD; opType++ {
+func (this *ConflictDetector) Init(inboxCapacity int) *ConflictDetector {
+	this.ops = make(ops, OperationType_count)
+	for opType := range this.ops {
 		this.ops[opType] = make(map[Key]Authors)
 	}
 	this.inbox = make(chan *operation, inboxCapacity)
@@ -88,9 +93,10 @@ func (this *ConflictDetector) Join() *ConflictDetector {
 	return this
 }
 
-func (this *ConflictDetector) GetLogger(author Author) Logger {
-	cache := make(map[operationType]Keys)
-	return func(t operationType, k Key) {
+// The returned logger is not thread safe
+func (this *ConflictDetector) NewLogger(author Author) Logger {
+	cache := make(map[OperationType]Keys)
+	return func(t OperationType, k Key) {
 		cachedKeys := cache[t]
 		if cachedKeys == nil {
 			cachedKeys = linkedhashset.New()
@@ -98,12 +104,12 @@ func (this *ConflictDetector) GetLogger(author Author) Logger {
 		} else if cachedKeys.Contains(k) {
 			return
 		}
-		cachedKeys.Add(k)
 		this.inbox <- &operation{
 			Author: author,
 			Key:    k,
 			Type:   t,
 		}
+		cachedKeys.Add(k)
 	}
 }
 
@@ -164,13 +170,13 @@ func (this *ConflictDetector) process(op *operation) {
 			})
 			delete(opsByKey, op.Key)
 		}
-		return
+	} else {
+		opsByKey := this.ops[op.Type]
+		authors := opsByKey[op.Key]
+		if authors == nil {
+			authors = linkedhashset.New()
+			opsByKey[op.Key] = authors
+		}
+		authors.Add(op.Author)
 	}
-	opsByKey := this.ops[op.Type]
-	authors := opsByKey[op.Key]
-	if authors == nil {
-		authors = linkedhashset.New()
-		opsByKey[op.Key] = authors
-	}
-	authors.Add(op.Author)
 }

@@ -2,12 +2,15 @@ package main
 
 import "fmt"
 
-type s struct {
-	m map[string]int
-}
+type OperationType int
 
+const (
+	GET OperationType = iota
+	SET
+	ADD
+	OperationType_count uint = iota
+)
 func main() {
-	var m = make(map[string]int, 3)
-	m["ff"] = 1
-	fmt.Println(m["ff"])
+	a := make([]int, OperationType_count)
+	fmt.Println(a[3])
 }

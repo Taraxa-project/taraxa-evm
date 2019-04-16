@@ -13,8 +13,6 @@ const balance = "balance"
 const code = "code"
 const nonce = "nonce"
 
-// TODO "touch" https://github.com/ethereum/eips/issues/158
-// TODO move to lower levels e.g. state.StateDB
 type TaraxaStateDB struct {
 	conflictLogger conflict_detector.Logger
 	stateDB        *state.StateDB
@@ -31,26 +29,40 @@ func (this *TaraxaStateDB) Init(commonDB *state.StateDB, conflictLogger conflict
 }
 
 func (this *TaraxaStateDB) CreateAccount(addr common.Address) {
-	this.onAccountWrite(addr)
+	preexisting := this.stateDB.Exist(addr)
+	this.onCreateOrDeleteAccount(addr)
+	if preexisting {
+		this.conflictLogger(conflict_detector.SET, accountCompositeKey(addr, balance))
+	}
 	this.stateDB.CreateAccount(addr)
 }
 
 func (this *TaraxaStateDB) SubBalance(addr common.Address, value *big.Int) {
-	//this.onAccountWrite(addr, balance)
-	this.AddBalance(addr, new(big.Int).Neg(value))
+	this.addBalance(addr, new(big.Int).Neg(value))
 }
 
 func (this *TaraxaStateDB) AddBalance(addr common.Address, value *big.Int) {
+	this.addBalance(addr, value)
+	if value.Sign() == 0 {
+		this.onAccountEmptyCheck(addr)
+	}
+}
+
+func (this *TaraxaStateDB) addBalance(addr common.Address, value *big.Int) {
+	this.onGetOrCreateAccount(addr)
+	if value.Sign() == 0 {
+		return
+	}
+	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
 	prev := this.balanceDeltas[addr]
 	if prev == nil {
 		prev = common.Big0
 	}
 	this.balanceDeltas[addr] = util.Sum(prev, value)
-	//this.stateDB.AddBalance(addr, value)
 }
 
 func (this *TaraxaStateDB) GetBalance(addr common.Address) *big.Int {
-	//this.onAccountRead(addr, balance)
+	this.onAccountRead(addr, balance)
 	delta := this.balanceDeltas[addr]
 	if delta == nil {
 		delta = common.Big0
@@ -64,21 +76,21 @@ func (this *TaraxaStateDB) HasBalance(address common.Address, amount *big.Int) b
 }
 
 func (this *TaraxaStateDB) GetNonce(addr common.Address) uint64 {
-	//this.onAccountRead(addr, nonce)
+	this.onAccountRead(addr, nonce)
 	delta := this.nonceDeltas[addr]
 	baseNonce := this.stateDB.GetNonce(addr)
 	return baseNonce + delta
 }
 
+// legacy
 func (this *TaraxaStateDB) SetNonce(addr common.Address, value uint64) {
-	this.onAccountWrite(addr, nonce)
-	this.stateDB.SetNonce(addr, value)
+	panic("not expected to be called")
 }
 
 func (this *TaraxaStateDB) AddNonce(addr common.Address, val uint64) {
-	prev := this.nonceDeltas[addr]
-	this.nonceDeltas[addr] = prev + val
-	//this.stateDB.AddNonce(addr, val)
+	this.onGetOrCreateAccount(addr)
+	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
+	this.nonceDeltas[addr] = this.nonceDeltas[addr] + val
 }
 
 func (this *TaraxaStateDB) SetCode(addr common.Address, val []byte) {
@@ -102,27 +114,29 @@ func (this *TaraxaStateDB) GetCodeSize(addr common.Address) int {
 }
 
 func (this *TaraxaStateDB) Suicide(addr common.Address) bool {
-	this.onAccountRead(addr)
+	this.onGetAccount(addr)
 	hasSuicided := this.stateDB.Suicide(addr)
 	if hasSuicided {
-		// read write
-		this.onAccountWrite(addr, balance)
+		this.onCreateOrDeleteAccount(addr)
 	}
 	return hasSuicided
 }
 
 func (this *TaraxaStateDB) HasSuicided(addr common.Address) bool {
-	this.onAccountRead(addr)
+	this.onGetAccount(addr)
 	return this.stateDB.HasSuicided(addr)
 }
 
 func (this *TaraxaStateDB) Exist(addr common.Address) bool {
-	this.onAccountRead(addr)
+	this.onGetAccount(addr)
 	return this.stateDB.Exist(addr)
 }
 
 func (this *TaraxaStateDB) Empty(addr common.Address) bool {
-	this.onAccountRead(addr, nonce, balance, code)
+	this.onGetAccount(addr)
+	if this.stateDB.Exist(addr) {
+		this.onAccountEmptyCheck(addr)
+	}
 	return this.stateDB.Empty(addr)
 }
 
@@ -171,23 +185,40 @@ func (this *TaraxaStateDB) AddPreimage(hash common.Hash, val []byte) {
 	this.stateDB.AddPreimage(hash, val)
 }
 
-func (this *TaraxaStateDB) onAccountRead(address common.Address, keys ...string) {
-	accountKey := address.Hex()
-	this.conflictLogger(conflict_detector.GET, accountKey)
-	if len(keys) > 0 && this.stateDB.Exist(address) {
-		for _, key := range keys {
-			this.conflictLogger(conflict_detector.GET, accountKey+key)
-		}
+func (this *TaraxaStateDB) onGetAccount(addr common.Address) {
+	this.conflictLogger(conflict_detector.GET, accountKey(addr))
+}
+
+func (this *TaraxaStateDB) onCreateOrDeleteAccount(addr common.Address) {
+	this.conflictLogger(conflict_detector.SET, accountKey(addr))
+}
+
+func (this *TaraxaStateDB) onGetOrCreateAccount(addr common.Address) {
+	this.conflictLogger(conflict_detector.INITIALIZE_DEFAULT, accountKey(addr))
+}
+
+func (this *TaraxaStateDB) onAccountRead(addr common.Address, key string) {
+	this.onGetAccount(addr)
+	if this.stateDB.Exist(addr) {
+		this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, key))
 	}
 }
 
-func (this *TaraxaStateDB) onAccountWrite(address common.Address, keys ...string) {
-	accountKey := address.Hex()
-	this.onAccountRead(address)
-	if len(keys) == 0 || !this.stateDB.Exist(address) {
-		this.conflictLogger(conflict_detector.SET, accountKey)
-	}
-	for _, key := range keys {
-		this.conflictLogger(conflict_detector.SET, accountKey+key)
-	}
+func (this *TaraxaStateDB) onAccountWrite(address common.Address, key string) {
+	this.onGetOrCreateAccount(address)
+	this.conflictLogger(conflict_detector.SET, accountCompositeKey(address, key))
+}
+
+func (this *TaraxaStateDB) onAccountEmptyCheck(addr common.Address)  {
+	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, balance))
+	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, nonce))
+	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, code))
+}
+
+func accountKey(address common.Address) string {
+	return address.Hex()
+}
+
+func accountCompositeKey(address common.Address, subKey string) string {
+	return accountKey(address) + subKey
 }

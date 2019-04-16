@@ -41,8 +41,8 @@ type TransactionResult struct {
 }
 
 func (this *TransactionExecution) Run(params *TransactionParams) *TransactionResult {
-	params.stateDB.Prepare(this.txHash, this.blockHash, int(this.txId))
-	conflictLogger := params.conflicts.GetLogger(params.conflictAuthor)
+	params.stateDB.Prepare(this.txHash, this.blockHash, this.txId)
+	conflictLogger := params.conflicts.NewLogger(params.conflictAuthor)
 	conflictTrackingDB := new(state_db.TaraxaStateDB).Init(params.stateDB, conflictLogger)
 	evmConfig := *this.evmConfig
 	evm := vm.NewEVMWithInterpreter(
