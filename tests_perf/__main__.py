@@ -13,6 +13,7 @@ etl_dir = this_dir.joinpath('ethereum_etl')
 sys.path.append(str(this_dir))
 
 
+# pull blocks via ethereum-etl
 def export(start_block, end_block, batch_size, worker_count):
     ethereum_etl("export_blocks_and_transactions "
                  f"--start-block {start_block} --end-block {end_block} "
@@ -29,6 +30,7 @@ last = 7519165
 export(last - 100, last, batch, cpu_count())
 
 
+# pull blocks from bigquery
 from google.cloud import bigquery
 
 bq = bigquery.Client.from_service_account_json(this_dir.joinpath("taraxa-perf-test-creds.json"))
