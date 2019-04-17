@@ -19,13 +19,11 @@ type TaraxaStateDB struct {
 	*TransientState
 }
 
-func NewDB(commonDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
+func NewDB(stateDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
 	this := new(TaraxaStateDB)
-	this.stateDB = commonDB
+	this.stateDB = stateDB
 	this.TransientState = NewTransientState()
 	this.conflictLogger = conflictLogger
-	this.BalanceDeltas = make(map[common.Address]*big.Int)
-	this.NonceDeltas = make(map[common.Address]uint64)
 	return this
 }
 

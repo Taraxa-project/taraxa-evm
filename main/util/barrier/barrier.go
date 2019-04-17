@@ -1,25 +1,25 @@
 package barrier
 
+import (
+	"sync/atomic"
+)
+
 type Barrier struct {
-	queue chan interface{}
+	count int32
 }
 
-// TODO wider capacity type
 func New(capacity int) Barrier {
 	return Barrier{
-		queue: make(chan interface{}, capacity),
+		count: int32(capacity),
 	}
 }
 
 func (this *Barrier) CheckIn() {
-	this.queue <- nil
+	atomic.AddInt32(&this.count, -1)
 }
 
-func (this *Barrier) Await(onCheckIn ...func(int)) {
-	for i := 0; i < cap(this.queue); i++ {
-		<-this.queue
-		for _, cb := range onCheckIn {
-			cb(i)
-		}
+func (this *Barrier) Await() {
+	for atomic.LoadInt32(&this.count) > 0 {
+
 	}
 }

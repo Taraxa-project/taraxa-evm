@@ -28,6 +28,7 @@ type TransactionParams struct {
 }
 
 type TransactionResult struct {
+	txId           api.TxId
 	value          hexutil.Bytes
 	gasUsed        uint64
 	logs           []*types.Log
@@ -48,6 +49,7 @@ func (this *TransactionExecution) Run(params *TransactionParams) *TransactionRes
 	)
 	st := core.NewStateTransition(evm, this.tx, params.gasPool)
 	result := new(TransactionResult)
+	result.txId = this.txId
 	result.value, result.gasUsed, result.contractErr, result.consensusErr = st.TransitionDb()
 	result.dbErr = params.taraxaDb.Error()
 	result.logs = params.taraxaDb.GetLogs(this.txHash)

@@ -93,6 +93,7 @@ func (this *ConflictDetector) Join() *ConflictDetector {
 	return this
 }
 
+// This function is thread safe
 // The returned logger is not thread safe
 func (this *ConflictDetector) NewLogger(author Author) Logger {
 	cache := make(map[OperationType]Keys)
