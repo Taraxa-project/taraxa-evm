@@ -54,12 +54,6 @@ type LDBConfig struct {
 	Handles int    `json:"handles"`
 }
 
-type RunConfiguration struct {
-	StateTransition
-	LDBConfig          *LDBConfig          `json:"ldbConfig"`
-	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
-}
-
 type TaraxaReceipt struct {
 	ReturnValue     hexutil.Bytes  `json:"returnValue"`
 	EthereumReceipt *types.Receipt `json:"ethereumReceipt"`
@@ -73,12 +67,15 @@ type StateTransitionResult struct {
 	UsedGas   uint64           `json:"usedGas"`
 }
 
-type Result struct {
-	*StateTransitionResult
+type Request struct {
+	StateTransition    *StateTransition    `json:"stateTransition"`
+	StateDatabase      *LDBConfig          `json:"stateDatabase"`
+	BlockchainDatabase *LDBConfig          `json:"blockchainDatabase"`
 	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
-	Error              error               `json:"error"`
 }
 
-type ExternalApi struct {
-	GetHeaderHashByBlockNumber func(u uint64) common.Hash
+type Response struct {
+	StateTransitionResult *StateTransitionResult `json:"stateTransitionResult"`
+	ConcurrentSchedule    *ConcurrentSchedule    `json:"concurrentSchedule"`
+	Error                 error                  `json:"error"`
 }

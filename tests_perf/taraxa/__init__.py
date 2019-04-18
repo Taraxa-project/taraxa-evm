@@ -59,7 +59,8 @@ json_str = json.dumps({
     ],
     "ldbConfig": {
         "file": "/Users/compuktor/projects/taraxa.io/taraxa-evm/main/state_transition/__test_ldb__",
-        "cache": 0, "handles": 0
+        "cache": 0,
+        "handles": 0
     },
     "concurrentSchedule": None
 })

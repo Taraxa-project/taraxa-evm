@@ -1,5 +1,3 @@
-//+build lib_cpp
-
 package main
 
 //#cgo CFLAGS: -I ../lib_cpp/include
@@ -8,24 +6,18 @@ import "C"
 
 import (
 	"encoding/json"
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
-	"github.com/Taraxa-project/taraxa-evm/main/state_transition"
+	"github.com/Taraxa-project/taraxa-evm/main/api/facade"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 )
 
-//export RunEvm
-func RunEvm(input *C.char, externalApi *C.ExternalApi) *C.char {
-	runConfig := new(api.RunConfiguration)
-	err := json.Unmarshal([]byte(C.GoString(input)), runConfig)
+//export RunTaraxaEvm
+func RunTaraxaEvm(input *C.char) *C.char {
+	request := new(api.Request)
+	err := json.Unmarshal([]byte(C.GoString(input)), request)
 	util.PanicOn(err)
-	result, _ := state_transition.Run(runConfig, &api.ExternalApi{
-		GetHeaderHashByBlockNumber: func(n uint64) common.Hash {
-			c_str := C.getHeaderHashByBlockNumber(externalApi, C.uint64_t(n))
-			return common.HexToHash(C.GoString(c_str))
-		},
-	})
-	bytes, err := json.Marshal(&result)
+	response := facade.Run(request)
+	bytes, err := json.Marshal(&response)
 	util.PanicOn(err)
 	return C.CString(string(bytes))
 }
