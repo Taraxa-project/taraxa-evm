@@ -13,18 +13,39 @@ const balance = "balance"
 const code = "code"
 const nonce = "nonce"
 
+type TransientState struct {
+	BalanceDeltas map[common.Address]*big.Int
+	NonceDeltas   map[common.Address]uint64
+}
+
 type TaraxaStateDB struct {
-	conflictLogger conflict_detector.Logger
-	stateDB        *state.StateDB
-	*TransientState
+	conflictLogger        conflict_detector.Logger
+	stateDB               *state.StateDB
+	totalTransientState   *TransientState
+	currentTransientState *TransientState
 }
 
 func NewDB(stateDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
 	this := new(TaraxaStateDB)
 	this.stateDB = stateDB
-	this.TransientState = NewTransientState()
+	this.totalTransientState = newTransientState()
+	this.currentTransientState = newTransientState()
 	this.conflictLogger = conflictLogger
 	return this
+}
+
+func newTransientState() *TransientState {
+	ret := new(TransientState)
+	ret.BalanceDeltas = make(map[common.Address]*big.Int)
+	ret.NonceDeltas = make(map[common.Address]uint64)
+	return ret
+}
+
+
+func (this *TaraxaStateDB) ResetCurrentTransientState() *TransientState {
+	ret := this.currentTransientState
+	this.currentTransientState = newTransientState()
+	return ret
 }
 
 func (this *TaraxaStateDB) CreateAccount(addr common.Address) {
@@ -34,6 +55,12 @@ func (this *TaraxaStateDB) CreateAccount(addr common.Address) {
 		this.conflictLogger(conflict_detector.SET, accountCompositeKey(addr, balance))
 	}
 	this.stateDB.CreateAccount(addr)
+}
+
+func (this *TaraxaStateDB) createAccountIfNotExists(addr common.Address) {
+	if !this.stateDB.Exist(addr) {
+		this.stateDB.CreateAccount(addr)
+	}
 }
 
 func (this *TaraxaStateDB) SubBalance(addr common.Address, value *big.Int) {
@@ -53,21 +80,14 @@ func (this *TaraxaStateDB) addBalance(addr common.Address, value *big.Int) {
 		return
 	}
 	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
-	prev := this.BalanceDeltas[addr]
-	if prev == nil {
-		prev = common.Big0
-	}
-	this.BalanceDeltas[addr] = util.Sum(prev, value)
+	this.createAccountIfNotExists(addr)
+	this.totalTransientState.BalanceDeltas[addr] = util.Sum(this.totalTransientState.BalanceDeltas[addr], value)
+	this.currentTransientState.BalanceDeltas[addr] = util.Sum(this.currentTransientState.BalanceDeltas[addr], value)
 }
 
 func (this *TaraxaStateDB) GetBalance(addr common.Address) *big.Int {
 	this.onAccountRead(addr, balance)
-	delta := this.BalanceDeltas[addr]
-	if delta == nil {
-		delta = common.Big0
-	}
-	baseBalance := this.stateDB.GetBalance(addr)
-	return util.Sum(baseBalance, delta)
+	return util.Sum(this.stateDB.GetBalance(addr), this.totalTransientState.BalanceDeltas[addr])
 }
 
 func (this *TaraxaStateDB) HasBalance(address common.Address, amount *big.Int) bool {
@@ -76,9 +96,7 @@ func (this *TaraxaStateDB) HasBalance(address common.Address, amount *big.Int) b
 
 func (this *TaraxaStateDB) GetNonce(addr common.Address) uint64 {
 	this.onAccountRead(addr, nonce)
-	delta := this.NonceDeltas[addr]
-	baseNonce := this.stateDB.GetNonce(addr)
-	return baseNonce + delta
+	return this.stateDB.GetNonce(addr) + this.totalTransientState.NonceDeltas[addr]
 }
 
 // legacy
@@ -89,7 +107,9 @@ func (this *TaraxaStateDB) SetNonce(addr common.Address, value uint64) {
 func (this *TaraxaStateDB) AddNonce(addr common.Address, val uint64) {
 	this.onGetOrCreateAccount(addr)
 	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
-	this.NonceDeltas[addr] = this.NonceDeltas[addr] + val
+	this.createAccountIfNotExists(addr)
+	this.totalTransientState.NonceDeltas[addr] = this.totalTransientState.NonceDeltas[addr] + val
+	this.currentTransientState.NonceDeltas[addr] = this.currentTransientState.NonceDeltas[addr] + val
 }
 
 func (this *TaraxaStateDB) SetCode(addr common.Address, val []byte) {

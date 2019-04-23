@@ -2,6 +2,7 @@ package state_transition
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
@@ -18,6 +19,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 	"sort"
+	"strconv"
 	"sync"
 )
 
@@ -62,6 +64,7 @@ func (this *TaraxaEvm) GenerateSchedule() (result *api.ConcurrentSchedule, err e
 		}()
 	}
 	parallelRoundDone.Await()
+	fmt.Println("passed the barrier")
 	errFatal.CheckIn()
 	conflictingAuthors := conflictDetector.RequestShutdown().Reset()
 	result = new(api.ConcurrentSchedule)
@@ -76,10 +79,12 @@ func (this *TaraxaEvm) GenerateSchedule() (result *api.ConcurrentSchedule, err e
 func (this *TaraxaEvm) TransitionState(schedule *api.ConcurrentSchedule) (ret *api.StateTransitionResult, err error) {
 	ret = new(api.StateTransitionResult)
 	var errFatal util.ErrorBarrier
-	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
+	defer util.Recover(errFatal.Catch(func(e error) {
+		err = e
+	}))
 	txCount := len(this.StateTransition.Transactions)
 	sequentialTxCount := len(schedule.Sequential)
-	conflictDetector := new(conflict_detector.ConflictDetector).Init(txCount * 60)
+	conflictDetector := new(conflict_detector.ConflictDetector).Init((txCount + 1) * 6000)
 	go conflictDetector.Run()
 	defer conflictDetector.RequestShutdown()
 	interpreterAborter := func(pc uint64) (uint64, bool) {
@@ -90,9 +95,9 @@ func (this *TaraxaEvm) TransitionState(schedule *api.ConcurrentSchedule) (ret *a
 		return pc, true
 	}
 	diskDb := this.StateDatabase.TrieDB().DiskDB().(ethdb.Database)
-	commitDb := state.NewDatabase(diskDb)
 	var parallelCommitLock sync.Mutex
-	currentParallelRoot := this.StateTransition.StateRoot
+	commitDb := state.NewDatabase(diskDb)
+	currentRoot := this.StateTransition.StateRoot
 	parallelResults := make(chan *TransactionResult, txCount-sequentialTxCount)
 	for txId, currentSeqIndex := 0, 0; txId < txCount; txId++ {
 		if currentSeqIndex < sequentialTxCount && txId == schedule.Sequential[currentSeqIndex] {
@@ -117,11 +122,11 @@ func (this *TaraxaEvm) TransitionState(schedule *api.ConcurrentSchedule) (ret *a
 			errFatal.CheckIn(result.dbErr, result.consensusErr)
 			parallelCommitLock.Lock()
 			defer parallelCommitLock.Unlock()
-			rebaseErr := ethereumStateDB.Rebase(currentParallelRoot, commitDb)
+			rebaseErr := ethereumStateDB.Rebase(currentRoot, commitDb)
 			errFatal.CheckIn(rebaseErr)
 			root, commitErr := ethereumStateDB.Commit(true)
 			errFatal.CheckIn(commitErr)
-			currentParallelRoot = root
+			currentRoot = root
 		}()
 	}
 	txResults := make([]*TransactionResult, txCount)
@@ -130,7 +135,7 @@ func (this *TaraxaEvm) TransitionState(schedule *api.ConcurrentSchedule) (ret *a
 		errFatal.CheckIn()
 		txResults[result.txId] = result
 	}
-	finalStateDB, stateDbCreateErr := state.New(currentParallelRoot, commitDb)
+	finalStateDB, stateDbCreateErr := state.New(currentRoot, commitDb)
 	errFatal.CheckIn(stateDbCreateErr)
 	taraxaDB := state_db.NewDB(finalStateDB, conflictDetector.NewLogger(sequential_group))
 	for _, txId := range schedule.Sequential {
@@ -146,20 +151,21 @@ func (this *TaraxaEvm) TransitionState(schedule *api.ConcurrentSchedule) (ret *a
 		errFatal.CheckIn(nonceErr)
 		for account, nonce := range txResult.transientState.NonceDeltas {
 			if !finalStateDB.Exist(account) { // TODO eliminate the need for this check
+				panic(fmt.Sprintf("skipping nonce %s == %s\n", account.Hex(), strconv.FormatUint(nonce, 10)))
 				continue
 			}
 			finalStateDB.AddNonce(account, nonce)
 		}
-		for account, balanceDelta := range txResult.transientState.BalanceDeltas {
-			if !finalStateDB.Exist(account) || balanceDelta.Sign() == 0 {
-				continue
-			}
-			finalStateDB.AddBalance(account, balanceDelta)
-			if finalStateDB.GetBalance(account).Sign() < 0 {
-				// TODO record and replay validation events
-				errFatal.CheckIn(vm.ErrInsufficientBalance)
-			}
-		}
+		//for account, balanceDelta := range txResult.transientState.BalanceDeltas {
+		//if !finalStateDB.Exist(account) || balanceDelta.Sign() == 0 {
+		//	continue
+		//}
+		//finalStateDB.AddBalance(account, balanceDelta)
+		//if finalStateDB.GetBalance(account).Sign() < 0 {
+		//	// TODO record and replay validation events
+		//	//errFatal.CheckIn(vm.ErrInsufficientBalance)
+		//}
+		//}
 		gasLimitReachedErr := gasPool.SubGas(txData.GasLimit)
 		errFatal.CheckIn(gasLimitReachedErr)
 		gasPool.AddGas(txData.GasLimit - txResult.gasUsed)
@@ -236,6 +242,6 @@ func (this *TaraxaEvm) Run(txId api.TxId, taraxaDB *state_db.TaraxaStateDB, cont
 	result.txId = txId
 	result.dbErr = taraxaDB.Error()
 	result.logs = taraxaDB.GetLogs(txData.Hash)
-	result.transientState = taraxaDB.TransientState.Clone()
+	result.transientState = taraxaDB.ResetCurrentTransientState()
 	return result
 }

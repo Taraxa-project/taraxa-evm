@@ -1,16 +1,12 @@
 package main
 
-import "fmt"
-
-type OperationType int
-
-const (
-	GET OperationType = iota
-	SET
-	ADD
-	OperationType_count uint = iota
+import (
+	"fmt"
+	"reflect"
 )
+
 func main() {
-	a := make([]int, OperationType_count)
-	fmt.Println(a[3])
+	var b *int
+	var foo interface{} = b
+	fmt.Println(reflect.ValueOf(foo).IsNil())
 }

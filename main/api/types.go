@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
 
@@ -77,5 +78,5 @@ type Request struct {
 type Response struct {
 	StateTransitionResult *StateTransitionResult `json:"stateTransitionResult"`
 	ConcurrentSchedule    *ConcurrentSchedule    `json:"concurrentSchedule"`
-	Error                 error                  `json:"error"`
+	Error                 *util.SimpleError      `json:"error"`
 }

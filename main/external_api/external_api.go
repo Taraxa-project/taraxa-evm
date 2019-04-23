@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/rawdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"strconv"
 )
 
 type ExternalApi struct {
@@ -13,11 +14,11 @@ type ExternalApi struct {
 // TODO refactor
 func New(blockchainDB rawdb.DatabaseReader) *ExternalApi {
 	return &ExternalApi{
-		GetHeaderHashByBlockNumber: func(u uint64) common.Hash {
-			key := []byte(string(u))
-			value, err := blockchainDB.Get(key)
+		GetHeaderHashByBlockNumber: func(blockNumber uint64) common.Hash {
+			blockNumberStr := strconv.FormatUint(blockNumber, 10)
+			value, err := blockchainDB.Get([]byte(blockNumberStr))
 			util.PanicOn(err)
-			return common.BytesToHash(value)
+			return common.HexToHash(string(value))
 		},
 	}
 }

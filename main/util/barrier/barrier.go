@@ -1,6 +1,7 @@
 package barrier
 
 import (
+	"fmt"
 	"sync/atomic"
 )
 
@@ -20,6 +21,6 @@ func (this *Barrier) CheckIn() {
 
 func (this *Barrier) Await() {
 	for atomic.LoadInt32(&this.count) > 0 {
-
+		fmt.Println(atomic.LoadInt32(&this.count))
 	}
 }

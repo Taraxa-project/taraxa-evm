@@ -2,6 +2,9 @@ package util
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
+	"runtime/debug"
 	"strings"
 )
 
@@ -56,8 +59,9 @@ func Handle(obj interface{}, handlers ...Hanlder) bool {
 	return false
 }
 
-func PanicOn(err error) {
-	if err != nil {
+func PanicOn(err interface{}) {
+	if err != nil && !reflect.ValueOf(err).IsNil() {
+		fmt.Println(string(debug.Stack()))
 		panic(err)
 	}
 }

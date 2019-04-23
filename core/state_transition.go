@@ -18,13 +18,14 @@ package core
 
 import (
 	"errors"
-	"math"
-	"math/big"
-
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"math"
+	"math/big"
+	"strconv"
 )
 
 var (
@@ -180,12 +181,14 @@ func (st *StateTransition) preCheck() error {
 
 func CheckNonce(db vm.StateDB, address common.Address, nonce uint64) error {
 	actualNonce := db.GetNonce(address)
+	if actualNonce == nonce {
+		return nil
+	}
+	fmt.Printf("Nonce check failed: %s != %s\n", strconv.FormatUint(actualNonce, 10), strconv.FormatUint(nonce, 10))
 	if actualNonce < nonce {
 		return ErrNonceTooHigh
-	} else if actualNonce > nonce {
-		return ErrNonceTooLow
 	}
-	return nil
+	return ErrNonceTooLow
 }
 
 // TransitionDb will transition the state by applying the current message and

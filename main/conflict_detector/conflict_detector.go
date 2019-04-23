@@ -10,7 +10,7 @@ type OperationType int
 const (
 	GET OperationType = iota
 	SET
-	ADD            //commutative
+	ADD  //commutative
 	// TODO consider operands of the operators
 	DEFAULT_INITIALIZE  //idempotent
 	OperationType_count uint = iota
