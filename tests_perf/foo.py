@@ -31,8 +31,11 @@ class BlockAndTxExporter:
             )
         ), **opts}
         self._db = db
+        self._block_cache = {}
+        self._tx_cache = {}
         self._tx_left = {}
         self._current_block = 0
+        self._block_count = 0
 
     @staticmethod
     def _block_key(block_num):
@@ -44,8 +47,9 @@ class BlockAndTxExporter:
         current_block_stored = self._db.get(self.CURRENT_BLOCK_KEY)
         if current_block_stored:
             self._current_block = int(current_block_stored)
+            self._block_count = self._current_block
             itr.seek(self._block_key(self._current_block - 1))
-        print(f'current_block: {self._current_block}')
+        print(f'block_count: {self._block_count}')
         for k, v in itr:
             if k == self.CURRENT_BLOCK_KEY:
                 continue
@@ -55,34 +59,39 @@ class BlockAndTxExporter:
             is_block = len(split) == 1
             if is_block:
                 tx_delta = json.loads(v)['transaction_count']
-            block_finished = self._add_transactions_left(block_num, tx_delta)
+            block_finished = self._sync(block_num, tx_delta)
             if block_finished:
                 assert self._current_block != block_num
             if block_finished and self._current_block < block_num:
                 self._download(self._current_block, block_num - 1)
 
-    def _add_transactions_left(self, block_number, cnt):
-        tx_left = self._tx_left.get(block_number, 0) + cnt
-        if tx_left != 0:
-            self._tx_left[block_number] = tx_left
+    def _sync(self, block_num):
+        block = self._block_cache[block_num]
+        transactions = self._tx_cache.setdefault(block_num, {})
+        block_tx_count = block['transaction_count']
+        if block_tx_count != len(transactions):
             return
-        while self._current_block == block_number or self._tx_left.get(self._current_block) == 0:
-            self._tx_left.pop(self._current_block, None)
+        self._block_cache.pop(block_num)
+        self._tx_cache.pop(block_num)
+        block['transactions'] = [transactions[i] for i in range(block_tx_count)]
+        self._db.put(self._block_key(block_num), json.dumps(block).encode())
+        if self._current_block == block_num:
             self._current_block += 1
             self._db.put(self.CURRENT_BLOCK_KEY, str(self._current_block).encode())
+            self._sync(self._current_block)
             print(f'current_block: {self._current_block}')
+        print(f'block_count: {self._current_block}')
         return True
 
     def _store_block(self, block):
         block_num = block['number']
-        self._db.put(self._block_key(block_num), json.dumps(block).encode())
-        self._add_transactions_left(block_num, block['transaction_count'])
+        self._block_cache[block_num] = block
+        self._sync(block_num)
 
     def _store_tx(self, tx):
         block_num = tx['block_number']
-        self._db.put(f"{pad_block_num(block_num)}_{pad_tx_index(tx['transaction_index'])}".encode(),
-                     json.dumps(tx).encode())
-        self._add_transactions_left(block_num, -1)
+        self._tx_cache.setdefault(block_num, {})[tx['transaction_index']] = tx
+        self._sync(block_num)
 
     def _download(self, from_block, to_block):
         print(f'exporting blocks {from_block}-{to_block}...')
@@ -98,8 +107,8 @@ class BlockAndTxExporter:
 
 db = rocksdb.DB('/mnt/xvdf/blocks_tx', rocksdb.Options(create_if_missing=True))
 (BlockAndTxExporter(db, 7665710, ethereum_etl=dict(
-    batch_size=5 * 1000,
-    max_workers=cpu_count() * 4,
+    batch_size=3 * 1000,
+    max_workers=cpu_count() * 3,
     timeout=15 * 1000
 ))
  .run())
