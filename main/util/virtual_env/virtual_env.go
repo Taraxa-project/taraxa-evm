@@ -1,0 +1,137 @@
+package virtual_env
+
+import (
+	"encoding/json"
+	"errors"
+	"github.com/google/uuid"
+	"reflect"
+	"strings"
+	"sync"
+)
+
+const addr_prefix = "__ptr__"
+
+type Address = string
+
+type functions = map[string]reflect.Value
+
+type memCell struct {
+	objRef          reflect.Value
+	destructor      func()
+	destructionLock sync.Mutex
+}
+
+type VirtualEnv struct {
+	mem       sync.Map
+	functions functions
+}
+
+type Builder struct {
+	obj VirtualEnv
+}
+
+func (this *Builder) Func(name string, function interface{}) *Builder {
+	if this.obj.functions == nil {
+		this.obj.functions = make(functions)
+	}
+	this.obj.functions[name] = reflect.ValueOf(function)
+	return this
+}
+
+func (this *Builder) Build() VirtualEnv {
+	return this.obj
+}
+
+func (this *VirtualEnv) Call(receiverAddr, funcName, argsEncoded string) (retEncoded string, err error) {
+	decoder := json.NewDecoder(strings.NewReader(argsEncoded))
+	_, err = decoder.Token()
+	if err != nil {
+		return
+	}
+	var receiver, callee reflect.Value
+	if len(receiverAddr) == 0 {
+		receiver, callee = reflect.ValueOf(this), this.functions[funcName]
+	} else {
+		receiver = this.load(receiverAddr).objRef
+		method, found := receiver.Type().MethodByName(funcName)
+		if !found {
+			err = errors.New("Method not found")
+			return
+		}
+		callee = method.Func
+	}
+	argValues := []reflect.Value{receiver}
+	calleeType := callee.Type()
+	for i := len(argValues); i < calleeType.NumIn(); i++ {
+		argType := calleeType.In(i)
+		isPtrArg := argType.Kind() == reflect.Ptr
+		if isPtrArg {
+			argType = argType.Elem()
+		}
+		valPtr := reflect.New(argType)
+		iValPtr := valPtr.Interface()
+		err = decoder.Decode(iValPtr)
+		if err != nil {
+			return
+		}
+		if strPtr, castOk := iValPtr.(*string); castOk {
+			str := *strPtr
+			if strings.HasPrefix(str, addr_prefix) {
+				valPtr = this.load(str).objRef
+			}
+		}
+		val := valPtr
+		if !isPtrArg {
+			val = val.Elem()
+		}
+		argValues = append(argValues, val)
+	}
+	var resultValuesInterfaces []interface{}
+	resultValues := callee.Call(argValues)
+	for _, val := range resultValues {
+		resultValuesInterfaces = append(resultValuesInterfaces, val.Interface())
+	}
+	ret, marshalErr := json.Marshal(resultValuesInterfaces)
+	return string(ret), marshalErr
+}
+
+func (this *VirtualEnv) Alloc(objPtr interface{}, destructor func()) (addr Address, err error) {
+	val := reflect.ValueOf(objPtr)
+	if val.Kind() != reflect.Ptr {
+		err = errors.New("Only pointers are supported")
+		return
+	}
+	cell := new(memCell)
+	cell.objRef = val
+	cell.destructor = destructor
+	for i := 0; i < 10; i++ {
+		addr = addr_prefix + uuid.New().String()
+		if _, hasBeenAllocated := this.mem.LoadOrStore(addr, cell); !hasBeenAllocated {
+			return
+		}
+	}
+	err = errors.New("Too many attempts")
+	return
+}
+
+func (this *VirtualEnv) Free(addr Address) error {
+	cell := this.load(addr)
+	if cell == nil {
+		return errors.New("Dangling pointer")
+	}
+	cell.destructionLock.Lock()
+	defer cell.destructionLock.Unlock()
+	cell = this.load(addr)
+	if cell != nil {
+		this.mem.Delete(addr)
+		if cell.destructor != nil {
+			cell.destructor()
+		}
+	}
+	return nil
+}
+
+func (this *VirtualEnv) load(addr Address) *memCell {
+	cell, _ := this.mem.Load(addr)
+	return cell.(*memCell)
+}

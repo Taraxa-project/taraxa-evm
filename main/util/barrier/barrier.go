@@ -1,26 +1,30 @@
 package barrier
 
 import (
-	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"sync/atomic"
 )
 
 type Barrier struct {
-	count int32
+	checkInsLeft int32
+	// Chan is used to make sure we wait using gopark
+	waitChan     chan interface{}
 }
 
-func New(capacity int) Barrier {
-	return Barrier{
-		count: int32(capacity),
-	}
+func New(size int) *Barrier {
+	util.Assert(size > 0, "size must be > 0")
+	ret := new(Barrier)
+	ret.checkInsLeft = int32(size)
+	ret.waitChan = make(chan interface{})
+	return ret
 }
 
 func (this *Barrier) CheckIn() {
-	atomic.AddInt32(&this.count, -1)
+	if atomic.AddInt32(&this.checkInsLeft, -1) == 0 {
+		close(this.waitChan)
+	}
 }
 
 func (this *Barrier) Await() {
-	for atomic.LoadInt32(&this.count) > 0 {
-		fmt.Println(atomic.LoadInt32(&this.count))
-	}
+	<-this.waitChan
 }

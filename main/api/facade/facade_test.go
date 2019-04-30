@@ -39,8 +39,8 @@ contract SingleVariable {
 	defer blockchainDBCleanup()
 
 	requestProto := api.Request{
-		StateDatabase:      &stateDBConfig,
-		BlockchainDatabase: &blockchainDBConfig,
+		StateDatabase:     &stateDBConfig,
+		BlockHashDatabase: &blockchainDBConfig,
 		StateTransition: &api.StateTransition{
 			Block: &api.Block{
 				Number:     "0",

@@ -14,3 +14,14 @@ func Sum(x, y *big.Int) *big.Int {
 	}
 	return new(big.Int).Add(x, y)
 }
+
+func Noop(...interface{}) interface{} {
+	return nil
+}
+
+func Chain(f, g func()) func() {
+	return func() {
+		f()
+		g()
+	}
+}

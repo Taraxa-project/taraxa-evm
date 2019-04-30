@@ -26,26 +26,29 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
-// Config are the configuration options for the Interpreter
-type Config struct {
+type StaticConfig struct {
 	// Debug enabled debugging Interpreter options
-	Debug bool
-	// Tracer is the op code logger
-	Tracer Tracer
+	Debug bool `json:"debug"`
 	// NoRecursion disabled Interpreter call, callcode,
 	// delegate call and create.
-	NoRecursion bool
+	NoRecursion bool `json:"noRecursion"`
 	// Enable recording of SHA3/keccak preimages
-	EnablePreimageRecording bool
+	EnablePreimageRecording bool `json:"enablePreimageRecording"`
+	// Type of the EWASM interpreter
+	EWASMInterpreter string `json:"eWASMInterpreter"`
+	// Type of the EVM interpreter
+	EVMInterpreter string `json:"eVMInterpreter"`
+}
+
+// Config are the configuration options for the Interpreter
+type Config struct {
+	StaticConfig
+	// Tracer is the op code logger
+	Tracer Tracer
 	// JumpTable contains the EVM instruction table. This
 	// may be left uninitialised and will be set to the default
 	// table.
 	JumpTable [256]operation
-
-	// Type of the EWASM interpreter
-	EWASMInterpreter string
-	// Type of the EVM interpreter
-	EVMInterpreter string
 }
 
 // Interpreter is used to run Ethereum based contracts and will utilise the

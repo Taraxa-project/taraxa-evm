@@ -1,6 +1,7 @@
-package state_db
+package taraxa_state_db
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -25,7 +26,7 @@ type TaraxaStateDB struct {
 	currentTransientState *TransientState
 }
 
-func NewDB(stateDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
+func New(stateDB *state.StateDB, conflictLogger conflict_detector.Logger) *TaraxaStateDB {
 	this := new(TaraxaStateDB)
 	this.stateDB = stateDB
 	this.totalTransientState = newTransientState()
@@ -33,14 +34,6 @@ func NewDB(stateDB *state.StateDB, conflictLogger conflict_detector.Logger) *Tar
 	this.conflictLogger = conflictLogger
 	return this
 }
-
-func newTransientState() *TransientState {
-	ret := new(TransientState)
-	ret.BalanceDeltas = make(map[common.Address]*big.Int)
-	ret.NonceDeltas = make(map[common.Address]uint64)
-	return ret
-}
-
 
 func (this *TaraxaStateDB) ResetCurrentTransientState() *TransientState {
 	ret := this.currentTransientState
@@ -57,14 +50,9 @@ func (this *TaraxaStateDB) CreateAccount(addr common.Address) {
 	this.stateDB.CreateAccount(addr)
 }
 
-func (this *TaraxaStateDB) createAccountIfNotExists(addr common.Address) {
-	if !this.stateDB.Exist(addr) {
-		this.stateDB.CreateAccount(addr)
-	}
-}
-
 func (this *TaraxaStateDB) SubBalance(addr common.Address, value *big.Int) {
 	this.addBalance(addr, new(big.Int).Neg(value))
+	this.stateDB.AddBalance(addr, common.Big0)
 }
 
 func (this *TaraxaStateDB) AddBalance(addr common.Address, value *big.Int) {
@@ -72,17 +60,7 @@ func (this *TaraxaStateDB) AddBalance(addr common.Address, value *big.Int) {
 	if value.Sign() == 0 {
 		this.onAccountEmptyCheck(addr)
 	}
-}
-
-func (this *TaraxaStateDB) addBalance(addr common.Address, value *big.Int) {
-	this.onGetOrCreateAccount(addr)
-	if value.Sign() == 0 {
-		return
-	}
-	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
-	this.createAccountIfNotExists(addr)
-	this.totalTransientState.BalanceDeltas[addr] = util.Sum(this.totalTransientState.BalanceDeltas[addr], value)
-	this.currentTransientState.BalanceDeltas[addr] = util.Sum(this.currentTransientState.BalanceDeltas[addr], value)
+	this.stateDB.AddBalance(addr, common.Big0)
 }
 
 func (this *TaraxaStateDB) GetBalance(addr common.Address) *big.Int {
@@ -105,9 +83,12 @@ func (this *TaraxaStateDB) SetNonce(addr common.Address, value uint64) {
 }
 
 func (this *TaraxaStateDB) AddNonce(addr common.Address, val uint64) {
+	if addr.Hex() == "0xcb350b1D62684c80Cf15696c28550B343A0c6444" {
+		fmt.Println()
+	}
 	this.onGetOrCreateAccount(addr)
 	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
-	this.createAccountIfNotExists(addr)
+	this.stateDB.AddNonce(addr, 0)
 	this.totalTransientState.NonceDeltas[addr] = this.totalTransientState.NonceDeltas[addr] + val
 	this.currentTransientState.NonceDeltas[addr] = this.currentTransientState.NonceDeltas[addr] + val
 }
@@ -216,6 +197,16 @@ func (this *TaraxaStateDB) Error() error {
 	return this.stateDB.Error()
 }
 
+func (this *TaraxaStateDB) addBalance(addr common.Address, value *big.Int) {
+	this.onGetOrCreateAccount(addr)
+	if value.Sign() == 0 {
+		return
+	}
+	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
+	this.totalTransientState.BalanceDeltas[addr] = util.Sum(this.totalTransientState.BalanceDeltas[addr], value)
+	this.currentTransientState.BalanceDeltas[addr] = util.Sum(this.currentTransientState.BalanceDeltas[addr], value)
+}
+
 func (this *TaraxaStateDB) onGetAccount(addr common.Address) {
 	this.conflictLogger(conflict_detector.GET, accountKey(addr))
 }
@@ -252,4 +243,11 @@ func accountKey(address common.Address) string {
 
 func accountCompositeKey(address common.Address, subKey string) string {
 	return accountKey(address) + subKey
+}
+
+func newTransientState() *TransientState {
+	ret := new(TransientState)
+	ret.BalanceDeltas = make(map[common.Address]*big.Int)
+	ret.NonceDeltas = make(map[common.Address]uint64)
+	return ret
 }

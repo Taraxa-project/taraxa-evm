@@ -292,7 +292,7 @@ func TestIncompleteStateSync(t *testing.T) {
 	// Create a random state to copy
 	srcDb, srcRoot, srcAccounts := makeTestState()
 
-	checkTrieConsistency(srcDb.TrieDB().DiskDB().(ethdb.Database), srcRoot)
+	checkTrieConsistency(srcDb.TrieDB().GetDiskDB().(ethdb.Database), srcRoot)
 
 	// Create a destination state and sync with the scheduler
 	dstDb := ethdb.NewMemDatabase()

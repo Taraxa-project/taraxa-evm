@@ -1,12 +1,9 @@
 package main
 
-import (
-	"fmt"
-	"reflect"
-)
+import "fmt"
 
 func main() {
-	var b *int
-	var foo interface{} = b
-	fmt.Println(reflect.ValueOf(foo).IsNil())
+	var i interface{}
+	i, ok := i.(*int)
+	fmt.Println(i, ok)
 }

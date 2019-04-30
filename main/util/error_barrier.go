@@ -39,20 +39,7 @@ func (this *ErrorBarrier) Get() error {
 	return nil
 }
 
-func (this *ErrorBarrier) Recover(callbacks ...func(error)) {
-	if recovered := recover(); recovered != nil {
-		thisErr := this.Get()
-		if recovered == thisErr {
-			for _, callback := range callbacks {
-				callback(thisErr)
-			}
-		} else {
-			panic(recovered)
-		}
-	}
-}
-
-func (this *ErrorBarrier) Catch(handlers ...func(err error)) Hanlder {
+func (this *ErrorBarrier) Catch(handlers ...func(err error)) Predicate {
 	return func(caught interface{}) bool {
 		thisErr := this.Get()
 		if caught == thisErr {

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type Hanlder func(interface{}) bool
+type Predicate func(interface{}) bool
 type ErrorHandler func(error)
 
 func SetTo(errPtr *error) ErrorHandler {
@@ -17,16 +17,7 @@ func SetTo(errPtr *error) ErrorHandler {
 	}
 }
 
-func CatchAny(handlers ...func(interface{})) Hanlder {
-	return func(caught interface{}) bool {
-		for _, handler := range handlers {
-			handler(caught)
-		}
-		return true
-	}
-}
-
-func CatchAnyErr(handlers ...ErrorHandler) Hanlder {
+func CatchAnyErr(handlers ...ErrorHandler) Predicate {
 	return func(caught interface{}) bool {
 		if err, isErr := caught.(error); isErr {
 			for _, handler := range handlers {
@@ -38,16 +29,16 @@ func CatchAnyErr(handlers ...ErrorHandler) Hanlder {
 	}
 }
 
-func Recover(handlers ...Hanlder) (caught interface{}) {
+func Recover(errorFilters ...Predicate) (caught interface{}) {
 	if caught = recover(); caught != nil {
-		if !Handle(caught, handlers...) {
+		if !AnyMatches(caught, errorFilters...) {
 			panic(caught)
 		}
 	}
 	return
 }
 
-func Handle(obj interface{}, handlers ...Hanlder) bool {
+func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 	if len(handlers) == 0 {
 		return true
 	}
@@ -59,11 +50,23 @@ func Handle(obj interface{}, handlers ...Hanlder) bool {
 	return false
 }
 
-func PanicOn(err interface{}) {
-	if err != nil && !reflect.ValueOf(err).IsNil() {
+func PanicOn(value interface{}) {
+	if !IsNil(value) {
 		fmt.Println(string(debug.Stack()))
-		panic(err)
+		panic(value)
 	}
+}
+
+func IsNil(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	reflectValue := reflect.ValueOf(value)
+	switch reflectValue.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return reflectValue.IsNil()
+	}
+	return false
 }
 
 func Assert(condition bool, msg ...string) {

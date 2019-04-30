@@ -99,7 +99,6 @@ type cachingDB struct {
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-
 	for i := len(db.pastTries) - 1; i >= 0; i-- {
 		if db.pastTries[i].Hash() == root {
 			return cachedTrie{db.pastTries[i].Copy(), db}, nil

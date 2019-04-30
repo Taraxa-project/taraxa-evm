@@ -1,0 +1,4 @@
+/venv
+/out
+**/*/Dockerfile
+**/*/docker-compose.yml

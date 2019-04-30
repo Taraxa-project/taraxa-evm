@@ -298,8 +298,12 @@ func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 }
 
 // DiskDB retrieves the persistent storage backing the trie database.
-func (db *Database) DiskDB() DatabaseReader {
+func (db *Database) GetDiskDB() ethdb.Database {
 	return db.diskdb
+}
+
+func (db *Database) SetDiskDB(diskdb ethdb.Database) {
+	db.diskdb = diskdb
 }
 
 // InsertBlob writes a new reference tracked blob to the memory database if it's

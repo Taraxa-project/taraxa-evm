@@ -5,18 +5,57 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 )
 
 type TxId = int
 type BigIntString = string;
 
+type BlockHashStore interface {
+	GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash
+}
+
+type ExternalApi interface {
+	BlockHashStore
+}
+
 func BigInt(str BigIntString) *big.Int {
 	if ret, success := new(big.Int).SetString(str, 10); success {
 		return ret
 	}
 	panic(errors.New("Could not convert string to bigint: " + str))
+}
+
+type LDBConfig struct {
+	File    string `json:"file"`
+	Cache   int    `json:"cache"`
+	Handles int    `json:"handles"`
+}
+
+func (this *LDBConfig) NewLdbDatabase() *ethdb.LDBDatabase {
+	db, err := ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
+	util.PanicOn(err)
+	return db
+}
+
+type StateDBConfig struct {
+	LevelDB   *LDBConfig `json:"leveldb"`
+	CacheSize int        `json:"cacheSize"`
+}
+
+type ExternalApiConfig struct {
+	BlockHashLevelDB *LDBConfig `json:"blockHashLevelDB"`
+}
+
+type Config struct {
+	StateDBConfig     StateDBConfig       `json:"stateDB"`
+	ExternalApiConfig *ExternalApiConfig  `json:"externalApi"`
+	EvmConfig         *vm.StaticConfig    `json:"evmConfig"`
+	ChainConfig       *params.ChainConfig `json:"chainConfig"`
 }
 
 type Transaction struct {
@@ -45,14 +84,23 @@ type StateTransition struct {
 	Transactions []*Transaction `json:"transactions"`
 }
 
+type ScheduleRequest struct {
+	StateTransition *StateTransition `json:"stateTransition" gencodec:"required"`
+}
+
 type ConcurrentSchedule struct {
 	Sequential []TxId `json:"sequential"`
 }
 
-type LDBConfig struct {
-	File    string `json:"file"`
-	Cache   int    `json:"cache"`
-	Handles int    `json:"handles"`
+type ScheduleResponse struct {
+	Result *ConcurrentSchedule `json:"result"`
+	Error  *util.SimpleError   `json:"error"`
+}
+
+type StateTransitionRequest struct {
+	StateTransition    *StateTransition    `json:"stateTransition" gencodec:"required"`
+	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
+	TargetLevelDB      *LDBConfig          `json:"targetLevelDB"`
 }
 
 type TaraxaReceipt struct {
@@ -68,15 +116,7 @@ type StateTransitionResult struct {
 	UsedGas   uint64           `json:"usedGas"`
 }
 
-type Request struct {
-	StateTransition    *StateTransition    `json:"stateTransition"`
-	StateDatabase      *LDBConfig          `json:"stateDatabase"`
-	BlockchainDatabase *LDBConfig          `json:"blockchainDatabase"`
-	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
-}
-
-type Response struct {
-	StateTransitionResult *StateTransitionResult `json:"stateTransitionResult"`
-	ConcurrentSchedule    *ConcurrentSchedule    `json:"concurrentSchedule"`
-	Error                 *util.SimpleError      `json:"error"`
+type StateTransitionResponse struct {
+	Result StateTransitionResult `json:"result"`
+	Error  *util.SimpleError     `json:"error"`
 }

@@ -19,6 +19,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 	"sort"
 
@@ -417,6 +418,11 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 	// Load the object from the database.
 	enc, err := self.trie.TryGet(addr[:])
 	if len(enc) == 0 {
+		if err != nil {
+			errStr := err.Error()
+			addStr := addr.Hex()
+			util.Noop(errStr, addStr)
+		}
 		self.setError(err)
 		return nil
 	}
@@ -447,6 +453,9 @@ func (self *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 // createObject creates a new state object. If there is an existing account with
 // the given address, it is overwritten and returned as the second return value.
 func (self *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
+	if addr.Hex() == "0xcb350b1D62684c80Cf15696c28550B343A0c6444" {
+		fmt.Println()
+	}
 	prev = self.getStateObject(addr)
 	newobj = newObject(self, addr, Account{})
 	newobj.setNonce(0) // sets the object to dirty
