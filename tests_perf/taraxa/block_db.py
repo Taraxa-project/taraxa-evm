@@ -1,88 +1,52 @@
 import json
 
-from taraxa.ethereum_etl import export_blocks_and_transactions
-from taraxa.leveldb import LevelDB
-from taraxa.util import str_bytes
+import rocksdb
+
+from taraxa.typing import Iterable, Tuple, Dict
+
+Block = Dict
 
 
-class CorruptedBlockException(Exception):
-    pass
+class BlockDB:
 
-
-class BlockDatabase:
-
-    def __init__(self, ldb: LevelDB, page_size=20000, download_batch_size=5000):
-        self.page_size = page_size
-        self.download_batch_size = download_batch_size
-        self._ldb = ldb
-        self._reset_cache()
-
-    def open_session(self):
-        return self._ldb.open_session()
-
-    def get_block_and_tx(self, number):
-        if not self._block_cache:
-            self._load_cache(number)
-        block = self._block_cache.get(number)
-        if not block:
-            self._download_batch(number)
-        block = self._block_cache.get(number)
-        if block:
-            return block, self._tx_cache.get(number, [])
-
-    def _reset_cache(self):
-        self._block_cache = {}
-        self._tx_cache = {}
-
-    def _load_cache(self, from_block):
-        self._reset_cache()
-        block_number = from_block
-        while True:
-            block_bytes = self._ldb.session.get(str_bytes(block_number))
-            if not block_bytes:
-                break
-            block = json.loads(block_bytes)
-            self._cache_block(block)
-            for tx_index in range(block['transaction_count']):
-                tx_bytes = self._ldb.session.get(self._tx_ldb_key(block_number, tx_index))
-                if not tx_bytes:
-                    self._unload_block(block_number)
-                    raise CorruptedBlockException()
-                self._cache_tx(json.loads(tx_bytes))
-            block_number = block_number + 1
-
-    def _cache_block(self, block):
-        self._block_cache[block['number']] = block
-
-    def _cache_tx(self, tx):
-        self._tx_cache.setdefault(tx['block_number'], []).append(tx)
-
-    def _unload_block(self, number):
-        self._ldb.session.delete(str_bytes(number))
-        self._block_cache.pop(number, None)
-        self._tx_cache.pop(number, None)
+    def __init__(self, db: rocksdb.DB):
+        self._db = db
 
     @staticmethod
-    def _tx_ldb_key(block_num, index):
-        return f"{block_num}_{index}".encode()
+    def block_key_encode(block_num: int):
+        return str(block_num).zfill(9).encode()
 
-    def _download_batch(self, from_block):
-        to_block = from_block + self.page_size - 1
-        print(f"downloading blocks {from_block}-{to_block}...")
-        self._reset_cache()
+    @staticmethod
+    def block_key_decode(key: bytes) -> int:
+        return int(str(key, encoding='utf-8').lstrip('0') or '0')
 
-        def save_block(block):
-            number = block['number']
-            print(number)
-            self._ldb.session.put(str_bytes(number), json.dumps(block).encode())
-            self._cache_block(block)
+    def put_block(self, block: Block):
+        self._db.put(self.block_key_encode(block['number']), json.dumps(block).encode())
 
-        def save_transaction(tx):
-            key = self._tx_ldb_key(tx['block_number'], tx['transaction_index'])
-            self._ldb.session.put(key, json.dumps(tx).encode())
-            self._cache_tx(tx)
+    def max_block_num(self) -> int:
+        itr = self._db.iterkeys()
+        itr.seek_to_last()
+        for k in itr:
+            return self.block_key_decode(k)
 
-        export_blocks_and_transactions(from_block, to_block,
-                                       batch_size=self.download_batch_size,
-                                       on_block=save_block,
-                                       on_transaction=save_transaction)
+    def iteritems(self, from_block: int = None) -> Iterable[Tuple[int, Block]]:
+        itr = self._db.iteritems()
+        itr.seek_to_first()
+        if from_block:
+            itr.seek(self.block_key_encode(from_block))
+        return ((self.block_key_decode(k), json.loads(v)) for k, v in itr)
+
+    def validate(self):
+        expected_block_num = 0
+        for block_num_db, block in self.iteritems():
+            print(f'validating block: {expected_block_num}')
+            block_num = block['number']
+            assert block_num_db == block_num == expected_block_num
+            tx_count = block['transaction_count']
+            transactions = block['transactions']
+            assert tx_count == len(transactions)
+            for i in range(tx_count):
+                tx = transactions[i]
+                assert tx['block_number'] == block_num
+                assert tx['transaction_index'] == i
+            expected_block_num += 1

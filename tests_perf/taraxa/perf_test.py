@@ -3,7 +3,7 @@ import os
 
 from paths import *
 from taraxa import util
-from taraxa.block_db import BlockDatabase
+from taraxa.block_db import BlockDB
 from taraxa.leveldb import LevelDB
 from taraxa.lib_taraxa_evm import LibTaraxaEvm
 
@@ -27,7 +27,7 @@ def run(*args,
     lib_taraxa_evm = LibTaraxaEvm(taraxa_c_lib_path)
     block_hash_ldb, block_ldb = (LevelDB(p, create_if_missing=True)
                                  for p in (block_hash_db_path, block_db_path))
-    block_db = BlockDatabase(block_ldb, page_size=20000, download_batch_size=5000)
+    block_db = BlockDB(block_ldb, page_size=20000, download_batch_size=5000)
     taraxa_state_db_config = {
         "file": str(taraxa_state_db_path),
         "cache": 0,

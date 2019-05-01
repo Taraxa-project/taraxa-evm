@@ -1,6 +1,0 @@
-version: '3.7'
-services:
-  blocks_transactions_to_rocksdb:
-    build:
-      context: ../../
-      dockerfile: ../Dockerfile

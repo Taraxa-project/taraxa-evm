@@ -48,14 +48,17 @@ def export_blocks_and_transactions(start_block, end_block,
                                    on_block=None,
                                    on_transaction=None,
                                    batch_size=5000,
-                                   max_workers=cpu_count(),
+                                   parallelism_factor=2.0,
                                    timeout=DEFAULT_TIMEOUT,
                                    provider_uri='https://mainnet.infura.io'):
+    max_workers = int(cpu_count() * parallelism_factor)
     job = ExportBlocksJob(
         start_block=start_block,
         end_block=end_block,
         batch_size=batch_size,
-        batch_web3_provider=ThreadLocalProxy(lambda: get_provider_from_uri(provider_uri, timeout=timeout, batch=True)),
+        batch_web3_provider=ThreadLocalProxy(lambda: get_provider_from_uri(provider_uri,
+                                                                           timeout=timeout,
+                                                                           batch=batch_size > 0)),
         max_workers=max_workers,
         item_exporter=_SimpleCompositeExporter(
             filename_mapping={

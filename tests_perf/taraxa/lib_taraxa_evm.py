@@ -2,9 +2,10 @@ import json
 from abc import ABC
 from contextlib import contextmanager
 from ctypes import cdll, c_char_p
-
 from paths import *
 from taraxa.util import call
+
+LOCAL_LIB_PACKAGE = base_dir.parent.joinpath('main')
 
 
 class Callable(ABC):
@@ -27,7 +28,6 @@ class Pointer(Callable, ABC):
 
 
 class LibTaraxaEvm(Callable):
-    go_library_package = base_dir.parent.joinpath('main')
 
     def __init__(self, library_path):
         lib = cdll.LoadLibrary(library_path)
@@ -35,6 +35,10 @@ class LibTaraxaEvm(Callable):
         lib.Call.restype = c_char_p
         lib.Free.argtypes = [c_char_p]
         self._lib = lib
+
+    @staticmethod
+    def build(output_path, package_path=LOCAL_LIB_PACKAGE):
+        call(f"go build -tags=lib_cpp -buildmode=c-shared -o {output_path} {package_path}")  # , cwd=path)
 
     def as_ptr(self, addr: str) -> Pointer:
         self_ = self
@@ -57,7 +61,3 @@ class LibTaraxaEvm(Callable):
         ret_encoded = self._lib.Call(receiver_addr.encode(), function_name.encode(), args_str.encode())
         # print(f'lib_taraxa_evm call: {receiver_addr}.{function_name}({args_str}) -> {str(ret_encoded)}')
         return json.loads(ret_encoded)
-
-    @classmethod
-    def build(cls, output_path):
-        call(f"go build -tags=lib_cpp -buildmode=c-shared -o {output_path}", cwd=cls.go_library_package)

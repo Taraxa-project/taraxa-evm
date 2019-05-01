@@ -45,3 +45,8 @@ def run(machine, dest, *exclude_patterns):
 
 
 run(*sys.argv[1:])
+
+# docker-machine create --driver amazonec2 --amazonec2-open-port 8000 --amazonec2-region us-east-2
+# --amazonec2-vpc-id vpc-0c890d64
+# --amazonec2-access-key AKIAX4HKAES7EFKQ5H7Z --amazonec2-secret-key 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
+# vm-tests

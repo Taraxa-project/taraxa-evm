@@ -18,9 +18,8 @@ RUN pip3 install --upgrade pip virtualenv
 RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
 RUN apt-get -y install librocksdb-dev libleveldb-dev
 # The Project
-WORKDIR /mnt
-#COPY / /project_root
-#WORKDIR /project_root/tests_perf
-#RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 venv
-#RUN . venv/bin/activate && python install.py
-#ENTRYPOINT . venv/bin/activate && bash -c
+COPY / /project_root
+WORKDIR /project_root/tests_perf
+RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 venv
+RUN . venv/bin/activate && python install.py
+ENTRYPOINT . venv/bin/activate && python apps

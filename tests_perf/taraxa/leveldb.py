@@ -10,7 +10,7 @@ class SessionRequiredError(Exception):
 class LevelDB:
 
     def __init__(self, path, *openargs, **openkwargs):
-        self.path = str(path)
+        self.path = path
         self.openargs = openargs
         self.openkwargs = openkwargs
         self._db = None
@@ -18,7 +18,7 @@ class LevelDB:
     @contextmanager
     def open_session(self):
         try:
-            self._db = plyvel.DB(self.path, *self.openargs, **self.openkwargs)
+            self._db = plyvel.DB(str(self.path), *self.openargs, **self.openkwargs)
             yield self.session
         finally:
             try:
