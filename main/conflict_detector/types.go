@@ -17,7 +17,7 @@ type Author = interface{} // equals/hashcode required
 type Authors = *linkedhashset.Set
 type Key = string // equals/hashcode required
 type Keys = *linkedhashset.Set
-type Logger func(OperationType, Key)
+type OperationLogger func(OperationType, Key)
 
 type conflictRelationsMap = map[OperationType][]OperationType
 
@@ -43,3 +43,9 @@ type operation struct {
 	Key    Key
 }
 type operationLog = []map[Key]Authors
+
+type OperationLoggerFactory func(Author) OperationLogger
+
+var NoopLoggerFactory OperationLoggerFactory = func(author Author) OperationLogger {
+	return func(operationType OperationType, key Key) {}
+}

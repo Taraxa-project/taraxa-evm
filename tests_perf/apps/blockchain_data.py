@@ -1,0 +1,89 @@
+from multiprocessing import cpu_count
+
+from taraxa.block_etl import BlockEtl
+from taraxa.type_util import fdict
+from taraxa.leveldb import LevelDB
+from . import shell
+from taraxa.context_util import with_exit_stack, current_exit_stack
+from taraxa.rocksdb_util import ceil_entry
+import json
+
+import rocksdb
+
+from taraxa.type_util import Iterable, Tuple, Dict
+
+
+class BlockDB:
+    Key = int
+    Value = Dict
+
+    def __init__(self, db: rocksdb.DB):
+        self._db = db
+
+    @staticmethod
+    def block_key_encode(block_num: Key) -> bytes:
+        return str(block_num).zfill(9).encode()
+
+    @staticmethod
+    def block_key_decode(key: bytes) -> Key:
+        return int(str(key, encoding='utf-8').lstrip('0') or '0')
+
+    def put_block(self, block: Value):
+        block_num = block['number']
+        self._db.put(self.block_key_encode(block_num), json.dumps(block).encode())
+
+    def max_block_num(self) -> Key:
+        key, _ = ceil_entry(self._db) or (None, None)
+        if key:
+            return self.block_key_decode(key)
+
+    def iteritems(self, from_block: Key = None) -> Iterable[Tuple[Key, Value]]:
+        itr = self._db.iteritems()
+        itr.seek_to_first()
+        if from_block:
+            itr.seek(self.block_key_encode(from_block))
+        return ((self.block_key_decode(k), json.loads(v)) for k, v in itr)
+
+
+@shell.command
+@with_exit_stack
+def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
+                            to_block=7665710, page_size=500000,
+                            ethereum_etl_opts=fdict(
+                                batch_size=500,
+                                max_workers=cpu_count() * 3,
+                                timeout=15)):
+    block_db = BlockDB(rocksdb.DB(block_db_path, rocksdb.Options(create_if_missing=True)))
+    block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
+    current_exit_stack().enter_context(block_hash_db.open_session())
+
+    def on_block(block):
+        block_db.put_block(block)
+        block_hash_db.session.put(str(block['number']).encode(), block['hash'].encode())
+
+    BlockEtl(on_block, ethereum_etl_opts=ethereum_etl_opts).run(block_db.max_block_num(), to_block, page_size)
+
+
+@shell.command
+@with_exit_stack
+def ensure_blockchain_data_valid(db_path: str, block_hash_db_path: str):
+    block_db = BlockDB(rocksdb.DB(db_path, rocksdb.Options(), read_only=True))
+    block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
+    current_exit_stack().enter_context(block_hash_db.open_session())
+    expected_block_num = 0
+    for block_num_db, block in block_db.iteritems():
+        print(f'validating block: {expected_block_num}')
+        block_num = block['number']
+        assert block_num_db == block_num == expected_block_num
+        tx_count = block['transaction_count']
+        transactions = block['transactions']
+        assert tx_count == len(transactions)
+        for i in range(tx_count):
+            tx = transactions[i]
+            assert tx['block_number'] == block_num
+            assert tx['transaction_index'] == i
+        block_hash_db_key = str(block_num).encode()
+        if not block_hash_db.session.get(block_hash_db_key):
+            print('detected absent entry in the block hash db, fixing')
+            block_hash_db.session.put(block_hash_db_key, block['hash'].encode())
+        expected_block_num += 1

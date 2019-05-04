@@ -72,13 +72,13 @@ contract SingleVariable {
 		},
 	}
 	scheduleResponse1 := Run(&request1)
-	util.PanicOn(scheduleResponse1.Error)
+	util.PanicIfPresent(scheduleResponse1.Error)
 
 	util.Assert(len(scheduleResponse1.ConcurrentSchedule.Sequential) == 0)
 
 	request1.ConcurrentSchedule = scheduleResponse1.ConcurrentSchedule
 	stateTransitionResponse1 := Run(&request1)
-	util.PanicOn(stateTransitionResponse1.Error)
+	util.PanicIfPresent(stateTransitionResponse1.Error)
 
 	receipts1 := stateTransitionResponse1.StateTransitionResult.Receipts
 	contractAddr1 := receipts1[0].EthereumReceipt.ContractAddress
@@ -118,13 +118,13 @@ contract SingleVariable {
 	}
 
 	scheduleResponse2 := Run(&request2)
-	util.PanicOn(scheduleResponse2.Error)
+	util.PanicIfPresent(scheduleResponse2.Error)
 
 	AssertContainsExactly(t, scheduleResponse2.ConcurrentSchedule.Sequential, 1, 2)
 
 	request2.ConcurrentSchedule = scheduleResponse2.ConcurrentSchedule
 	stateTransitionResponse2 := Run(&request2)
-	util.PanicOn(stateTransitionResponse2.Error)
+	util.PanicIfPresent(stateTransitionResponse2.Error)
 
 	receipts2 := stateTransitionResponse2.StateTransitionResult.Receipts
 	assert.Equal(t, hexutil.Bytes(common.BigToHash(someValue).Bytes()), receipts2[2].ReturnValue)
@@ -161,7 +161,7 @@ contract SingleVariable {
 		},
 	}
 	scheduleResponse3 := Run(&request3)
-	util.PanicOn(scheduleResponse3.Error)
+	util.PanicIfPresent(scheduleResponse3.Error)
 
 	AssertContainsExactly(t, scheduleResponse3.ConcurrentSchedule.Sequential, 0, 1)
 
@@ -187,7 +187,7 @@ func addr(n int64) *common.Address {
 
 func compile(contract string) *compiler.Contract {
 	contracts, err := compiler.CompileSolidityString("solc", contract);
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	for _, contract := range contracts {
 		return contract
 	}
@@ -197,31 +197,31 @@ func compile(contract string) *compiler.Contract {
 func code(contract *compiler.Contract) *hexutil.Bytes {
 	var code hexutil.Bytes
 	code, err := hexutil.Decode(contract.Code)
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	return &code
 }
 
 func call(contract *compiler.Contract, method string, args ...interface{}) *hexutil.Bytes {
 	var calldata hexutil.Bytes
 	calldata, err := contract.Info.AbiDefinition.Pack(method, args...)
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	return &calldata;
 }
 
 func newTestLDB(name string) (api.LDBConfig, func()) {
 	dirname := "__test_ldb__" + name
 	if _, err := os.Stat(dirname); !os.IsNotExist(err) {
-		util.PanicOn(os.RemoveAll(dirname))
+		util.PanicIfPresent(os.RemoveAll(dirname))
 	}
-	util.PanicOn(os.Mkdir(dirname, os.ModePerm))
+	util.PanicIfPresent(os.Mkdir(dirname, os.ModePerm))
 	absPath, err := filepath.Abs(dirname)
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	return api.LDBConfig{
 		File:    absPath,
 		Cache:   0,
 		Handles: 0,
 	}, func() {
-		util.PanicOn(os.RemoveAll(dirname))
+		util.PanicIfPresent(os.RemoveAll(dirname))
 	}
 }
 

@@ -38,9 +38,11 @@ def run(machine, dest, *exclude_patterns):
             archive_file.write(src, arcname=rel_path)
         assert p.wait() == 0
         archive_path_dest = dest.joinpath(archive_name)
+    target_dir = dest.joinpath(repo_dir.name)
     assert 0 == call(f'docker-machine scp -d {archive_path_local} {machine}:{archive_path_dest}'.split(" "))
     assert 0 == call(f'docker-machine ssh {machine} sudo '
-                     f'unzip -o -d {dest.joinpath(repo_dir.name)} {archive_path_dest}'
+                     # f'rm -rf {target_dir} && '
+                     f'unzip -o -d {target_dir} {archive_path_dest}'
                      .split(' '))
 
 

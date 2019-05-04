@@ -58,6 +58,7 @@ class LibTaraxaEvm(Callable):
 
     def _call(self, receiver_addr: str, function_name: str, *args) -> list:
         args_str = json.dumps(args)
+        # print(f'lib_taraxa_vm call: {receiver_addr}.{function_name}({args_str})')
         ret_encoded = self._lib.Call(receiver_addr.encode(), function_name.encode(), args_str.encode())
-        # print(f'lib_taraxa_evm call: {receiver_addr}.{function_name}({args_str}) -> {str(ret_encoded)}')
+        # print(f'lib_taraxa_vm result: {str(ret_encoded, encoding="utf-8")}')
         return json.loads(ret_encoded)

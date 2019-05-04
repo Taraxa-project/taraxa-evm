@@ -50,7 +50,7 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 	return false
 }
 
-func PanicOn(value interface{}) {
+func PanicIfPresent(value interface{}) {
 	if !IsNil(value) {
 		fmt.Println(string(debug.Stack()))
 		panic(value)

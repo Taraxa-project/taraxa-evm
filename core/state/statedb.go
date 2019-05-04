@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
+	"runtime/debug"
 	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -118,6 +119,10 @@ func (self *StateDB) Rebase(root common.Hash, db Database) error {
 	return nil
 }
 
+func (this *StateDB) Merge(that *StateDB) {
+	//this TODO
+}
+
 // setError remembers the first non-nil error it is called with.
 func (self *StateDB) setError(err error) {
 	if self.dbErr == nil {
@@ -169,6 +174,7 @@ func (self *StateDB) Preimages() map[common.Hash][]byte {
 
 // AddRefund adds gas to the refund counter
 func (self *StateDB) AddRefund(gas uint64) {
+	fmt.Println("AddRefund", gas, debug.Stack())
 	self.journal.append(refundChange{prev: self.refund})
 	self.refund += gas
 }
@@ -177,6 +183,7 @@ func (self *StateDB) AddRefund(gas uint64) {
 // This method will panic if the refund counter goes below zero
 func (self *StateDB) SubRefund(gas uint64) {
 	self.journal.append(refundChange{prev: self.refund})
+	fmt.Println("SubRefund", gas, debug.Stack())
 	if gas > self.refund {
 		panic("Refund counter below zero")
 	}
@@ -453,9 +460,6 @@ func (self *StateDB) GetOrNewStateObject(addr common.Address) *stateObject {
 // createObject creates a new state object. If there is an existing account with
 // the given address, it is overwritten and returned as the second return value.
 func (self *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) {
-	if addr.Hex() == "0xcb350b1D62684c80Cf15696c28550B343A0c6444" {
-		fmt.Println()
-	}
 	prev = self.getStateObject(addr)
 	newobj = newObject(self, addr, Account{})
 	newobj.setNonce(0) // sets the object to dirty

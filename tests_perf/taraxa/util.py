@@ -1,7 +1,6 @@
 import json
 import subprocess
-from contextlib import AbstractContextManager
-from typing import ContextManager
+from typing import Type
 
 
 def popen(cmd, *args, **kwargs):
@@ -10,6 +9,13 @@ def popen(cmd, *args, **kwargs):
 
 def call(cmd, *args, **kwargs):
     assert 0 == subprocess.call(cmd.split(' '), *args, **kwargs)
+
+
+def raise_if_not_none(err, factory: Type[BaseException] = None):
+    if err is not None:
+        if factory is None:
+            raise err
+        raise factory(err)
 
 
 def read_str(path):
@@ -34,17 +40,4 @@ def write_json(path, value, *args, **kwargs):
 
 
 def str_bytes(obj):
-    return str(obj).encode(encoding='utf-8')
-
-
-class ContextManagers(AbstractContextManager):
-
-    def __init__(self, *delegates: ContextManager):
-        self.delegates = delegates
-
-    def __enter__(self):
-        return [ctx.__enter__() for ctx in self.delegates]
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        for ctx in self.delegates:
-            ctx.__exit__(exc_type, exc_value, traceback)
+    return str(obj).encode()

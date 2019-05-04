@@ -19,7 +19,7 @@ func New(db ethdb.Database) *BlockHashDB {
 
 func (this *BlockHashDB) GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash {
 	value, err := this.db.Get(key(blockNumber))
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	return common.HexToHash(string(value))
 }
 

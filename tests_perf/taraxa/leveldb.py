@@ -1,6 +1,7 @@
 import plyvel
 
 from contextlib import contextmanager
+from pathlib import Path
 
 
 class SessionRequiredError(Exception):
@@ -10,7 +11,7 @@ class SessionRequiredError(Exception):
 class LevelDB:
 
     def __init__(self, path, *openargs, **openkwargs):
-        self.path = path
+        self.path = Path(path)
         self.openargs = openargs
         self.openkwargs = openkwargs
         self._db = None

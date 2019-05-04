@@ -1,20 +1,19 @@
 from taraxa.ethereum_etl import export_blocks_and_transactions
-from taraxa.typing import fdict
-from .block_db import BlockDB
+from taraxa.type_util import *
 
 
 class BlockEtl:
 
-    def __init__(self, db: BlockDB, ethereum_etl_opts=fdict()):
-        self._db = db
+    def __init__(self, on_block: Callable[[dict], NoReturn], ethereum_etl_opts=fdict()):
+        self._on_block = on_block
         self.ethereum_etl_opts = ethereum_etl_opts
         self._block_cache = {}
         self._tx_cache = {}
         self._finished_blocks = {}
         self._next_block = 0
 
-    def run(self, to_block, page_size):
-        self._next_block = self._db.max_block_num() + 1
+    def run(self, from_block, to_block, page_size):
+        self._next_block = from_block + 1
         print(f'block_count: {self._next_block}')
         while self._next_block <= to_block:
             self._download(self._next_block, min(self._next_block + page_size, to_block))
@@ -34,10 +33,10 @@ class BlockEtl:
             'transactions': [transactions[i] for i in range(block_tx_count)]
         }
         while True:
-            block_to_write = self._finished_blocks.pop(self._next_block, None)
-            if not block_to_write:
+            block_to_flush = self._finished_blocks.pop(self._next_block, None)
+            if not block_to_flush:
                 break
-            self._db.put_block(block_to_write)
+            self._on_block(block_to_flush)
             self._next_block += 1
             print(f'block_count: {self._next_block}')
 

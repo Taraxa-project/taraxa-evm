@@ -83,6 +83,10 @@ type keccakState interface {
 
 type ExecutionController func(programCounter uint64) (changedProgramCounter uint64, shouldContinue bool)
 
+var NoopExecutionController = func(programCounter uint64) (changedProgramCounter uint64, shouldContinue bool) {
+	return programCounter, true
+}
+
 // EVMInterpreter represents an EVM interpreter
 type EVMInterpreter struct {
 	evm      *EVM
@@ -127,7 +131,7 @@ func NewEVMInterpreterWithExecutionController(evm *EVM, cfg Config, ctrl Executi
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
 func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
-	return NewEVMInterpreterWithExecutionController(evm, cfg, nil)
+	return NewEVMInterpreterWithExecutionController(evm, cfg, NoopExecutionController)
 }
 
 func (in *EVMInterpreter) enforceRestrictions(op OpCode, operation operation, stack *Stack) error {
@@ -217,12 +221,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
 	for atomic.LoadInt32(&in.evm.abort) == 0 {
-		if in.executionController != nil {
-			if pcChanged, shouldContinue := in.executionController(pc); shouldContinue {
-				pc = pcChanged
-			} else {
-				break
-			}
+		if pcChanged, shouldContinue := in.executionController(pc); shouldContinue {
+			pc = pcChanged
+		} else {
+			break
 		}
 		if in.cfg.Debug {
 			// Capture pre-execution values for tracing.

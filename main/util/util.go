@@ -3,6 +3,7 @@ package util
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"math/big"
+	"reflect"
 )
 
 func Sum(x, y *big.Int) *big.Int {
@@ -23,5 +24,26 @@ func Chain(f, g func()) func() {
 	return func() {
 		f()
 		g()
+	}
+}
+
+type Remapper func(key, oldValue interface{}, wasPresent bool) (newValue interface{})
+
+func Compute(anyMap, key interface{}, remapper Remapper) (newValue interface{}, revert func()) {
+	reflectMap := reflect.ValueOf(anyMap)
+	reflectKey := reflect.ValueOf(key)
+	reflectOldVal := reflectMap.MapIndex(reflectKey)
+	wasPresent := reflectOldVal.IsValid()
+	var oldVal interface{}
+	if wasPresent {
+		oldVal = reflectOldVal.Interface()
+	} else {
+		valueType := reflectMap.Type().Elem()
+		oldVal = reflect.Zero(valueType).Interface()
+	}
+	newValue = remapper(key, oldVal, wasPresent)
+	reflectMap.SetMapIndex(reflectKey, reflect.ValueOf(newValue))
+	return newValue, func() {
+		reflectMap.SetMapIndex(reflectKey, reflectOldVal)
 	}
 }

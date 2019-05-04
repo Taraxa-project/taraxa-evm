@@ -3,6 +3,7 @@ package conflict_detector
 import (
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
+	"sync/atomic"
 )
 
 type ConflictDetector struct {
@@ -10,8 +11,10 @@ type ConflictDetector struct {
 	operationLog      operationLog
 	keysInConflict    Keys
 	authorsInConflict Authors
+	// TODO don't use mutex here
 	conflictMutex     sync.RWMutex
 	executionMutex    sync.Mutex
+	haveBeenConflicts int32
 }
 
 func New(inboxCapacity int) *ConflictDetector {
@@ -53,7 +56,7 @@ func (this *ConflictDetector) Join() *ConflictDetector {
 
 // This function is thread safe
 // The returned logger is not thread safe
-func (this *ConflictDetector) NewLogger(author Author) Logger {
+func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 	cache := make(map[OperationType]Keys)
 	return func(opType OperationType, key Key) {
 		cachedKeys := cache[opType]
@@ -80,6 +83,7 @@ func (this *ConflictDetector) Reset() (authorsInConflict Authors) {
 	authorsInConflict = this.authorsInConflict
 	this.authorsInConflict = linkedhashset.New()
 	this.keysInConflict = linkedhashset.New()
+	this.haveBeenConflicts = 0
 	return
 }
 
@@ -90,15 +94,14 @@ func (this *ConflictDetector) IsCurrentlyInConflict(author Author) bool {
 }
 
 func (this *ConflictDetector) HaveBeenConflicts() bool {
-	this.conflictMutex.RLock()
-	defer this.conflictMutex.RUnlock()
-	return !this.authorsInConflict.Empty()
+	return atomic.LoadInt32(&this.haveBeenConflicts) == 1
 }
 
 func (this *ConflictDetector) addConflictingAuthor(author Author) {
 	this.conflictMutex.Lock()
 	defer this.conflictMutex.Unlock()
 	this.authorsInConflict.Add(author)
+	atomic.StoreInt32(&this.haveBeenConflicts, 1)
 }
 
 func (this *ConflictDetector) process(op *operation) {

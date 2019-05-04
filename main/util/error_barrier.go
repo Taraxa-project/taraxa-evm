@@ -28,7 +28,7 @@ func (this *ErrorBarrier) CheckIn(errors ...error) {
 }
 
 func (this *ErrorBarrier) PanicIfPresent() {
-	PanicOn(this.Get())
+	PanicIfPresent(this.Get())
 }
 
 func (this *ErrorBarrier) Get() error {

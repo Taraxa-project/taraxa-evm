@@ -154,7 +154,6 @@ func (st *StateTransition) useGas(amount uint64) error {
 
 func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
-	// TODO post-check
 	if !st.state.HasBalance(st.msg.From(), mgval) {
 		return errInsufficientBalanceForGas
 	}
@@ -213,10 +212,12 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 	var evm = st.evm
 	if contractCreation {
 		ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+		fmt.Println("contract creation", st.gas)
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.AddNonce(sender.Address(), 1)
 		ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		fmt.Println("contract call", st.gas)
 	}
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)
@@ -239,6 +240,7 @@ func (st *StateTransition) refundGas() {
 		refund = st.state.GetRefund()
 	}
 	st.gas += refund
+	//fmt.Println("refundGas", refund, string(debug.Stack()))
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)

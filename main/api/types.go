@@ -38,24 +38,13 @@ type LDBConfig struct {
 
 func (this *LDBConfig) NewLdbDatabase() *ethdb.LDBDatabase {
 	db, err := ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
-	util.PanicOn(err)
+	util.PanicIfPresent(err)
 	return db
 }
 
 type StateDBConfig struct {
-	LevelDB   *LDBConfig `json:"leveldb"`
+	LDB       *LDBConfig `json:"ldb"`
 	CacheSize int        `json:"cacheSize"`
-}
-
-type ExternalApiConfig struct {
-	BlockHashLevelDB *LDBConfig `json:"blockHashLevelDB"`
-}
-
-type Config struct {
-	StateDBConfig     StateDBConfig       `json:"stateDB"`
-	ExternalApiConfig *ExternalApiConfig  `json:"externalApi"`
-	EvmConfig         *vm.StaticConfig    `json:"evmConfig"`
-	ChainConfig       *params.ChainConfig `json:"chainConfig"`
 }
 
 type Transaction struct {
@@ -119,4 +108,12 @@ type StateTransitionResult struct {
 type StateTransitionResponse struct {
 	Result StateTransitionResult `json:"result"`
 	Error  *util.SimpleError     `json:"error"`
+}
+
+type VMConfig struct {
+	StateDB                  StateDBConfig       `json:"stateDB"`
+	Evm                      *vm.StaticConfig    `json:"evm"`
+	Chain                    *params.ChainConfig `json:"chain"`
+	BlockHashLDB             *LDBConfig          `json:"blockHashLDB"`
+	StateTransitionTargetLDB *LDBConfig          `json:"stateTransitionTargetLDB"`
 }

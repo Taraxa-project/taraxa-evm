@@ -11,7 +11,7 @@ func run(requestStr string) *api.Response {
 	responseStr := RunJson(requestStr)
 	response := new(api.Response)
 	json.Unmarshal([]byte(responseStr), response)
-	util.PanicOn(response.Error)
+	util.PanicIfPresent(response.Error)
 	return response
 }
 
