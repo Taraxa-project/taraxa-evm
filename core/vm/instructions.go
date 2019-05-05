@@ -19,13 +19,12 @@ package vm
 import (
 	"errors"
 	"fmt"
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"golang.org/x/crypto/sha3"
+	"math/big"
 )
 
 var (
@@ -412,7 +411,9 @@ func opAddress(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memo
 func opBalance(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	slot := stack.peek()
 	// TODO conflict prone
-	slot.Set(interpreter.evm.StateDB.GetBalance(common.BigToAddress(slot)))
+	balance := interpreter.evm.StateDB.GetBalance(common.BigToAddress(slot))
+	//fmt.Println("opBalance", balance, contract.caller.Address().Hex(), contract.self.Address().Hex(), string(debug.Stack()))
+	slot.Set(balance)
 	return nil, nil
 }
 

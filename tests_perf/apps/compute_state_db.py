@@ -71,34 +71,29 @@ def execute_transactions(vm_opts,
         if to_block and block_num > to_block:
             break
         assert block_num_from_db == block_num
+        base_result = source_result_db.get(block_num - 1) if source_result_db else last_result
+        state_root = base_result['state_transition_result']['stateRoot'] if base_result else '0x' + '0' * 64
         transactions = block['transactions']
         tx_count = len(transactions)
-        print(f'Processing block {block_num}')
-        if tx_count != 0:
-            base_result = source_result_db.get(block_num - 1) if source_result_db else last_result
-            state_root = base_result['state_transition_result']['stateRoot'] if base_result else '0x' + '0' * 64
-            print(f'tx count: {tx_count}, state_root: {state_root}')
-            state_transition = {
-                "stateRoot": state_root,
-                "block": _map_block(block),
-                "transactions": [_map_transaction(tx) for tx in transactions],
-            }
-            if emulate_ethereum:
-                concurrent_schedule = {
-                    "sequential": list(range(tx_count))
-                }
-            else:
-                concurrent_schedule, err = taraxa_vm_ptr.call('GenerateSchedule', state_transition)
-                raise_if_not_none(err, lambda e: RuntimeError(f'Schedule generation failed: {e}'))
-            state_transition_result, err = taraxa_vm_ptr.call("TransitionState", state_transition, concurrent_schedule)
-            raise_if_not_none(err, lambda e: RuntimeError(f'State transition failed: {e}'))
-            last_result = {
-                'concurrent_schedule': concurrent_schedule,
-                'state_transition_result': state_transition_result,
+        print(f'Processing block {block_num}, tx count: {tx_count}, base_state_root: {state_root}')
+        state_transition = {
+            "stateRoot": state_root,
+            "block": _map_block(block),
+            "transactions": [_map_transaction(tx) for tx in transactions],
+        }
+        if emulate_ethereum:
+            concurrent_schedule = {
+                "sequential": list(range(tx_count))
             }
         else:
-            # because block rewards are not implemented, state change won't happen without transactions
-            print('no transactions, skipping')
+            concurrent_schedule, err = taraxa_vm_ptr.call('GenerateSchedule', state_transition)
+            raise_if_not_none(err, lambda e: RuntimeError(f'Schedule generation failed: {e}'))
+        state_transition_result, err = taraxa_vm_ptr.call("TransitionState", state_transition, concurrent_schedule)
+        raise_if_not_none(err, lambda e: RuntimeError(f'State transition failed: {e}'))
+        last_result = {
+            'concurrent_schedule': concurrent_schedule,
+            'state_transition_result': state_transition_result,
+        }
         target_result_db.put(block_num, last_result)
         block_num += 1
     assert not to_block or block_num - 1 == to_block

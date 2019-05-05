@@ -1,16 +1,14 @@
-from multiprocessing import cpu_count
-
-from taraxa.block_etl import BlockEtl
-from taraxa.type_util import fdict
-from taraxa.leveldb import LevelDB
-from . import shell
-from taraxa.context_util import with_exit_stack, current_exit_stack
-from taraxa.rocksdb_util import ceil_entry
 import json
 
 import rocksdb
 
+from taraxa.block_etl import BlockEtl
+from taraxa.context_util import with_exit_stack, current_exit_stack
+from taraxa.leveldb import LevelDB
+from taraxa.rocksdb_util import ceil_entry
 from taraxa.type_util import Iterable, Tuple, Dict
+from taraxa.type_util import fdict
+from . import shell
 
 
 class BlockDB:
@@ -48,20 +46,31 @@ class BlockDB:
 @shell.command
 @with_exit_stack
 def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
-                            to_block=7665710, page_size=500000,
+                            to_block=7665710, page_size=1000000,
                             ethereum_etl_opts=fdict(
-                                batch_size=500,
-                                max_workers=cpu_count() * 3,
+                                batch_size=800,
+                                parallelism_factor=3,
                                 timeout=15)):
     block_db = BlockDB(rocksdb.DB(block_db_path, rocksdb.Options(create_if_missing=True)))
     block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
     current_exit_stack().enter_context(block_hash_db.open_session())
 
     def on_block(block):
+        block_num = block['number']
+        for i, tx in enumerate(block['transactions']):
+            print(tx)
+            assert tx['hash'] == tx['receipt']['transactionHash']
+            assert tx['blockNumber'] == block_num
+            assert tx['transactionIndex'] == i
+        for h, b in zip(block['uncles'], block['uncleBlocks']):
+            print(h, b)
+            assert h == b['hash']
         block_db.put_block(block)
         block_hash_db.session.put(str(block['number']).encode(), block['hash'].encode())
 
-    BlockEtl(on_block, ethereum_etl_opts=ethereum_etl_opts).run(block_db.max_block_num(), to_block, page_size)
+    last_block = block_db.max_block_num()
+    from_block = last_block + 1 if last_block else 0
+    BlockEtl(on_block, ethereum_etl_opts=ethereum_etl_opts).run(from_block, to_block, page_size)
 
 
 @shell.command

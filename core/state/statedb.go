@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
-	"runtime/debug"
 	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -126,6 +125,7 @@ func (this *StateDB) Merge(that *StateDB) {
 // setError remembers the first non-nil error it is called with.
 func (self *StateDB) setError(err error) {
 	if self.dbErr == nil {
+		util.PanicIfPresent(err)
 		self.dbErr = err
 	}
 }
@@ -174,7 +174,7 @@ func (self *StateDB) Preimages() map[common.Hash][]byte {
 
 // AddRefund adds gas to the refund counter
 func (self *StateDB) AddRefund(gas uint64) {
-	fmt.Println("AddRefund", gas, debug.Stack())
+	//fmt.Println("AddRefund", gas, string(debug.Stack()))
 	self.journal.append(refundChange{prev: self.refund})
 	self.refund += gas
 }
@@ -183,7 +183,7 @@ func (self *StateDB) AddRefund(gas uint64) {
 // This method will panic if the refund counter goes below zero
 func (self *StateDB) SubRefund(gas uint64) {
 	self.journal.append(refundChange{prev: self.refund})
-	fmt.Println("SubRefund", gas, debug.Stack())
+	//fmt.Println("SubRefund", gas, string(debug.Stack()))
 	if gas > self.refund {
 		panic("Refund counter below zero")
 	}
@@ -213,7 +213,8 @@ func (self *StateDB) GetBalance(addr common.Address) *big.Int {
 }
 
 func (this *StateDB) HasBalance(address common.Address, amount *big.Int) bool {
-	return this.GetBalance(address).Cmp(amount) >= 0
+	return true
+	//return this.GetBalance(address).Cmp(amount) >= 0
 }
 
 func (self *StateDB) GetNonce(addr common.Address) uint64 {
@@ -324,18 +325,20 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, amount *big.Int) {
-	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.AddBalance(amount)
-	}
+	return
+	//stateObject := self.GetOrNewStateObject(addr)
+	//if stateObject != nil {
+	//	stateObject.AddBalance(amount)
+	//}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
 func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
-	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SubBalance(amount)
-	}
+	return
+	//stateObject := self.GetOrNewStateObject(addr)
+	//if stateObject != nil {
+	//	stateObject.SubBalance(amount)
+	//}
 }
 
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {
@@ -353,7 +356,7 @@ func (self *StateDB) SetNonce(addr common.Address, nonce uint64) {
 }
 
 func (this *StateDB) AddNonce(addr common.Address, value uint64) {
-	this.SetNonce(addr, this.GetNonce(addr) + value)
+	this.SetNonce(addr, this.GetNonce(addr)+value)
 }
 
 func (self *StateDB) SetCode(addr common.Address, code []byte) {
@@ -425,11 +428,6 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 	// Load the object from the database.
 	enc, err := self.trie.TryGet(addr[:])
 	if len(enc) == 0 {
-		if err != nil {
-			errStr := err.Error()
-			addStr := addr.Hex()
-			util.Noop(errStr, addStr)
-		}
 		self.setError(err)
 		return nil
 	}

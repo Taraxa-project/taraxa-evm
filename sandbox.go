@@ -9,6 +9,6 @@ type foo struct {
 
 func main() {
 	//var f = new(foo)
-	var foo = []int{1, 2, 3}
-	fmt.Println(foo[:3])
+	//var foo = []int{1, 2, 3}
+	fmt.Println(^uint64(0))
 }

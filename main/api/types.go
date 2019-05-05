@@ -59,18 +59,19 @@ type Transaction struct {
 }
 
 type Block struct {
-	Coinbase   common.Address `json:"coinbase"`
-	Number     BigIntString   `json:"number"`
-	Time       BigIntString   `json:"time"`
-	Difficulty BigIntString   `json:"difficulty"`
-	GasLimit   uint64         `json:"gasLimit"`
-	Hash       common.Hash    `json:"hash"`
+	Coinbase     common.Address `json:"coinbase"`
+	Number       BigIntString   `json:"number"`
+	Time         BigIntString   `json:"time"`
+	Difficulty   BigIntString   `json:"difficulty"`
+	GasLimit     uint64         `json:"gasLimit"`
+	Hash         common.Hash    `json:"hash"`
+	Uncles       []common.Hash  `json:"uncles"`
+	Transactions []*Transaction `json:"transactions"`
 }
 
 type StateTransition struct {
-	StateRoot    common.Hash    `json:"stateRoot"`
-	Block        *Block         `json:"block"`
-	Transactions []*Transaction `json:"transactions"`
+	StateRoot common.Hash `json:"stateRoot"`
+	Block     *Block      `json:"block"`
 }
 
 type ScheduleRequest struct {

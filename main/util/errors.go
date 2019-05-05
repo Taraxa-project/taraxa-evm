@@ -52,7 +52,7 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 
 func PanicIfPresent(value interface{}) {
 	if !IsNil(value) {
-		fmt.Println(string(debug.Stack()))
+		fmt.Println(value.(error).Error(), string(debug.Stack()))
 		panic(value)
 	}
 }

@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from . import shell
-from .blockchain_data import collect_blockchain_data
-from .compute_state_db import execute_transactions
+from apps import shell
+from apps.blockchain_data import collect_blockchain_data
+from apps.compute_state_db import execute_transactions
 
 MAX_BLOCK = 7665710
 
@@ -13,6 +13,7 @@ def subdir(base, child):
 
 @shell.command
 def collect_blocks(base_path: str):
+    Path(base_path).mkdir(parents=True, exist_ok=True)
     collect_blockchain_data(subdir(base_path, 'blocks'), subdir(base_path, 'block_hashes'), to_block=MAX_BLOCK)
 
 
@@ -42,3 +43,5 @@ def compute_state_eth_mode(base_path: str):
         target_result_db_opts={
             'path': subdir(base_path, 'ethereum_emulated_results')
         })
+
+# collect_blocks('../out')
