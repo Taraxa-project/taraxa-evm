@@ -14,7 +14,15 @@ def subdir(base, child):
 @shell.command
 def collect_blocks(base_path: str):
     Path(base_path).mkdir(parents=True, exist_ok=True)
-    collect_blockchain_data(subdir(base_path, 'blocks'), subdir(base_path, 'block_hashes'), to_block=MAX_BLOCK)
+    collect_blockchain_data(subdir(base_path, 'blocks'), subdir(base_path, 'block_hashes'),
+                            to_block=MAX_BLOCK,
+                            page_size=500000,
+                            ethereum_etl_opts=dict(
+                                provider_uri='https://mainnet.infura.io/v3/6f560dcc0ff74bc0aa6596b7fe253573',
+                                # provider_uri='https://ethereum.api.nodesmith.io/v1/mainnet/jsonrpc?apiKey=783e2979af6d4e6a8e4475d31830948d',
+                                batch_size=750,
+                                parallelism_factor=3,
+                                timeout=500))
 
 
 @shell.command

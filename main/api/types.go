@@ -1,19 +1,19 @@
 package api
 
 import (
-	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 )
 
 type TxId = int
-type BigIntString = string;
+
+type BigIntString = *big.Int
 
 type BlockHashStore interface {
 	GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash
@@ -21,13 +21,6 @@ type BlockHashStore interface {
 
 type ExternalApi interface {
 	BlockHashStore
-}
-
-func BigInt(str BigIntString) *big.Int {
-	if ret, success := new(big.Int).SetString(str, 10); success {
-		return ret
-	}
-	panic(errors.New("Could not convert string to bigint: " + str))
 }
 
 type LDBConfig struct {
@@ -58,15 +51,19 @@ type Transaction struct {
 	Hash     common.Hash     `json:"hash"`
 }
 
+type HeaderNumerAndCoinbase struct {
+	Number   BigIntString   `json:"number"`
+	Coinbase common.Address `json:"coinbase"`
+}
+
 type Block struct {
-	Coinbase     common.Address `json:"coinbase"`
-	Number       BigIntString   `json:"number"`
-	Time         BigIntString   `json:"time"`
-	Difficulty   BigIntString   `json:"difficulty"`
-	GasLimit     uint64         `json:"gasLimit"`
-	Hash         common.Hash    `json:"hash"`
-	Uncles       []common.Hash  `json:"uncles"`
-	Transactions []*Transaction `json:"transactions"`
+	*HeaderNumerAndCoinbase
+	Time         BigIntString              `json:"time"`
+	Difficulty   BigIntString              `json:"difficulty"`
+	GasLimit     uint64                    `json:"gasLimit"`
+	Hash         common.Hash               `json:"hash"`
+	Uncles       []*HeaderNumerAndCoinbase `json:"uncles"`
+	Transactions []*Transaction            `json:"transactions"`
 }
 
 type StateTransition struct {
@@ -112,9 +109,9 @@ type StateTransitionResponse struct {
 }
 
 type VMConfig struct {
-	StateDB                  StateDBConfig       `json:"stateDB"`
-	Evm                      *vm.StaticConfig    `json:"evm"`
-	Chain                    *params.ChainConfig `json:"chain"`
-	BlockHashLDB             *LDBConfig          `json:"blockHashLDB"`
-	StateTransitionTargetLDB *LDBConfig          `json:"stateTransitionTargetLDB"`
+	StateDB                  StateDBConfig    `json:"stateDB"`
+	Evm                      *vm.StaticConfig `json:"evm"`
+	Genesis                  *core.Genesis    `json:"genesis"`
+	BlockHashLDB             *LDBConfig       `json:"blockHashLDB"`
+	StateTransitionTargetLDB *LDBConfig       `json:"stateTransitionTargetLDB"`
 }

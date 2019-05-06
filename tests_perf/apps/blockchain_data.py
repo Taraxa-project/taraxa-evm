@@ -48,9 +48,9 @@ class BlockDB:
 def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
                             to_block=7665710, page_size=1000000,
                             ethereum_etl_opts=fdict(
-                                batch_size=800,
-                                parallelism_factor=3,
-                                timeout=15)):
+                                batch_size=500,
+                                parallelism_factor=2.5,
+                                timeout=20)):
     block_db = BlockDB(rocksdb.DB(block_db_path, rocksdb.Options(create_if_missing=True)))
     block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
     current_exit_stack().enter_context(block_hash_db.open_session())
@@ -58,12 +58,10 @@ def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
     def on_block(block):
         block_num = block['number']
         for i, tx in enumerate(block['transactions']):
-            print(tx)
             assert tx['hash'] == tx['receipt']['transactionHash']
             assert tx['blockNumber'] == block_num
             assert tx['transactionIndex'] == i
         for h, b in zip(block['uncles'], block['uncleBlocks']):
-            print(h, b)
             assert h == b['hash']
         block_db.put_block(block)
         block_hash_db.session.put(str(block['number']).encode(), block['hash'].encode())

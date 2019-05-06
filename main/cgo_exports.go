@@ -5,6 +5,7 @@ package main
 import "C"
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
@@ -12,7 +13,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/main/taraxa_evm"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/virtual_env"
-	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 var env = new(virtual_env.Builder).
@@ -40,9 +40,9 @@ var env = new(virtual_env.Builder).
 		if taraxaEvm.EvmConfig == nil {
 			taraxaEvm.EvmConfig = new(vm.StaticConfig)
 		}
-		taraxaEvm.ChainConfig = config.Chain
-		if taraxaEvm.ChainConfig == nil {
-			taraxaEvm.ChainConfig = params.MainnetChainConfig
+		taraxaEvm.Genesis = config.Genesis
+		if taraxaEvm.Genesis == nil {
+			taraxaEvm.Genesis = core.DefaultGenesisBlock()
 		}
 		vmAddr, allocErr := env.Alloc(taraxaEvm, cleanup)
 		util.PanicIfPresent(allocErr)

@@ -1,4 +1,4 @@
-from taraxa.ethereum_etl import export_blocks_batch
+from taraxa.ethereum_etl import export_blocks
 from taraxa.type_util import *
 
 
@@ -12,6 +12,7 @@ class BlockEtl:
 
     def run(self, from_block, to_block, page_size):
         self._next_block = from_block
+        print(f'running block etl with args {self.ethereum_etl_opts}')
         print(f'block_count: {self._next_block}')
         while self._next_block <= to_block:
             self._download(self._next_block, min(self._next_block + page_size, to_block))
@@ -20,6 +21,7 @@ class BlockEtl:
         block_num = block['number']
         if block_num != self._next_block:
             self._finished_blocks[block_num] = block
+            # print('downloaded future block')
             return
         block_to_flush = block
         while block_to_flush is not None:
@@ -30,4 +32,4 @@ class BlockEtl:
 
     def _download(self, from_block, to_block):
         print(f'downloading blocks {from_block}-{to_block}...')
-        export_blocks_batch(from_block, to_block, self._store_block, **self.ethereum_etl_opts)
+        export_blocks(from_block, to_block, self._store_block, **self.ethereum_etl_opts)

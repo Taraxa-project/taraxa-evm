@@ -8,6 +8,8 @@ require (
 	github.com/cosiner/argv v0.0.1 // indirect
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/deckarep/golang-set v1.7.1
+	github.com/edsrzf/mmap-go v1.0.0
 	github.com/emirpasic/gods v1.12.0
 	github.com/go-delve/delve v1.2.0 // indirect
 	github.com/go-stack/stack v1.8.0

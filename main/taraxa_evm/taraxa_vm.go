@@ -13,7 +13,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/taraxa_state_db"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 )
 
@@ -21,7 +20,7 @@ var sequential_group conflict_detector.Author = "SEQUENTIAL_GROUP"
 
 type TaraxaVM struct {
 	ExternalApi   api.ExternalApi
-	ChainConfig   *params.ChainConfig
+	Genesis       *core.Genesis
 	EvmConfig     *vm.StaticConfig
 	SourceStateDB state.Database
 	TargetStateDB state.Database
@@ -80,19 +79,24 @@ func (this *TaraxaVM) TransitionState(
 	stateTransition *api.StateTransition, schedule *api.ConcurrentSchedule) (
 	ret *api.StateTransitionResult, err error,
 ) {
+	ret = new(api.StateTransitionResult)
 	var errFatal util.ErrorBarrier
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
-	commitDb := this.SourceStateDB
-
-	ethhahsh := ethash.New(this.ChainConfig.Ethash)
-	ethhahsh.Finalize()
+	//commitDb := this.SourceStateDB
 	//commitDb := this.TargetStateDB
 	//if commitDb == nil {
 	//	panic("don't go here")
 	//	commitDb = state.NewDatabase(this.SourceStateDB.TrieDB().GetDiskDB())
 	//}
 	block := stateTransition.Block
-	blockNumber := api.BigInt(block.Number)
+	blockNumber := block.Number
+	if blockNumber.Sign() == 0 {
+		diskDB := this.SourceStateDB.TrieDB().GetDiskDB()
+		_, _, genesisSetupErr := core.SetupGenesisBlock(diskDB, this.Genesis)
+		errFatal.CheckIn(genesisSetupErr)
+		ret.StateRoot = this.Genesis.ToBlock(diskDB).Root()
+		return
+	}
 	transactions := block.Transactions
 	txCount := len(transactions)
 	interpreterController := vm.NoopExecutionController
@@ -146,7 +150,7 @@ func (this *TaraxaVM) TransitionState(
 	//		defer parallelCommitLock.Unlock()
 	//		rebaseErr := ethereumStateDB.Rebase(currentRoot, commitDb)
 	//		errFatal.CheckIn(rebaseErr)
-	//		root, commitErr := ethereumStateDB.Commit(this.ChainConfig.IsEIP158(blockNumber))
+	//		root, commitErr := ethereumStateDB.Commit(chainConfig.IsEIP158(blockNumber))
 	//		errFatal.CheckIn(commitErr)
 	//		currentRoot = root
 	//	}()
@@ -157,12 +161,13 @@ func (this *TaraxaVM) TransitionState(
 	//	errFatal.CheckIn()
 	//	txResults[result.txId] = result
 	//}
-	finalStateDB, stateDbCreateErr := state.New(currentRoot, commitDb)
+	finalStateDB, stateDbCreateErr := state.New(currentRoot, this.SourceStateDB)
 	errFatal.CheckIn(stateDbCreateErr)
 	//taraxaDB := taraxa_state_db.New(finalStateDB, opLoggerFactory(sequential_group))
-	gasPool := new(core.GasPool).AddGas(^uint64(0))
-	finalStateDB.GetOrNewStateObject(block.Coinbase)
-	if this.ChainConfig.DAOForkSupport && this.ChainConfig.DAOForkBlock != nil && this.ChainConfig.DAOForkBlock.Cmp(blockNumber) == 0 {
+	//gasPool := new(core.GasPool).AddGas(^uint64(0))
+	gasPool := new(core.GasPool).AddGas(block.GasLimit)
+	chainConfig := this.Genesis.Config
+	if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(blockNumber) == 0 {
 		misc.ApplyDAOHardFork(finalStateDB)
 	}
 	for _, txId := range schedule.Sequential {
@@ -175,7 +180,6 @@ func (this *TaraxaVM) TransitionState(
 		txResults[txId] = result
 	}
 	//gasPool := new(core.GasPool).AddGas(stateTransition.Block.GasLimit)
-	ret = new(api.StateTransitionResult)
 	for txId, txResult := range txResults {
 		txData := transactions[txId]
 		//nonceErr := core.CheckNonce(finalStateDB, txData.From, txData.Nonce)
@@ -204,7 +208,7 @@ func (this *TaraxaVM) TransitionState(
 		//errFatal.CheckIn(gasLimitReachedErr)
 		//gasPool.AddGas(txData.GasLimit - txResult.gasUsed)
 		ret.UsedGas += txResult.gasUsed
-		ethReceipt := types.NewReceipt(nil, txResult.contractErr != nil, ret.UsedGas)
+		ethReceipt := types.NewReceipt(txResult.rootBytes, txResult.contractErr != nil, ret.UsedGas)
 		if txData.To == nil {
 			ethReceipt.ContractAddress = crypto.CreateAddress(txData.From, txData.Nonce)
 		}
@@ -219,9 +223,10 @@ func (this *TaraxaVM) TransitionState(
 		})
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
-	finalRoot, commitErr := finalStateDB.Commit(this.ChainConfig.IsEIP158(blockNumber))
+	ethash.AccumulateRewards(chainConfig, finalStateDB, block.HeaderNumerAndCoinbase, block.Uncles...)
+	finalRoot, commitErr := finalStateDB.Commit(chainConfig.IsEIP158(blockNumber))
 	errFatal.CheckIn(commitErr)
-	trieDB := commitDb.TrieDB()
+	trieDB := this.SourceStateDB.TrieDB()
 	//trieDB.SetDiskDB(commitTo)
 	finalCommitErr := trieDB.Commit(finalRoot, false)
 	errFatal.CheckIn(finalCommitErr)
@@ -234,6 +239,7 @@ type TransactionResult struct {
 	value          hexutil.Bytes
 	gasUsed        uint64
 	logs           []*types.Log
+	rootBytes      []byte
 	transientState *taraxa_state_db.TransientState
 	contractErr    error
 	consensusErr   error
@@ -248,10 +254,11 @@ func (this *TaraxaVM) ExecuteTransaction(
 	controller vm.ExecutionController,
 	gasPool *core.GasPool,
 ) *TransactionResult {
+	chainConfig := this.Genesis.Config
 	block := stateTransition.Block
 	txData := block.Transactions[txId]
-	gasPrice := api.BigInt(txData.GasPrice)
-	blockNumber := api.BigInt(block.Number)
+	gasPrice := txData.GasPrice
+	blockNumber := block.Number
 	evmContext := vm.Context{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
@@ -259,8 +266,8 @@ func (this *TaraxaVM) ExecuteTransaction(
 		Origin:      txData.From,
 		Coinbase:    block.Coinbase,
 		BlockNumber: blockNumber,
-		Time:        api.BigInt(block.Time),
-		Difficulty:  api.BigInt(block.Difficulty),
+		Time:        block.Time,
+		Difficulty:  block.Difficulty,
 		GasLimit:    block.GasLimit,
 		GasPrice:    new(big.Int).Set(gasPrice),
 	}
@@ -268,13 +275,13 @@ func (this *TaraxaVM) ExecuteTransaction(
 		StaticConfig: *this.EvmConfig,
 	}
 	evm := vm.NewEVMWithInterpreter(
-		evmContext, stateDB, this.ChainConfig, evmConfig,
+		evmContext, stateDB, chainConfig, evmConfig,
 		func(evm *vm.EVM) vm.Interpreter {
 			return vm.NewEVMInterpreterWithExecutionController(evm, evmConfig, controller)
 		},
 	)
 	message := types.NewMessage(
-		txData.From, txData.To, txData.Nonce, api.BigInt(txData.Amount), txData.GasLimit, gasPrice, *txData.Data,
+		txData.From, txData.To, txData.Nonce, txData.Amount, txData.GasLimit, gasPrice, *txData.Data,
 		true,
 	)
 	//gasPool := new(core.GasPool).AddGas(block.GasLimit)
@@ -285,6 +292,11 @@ func (this *TaraxaVM) ExecuteTransaction(
 	result.txId = txId
 	result.dbErr = stateDB.Error()
 	result.logs = stateDB.GetLogs(txData.Hash)
+	if chainConfig.IsByzantium(blockNumber) {
+		stateDB.Finalise(true)
+	} else {
+		result.rootBytes = stateDB.IntermediateRoot(chainConfig.IsEIP158(blockNumber)).Bytes()
+	}
 	//result.transientState = stateDB.CommitTransientState()
 	return result
 }

@@ -89,37 +89,20 @@ type StateDB struct {
 }
 
 // Create a new state from a given trie.
-func New(root common.Hash, db Database) (ret *StateDB, err error) {
-	ret = &StateDB{
+func New(root common.Hash, db Database) (*StateDB, error) {
+	tr, err := db.OpenTrie(root)
+	if err != nil {
+		return nil, err
+	}
+	return &StateDB{
+		db:                db,
+		trie:              tr,
 		stateObjects:      make(map[common.Address]*stateObject),
 		stateObjectsDirty: make(map[common.Address]struct{}),
 		logs:              make(map[common.Hash][]*types.Log),
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
-	}
-	err = ret.Rebase(root, db)
-	if (err != nil) {
-		// to conform the previous interface
-		ret = nil
-	}
-	return
-}
-
-func (self *StateDB) Rebase(root common.Hash, db Database) error {
-	trie, err := db.OpenTrie(root)
-	if err != nil {
-		return err
-	}
-	self.db = db
-	self.trie = trie
-	for _, stateObject := range self.stateObjects {
-		stateObject.trie = nil
-	}
-	return nil
-}
-
-func (this *StateDB) Merge(that *StateDB) {
-	//this TODO
+	}, nil
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -174,7 +157,6 @@ func (self *StateDB) Preimages() map[common.Hash][]byte {
 
 // AddRefund adds gas to the refund counter
 func (self *StateDB) AddRefund(gas uint64) {
-	//fmt.Println("AddRefund", gas, string(debug.Stack()))
 	self.journal.append(refundChange{prev: self.refund})
 	self.refund += gas
 }
@@ -183,7 +165,6 @@ func (self *StateDB) AddRefund(gas uint64) {
 // This method will panic if the refund counter goes below zero
 func (self *StateDB) SubRefund(gas uint64) {
 	self.journal.append(refundChange{prev: self.refund})
-	//fmt.Println("SubRefund", gas, string(debug.Stack()))
 	if gas > self.refund {
 		panic("Refund counter below zero")
 	}
@@ -213,8 +194,8 @@ func (self *StateDB) GetBalance(addr common.Address) *big.Int {
 }
 
 func (this *StateDB) HasBalance(address common.Address, amount *big.Int) bool {
-	return true
-	//return this.GetBalance(address).Cmp(amount) >= 0
+	//return true
+	return this.GetBalance(address).Cmp(amount) >= 0
 }
 
 func (self *StateDB) GetNonce(addr common.Address) uint64 {
@@ -325,20 +306,18 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, amount *big.Int) {
-	return
-	//stateObject := self.GetOrNewStateObject(addr)
-	//if stateObject != nil {
-	//	stateObject.AddBalance(amount)
-	//}
+	stateObject := self.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.AddBalance(amount)
+	}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
 func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
-	return
-	//stateObject := self.GetOrNewStateObject(addr)
-	//if stateObject != nil {
-	//	stateObject.SubBalance(amount)
-	//}
+	stateObject := self.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SubBalance(amount)
+	}
 }
 
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {

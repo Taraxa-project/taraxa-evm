@@ -41,3 +41,8 @@ def write_json(path, value, *args, **kwargs):
 
 def str_bytes(obj):
     return str(obj).encode()
+
+
+def assert_eq(first, second, format_str='{} != {}'):
+    if first != second:
+        raise ValueError(format_str.format(first, second))

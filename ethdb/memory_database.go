@@ -90,26 +90,8 @@ func (db *MemDatabase) Delete(key []byte) error {
 
 func (db *MemDatabase) Close() {}
 
-type mapWriter struct {
-	db *MemDatabase
-}
-
-func (w *mapWriter) Put(key []byte, value []byte) error {
-	w.db.db[string(key)] = common.CopyBytes(value)
-	return nil
-}
-
-func (w *mapWriter) Delete(key []byte) error {
-	delete(w.db.db, string(key))
-	return nil
-}
-
 func (db *MemDatabase) NewBatch() Batch {
-	writer := &mapWriter{db: db}
-	return &MemBatch{
-		writer:     writer,
-		commitLock: &db.lock,
-	}
+	return &memBatch{db: db}
 }
 
 func (db *MemDatabase) Len() int { return len(db.db) }
@@ -119,56 +101,43 @@ type kv struct {
 	del  bool
 }
 
-type putterAndDeleter interface {
-	Putter
-	Deleter
+type memBatch struct {
+	db     *MemDatabase
+	writes []kv
+	size   int
 }
 
-type MemBatch struct {
-	writer     putterAndDeleter
-	commitLock *sync.RWMutex
-	writes     []kv
-	size       int
-}
-
-func (b *MemBatch) Put(key, value []byte) error {
+func (b *memBatch) Put(key, value []byte) error {
 	b.writes = append(b.writes, kv{common.CopyBytes(key), common.CopyBytes(value), false})
 	b.size += len(value)
 	return nil
 }
 
-func (b *MemBatch) Delete(key []byte) error {
+func (b *memBatch) Delete(key []byte) error {
 	b.writes = append(b.writes, kv{common.CopyBytes(key), nil, true})
 	b.size += 1
 	return nil
 }
 
-func (b *MemBatch) Write() (err error) {
-	if b.commitLock != nil {
-		b.commitLock.Lock()
-		defer b.commitLock.Unlock()
-	}
+func (b *memBatch) Write() error {
+	b.db.lock.Lock()
+	defer b.db.lock.Unlock()
+
 	for _, kv := range b.writes {
 		if kv.del {
-			err = b.writer.Delete(kv.k)
-			if err != nil {
-				return
-			}
+			delete(b.db.db, string(kv.k))
 			continue
 		}
-		err = b.writer.Put(kv.k, kv.v)
-		if err != nil {
-			return
-		}
+		b.db.db[string(kv.k)] = kv.v
 	}
 	return nil
 }
 
-func (b *MemBatch) ValueSize() int {
+func (b *memBatch) ValueSize() int {
 	return b.size
 }
 
-func (b *MemBatch) Reset() {
+func (b *memBatch) Reset() {
 	b.writes = b.writes[:0]
 	b.size = 0
 }
