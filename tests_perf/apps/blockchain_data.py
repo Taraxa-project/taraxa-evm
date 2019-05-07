@@ -11,6 +11,16 @@ from taraxa.type_util import fdict
 from . import shell
 
 
+def validate_block(block):
+    block_num = block['number']
+    for i, tx in enumerate(block['transactions']):
+        assert tx['hash'] == tx['receipt']['transactionHash']
+        assert tx['blockNumber'] == block_num
+        assert tx['transactionIndex'] == i
+    for i, h in enumerate(block['uncles']):
+        assert h == block['uncleBlocks'][i]['hash']
+
+
 class BlockDB:
     Key = int
     Value = Dict
@@ -56,13 +66,7 @@ def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
     current_exit_stack().enter_context(block_hash_db.open_session())
 
     def on_block(block):
-        block_num = block['number']
-        for i, tx in enumerate(block['transactions']):
-            assert tx['hash'] == tx['receipt']['transactionHash']
-            assert tx['blockNumber'] == block_num
-            assert tx['transactionIndex'] == i
-        for h, b in zip(block['uncles'], block['uncleBlocks']):
-            assert h == b['hash']
+        validate_block(block)
         block_db.put_block(block)
         block_hash_db.session.put(str(block['number']).encode(), block['hash'].encode())
 
@@ -72,25 +76,25 @@ def collect_blockchain_data(block_db_path: str, block_hash_db_path: str,
 
 
 @shell.command
-@with_exit_stack
-def ensure_blockchain_data_valid(db_path: str, block_hash_db_path: str):
+# @with_exit_stack
+def ensure_blockchain_data_valid(db_path: str, from_block=0):
     block_db = BlockDB(rocksdb.DB(db_path, rocksdb.Options(), read_only=True))
-    block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
-    current_exit_stack().enter_context(block_hash_db.open_session())
-    expected_block_num = 0
-    for block_num_db, block in block_db.iteritems():
+    # block_hash_db = LevelDB(block_hash_db_path, create_if_missing=True)
+    # block_hash_db.repair()
+    # current_exit_stack().enter_context(block_hash_db.open_session())
+    expected_block_num = from_block
+    for block_num_db, block in block_db.iteritems(from_block):
         print(f'validating block: {expected_block_num}')
         block_num = block['number']
         assert block_num_db == block_num == expected_block_num
-        tx_count = block['transaction_count']
-        transactions = block['transactions']
-        assert tx_count == len(transactions)
-        for i in range(tx_count):
-            tx = transactions[i]
-            assert tx['block_number'] == block_num
-            assert tx['transaction_index'] == i
-        block_hash_db_key = str(block_num).encode()
-        if not block_hash_db.session.get(block_hash_db_key):
-            print('detected absent entry in the block hash db, fixing')
-            block_hash_db.session.put(block_hash_db_key, block['hash'].encode())
+        validate_block(block)
+        # block_hash_db_key = str(block_num).encode()
+        # block_hash_bytes = block['hash'].encode()
+        # block_hash_from_db = block_hash_db.session.get(block_hash_db_key)
+        # if block_hash_from_db != block_hash_bytes:
+        #     if not block_hash_from_db:
+        #         print('detected absent entry in the block hash db, fixing')
+        #     else:
+        #         print('wrong block hash in the db, fixing')
+        #     block_hash_db.session.put(block_hash_db_key, block_hash_bytes)
         expected_block_num += 1

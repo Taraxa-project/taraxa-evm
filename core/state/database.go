@@ -143,9 +143,6 @@ func (db *cachingDB) CopyTrie(t Trie) Trie {
 // ContractCode retrieves a particular contract's code.
 func (db *cachingDB) ContractCode(addrHash, codeHash common.Hash) ([]byte, error) {
 	code, err := db.db.Node(codeHash)
-	if err != nil {
-		fmt.Println("could not find contract at", addrHash.Hex())
-	}
 	if err == nil {
 		db.codeSizeCache.Add(codeHash, len(code))
 	}

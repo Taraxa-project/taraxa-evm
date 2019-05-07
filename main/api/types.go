@@ -6,7 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
+	"github.com/Taraxa-project/taraxa-evm/main/metrics"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
@@ -23,21 +23,9 @@ type ExternalApi interface {
 	BlockHashStore
 }
 
-type LDBConfig struct {
-	File    string `json:"file"`
-	Cache   int    `json:"cache"`
-	Handles int    `json:"handles"`
-}
-
-func (this *LDBConfig) NewLdbDatabase() *ethdb.LDBDatabase {
-	db, err := ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
-	util.PanicIfPresent(err)
-	return db
-}
-
 type StateDBConfig struct {
-	LDB       *LDBConfig `json:"ldb"`
-	CacheSize int        `json:"cacheSize"`
+	DbConfig  *GenericDbConfig `json:"db"`
+	CacheSize int              `json:"cacheSize"`
 }
 
 type Transaction struct {
@@ -66,28 +54,14 @@ type Block struct {
 	Transactions []*Transaction            `json:"transactions"`
 }
 
-type StateTransition struct {
-	StateRoot common.Hash `json:"stateRoot"`
-	Block     *Block      `json:"block"`
-}
-
-type ScheduleRequest struct {
-	StateTransition *StateTransition `json:"stateTransition" gencodec:"required"`
+type StateTransitionRequest struct {
+	StateRoot    common.Hash `json:"stateRoot"`
+	ExpectedRoot common.Hash `json:"expectedRoot"`
+	Block        *Block      `json:"block"`
 }
 
 type ConcurrentSchedule struct {
 	Sequential []TxId `json:"sequential"`
-}
-
-type ScheduleResponse struct {
-	Result *ConcurrentSchedule `json:"result"`
-	Error  *util.SimpleError   `json:"error"`
-}
-
-type StateTransitionRequest struct {
-	StateTransition    *StateTransition    `json:"stateTransition" gencodec:"required"`
-	ConcurrentSchedule *ConcurrentSchedule `json:"concurrentSchedule"`
-	TargetLevelDB      *LDBConfig          `json:"targetLevelDB"`
 }
 
 type TaraxaReceipt struct {
@@ -109,9 +83,18 @@ type StateTransitionResponse struct {
 }
 
 type VMConfig struct {
-	StateDB                  StateDBConfig    `json:"stateDB"`
-	Evm                      *vm.StaticConfig `json:"evm"`
-	Genesis                  *core.Genesis    `json:"genesis"`
-	BlockHashLDB             *LDBConfig       `json:"blockHashLDB"`
-	StateTransitionTargetLDB *LDBConfig       `json:"stateTransitionTargetLDB"`
+	StateDB                 StateDBConfig    `json:"stateDB"`
+	Evm                     *vm.StaticConfig `json:"evm"`
+	Genesis                 *core.Genesis    `json:"genesis"`
+	BlockHashDB             *GenericDbConfig `json:"blockDB"`
+	StateTransitionTargetDB *GenericDbConfig `json:"stateTransitionTargetDB"`
+}
+
+type TransactionMetrics struct {
+	TotalExecutionTime metrics.AtomicCounter
+	TotalTrieReadTime  metrics.AtomicCounter
+}
+
+type Metrics struct {
+	TransactionMetrics []TransactionMetrics
 }

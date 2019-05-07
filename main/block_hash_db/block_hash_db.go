@@ -1,10 +1,11 @@
 package block_hash_db
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
-	"strconv"
 )
 
 type BlockHashDB struct {
@@ -18,15 +19,14 @@ func New(db ethdb.Database) *BlockHashDB {
 }
 
 func (this *BlockHashDB) GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash {
-	value, err := this.db.Get(key(blockNumber))
+	blockNumberStr := fmt.Sprintf("%09d", blockNumber)
+	value, err := this.db.Get([]byte(blockNumberStr))
 	util.PanicIfPresent(err)
-	return common.HexToHash(string(value))
-}
-
-func (this *BlockHashDB) Put(blockNumber uint64, hash common.Hash) {
-	this.db.Put(key(blockNumber), []byte(hash.Hex()))
-}
-
-func key(blockNumber uint64) []byte {
-	return []byte(strconv.FormatUint(blockNumber, 10))
+	header := new(struct {
+		Hash *common.Hash `json:"hash"`
+	})
+	err = json.Unmarshal(value, header)
+	util.PanicIfPresent(err)
+	util.Assert(header.Hash != nil)
+	return *header.Hash
 }

@@ -1,4 +1,4 @@
-FROM ubuntu:18.10
+FROM ubuntu:19.04
 
 VOLUME /mnt
 # General
@@ -21,4 +21,4 @@ RUN apt-get -y install librocksdb-dev libleveldb-dev
 WORKDIR /mnt/workspace/taraxa-evm/tests_perf
 #RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 venv
 #RUN . venv/bin/activate && python install.py
-ENTRYPOINT venv/bin/python apps "collect_blocks('/mnt/xvdf/perf_test')"
+#ENTRYPOINT venv/bin/python apps "collect_blocks('/mnt/xvdf/perf_test')"

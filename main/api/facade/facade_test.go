@@ -41,7 +41,7 @@ contract SingleVariable {
 	requestProto := api.Request{
 		StateDatabase:     &stateDBConfig,
 		BlockHashDatabase: &blockchainDBConfig,
-		StateTransition: &api.StateTransition{
+		StateTransition: &api.StateTransitionRequest{
 			Block: &api.Block{
 				Number:     "0",
 				Time:       "0",

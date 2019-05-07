@@ -32,3 +32,6 @@ class LevelDB:
         if self._db is None:
             raise SessionRequiredError(f"Session is not opened for this leveldb at {self.path}")
         return self._db
+
+    def repair(self):
+        plyvel.repair_db(str(self.path))

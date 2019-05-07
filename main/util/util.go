@@ -16,6 +16,10 @@ func Sum(x, y *big.Int) *big.Int {
 	return new(big.Int).Add(x, y)
 }
 
+func DoNothing() {
+
+}
+
 func Noop(...interface{}) interface{} {
 	return nil
 }
@@ -46,4 +50,11 @@ func Compute(anyMap, key interface{}, remapper Remapper) (newValue interface{}, 
 	return newValue, func() {
 		reflectMap.SetMapIndex(reflectKey, reflectOldVal)
 	}
+}
+
+func Min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }

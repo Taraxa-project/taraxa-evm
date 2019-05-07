@@ -15,26 +15,28 @@ class EmptyResponseException(Exception):
     pass
 
 
-def _make_batch_request(batch_client, batch_request):
+def _make_batch_request(batch_client, batch_request,
+                        retry_exceptions=(*RETRY_EXCEPTIONS, ReadTimeout, EmptyResponseException)):
     results = []
-    limit = len(batch_request)
-    while len(results) < len(batch_request):
-        next_portion = batch_request[len(results):limit]
+    batch_size = len(batch_request)
+    while True:
+        next_portion = batch_request[len(results):len(results) + batch_size]
         if not next_portion:
             break
         try:
             batch_response = batch_client.make_batch_request(json.dumps(next_portion))
+            assert batch_response
             for response in batch_response:
                 result = response.get('result')
                 if result is None:
                     raise EmptyResponseException(response)
                 results.append((result, response['id']))
-            limit = len(batch_request) - len(results)
-        except (*RETRY_EXCEPTIONS, ReadTimeout, EmptyResponseException) as e:
+            batch_size = len(batch_request) - len(results)
+        except retry_exceptions as e:
             print(f"Retrying on exception {e}")
             if isinstance(e, (ReadTimeout, EmptyResponseException, Timeout, ConnectionError, ConnectTimeout)):
-                limit = max(10, int(limit / 2))
-                print(f"Halved the batch size: {limit}")
+                batch_size = max(10, int(batch_size / 2))
+                print(f"Halved the batch size: {batch_size}")
     return results
 
 
@@ -67,12 +69,19 @@ def export_blocks_batch(block_number_batch, provider_uri, timeout=None):
             rpc_callbacks.append(lambda result, tx=tx: setitem(tx, 'receipt', result))
         blocks.append(block)
     if rpc_requests:
-        batch_size = int(len(blocks) * 3)
+        batch_size = int(len(blocks) * 2)
         current_request_id = 0
         request_count = len(rpc_requests)
         for batch_num in range(0, request_count, batch_size):
             batch_request = rpc_requests[batch_num:batch_num + batch_size]
             results = _make_batch_request(batch_web3_provider, batch_request)
+
+            assert len(results) == len(batch_request)
+            last = None
+            for _, req_id in results:
+                assert last is None or last == req_id - 1
+                last = req_id
+
             for result, req_id in results:
                 if current_request_id != req_id:
                     raise RuntimeError(f'{current_request_id} != {req_id}, '

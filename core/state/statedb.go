@@ -19,7 +19,6 @@ package state
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 	"sort"
 
@@ -105,10 +104,13 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	}, nil
 }
 
+func (this *StateDB) Merge(that *StateDB) {
+
+}
+
 // setError remembers the first non-nil error it is called with.
 func (self *StateDB) setError(err error) {
 	if self.dbErr == nil {
-		util.PanicIfPresent(err)
 		self.dbErr = err
 	}
 }

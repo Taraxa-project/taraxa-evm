@@ -395,11 +395,6 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 // Node retrieves an encoded cached trie node from memory. If it cannot be found
 // cached, the method queries the persistent database for the content.
 func (db *Database) Node(hash common.Hash) (ret []byte, err error) {
-	defer func() {
-		if err != nil {
-			fmt.Println("could not find hash", hash.Hex(), err.Error())
-		}
-	}()
 	// Retrieve the node from the clean cache if available
 	if db.cleans != nil {
 		if enc, err := db.cleans.Get(string(hash[:])); err == nil && enc != nil {

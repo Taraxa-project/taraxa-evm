@@ -429,6 +429,7 @@ func (t *Trie) resolve(n node, prefix []byte) (node, error) {
 
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
 	cacheMissCounter.Inc(1)
+
 	hash := common.BytesToHash(n)
 	if node := t.db.node(hash, t.cachegen); node != nil {
 		return node, nil
