@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
@@ -35,6 +36,22 @@ func New(stateDB *state.StateDB, conflictLogger conflict_detector.OperationLogge
 	this.conflictLogger = conflictLogger
 	this.lastCommittedSnapshot = this.transientStateLog.CurrentSnapshot()
 	return this
+}
+
+func (this *TaraxaStateDB) MergeChanges(that vm.StateDB) {
+	this.stateDB.MergeChanges(that)
+}
+
+func (this *TaraxaStateDB) Finalise(deleteEmptyObjects bool) {
+	this.stateDB.Finalise(deleteEmptyObjects)
+}
+
+func (this *TaraxaStateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
+	return this.stateDB.IntermediateRoot(deleteEmptyObjects)
+}
+
+func (this *TaraxaStateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
+	return this.stateDB.Commit(deleteEmptyObjects)
 }
 
 func (this *TaraxaStateDB) CreateAccount(addr common.Address) {

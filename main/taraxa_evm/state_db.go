@@ -8,6 +8,7 @@ import (
 
 type StateDB interface {
 	vm.StateDB
+	MergeChanges(that vm.StateDB)
 	Error() error
 	Finalise(deleteEmptyObjects bool)
 	GetLogs(hash common.Hash) []*types.Log

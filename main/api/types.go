@@ -35,8 +35,15 @@ type Transaction struct {
 	Amount   BigIntString    `json:"amount"`
 	GasLimit uint64          `json:"gasLimit"`
 	GasPrice BigIntString    `json:"gasPrice"`
-	Data     *hexutil.Bytes  `json:"data"`
+	Data     hexutil.Bytes   `json:"data"`
 	Hash     common.Hash     `json:"hash"`
+}
+
+func (this *Transaction) AsMessage(checkNonce bool) types.Message {
+	return types.NewMessage(
+		this.From, this.To, this.Nonce, this.Amount, this.GasLimit, this.GasPrice, this.Data,
+		checkNonce,
+	)
 }
 
 type HeaderNumerAndCoinbase struct {
@@ -44,24 +51,28 @@ type HeaderNumerAndCoinbase struct {
 	Coinbase common.Address `json:"coinbase"`
 }
 
+type BlockHeader struct {
+	HeaderNumerAndCoinbase
+	Time       BigIntString `json:"time"`
+	Difficulty BigIntString `json:"difficulty"`
+	GasLimit   uint64       `json:"gasLimit"`
+	Hash       common.Hash  `json:"hash"`
+}
+
 type Block struct {
-	*HeaderNumerAndCoinbase
-	Time         BigIntString              `json:"time"`
-	Difficulty   BigIntString              `json:"difficulty"`
-	GasLimit     uint64                    `json:"gasLimit"`
-	Hash         common.Hash               `json:"hash"`
+	BlockHeader
 	Uncles       []*HeaderNumerAndCoinbase `json:"uncles"`
 	Transactions []*Transaction            `json:"transactions"`
 }
 
 type StateTransitionRequest struct {
-	StateRoot    common.Hash `json:"stateRoot"`
-	ExpectedRoot common.Hash `json:"expectedRoot"`
-	Block        *Block      `json:"block"`
+	BaseStateRoot common.Hash `json:"stateRoot"`
+	ExpectedRoot  common.Hash `json:"expectedRoot"`
+	Block         *Block      `json:"block"`
 }
 
 type ConcurrentSchedule struct {
-	Sequential []TxId `json:"sequential"`
+	SequentialTransactions util.LinkedHashSet `json:"sequential"`
 }
 
 type TaraxaReceipt struct {

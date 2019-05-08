@@ -19,6 +19,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"math/big"
 	"sort"
 
@@ -104,8 +105,10 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	}, nil
 }
 
-func (this *StateDB) Merge(that *StateDB) {
-
+func (this *StateDB) MergeChanges(db vm.StateDB) {
+	that := db.(*StateDB)
+	// TODO
+	that.Logs()
 }
 
 // setError remembers the first non-nil error it is called with.

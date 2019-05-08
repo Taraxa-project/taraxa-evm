@@ -13,7 +13,7 @@ const addr_prefix = "__ptr__"
 
 type Address = string
 
-type functions = map[string]reflect.Value
+type Functions map[string]interface{}
 
 type memCell struct {
 	objRef          reflect.Value
@@ -22,24 +22,8 @@ type memCell struct {
 }
 
 type VirtualEnv struct {
+	Functions
 	mem       sync.Map
-	functions functions
-}
-
-type Builder struct {
-	obj VirtualEnv
-}
-
-func (this *Builder) Func(name string, function interface{}) *Builder {
-	if this.obj.functions == nil {
-		this.obj.functions = make(functions)
-	}
-	this.obj.functions[name] = reflect.ValueOf(function)
-	return this
-}
-
-func (this *Builder) Build() VirtualEnv {
-	return this.obj
 }
 
 func (this *VirtualEnv) Call(receiverAddr, funcName, argsEncoded string) (retEncoded string, err error) {
@@ -50,7 +34,7 @@ func (this *VirtualEnv) Call(receiverAddr, funcName, argsEncoded string) (retEnc
 	}
 	var receiver, callee reflect.Value
 	if len(receiverAddr) == 0 {
-		receiver, callee = reflect.ValueOf(this), this.functions[funcName]
+		receiver, callee = reflect.ValueOf(this), reflect.ValueOf(this.Functions[funcName])
 	} else {
 		receiver = this.load(receiverAddr).objRef
 		method, found := receiver.Type().MethodByName(funcName)

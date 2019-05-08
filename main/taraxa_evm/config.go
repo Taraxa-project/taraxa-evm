@@ -22,9 +22,9 @@ type StateDBConfig struct {
 
 type Config struct {
 	StaticConfig
-	StateDB      StateDBConfig        `json:"stateDB"`
-	BlockDB      *api.GenericDbConfig `json:"blockDB"`
-	WriteStateDB *api.GenericDbConfig `json:"writeStateDB"`
+	StateDB StateDBConfig        `json:"stateDB"`
+	BlockDB *api.GenericDbConfig `json:"blockDB"`
+	WriteDB *api.GenericDbConfig `json:"writeDB"`
 }
 
 func (this *Config) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
@@ -46,13 +46,13 @@ func (this *Config) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	localErr.CheckIn(e2)
 	cleanup = util.Chain(cleanup, blockHashDb.Close)
 	ret.ExternalApi = block_hash_db.New(blockHashDb)
-	ret.ReadStateDB = state.NewDatabaseWithCache(stateDb, this.StateDB.CacheSize)
-	ret.WriteStateDB = ret.ReadStateDB
-	if this.WriteStateDB != nil {
-		db, e3 := this.WriteStateDB.NewDB()
+	ret.StateDB = state.NewDatabaseWithCache(stateDb, this.StateDB.CacheSize)
+	ret.WriteDB = stateDb
+	if this.WriteDB != nil {
+		writeDB, e3 := this.WriteDB.NewDB()
 		localErr.CheckIn(e3)
-		cleanup = util.Chain(cleanup, db.Close)
-		ret.WriteStateDB = state.NewDatabase(db)
+		cleanup = util.Chain(cleanup, writeDB.Close)
+		ret.WriteDB = writeDB
 	}
 	ret.StaticConfig = this.StaticConfig
 	if ret.EvmConfig == nil {

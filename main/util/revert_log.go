@@ -1,7 +1,10 @@
 package util
 
-type revision [2]int
 type Revert func()
+
+type revision struct {
+	snapshotId, revertsOffset int
+}
 
 type RevertLog struct {
 	revisions []revision
@@ -14,7 +17,7 @@ func (this *RevertLog) Append(revert Revert) {
 
 func (this *RevertLog) CurrentSnapshot() int {
 	if revCount := len(this.revisions); revCount > 0 {
-		return this.revisions[revCount-1][0]
+		return this.revisions[revCount-1].snapshotId
 	}
 	return -1
 }
@@ -28,8 +31,8 @@ func (this *RevertLog) RevertToSnapshot(snapshotId int) {
 	var revisionsIndex, revertsIndex int
 	for i := len(this.revisions) - 1; i >= 0; i-- {
 		revision := this.revisions[i]
-		if revision[0] == snapshotId {
-			revisionsIndex, revertsIndex = i, revision[1]
+		if revision.snapshotId == snapshotId {
+			revisionsIndex, revertsIndex = i, revision.revertsOffset
 			break
 		}
 	}

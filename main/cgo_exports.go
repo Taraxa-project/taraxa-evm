@@ -10,8 +10,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/main/util/virtual_env"
 )
 
-var env = new(virtual_env.Builder).
-	Func("NewVM", func(env *virtual_env.VirtualEnv, config *taraxa_evm.Config) (vmAddr string, err error) {
+// TODO refactor
+var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
+	"NewVM": func(env *virtual_env.VirtualEnv, config *taraxa_evm.Config) (vmAddr string, err error) {
 		cleanup := util.DoNothing
 		defer util.CatchAnyErr(func(e error) {
 			err = e
@@ -23,8 +24,8 @@ var env = new(virtual_env.Builder).
 		vmAddr, allocErr := env.Alloc(vm, cleanup)
 		util.PanicIfPresent(allocErr)
 		return
-	}).
-	Build()
+	},
+}}
 
 //export Call
 func Call(receiverAddr, methodName, argsEncoded *C.char) *C.char {
