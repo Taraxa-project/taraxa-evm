@@ -4,7 +4,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
@@ -14,13 +13,18 @@ const balance = "balance"
 const code = "code"
 const nonce = "nonce"
 
+type StateChange struct {
+	*TransientState
+	*state.StateChange
+}
+
 type TransientState struct {
 	BalanceDeltas map[common.Address]*big.Int
 	NonceDeltas   map[common.Address]uint64
 }
 
 type TaraxaStateDB struct {
-	conflictLogger        conflict_detector.OperationLogger
+	operationLogger       conflict_detector.OperationLogger
 	stateDB               *state.StateDB
 	totalTransientState   *TransientState
 	currentTransientState *TransientState
@@ -28,18 +32,23 @@ type TaraxaStateDB struct {
 	transientStateLog     util.RevertLog
 }
 
-func New(stateDB *state.StateDB, conflictLogger conflict_detector.OperationLogger) *TaraxaStateDB {
+func New(stateDB *state.StateDB, operationLogger conflict_detector.OperationLogger) *TaraxaStateDB {
 	this := new(TaraxaStateDB)
 	this.stateDB = stateDB
+	this.operationLogger = operationLogger
 	this.totalTransientState = newTransientState()
-	this.currentTransientState = newTransientState()
-	this.conflictLogger = conflictLogger
-	this.lastCommittedSnapshot = this.transientStateLog.CurrentSnapshot()
+	this.prepareForStateChange()
 	return this
 }
 
-func (this *TaraxaStateDB) MergeChanges(that vm.StateDB) {
-	this.stateDB.MergeChanges(that)
+func (this *TaraxaStateDB) prepareForStateChange() {
+	this.currentTransientState = newTransientState()
+	this.lastCommittedSnapshot = this.transientStateLog.CurrentSnapshot()
+}
+
+func (this *TaraxaStateDB) CommitLocally() *StateChange {
+	defer this.prepareForStateChange()
+	return &StateChange{this.currentTransientState, this.stateDB.CommitLocally()}
 }
 
 func (this *TaraxaStateDB) Finalise(deleteEmptyObjects bool) {
@@ -58,7 +67,7 @@ func (this *TaraxaStateDB) CreateAccount(addr common.Address) {
 	preexisting := this.stateDB.Exist(addr)
 	this.onCreateOrDeleteAccount(addr)
 	if preexisting {
-		this.conflictLogger(conflict_detector.SET, accountCompositeKey(addr, balance))
+		this.operationLogger(conflict_detector.SET, accountCompositeKey(addr, balance))
 	}
 	this.stateDB.CreateAccount(addr)
 }
@@ -81,7 +90,7 @@ func (this *TaraxaStateDB) addBalance(addr common.Address, value *big.Int) {
 	if value.Sign() == 0 {
 		return
 	}
-	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
+	this.operationLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
 	this.modifyTransientState(func(s *TransientState) util.Revert {
 		_, revert := util.Compute(s.BalanceDeltas, addr, func(_, oldVal interface{}, _ bool) interface{} {
 			return util.Sum(oldVal.(*big.Int), value)
@@ -111,8 +120,8 @@ func (this *TaraxaStateDB) SetNonce(addr common.Address, value uint64) {
 
 func (this *TaraxaStateDB) AddNonce(addr common.Address, val uint64) {
 	this.onGetOrCreateAccount(addr)
-	this.conflictLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
-	this.stateDB.AddNonce(addr, 0)
+	this.stateDB.GetOrNewStateObject(addr)
+	this.operationLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
 	this.modifyTransientState(func(s *TransientState) util.Revert {
 		_, revert := util.Compute(s.NonceDeltas, addr, func(_, oldVal interface{}, _ bool) interface{} {
 			return oldVal.(uint64) + val
@@ -206,13 +215,6 @@ func (this *TaraxaStateDB) GetRefund() uint64 {
 	return this.stateDB.GetRefund()
 }
 
-func (this *TaraxaStateDB) CommitTransientState() *TransientState {
-	ret := this.currentTransientState
-	this.currentTransientState = newTransientState()
-	this.lastCommittedSnapshot = this.transientStateLog.CurrentSnapshot()
-	return ret
-}
-
 func (this *TaraxaStateDB) RevertToSnapshot(snapshotId int) {
 	util.Assert(snapshotId > this.lastCommittedSnapshot)
 	this.transientStateLog.RevertToSnapshot(snapshotId)
@@ -229,8 +231,12 @@ func (this *TaraxaStateDB) AddPreimage(hash common.Hash, val []byte) {
 	this.stateDB.AddPreimage(hash, val)
 }
 
-func (this *TaraxaStateDB) Prepare(thash, bhash common.Hash, ti int) {
-	this.stateDB.Prepare(thash, bhash, ti)
+func (this *TaraxaStateDB) OpenTransaction(thash, bhash common.Hash, ti int) {
+	this.stateDB.OpenTransaction(thash, bhash, ti)
+}
+
+func (self *TaraxaStateDB) CloseTransaction() {
+	self.stateDB.CommitLocally()
 }
 
 func (this *TaraxaStateDB) GetLogs(hash common.Hash) []*types.Log {
@@ -242,33 +248,33 @@ func (this *TaraxaStateDB) Error() error {
 }
 
 func (this *TaraxaStateDB) onGetAccount(addr common.Address) {
-	this.conflictLogger(conflict_detector.GET, accountKey(addr))
+	this.operationLogger(conflict_detector.GET, accountKey(addr))
 }
 
 func (this *TaraxaStateDB) onCreateOrDeleteAccount(addr common.Address) {
-	this.conflictLogger(conflict_detector.SET, accountKey(addr))
+	this.operationLogger(conflict_detector.SET, accountKey(addr))
 }
 
 func (this *TaraxaStateDB) onGetOrCreateAccount(addr common.Address) {
-	this.conflictLogger(conflict_detector.DEFAULT_INITIALIZE, accountKey(addr))
+	this.operationLogger(conflict_detector.DEFAULT_INITIALIZE, accountKey(addr))
 }
 
 func (this *TaraxaStateDB) onAccountRead(addr common.Address, key string) {
 	this.onGetAccount(addr)
 	if this.stateDB.Exist(addr) {
-		this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, key))
+		this.operationLogger(conflict_detector.GET, accountCompositeKey(addr, key))
 	}
 }
 
 func (this *TaraxaStateDB) onAccountWrite(address common.Address, key string) {
 	this.onGetOrCreateAccount(address)
-	this.conflictLogger(conflict_detector.SET, accountCompositeKey(address, key))
+	this.operationLogger(conflict_detector.SET, accountCompositeKey(address, key))
 }
 
 func (this *TaraxaStateDB) onAccountEmptyCheck(addr common.Address) {
-	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, balance))
-	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, nonce))
-	this.conflictLogger(conflict_detector.GET, accountCompositeKey(addr, code))
+	this.operationLogger(conflict_detector.GET, accountCompositeKey(addr, balance))
+	this.operationLogger(conflict_detector.GET, accountCompositeKey(addr, nonce))
+	this.operationLogger(conflict_detector.GET, accountCompositeKey(addr, code))
 }
 
 func accountKey(address common.Address) string {
@@ -280,8 +286,5 @@ func accountCompositeKey(address common.Address, subKey string) string {
 }
 
 func newTransientState() *TransientState {
-	ret := new(TransientState)
-	ret.BalanceDeltas = make(map[common.Address]*big.Int)
-	ret.NonceDeltas = make(map[common.Address]uint64)
-	return ret
+	return &TransientState{make(map[common.Address]*big.Int), make(map[common.Address]uint64)}
 }

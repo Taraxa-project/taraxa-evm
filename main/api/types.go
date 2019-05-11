@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/main/metrics"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
@@ -99,13 +98,4 @@ type VMConfig struct {
 	Genesis                 *core.Genesis    `json:"genesis"`
 	BlockHashDB             *GenericDbConfig `json:"blockDB"`
 	StateTransitionTargetDB *GenericDbConfig `json:"stateTransitionTargetDB"`
-}
-
-type TransactionMetrics struct {
-	TotalExecutionTime metrics.AtomicCounter
-	TotalTrieReadTime  metrics.AtomicCounter
-}
-
-type Metrics struct {
-	TransactionMetrics []TransactionMetrics
 }

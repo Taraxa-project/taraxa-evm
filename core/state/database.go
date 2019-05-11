@@ -66,8 +66,8 @@ type Trie interface {
 	TryDelete(key []byte) error
 	Commit(onleaf trie.LeafCallback) (common.Hash, error)
 	Hash() common.Hash
-	NodeIterator(startKey []byte) trie.NodeIterator
-	Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error
+	//NodeIterator(startKey []byte) trie.NodeIterator
+	//Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for

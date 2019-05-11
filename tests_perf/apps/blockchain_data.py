@@ -45,6 +45,10 @@ class BlockDB:
         if key:
             return self.block_key_decode(key)
 
+    def get_block(self, key: Key):
+        enc = self._db.get(self.block_key_encode(key))
+        return enc and json.loads(enc)
+
     def iteritems(self, from_block: Key = None) -> Iterable[Tuple[Key, Value]]:
         itr = self._db.iteritems()
         itr.seek_to_first()

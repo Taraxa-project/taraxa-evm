@@ -2,9 +2,7 @@ package util
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strings"
 )
 
@@ -52,7 +50,6 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 
 func PanicIfPresent(value interface{}) {
 	if !IsNil(value) {
-		fmt.Println(value.(error).Error(), string(debug.Stack()))
 		panic(value)
 	}
 }

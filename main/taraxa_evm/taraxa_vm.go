@@ -1,6 +1,7 @@
 package taraxa_evm
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -69,7 +70,7 @@ func (this *TaraxaVM) GenerateSchedule(
 
 func (this *TaraxaVM) TransitionStateLikeEthereum(
 	req *api.StateTransitionRequest, schedule *api.ConcurrentSchedule) (
-	ret *api.StateTransitionResult, err error,
+	*api.StateTransitionResult, Metrics, error,
 ) {
 	return stateTransition{
 		TaraxaVM:               this,
@@ -121,7 +122,15 @@ func (this *TaraxaVM) executeTransaction(r *transactionRequest) *transactionResu
 		},
 	)
 	st := core.NewStateTransition(evm, tx.AsMessage(r.checkNonce), r.gasPool)
-	r.stateDB.Prepare(tx.Hash, block.Hash, r.txId)
+	r.stateDB.OpenTransaction(tx.Hash, block.Hash, r.txId)
 	ret, usedGas, vmErr, consensusErr := st.TransitionDb()
 	return &transactionResult{ret, usedGas, vmErr, consensusErr}
+}
+
+func (this *TaraxaVM) PersistentCommit(root common.Hash) error {
+	trieDb := this.StateDB.TrieDB()
+	originalDiskDb := trieDb.GetDiskDB()
+	defer trieDb.SetDiskDB(originalDiskDb)
+	trieDb.SetDiskDB(this.WriteDB)
+	return trieDb.Commit(root, false)
 }

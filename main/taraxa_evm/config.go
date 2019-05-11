@@ -1,11 +1,13 @@
 package taraxa_evm
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/block_hash_db"
+	"github.com/Taraxa-project/taraxa-evm/main/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 )
 
@@ -39,17 +41,27 @@ func (this *Config) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		localErr.Catch(util.SetTo(&err)),
 	)
 	ret = new(TaraxaVM)
+
+	rec := metric_utils.NewTimeRecorder()
 	stateDb, e1 := this.StateDB.DB.NewDB()
+	fmt.Println("create state db took", rec())
+
 	localErr.CheckIn(e1)
 	cleanup = util.Chain(cleanup, stateDb.Close)
+
+	rec = metric_utils.NewTimeRecorder()
 	blockHashDb, e2 := this.BlockDB.NewDB()
+	fmt.Println("create block db took", rec())
+
 	localErr.CheckIn(e2)
 	cleanup = util.Chain(cleanup, blockHashDb.Close)
 	ret.ExternalApi = block_hash_db.New(blockHashDb)
 	ret.StateDB = state.NewDatabaseWithCache(stateDb, this.StateDB.CacheSize)
 	ret.WriteDB = stateDb
 	if this.WriteDB != nil {
+		rec = metric_utils.NewTimeRecorder()
 		writeDB, e3 := this.WriteDB.NewDB()
+		fmt.Println("create write db took", rec())
 		localErr.CheckIn(e3)
 		cleanup = util.Chain(cleanup, writeDB.Close)
 		ret.WriteDB = writeDB

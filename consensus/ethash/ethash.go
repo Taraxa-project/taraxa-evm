@@ -20,7 +20,6 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"math/rand"
 	"os"
@@ -33,13 +32,13 @@ import (
 	"time"
 	"unsafe"
 
-	mmap "github.com/edsrzf/mmap-go"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/rpc"
+	"github.com/edsrzf/mmap-go"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -48,9 +47,6 @@ var ErrInvalidDumpMagic = errors.New("invalid dump magic")
 var (
 	// two256 is a big integer representing 2^256
 	two256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
-
-	// sharedEthash is a full instance that can be shared between multiple users.
-	sharedEthash = New(Config{"", 3, 0, "", 1, 0, ModeNormal}, nil, false)
 
 	// algorithmRevision is the data structure version used for file naming.
 	algorithmRevision = 23
@@ -371,24 +367,11 @@ func (d *dataset) finalizer() {
 	}
 }
 
-// MakeCache generates a new ethash cache and optionally stores it to disk.
-func MakeCache(block uint64, dir string) {
-	c := cache{epoch: block / epochLength}
-	c.generate(dir, math.MaxInt32, false)
-}
-
-// MakeDataset generates a new ethash dataset and optionally stores it to disk.
-func MakeDataset(block uint64, dir string) {
-	d := dataset{epoch: block / epochLength}
-	d.generate(dir, math.MaxInt32, false)
-}
-
 // Mode defines the type and amount of PoW verification an ethash engine makes.
 type Mode uint
 
 const (
 	ModeNormal Mode = iota
-	ModeShared
 	ModeTest
 	ModeFake
 	ModeFullFake
@@ -515,57 +498,6 @@ func NewTester(notify []string, noverify bool) *Ethash {
 	}
 	go ethash.remote(notify, noverify)
 	return ethash
-}
-
-// NewFaker creates a ethash consensus engine with a fake PoW scheme that accepts
-// all blocks' seal as valid, though they still have to conform to the Ethereum
-// consensus rules.
-func NewFaker() *Ethash {
-	return &Ethash{
-		config: Config{
-			PowMode: ModeFake,
-		},
-	}
-}
-
-// NewFakeFailer creates a ethash consensus engine with a fake PoW scheme that
-// accepts all blocks as valid apart from the single one specified, though they
-// still have to conform to the Ethereum consensus rules.
-func NewFakeFailer(fail uint64) *Ethash {
-	return &Ethash{
-		config: Config{
-			PowMode: ModeFake,
-		},
-		fakeFail: fail,
-	}
-}
-
-// NewFakeDelayer creates a ethash consensus engine with a fake PoW scheme that
-// accepts all blocks as valid, but delays verifications by some time, though
-// they still have to conform to the Ethereum consensus rules.
-func NewFakeDelayer(delay time.Duration) *Ethash {
-	return &Ethash{
-		config: Config{
-			PowMode: ModeFake,
-		},
-		fakeDelay: delay,
-	}
-}
-
-// NewFullFaker creates an ethash consensus engine with a full fake scheme that
-// accepts all blocks as valid, without checking any consensus rules whatsoever.
-func NewFullFaker() *Ethash {
-	return &Ethash{
-		config: Config{
-			PowMode: ModeFullFake,
-		},
-	}
-}
-
-// NewShared creates a full sized ethash PoW shared between all requesters running
-// in the same process.
-func NewShared() *Ethash {
-	return &Ethash{shared: sharedEthash}
 }
 
 // Close closes the exit channel to notify all backend threads exiting.

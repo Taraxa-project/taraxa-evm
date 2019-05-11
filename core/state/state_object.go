@@ -61,8 +61,8 @@ func (self Storage) Copy() Storage {
 // Account values can be accessed and modified through the object.
 // Finally, call CommitTrie to write the modified storage trie into a database.
 type stateObject struct {
-	address  common.Address
-	addrHash common.Hash // hash of ethereum address of the account
+	address  common.Address // TODO in state
+	addrHash common.Hash    // hash of ethereum address of the account // TODO in state
 	data     Account
 	db       *StateDB
 
@@ -83,9 +83,9 @@ type stateObject struct {
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode bool // true if the code was updated
-	suicided  bool
-	deleted   bool
+	dirtyCode bool // true if the code was updated // TODO in state
+	suicided  bool // TODO in state
+	deleted   bool // TODO in state
 }
 
 // empty returns whether the account is considered empty.

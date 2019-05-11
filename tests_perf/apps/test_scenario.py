@@ -32,7 +32,7 @@ def compute_eth_state(base_path, state_db_config_factory, suffix=''):
     execute_transactions(
         vm_opts={
             'stateDB': {
-                'cacheSize': 2048,
+                'cacheSize': 8000,
                 'db': state_db_config_factory(state_db_path),
             },
             'blockDB': {

@@ -19,7 +19,7 @@ package state
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 	"sort"
 
@@ -51,6 +51,16 @@ func (n *proofList) Put(key []byte, value []byte) error {
 	return nil
 }
 
+type Dirties = map[common.Address]struct{}
+type Objects = map[common.Address]*stateObject
+type Logs = map[common.Hash][]*types.Log
+
+type State struct {
+	// This map holds 'live' objects, which will get modified while processing a state transition.
+	stateObjects      map[common.Address]*stateObject
+	stateObjectsDirty map[common.Address]struct{}
+}
+
 // StateDBs within the ethereum protocol are used to store anything
 // within the merkle trie. StateDBs take care of caching and storing
 // nested states. It's the general query interface to retrieve:
@@ -59,11 +69,9 @@ func (n *proofList) Put(key []byte, value []byte) error {
 type StateDB struct {
 	db   Database
 	trie Trie
-
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects      map[common.Address]*stateObject
 	stateObjectsDirty map[common.Address]struct{}
-
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
@@ -79,6 +87,7 @@ type StateDB struct {
 	logs         map[common.Hash][]*types.Log
 	logSize      uint
 
+	// TODO ignored for now
 	preimages map[common.Hash][]byte
 
 	// Journal of state modifications. This is the backbone of
@@ -97,18 +106,71 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	return &StateDB{
 		db:                db,
 		trie:              tr,
-		stateObjects:      make(map[common.Address]*stateObject),
-		stateObjectsDirty: make(map[common.Address]struct{}),
-		logs:              make(map[common.Hash][]*types.Log),
+		stateObjects:      make(Objects),
+		stateObjectsDirty: make(Dirties),
+		logs:              make(Logs),
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
 	}, nil
 }
 
-func (this *StateDB) MergeChanges(db vm.StateDB) {
-	that := db.(*StateDB)
-	// TODO
-	that.Logs()
+type StateChange struct {
+	dirties Objects
+	logs    Logs
+}
+
+func (self *StateDB) OpenTransaction(thash, bhash common.Hash, ti int) {
+	self.Prepare(thash, bhash, ti)
+}
+
+func (this *StateDB) CommitLocally() *StateChange {
+	ret := &StateChange{
+		logs:    this.logs,
+		dirties: make(Objects),
+	}
+	for k := range this.journal.dirties {
+		ret.dirties[k] = unlinkedCopy(this.stateObjects[k])
+	}
+	this.clearJournalAndRefund()
+	this.thash = common.Hash{}
+	this.bhash = common.Hash{}
+	this.txIndex = 0
+	this.logs = make(Logs)
+	this.stateObjectsDirty = make(Dirties)
+	return ret
+}
+
+func (this *StateDB) MergeChanges(change *StateChange) {
+	for k, v := range change.dirties {
+		this.stateObjectsDirty[k] = struct{}{}
+		//this.stateObjects[k] = unlinkedCopy(v)
+		this.stateObjects[k] = v
+	}
+	for k, v := range change.logs {
+		util.Assert(this.logs[k] == nil)
+		this.logs[k] = append(this.logs[k], v...)
+		this.logSize += uint(len(v))
+	}
+}
+
+func unlinkedCopy(object *stateObject) *stateObject {
+	copy := newObject(nil, object.address, object.data)
+	copy.data.Balance = new(big.Int).Set(object.data.Balance)
+	copy.code = object.code
+	//copy.originStorage = object.originStorage.Copy()
+	//copy.dirtyStorage = object.dirtyStorage.Copy()
+	for k, dirtyValue := range object.dirtyStorage {
+		originValue, present := object.originStorage[k]
+		util.Assert(present)
+		if originValue != dirtyValue {
+			copy.originStorage[k] = originValue
+			copy.dirtyStorage[k] = dirtyValue
+		}
+	}
+	copy.suicided = object.suicided
+	copy.dirtyCode = object.dirtyCode
+	copy.deleted = object.deleted
+	return copy
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -253,11 +315,12 @@ func (self *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash
 }
 
 // GetProof returns the MerkleProof for a given Account
-func (self *StateDB) GetProof(a common.Address) ([][]byte, error) {
-	var proof proofList
-	err := self.trie.Prove(crypto.Keccak256(a.Bytes()), 0, &proof)
-	return [][]byte(proof), err
-}
+// TODO unused
+//func (self *StateDB) GetProof(a common.Address) ([][]byte, error) {
+//	var proof proofList
+//	err := self.trie.Prove(crypto.Keccak256(a.Bytes()), 0, &proof)
+//	return [][]byte(proof), err
+//}
 
 // GetProof returns the StorageProof for given key
 // TODO unused
@@ -601,19 +664,17 @@ func (s *StateDB) clearJournalAndRefund() {
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
 	defer s.clearJournalAndRefund()
-
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Commit objects to the trie.
-	for addr, stateObject := range s.stateObjects {
-		_, isDirty := s.stateObjectsDirty[addr]
-		switch {
-		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
+	for addr := range s.stateObjectsDirty {
+		stateObject := s.stateObjects[addr]
+		if stateObject.suicided || deleteEmptyObjects && stateObject.empty() {
 			// If the object has been removed, don't bother syncing it
 			// and just mark it for deletion in the trie.
 			s.deleteStateObject(stateObject)
-		case isDirty:
+		} else {
 			// Write any contract code associated with the state object
 			if stateObject.code != nil && stateObject.dirtyCode {
 				s.db.TrieDB().InsertBlob(common.BytesToHash(stateObject.CodeHash()), stateObject.code)
@@ -628,7 +689,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
-	// Write trie changes.
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {

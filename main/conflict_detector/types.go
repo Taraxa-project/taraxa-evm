@@ -46,6 +46,8 @@ type operationLog = []map[Key]Authors
 
 type OperationLoggerFactory func(Author) OperationLogger
 
+var NoopLogger OperationLogger = func(operationType OperationType, key Key) {}
+
 var NoopLoggerFactory OperationLoggerFactory = func(author Author) OperationLogger {
-	return func(operationType OperationType, key Key) {}
+	return NoopLogger
 }

@@ -79,7 +79,7 @@ def execute_transactions(vm_opts,
         print(f'Processing block {block_num}, tx count: {tx_count}, base_state_root: {state_root}')
         state_transition = {
             "stateRoot": state_root,
-            "block": _map_block(block),
+            "block": map_block(block),
             "expectedRoot": block['stateRoot']
         }
         if emulate_ethereum:
@@ -89,21 +89,24 @@ def execute_transactions(vm_opts,
         else:
             concurrent_schedule, err = taraxa_vm_ptr.call('GenerateSchedule', state_transition)
             raise_if_not_none(err, lambda e: RuntimeError(f'Schedule generation failed: {e}'))
-        state_transition_result, err = taraxa_vm_ptr.call("TransitionStateLikeEthereum", state_transition, concurrent_schedule)
+        state_transition_result, metrics, err = taraxa_vm_ptr.call("TransitionStateLikeEthereum",
+                                                                   state_transition, concurrent_schedule)
         raise_if_not_none(err, lambda e: RuntimeError(f'State transition failed: {e}'))
-
+        print(f'metrics: {json.dumps(map_metrics(metrics))}'.ljust(20, '='))
+        # print(json.dumps(metrics))
         for i, receipt in enumerate(state_transition_result['receipts'] or []):
             eth_receipt = receipt['ethereumReceipt']
             expected_receipt = block['transactions'][i]['receipt']
             if 'status' in expected_receipt:
-                assert_eq(eth_receipt['status'], hex_to_dec(expected_receipt['status']))
-            assert_eq(eth_receipt['root'], expected_receipt['root'])
+                assert_eq(eth_receipt['status'], expected_receipt['status'])
+            if 'root' in expected_receipt:
+                assert_eq(eth_receipt.get['root'], expected_receipt.get['root'])
             assert_eq(eth_receipt['gasUsed'], expected_receipt['gasUsed'])
             assert_eq(eth_receipt['cumulativeGasUsed'], expected_receipt['cumulativeGasUsed'])
             assert_eq(eth_receipt['contractAddress'],
                       expected_receipt['contractAddress'] or '0x0000000000000000000000000000000000000000')
         assert_eq(state_transition_result['usedGas'], hex_to_dec(block['gasUsed']))
-        # assert_eq(state_transition_result['stateRoot'], block['stateRoot'])
+        assert_eq(state_transition_result['stateRoot'], block['stateRoot'])
 
         last_result = {
             'concurrentSchedule': concurrent_schedule,
@@ -114,7 +117,7 @@ def execute_transactions(vm_opts,
     assert not to_block or block_num - 1 == to_block
 
 
-def _map_block(block):
+def map_block(block):
     return {
         "number": block['number'],
         "coinbase": block['miner'],
@@ -122,19 +125,19 @@ def _map_block(block):
         "difficulty": hex_to_dec(block['difficulty']),
         "gasLimit": hex_to_dec(block['gasLimit']),
         "hash": block['hash'],
-        "transactions": [_map_transaction(tx) for tx in block['transactions']],
-        "uncles": [_map_uncle(u) for u in block['uncleBlocks']]
+        "transactions": [map_transaction(tx) for tx in block['transactions']],
+        "uncles": [map_uncle(u) for u in block['uncleBlocks']]
     }
 
 
-def _map_uncle(uncle_block):
+def map_uncle(uncle_block):
     return {
         'number': hex_to_dec(uncle_block['number']),
         'coinbase': uncle_block['miner']
     }
 
 
-def _map_transaction(transaction):
+def map_transaction(transaction):
     return {
         "to": transaction['to'],
         "from": transaction['from'],
@@ -145,3 +148,27 @@ def _map_transaction(transaction):
         "data": transaction['input'],
         "hash": transaction['hash']
     }
+
+
+def map_metrics(metrics: Mapping):
+    tx_totals = {}
+    tx_metrics = metrics['transactionMetrics']
+    for tx_record in tx_metrics:
+        tx_record_enriched = {
+            **tx_record,
+            'pct_trie_reads': pct(tx_record['trieReads'], tx_record['totalExecutionTime']),
+            'pct_persistent_reads_in_trie_reads': pct(tx_record['persistentReads'], tx_record['trieReads']),
+        }
+        for k, v in tx_record_enriched.items():
+            tx_totals[k] = tx_totals.get(k, 0) + v
+    return {
+        'pct_tx_execution': pct(tx_totals['totalExecutionTime'], metrics['totalTime']),
+        'pct_persistent_commit': pct(metrics['persistentCommit'], metrics['totalTime']),
+        'pct_pct_trie_commit_sync': pct(metrics['trieCommitSync'], metrics['totalTime']),
+        'pct_pct_trie_commit_total': pct(metrics['trieCommitTotal'], metrics['totalTime']),
+        'tx_averages': {k: round(v / len(tx_metrics), 5) for k, v in tx_totals.items()}
+    }
+
+
+def pct(x, y):
+    return round(x / y if y != 0 else 0.000000, 5)

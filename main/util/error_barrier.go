@@ -10,20 +10,15 @@ type ErrorBarrier struct {
 }
 
 func (this *ErrorBarrier) SetIfAbsent(err error) (hasSet bool) {
-	if err != nil {
-		hasSet = atomic.CompareAndSwapPointer(&this.err, nil, unsafe.Pointer(&err))
-	}
-	return
+	return !IsNil(err) && atomic.CompareAndSwapPointer(&this.err, nil, unsafe.Pointer(&err))
 }
 
 func (this *ErrorBarrier) CheckIn(errors ...error) {
 	this.PanicIfPresent()
 	for _, err := range errors {
-		if err == nil {
-			continue
+		if this.SetIfAbsent(err) {
+			panic(err)
 		}
-		this.SetIfAbsent(err)
-		this.PanicIfPresent()
 	}
 }
 

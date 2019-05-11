@@ -1,4 +1,4 @@
-package metrics
+package metric_utils
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/main/proxy"
@@ -20,17 +20,18 @@ func (this *AtomicCounter) Get() uint64 {
 	return atomic.LoadUint64((*uint64)(this))
 }
 
-func (this *AtomicCounter) NewTimeRecorder() func() {
+func (this *AtomicCounter) NewTimeRecorder() func() time.Duration {
 	return NewTimeRecorder(this.AddDuration)
 }
 
-func (this *AtomicCounter) MeasureElapsedTime(action func()) {
+func (this *AtomicCounter) MeasureElapsedTime(action func()) *AtomicCounter {
 	recorder := this.NewTimeRecorder()
 	defer recorder()
 	action()
+	return this
 }
 
-func MeasureElapsedTime(counters ...AtomicCounter) proxy.Decorator {
+func MeasureElapsedTime(counters ...*AtomicCounter) proxy.Decorator {
 	return func(...proxy.Argument) proxy.ArgumentsCallback {
 		recordTime := NewTimeRecorder(func(duration time.Duration) {
 			for _, counter := range counters {

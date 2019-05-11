@@ -8,11 +8,11 @@ import (
 
 type StateDB interface {
 	vm.StateDB
-	MergeChanges(that vm.StateDB)
 	Error() error
 	Finalise(deleteEmptyObjects bool)
 	GetLogs(hash common.Hash) []*types.Log
-	Prepare(thash, bhash common.Hash, ti int)
+	OpenTransaction(thash, bhash common.Hash, ti int)
+	//CloseTransaction() TODO
 	IntermediateRoot(deleteEmptyObjects bool) common.Hash
 	Commit(deleteEmptyObjects bool) (root common.Hash, err error)
 }
