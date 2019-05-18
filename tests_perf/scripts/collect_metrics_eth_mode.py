@@ -1,14 +1,40 @@
 import json
 from pathlib import Path
 from tempfile import gettempdir
+from zipfile import ZipFile, ZIP_DEFLATED
 
 from apps.blockchain_data import BlockDB
 from apps.compute_state_db import map_block
 from taraxa import rocksdb_util
 from taraxa.lib_taraxa_evm import LibTaraxaEvm
 from taraxa.util import raise_if_not_none
-import rocksdb
-from zipfile import ZipFile, ZIP_DEFLATED
+
+
+def map_metrics(metrics):
+    tx_totals = {}
+    tx_metrics = metrics['transactionMetrics']
+    for tx_record in tx_metrics:
+        tx_record_enriched = {
+            **tx_record,
+            'pct_trie_reads': pct(tx_record['trieReads'], tx_record['totalExecutionTime']),
+            'pct_persistent_reads_in_trie_reads': pct(tx_record['persistentReads'], tx_record['trieReads']),
+        }
+        for k, val in tx_record_enriched.items():
+            tx_totals[k] = tx_totals.get(k, 0) + val
+    return {
+        'pct_tx_execution': pct(tx_totals.get('totalExecutionTime', 0), metrics['totalTime']),
+        'pct_persistent_commit': pct(metrics['persistentCommit'], metrics['totalTime']),
+        'pct_pct_trie_commit_sync': pct(metrics['trieCommitSync'], metrics['totalTime']),
+        'pct_pct_trie_commit_total': pct(metrics['trieCommitTotal'], metrics['totalTime']),
+        'trie_commit_speedup': ((metrics['totalTime'] - metrics['trieCommitSync'] + metrics['trieCommitTotal'])
+                                / metrics['totalTime']),
+        'tx_averages': {k: round(val / len(tx_metrics), 5) for k, val in tx_totals.items()}
+    }
+
+
+def pct(x, y):
+    return round(x / y if y != 0 else 0.000000, 5)
+
 
 intervals = [
     (778483, 808909), (1620940, 1657167), (2912407, 2948852), (3800776, 3831962)
@@ -21,7 +47,7 @@ PROJECT_NAME = 'eth_metrics'
 
 BASE_DIR.mkdir(exist_ok=True, parents=True)
 
-dummy_state_dir = BASE_DIR.joinpath(f'ethereum_emulated_state_metrics_dummies')
+dummy_state_dir = BASE_DIR.joinpath(f'{PROJECT_NAME}_dummy_state')
 dummy_state_dir.mkdir(exist_ok=True, parents=True)
 
 block_db_conf = rocksdb_util.Config(read_only=True, path=str(BASE_DIR.joinpath('blocks')))
@@ -30,7 +56,7 @@ block_db = BlockDB(block_db_conf.new_db())
 
 def new_vm(partition):
     print("building lib")
-    library_path = Path(gettempdir()).joinpath(f'taraxa_vm_{partition}').joinpath('taraxa_vm.so')
+    library_path = Path(gettempdir()).joinpath(f'{PROJECT_NAME}_taraxa_vm_{partition}').joinpath('taraxa_vm.so')
     LibTaraxaEvm.build(library_path)
     lib_taraxa_vm = LibTaraxaEvm(library_path)
     print("built lib")
@@ -97,7 +123,7 @@ def process_block(block_num):
         vm_instances[partition] = taraxa_vm_ptr
     prev_block = block_db.get_block(block_num - 1)
     block = block_db.get_block(block_num)
-    state_transition_result, metrics, err = taraxa_vm_ptr.call("TransitionStateLikeEthereum",
+    state_transition_result, metrics, err = taraxa_vm_ptr.call("TransitionState",
                                                                {
                                                                    "stateRoot": prev_block['stateRoot'],
                                                                    "block": map_block(block),
@@ -107,6 +133,7 @@ def process_block(block_num):
                                                                    "sequential": list(
                                                                        range(len(block['transactions'])))
                                                                })
+    print(json.dumps(map_metrics(metrics)))
     raise_if_not_none(err, lambda e: RuntimeError(f'State transition failed: {e}'))
     return {
         'blockNumber': block_num,

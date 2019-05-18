@@ -8,3 +8,4 @@ cython
 python-rocksdb == 0.7.0
 click
 frozendict == 1.2
+numpy

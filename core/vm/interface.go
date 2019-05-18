@@ -33,8 +33,6 @@ type StateDB interface {
 	HasBalance(address common.Address, amount *big.Int) bool
 
 	GetNonce(common.Address) uint64
-	// TODO leftover from the original api
-	SetNonce(common.Address, uint64)
 	AddNonce(common.Address, uint64)
 
 	GetCodeHash(common.Address) common.Hash
@@ -65,7 +63,6 @@ type StateDB interface {
 
 	AddLog(*types.Log)
 	AddPreimage(common.Hash, []byte)
-
 }
 
 // CallContext provides a basic interface for the EVM calling conventions. The EVM

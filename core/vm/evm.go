@@ -392,8 +392,8 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	evm.StateDB.AddNonce(caller.Address(), 1)
 
 	// Ensure there's no existing contract already at the designated address
-	// TODO conflict prone
 	contractHash := evm.StateDB.GetCodeHash(address)
+	// TODO conflict prone
 	if evm.StateDB.GetNonce(address) != 0 || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}

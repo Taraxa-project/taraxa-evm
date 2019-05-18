@@ -102,10 +102,12 @@ type (
 	balanceChange struct {
 		account *common.Address
 		prev    *big.Int
+		prevAdditive bool
 	}
 	nonceChange struct {
-		account *common.Address
-		prev    uint64
+		account      *common.Address
+		prev         uint64
+		prevAdditive bool
 	}
 	storageChange struct {
 		account       *common.Address
@@ -172,7 +174,9 @@ func (ch touchChange) dirtied() *common.Address {
 }
 
 func (ch balanceChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setBalance(ch.prev)
+	obj := s.getStateObject(*ch.account)
+	obj.setBalance(ch.prev)
+	obj.balanceAdditive = ch.prevAdditive
 }
 
 func (ch balanceChange) dirtied() *common.Address {
@@ -180,7 +184,9 @@ func (ch balanceChange) dirtied() *common.Address {
 }
 
 func (ch nonceChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setNonce(ch.prev)
+	obj := s.getStateObject(*ch.account)
+	obj.setNonce(ch.prev)
+	obj.nonceAdditive = ch.prevAdditive
 }
 
 func (ch nonceChange) dirtied() *common.Address {

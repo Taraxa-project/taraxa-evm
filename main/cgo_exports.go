@@ -5,14 +5,14 @@ package main
 import "C"
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/main/taraxa_evm"
+	"github.com/Taraxa-project/taraxa-evm/main/taraxa_vm"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/virtual_env"
 )
 
 // TODO refactor
 var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
-	"NewVM": func(env *virtual_env.VirtualEnv, config *taraxa_evm.Config) (vmAddr string, err error) {
+	"NewVM": func(env *virtual_env.VirtualEnv, config *taraxa_vm.Config) (vmAddr string, err error) {
 		cleanup := util.DoNothing
 		defer util.CatchAnyErr(func(e error) {
 			err = e

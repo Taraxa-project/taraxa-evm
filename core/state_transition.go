@@ -154,7 +154,7 @@ func (st *StateTransition) useGas(amount uint64) error {
 
 func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
-	if !st.state.HasBalance(st.msg.From(), mgval) {
+	if !st.evm.CanTransfer(st.state, st.msg.From(), mgval) {
 		return errInsufficientBalanceForGas
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {

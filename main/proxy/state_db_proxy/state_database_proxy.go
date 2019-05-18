@@ -8,41 +8,37 @@ import (
 
 type DatabaseProxy struct {
 	state.Database
-	Decorators     *proxy.Decorators
-	TrieDecorators *proxy.Decorators
+	*proxy.BaseProxy
+	TrieProxy *proxy.BaseProxy
 }
 
 func (this DatabaseProxy) OpenTrie(root common.Hash) (t state.Trie, e error) {
-	after := this.Decorators.BeforeCall("OpenTrie", &root)
-	defer after(&t, &e)
+	defer this.CallDecorator("OpenTrie", &root)(&t, &e)
 	trie, err := this.Database.OpenTrie(root)
-	return TrieProxy{trie, this.TrieDecorators}, err
+	return TrieProxy{trie, this.TrieProxy}, err
 }
 
 func (this DatabaseProxy) OpenStorageTrie(addrHash, root common.Hash) (t state.Trie, e error) {
-	after := this.Decorators.BeforeCall("OpenStorageTrie", &addrHash, &root)
-	defer after(&t, &e)
+	defer this.CallDecorator("OpenStorageTrie", &addrHash, &root)(&t, &e)
 	trie, err := this.Database.OpenStorageTrie(addrHash, root)
-	return TrieProxy{trie, this.TrieDecorators}, err
+	return TrieProxy{trie, this.TrieProxy}, err
 }
 
 func (this DatabaseProxy) CopyTrie(trie state.Trie) state.Trie {
-	return TrieProxy{this.Database.CopyTrie(trie), this.TrieDecorators}
+	return TrieProxy{this.Database.CopyTrie(trie), this.TrieProxy}
 }
 
 func (this DatabaseProxy) ContractCode(addrHash, codeHash common.Hash) (b []byte, e error) {
-	after := this.Decorators.BeforeCall("ContractCode", &addrHash, &codeHash)
-	defer after(&b, &e)
+	defer this.CallDecorator("ContractCode", &addrHash, &codeHash)(&b, &e)
 	return this.Database.ContractCode(addrHash, codeHash)
 }
 
 type TrieProxy struct {
 	state.Trie
-	Decorators *proxy.Decorators
+	*proxy.BaseProxy
 }
 
 func (this TrieProxy) TryGet(key []byte) (b []byte, e error) {
-	after := this.Decorators.BeforeCall("TryGet", &key)
-	defer after(&b, &e)
+	defer this.CallDecorator("TryGet", &key)(&b, &e)
 	return this.Trie.TryGet(key)
 }

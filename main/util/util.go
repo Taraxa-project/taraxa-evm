@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"math/big"
 	"reflect"
@@ -52,8 +53,27 @@ func Compute(anyMap, key interface{}, remapper Remapper) (newValue interface{}, 
 	}
 }
 
-func Min(x, y int) int {
-	if x < y {
+func ForEach(indexableWithLength interface{}, cb func(i int, val interface{})) {
+	val := reflect.ValueOf(indexableWithLength)
+	length := val.Len()
+	for i := 0; i < length; i++ {
+		cb(i, val.Index(i).Interface())
+	}
+}
+
+func Join(separator string, indexableWithLength interface{}) (result string) {
+	length := reflect.ValueOf(indexableWithLength).Len()
+	ForEach(indexableWithLength, func(i int, val interface{}) {
+		result += fmt.Sprint(val)
+		if i < length-1 {
+			result += separator
+		}
+	})
+	return
+}
+
+func Max(x, y int) int {
+	if x > y {
 		return x
 	}
 	return y

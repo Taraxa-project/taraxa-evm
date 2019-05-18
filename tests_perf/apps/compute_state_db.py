@@ -150,7 +150,7 @@ def map_transaction(transaction):
     }
 
 
-def map_metrics(metrics: Mapping):
+def map_metrics(metrics):
     tx_totals = {}
     tx_metrics = metrics['transactionMetrics']
     for tx_record in tx_metrics:
@@ -162,7 +162,7 @@ def map_metrics(metrics: Mapping):
         for k, v in tx_record_enriched.items():
             tx_totals[k] = tx_totals.get(k, 0) + v
     return {
-        'pct_tx_execution': pct(tx_totals['totalExecutionTime'], metrics['totalTime']),
+        'pct_tx_execution': pct(tx_totals.get('totalExecutionTime', 0), metrics['totalTime']),
         'pct_persistent_commit': pct(metrics['persistentCommit'], metrics['totalTime']),
         'pct_pct_trie_commit_sync': pct(metrics['trieCommitSync'], metrics['totalTime']),
         'pct_pct_trie_commit_total': pct(metrics['trieCommitTotal'], metrics['totalTime']),

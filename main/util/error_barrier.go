@@ -34,7 +34,7 @@ func (this *ErrorBarrier) Get() error {
 	return nil
 }
 
-func (this *ErrorBarrier) Catch(handlers ...func(err error)) Predicate {
+func (this *ErrorBarrier) Catch(handlers ...ErrorHandler) Predicate {
 	return func(caught interface{}) bool {
 		thisErr := this.Get()
 		if caught == thisErr {

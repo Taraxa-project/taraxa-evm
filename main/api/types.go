@@ -71,7 +71,7 @@ type StateTransitionRequest struct {
 }
 
 type ConcurrentSchedule struct {
-	SequentialTransactions util.LinkedHashSet `json:"sequential"`
+	SequentialTransactions []TxId `json:"sequential"`
 }
 
 type TaraxaReceipt struct {
@@ -80,11 +80,15 @@ type TaraxaReceipt struct {
 	ContractError   error          `json:"contractError"`
 }
 
+type StateTransitionReceipt struct {
+	Receipts []*TaraxaReceipt `json:"receipts"`
+	AllLogs  []*types.Log     `json:"allLogs"`
+	UsedGas  uint64           `json:"usedGas"`
+}
+
 type StateTransitionResult struct {
-	StateRoot common.Hash      `json:"stateRoot"`
-	Receipts  []*TaraxaReceipt `json:"receipts"`
-	AllLogs   []*types.Log     `json:"allLogs"`
-	UsedGas   uint64           `json:"usedGas"`
+	StateRoot common.Hash `json:"stateRoot"`
+	*StateTransitionReceipt
 }
 
 type StateTransitionResponse struct {

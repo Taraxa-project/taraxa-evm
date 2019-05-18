@@ -90,15 +90,15 @@ func NewDatabaseWithCache(db ethdb.Database, cache int) Database {
 
 type cachingDB struct {
 	db            *trie.Database
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	pastTries     []*trie.SecureTrie
 	codeSizeCache *lru.Cache
 }
 
 // OpenTrie opens the main account trie.
 func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	for i := len(db.pastTries) - 1; i >= 0; i-- {
 		if db.pastTries[i].Hash() == root {
 			return cachedTrie{db.pastTries[i].Copy(), db}, nil
@@ -175,8 +175,4 @@ func (m cachedTrie) Commit(onleaf trie.LeafCallback) (common.Hash, error) {
 		m.db.pushTrie(m.SecureTrie)
 	}
 	return root, err
-}
-
-func (m cachedTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
-	return m.SecureTrie.Prove(key, fromLevel, proofDb)
 }

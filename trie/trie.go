@@ -110,12 +110,6 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 	return trie, nil
 }
 
-// NodeIterator returns an iterator that returns nodes of the trie. Iteration starts at
-// the key after the given start key.
-func (t *Trie) NodeIterator(start []byte) NodeIterator {
-	return newNodeIterator(t, start)
-}
-
 // TryGet returns the value for key stored in the trie.
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
@@ -436,10 +430,6 @@ func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
 	}
 	return nil, &MissingNodeError{NodeHash: hash, Path: prefix}
 }
-
-// Root returns the root hash of the trie.
-// Deprecated: use Hash instead.
-func (t *Trie) Root() []byte { return t.Hash().Bytes() }
 
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.

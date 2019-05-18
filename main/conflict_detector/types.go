@@ -37,7 +37,7 @@ var conflictRelations = func() conflictRelationsMap {
 	return ret
 }()
 
-type operation struct {
+type Operation struct {
 	Author Author
 	Type   OperationType
 	Key    Key

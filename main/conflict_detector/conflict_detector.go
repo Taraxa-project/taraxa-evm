@@ -3,28 +3,28 @@ package conflict_detector
 import (
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
-	"sync/atomic"
 )
 
+type OnConflict (func(*ConflictDetector, *Operation, Authors))
+
 type ConflictDetector struct {
-	inbox             chan *operation
+	inbox             chan *Operation
 	operationLog      operationLog
 	keysInConflict    Keys
 	authorsInConflict Authors
-	// TODO don't use mutex here
-	conflictMutex     sync.RWMutex
 	executionMutex    sync.Mutex
-	haveBeenConflicts int32
+	onConflict        OnConflict
 }
 
-func New(inboxCapacity int) *ConflictDetector {
+func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
 	this := new(ConflictDetector)
+	this.inbox = make(chan *Operation, inboxCapacity)
 	this.operationLog = make(operationLog, OperationType_count)
 	for opType := range this.operationLog {
 		this.operationLog[opType] = make(map[Key]Authors)
 	}
-	this.inbox = make(chan *operation, inboxCapacity)
-	this.Reset()
+	this.onConflict = onConflict
+	this.reset()
 	return this
 }
 
@@ -32,26 +32,24 @@ func (this *ConflictDetector) Run() {
 	this.executionMutex.Lock()
 	defer this.executionMutex.Unlock()
 	for {
-		op := <-this.inbox
-		if op == nil {
+		if op := <-this.inbox; op != nil {
+			this.process(op)
+		} else {
 			break
 		}
-		this.process(op)
 	}
-	// TODO close channel?
-	//close(this.inbox)
-	//this.inbox = make(chan *operation, cap(this.inbox))
 }
 
-func (this *ConflictDetector) RequestShutdown() *ConflictDetector {
+func (this *ConflictDetector) SignalShutdown() *ConflictDetector {
 	this.inbox <- nil
 	return this
 }
 
-func (this *ConflictDetector) Join() *ConflictDetector {
+func (this *ConflictDetector) AwaitResult() Authors {
 	this.executionMutex.Lock()
 	defer this.executionMutex.Unlock()
-	return this
+	defer this.reset()
+	return this.authorsInConflict
 }
 
 // This function is thread safe
@@ -66,50 +64,31 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 		} else if cachedKeys.Contains(key) {
 			return
 		}
-		this.inbox <- &operation{
-			Author: author,
-			Key:    key,
-			Type:   opType,
-		}
+		this.inbox <- &Operation{author, opType, key}
 		cachedKeys.Add(key)
 	}
 }
 
-func (this *ConflictDetector) Reset() (authorsInConflict Authors) {
-	this.executionMutex.Lock()
-	defer this.executionMutex.Unlock()
-	this.conflictMutex.Lock()
-	defer this.conflictMutex.Unlock()
-	authorsInConflict = this.authorsInConflict
+func (this *ConflictDetector) reset() {
 	this.authorsInConflict = linkedhashset.New()
 	this.keysInConflict = linkedhashset.New()
-	this.haveBeenConflicts = 0
-	return
 }
 
-func (this *ConflictDetector) IsCurrentlyInConflict(author Author) bool {
-	this.conflictMutex.RLock()
-	defer this.conflictMutex.RUnlock()
-	return this.authorsInConflict.Contains(author)
+func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
+	authors.Each(func(_ int, author Author) {
+		this.authorsInConflict.Add(author)
+	})
+	if this.onConflict != nil {
+		this.onConflict(this, op, authors)
+	}
 }
 
-func (this *ConflictDetector) HaveBeenConflicts() bool {
-	return atomic.LoadInt32(&this.haveBeenConflicts) == 1
-}
-
-func (this *ConflictDetector) addConflictingAuthor(author Author) {
-	this.conflictMutex.Lock()
-	defer this.conflictMutex.Unlock()
-	this.authorsInConflict.Add(author)
-	atomic.StoreInt32(&this.haveBeenConflicts, 1)
-}
-
-func (this *ConflictDetector) process(op *operation) {
-	if this.IsCurrentlyInConflict(op.Author) {
+func (this *ConflictDetector) process(op *Operation) {
+	if this.authorsInConflict.Contains(op.Author) {
 		return
 	}
 	if this.keysInConflict.Contains(op.Key) {
-		this.addConflictingAuthor(op.Author)
+		this.registerConflict(op, linkedhashset.New(op.Author))
 		return
 	}
 	conflictFound := false
@@ -123,14 +102,10 @@ func (this *ConflictDetector) process(op *operation) {
 	if conflictFound {
 		this.keysInConflict.Add(op.Key)
 		for _, opsByKey := range this.operationLog {
-			authors := opsByKey[op.Key]
-			if authors == nil {
-				continue
+			if authors := opsByKey[op.Key]; authors != nil {
+				this.registerConflict(op, authors)
+				delete(opsByKey, op.Key)
 			}
-			authors.Each(func(index int, author Author) {
-				this.addConflictingAuthor(author)
-			})
-			delete(opsByKey, op.Key)
 		}
 	} else {
 		opsByKey := this.operationLog[op.Type]

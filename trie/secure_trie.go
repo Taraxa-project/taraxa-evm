@@ -141,22 +141,10 @@ func (t *SecureTrie) Hash() common.Hash {
 	return t.trie.Hash()
 }
 
-// Root returns the root hash of SecureTrie.
-// Deprecated: use Hash instead.
-func (t *SecureTrie) Root() []byte {
-	return t.trie.Root()
-}
-
 // Copy returns a copy of SecureTrie.
 func (t *SecureTrie) Copy() *SecureTrie {
 	cpy := *t
 	return &cpy
-}
-
-// NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
-// starts at the key after the given start key.
-func (t *SecureTrie) NodeIterator(start []byte) NodeIterator {
-	return t.trie.NodeIterator(start)
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.

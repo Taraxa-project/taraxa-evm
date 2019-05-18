@@ -32,7 +32,7 @@ func (this *AtomicCounter) MeasureElapsedTime(action func()) *AtomicCounter {
 }
 
 func MeasureElapsedTime(counters ...*AtomicCounter) proxy.Decorator {
-	return func(...proxy.Argument) proxy.ArgumentsCallback {
+	return func(...proxy.Argument) func(...proxy.Argument) {
 		recordTime := NewTimeRecorder(func(duration time.Duration) {
 			for _, counter := range counters {
 				counter.AddDuration(duration)
