@@ -281,8 +281,11 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 	var cleans *bigcache.BigCache
 	if cache > 0 {
+		//shardCount := 4096
+		shardCount := 2048
 		cleans, _ = bigcache.NewBigCache(bigcache.Config{
-			Shards:             1024,
+			// TODO increase the number of shards
+			Shards:             shardCount,
 			LifeWindow:         time.Hour,
 			MaxEntriesInWindow: cache * 1024,
 			MaxEntrySize:       512,

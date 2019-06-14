@@ -14,7 +14,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/barrier"
 	"math/big"
+	"runtime"
 	"sort"
+	"sync/atomic"
 )
 
 type TaraxaVM struct {
@@ -24,7 +26,6 @@ type TaraxaVM struct {
 	WriteDiskDB *ethdb_proxy.DatabaseProxy
 	ReadDB      *state_db_proxy.DatabaseProxy
 	WriteDB     *state_db_proxy.DatabaseProxy
-	threadPool  *util.SimpleThreadPool
 }
 
 func (this *TaraxaVM) GenerateSchedule(req *api.StateTransitionRequest) (result *api.ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
@@ -45,41 +46,54 @@ func (this *TaraxaVM) GenerateSchedule(req *api.StateTransitionRequest) (result 
 	go conflictDetector.Run()
 	defer conflictDetector.SignalShutdown()
 	allDone := barrier.New(txCount)
-	for txId := 0; txId < txCount; txId++ {
-		txId := txId
-		errConflict := txConflictErrors[txId]
+	lastScheduledTxId := int32(-1)
+	parallelismFactor := 1.3 // Good
+	numCPU := runtime.NumCPU()
+	threadCount := int(float64(numCPU) * parallelismFactor)
+	for i := 0; i < threadCount; i++ {
 		go func() {
-			defer util.Recover(errFatal.Catch(), errConflict.Catch())
-			defer allDone.CheckIn()
+			defer util.Recover(errFatal.Catch())
 			stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
 			errFatal.CheckIn(stateDBCreateErr)
-			result := this.executeTransaction(&transactionRequest{
-				txId,
-				req.Block.Transactions[txId],
-				&req.Block.BlockHeader,
-				&OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
-				func(pc uint64) (uint64, bool) {
-					errFatal.CheckIn()
-					errConflict.CheckIn()
-					return pc, true
-				},
-				new(core.GasPool).AddGas(req.Block.GasLimit),
-				false,
-				&metrics.TransactionMetrics[txId],
-				func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
-					return true
-				},
-			})
-			errFatal.CheckIn(result.ConsensusErr)
+			for {
+				txId := api.TxId(atomic.AddInt32(&lastScheduledTxId, 1))
+				if txId >= txCount {
+					break
+				}
+				// TODO move to a function:
+				errConflict := txConflictErrors[txId]
+				defer util.Recover(errConflict.Catch())
+				defer allDone.CheckIn()
+				result := this.executeTransaction(&transactionRequest{
+					txId,
+					req.Block.Transactions[txId],
+					&req.Block.BlockHeader,
+					&OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
+					func(pc uint64) (uint64, bool) {
+						errFatal.CheckIn()
+						errConflict.CheckIn()
+						return pc, true
+					},
+					new(core.GasPool).AddGas(req.Block.GasLimit),
+					false,
+					&metrics.TransactionMetrics[txId],
+					func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
+						return true
+					},
+				})
+				errFatal.CheckIn(result.ConsensusErr)
+				stateDB.Reset()
+			}
 		}()
 	}
 	allDone.Await()
 	defer metrics.ConflictPostProcessing.NewTimeRecorder()()
 	errFatal.CheckIn()
-	conflictDetector.SignalShutdown().AwaitResult().Each(func(_ int, value interface{}) {
-		result.SequentialTransactions = append(result.SequentialTransactions, value.(api.TxId))
+	conflictingTx := conflictDetector.SignalShutdown().AwaitResult().Values()
+	sort.Slice(conflictingTx, func(i, j int) bool {
+		return conflictingTx[i].(api.TxId) < conflictingTx[j].(api.TxId)
 	})
-	sort.Ints(result.SequentialTransactions)
+	result.SequentialTransactions = api.NewTxIdSet(conflictingTx)
 	return
 }
 
@@ -146,8 +160,8 @@ func (this *TaraxaVM) executeTransaction(req *transactionRequest) *TransactionRe
 		GasLimit:    block.GasLimit,
 		GasPrice:    new(big.Int).Set(tx.GasPrice),
 	}
-	evmConfig := vm.Config{
-		StaticConfig: *this.EvmConfig,
+	evmConfig := &vm.Config{
+		StaticConfig: this.EvmConfig,
 	}
 	evm := vm.NewEVMWithInterpreter(
 		evmContext, stateDB, chainConfig, evmConfig,
@@ -159,12 +173,4 @@ func (this *TaraxaVM) executeTransaction(req *transactionRequest) *TransactionRe
 	stateDB.BeginTransaction(tx.Hash, block.Hash, req.txId)
 	ret, usedGas, vmErr, consensusErr := st.TransitionDb()
 	return &TransactionResult{req.txId, ret, usedGas, vmErr, consensusErr, stateDB.GetLogs(tx.Hash)}
-}
-
-func (this *TaraxaVM) doParallel(task func()) error {
-	if this.threadPool != nil {
-		return this.threadPool.Go(task)
-	}
-	go task()
-	return nil
 }

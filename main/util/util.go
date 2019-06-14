@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"math/big"
 	"reflect"
+	"sync/atomic"
 )
 
 func Sum(x, y *big.Int) *big.Int {
@@ -77,4 +78,54 @@ func Max(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func Min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+
+type Interval struct {
+	StartInclusive, EndExclusive int
+}
+
+func (this *Interval) IsEmpty() bool {
+	return this.StartInclusive == this.EndExclusive
+}
+
+type AtomicRange struct {
+	left int32
+}
+
+func NewAtomicRange(size int) AtomicRange {
+	return AtomicRange{int32(size)}
+}
+
+func (this *AtomicRange) Take(size int) *Interval {
+	newVal := int(atomic.AddInt32(&this.left, -int32(size)));
+	return &Interval{Max(newVal, 0), Max(newVal+size, 0)}
+}
+
+func (this *AtomicRange) IsEmpty() bool {
+	return atomic.LoadInt32(&this.left) == 0
+}
+
+type IncreasingAtomicRange struct {
+	taken int32
+	size  int
+}
+
+func NewIncreasingAtomicRange(size int) IncreasingAtomicRange {
+	return IncreasingAtomicRange{size: size}
+}
+
+func (this *IncreasingAtomicRange) Take(size int) *Interval {
+	newVal := int(atomic.AddInt32(&this.taken, int32(size)));
+	return &Interval{Min(newVal-size, this.size), Min(newVal, this.size)}
+}
+
+func (this *IncreasingAtomicRange) IsEmpty() bool {
+	return atomic.LoadInt32(&this.taken) == int32(this.size)
 }

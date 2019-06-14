@@ -18,12 +18,13 @@ package state
 
 import (
 	"fmt"
+	"github.com/cornelk/hashmap"
+	lru "github.com/hashicorp/golang-lru"
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/trie"
-	lru "github.com/hashicorp/golang-lru"
 )
 
 // Trie cache generation limit after which to evict trie nodes from memory.
@@ -82,17 +83,36 @@ func NewDatabase(db ethdb.Database) Database {
 // well as a lot of collapsed RLP trie nodes in a large memory cache.
 func NewDatabaseWithCache(db ethdb.Database, cache int) Database {
 	csc, _ := lru.New(codeSizeCacheSize)
+	//csc := new(chmCodeCache) //TODO
 	return &cachingDB{
 		db:            trie.NewDatabaseWithCache(db, cache),
 		codeSizeCache: csc,
 	}
 }
 
+type codeSizeCache interface {
+	Add(interface{}, interface{}) bool
+	Get(interface{}) (interface{}, bool)
+}
+
+type chmCodeCache struct {
+	hashmap.HashMap
+}
+
+func (this *chmCodeCache) Add(hash interface{}, size interface{}) bool {
+	this.HashMap.Set(hash.(common.Hash).Hex(), size)
+	return false
+}
+
+func (this *chmCodeCache) Get(hash interface{}) (interface{}, bool) {
+	return this.HashMap.Get(hash.(common.Hash).Hex())
+}
+
 type cachingDB struct {
 	db            *trie.Database
 	mu            sync.RWMutex
 	pastTries     []*trie.SecureTrie
-	codeSizeCache *lru.Cache
+	codeSizeCache codeSizeCache
 }
 
 // OpenTrie opens the main account trie.
@@ -144,6 +164,7 @@ func (db *cachingDB) CopyTrie(t Trie) Trie {
 func (db *cachingDB) ContractCode(addrHash, codeHash common.Hash) ([]byte, error) {
 	code, err := db.db.Node(codeHash)
 	if err == nil {
+		// TODO use single lock for all. Replace with bigcache
 		db.codeSizeCache.Add(codeHash, len(code))
 	}
 	return code, err

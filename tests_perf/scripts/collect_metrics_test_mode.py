@@ -5,6 +5,7 @@ from os import cpu_count
 from pathlib import Path
 from shutil import rmtree
 from tempfile import gettempdir
+import sys
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import numpy
@@ -28,13 +29,13 @@ intervals = [
 SKIP = b'skip'
 
 BLOCK_STEP = 10
-MIN_TX_TO_RUN = 3000
-warmup_rounds = 2
-test_rounds = 5
+MIN_TX_TO_RUN = 0
+warmup_rounds = 3
+test_rounds = 3
 
 BASE_DIR = Path('/mnt/xvdf/perf_test/')
 
-PROJECT_NAME = 'test_mode_metrics_19'
+PROJECT_NAME = 'test_mode_metrics_24'
 
 BASE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -44,66 +45,57 @@ dummy_state_dir.mkdir(exist_ok=True, parents=True)
 block_db_conf = rocksdb_util.Config(read_only=True, path=str(BASE_DIR.joinpath('blocks')))
 block_db = BlockDB(block_db_conf.new_db())
 
-
-def new_vm(partition):
-    print("building lib")
-    library_path = Path(gettempdir()).joinpath(f'{PROJECT_NAME}_taraxa_vm_{partition}').joinpath('taraxa_vm.so')
-    LibTaraxaEvm.build(library_path)
-    lib_taraxa_vm = LibTaraxaEvm(library_path)
-    print("built lib")
-    conf = {
-        'readDB': {
-            'cacheSize': 5000,
-            'db': {
-                'type': 'rocksdb',
-                'options': {
-                    'file': str(BASE_DIR.joinpath('ethereum_emulated_state_rocksdb')),
-                    'readOnly': True
-                }
-            }
-        },
-        'writeDB': {
-            'cacheSize': 5000,
-            'db': {
-                'type': 'rocksdb',
-                'options': {
-                    'file': str(dummy_state_dir.joinpath(f'state_db_{partition}')),
-                }
-            }
-        },
-        'blockDB': {
+print("building lib")
+library_path = Path(gettempdir()).joinpath(f'{PROJECT_NAME}_taraxa_vm').joinpath('taraxa_vm.so')
+LibTaraxaEvm.build(library_path)
+lib_taraxa_vm = LibTaraxaEvm(library_path)
+print("built lib")
+conf = {
+    'readDB': {
+        'cacheSize': 5000,
+        'db': {
             'type': 'rocksdb',
             'options': {
-                'file': block_db_conf.path,
+                'file': str(BASE_DIR.joinpath('ethereum_emulated_state_rocksdb')),
                 'readOnly': True
             }
-        },
-        'conflictDetectorInboxPerTransaction': 500,
-        'threadPool': {
-            'threadCount': cpu_count() * 2,
-            'queueSize': cpu_count() * 50
         }
-    }
-    taraxa_vm_handle, err = lib_taraxa_vm.call("NewVM", conf)
-    raise_if_not_none(err, RuntimeError)
-    print("built vm")
-    return lib_taraxa_vm.as_ptr(taraxa_vm_handle)
+    },
+    'writeDB': {
+        'cacheSize': 5000,
+        'db': {
+            'type': 'rocksdb',
+            'options': {
+                'file': str(dummy_state_dir.joinpath(f'state_db')),
+            }
+        }
+    },
+    'blockDB': {
+        'type': 'rocksdb',
+        'options': {
+            'file': block_db_conf.path,
+            'readOnly': True
+        }
+    },
+    'conflictDetectorInboxPerTransaction': 500,
+}
+lib_taraxa_vm.lib.SetGCPercent(-1)
+taraxa_vm_handle, err = lib_taraxa_vm.call("NewVM", conf)
+raise_if_not_none(err, RuntimeError)
+taraxa_vm_ptr = lib_taraxa_vm.as_ptr(taraxa_vm_handle)
 
-
-taraxa_vm_ptr = None
+print("built vm")
 
 
 def perform_testing(state_transition_request):
-    global taraxa_vm_ptr
-    if not taraxa_vm_ptr:
-        taraxa_vm_ptr = new_vm(0)
+    global taraxa_vm_ptr, lib_taraxa_vm
     block = state_transition_request['block']
     print(f'processing block with tx count: {len(block["transactions"])}')
     all_tx_ids = list(range(len(block['transactions'])))
     conflicting_tx_ids = []
     schedule_metrics_samples = []
     for round in range(test_rounds + warmup_rounds):
-        print(f'ruunning round #{round} of schedule generation')
+        # print(f'ruunning round #{round} of schedule generation')
         schedule, schedule_metrics, err = taraxa_vm_ptr.call("GenerateSchedule", state_transition_request)
         raise_if_not_none(err)
         conflicting_tx_ids = schedule['sequential'] = schedule.get('sequential') or []
@@ -123,12 +115,11 @@ def perform_testing(state_transition_request):
     run_configurations.extend(taraxa_configurations)
     metrics_by_config = {}
     for config_name, config in run_configurations:
-        for _ in range(warmup_rounds):
-            taraxa_vm_ptr.call("TestMode", state_transition_request, config)
-        for round in range(test_rounds):
-            print(f'ruunning round #{round} of {config_name}')
+        for round in range(test_rounds + warmup_rounds):
+            # print(f'running round #{round} of {config_name}')
             [config_metrics] = taraxa_vm_ptr.call("TestMode", state_transition_request, config)
-            metrics_by_config.setdefault(config_name, []).append(config_metrics)
+            if round >= warmup_rounds:
+                metrics_by_config.setdefault(config_name, []).append(config_metrics)
     return {
         'blockNumber': block['number'],
         'txCount': len(block['transactions']),
@@ -138,11 +129,14 @@ def perform_testing(state_transition_request):
     }
 
 
+EXIT_TRIGGER_STEP = 500
+GC_TRIGGER_STEP = 15
+blocks_tested = 0
 results_db = rocksdb_util.Config(path=str(BASE_DIR.joinpath(PROJECT_NAME)), opts={'create_if_missing': True}).new_db()
 total = sum(end - start + 1 for start, end in intervals)
 processed = 0
 current_transactions = []
-state_transition_request = {}
+state_transition_request = None
 for start, end in intervals:
     current_block = start
     while current_block <= end:
@@ -166,24 +160,28 @@ for start, end in intervals:
             if len(block_from_request['transactions']) >= MIN_TX_TO_RUN or is_last_block:
                 result = perform_testing(state_transition_request)
                 results_db.put(block_db_key, json.dumps(result).encode())
-                state_transition_request = {}
+                state_transition_request = None
+                blocks_tested += 1
+                if blocks_tested % EXIT_TRIGGER_STEP == 0:
+                    exit(-1)
+                if blocks_tested % GC_TRIGGER_STEP == 0:
+                    print('running GC...')
+                    lib_taraxa_vm.lib.GC()
             else:
                 results_db.put(block_db_key, SKIP)
 
         current_block += BLOCK_STEP
         processed += BLOCK_STEP
 
-print("foo")
 
-
-def print_summary_stats(name, array):
+def print_summary_stats(name, array, file=sys.stdout):
     print(f'min {name}: {numpy.percentile(array, 0)}\n'
           f'pct. 25 {name}: {numpy.percentile(array, 25)}\n'
           f'median {name}: {numpy.percentile(array, 50)}\n'
           f'pct. 75 {name}: {numpy.percentile(array, 75)}\n'
           f'max {name}: {numpy.percentile(array, 100)}\n'
           f'mean {name}: {numpy.mean(array)}\n'
-          f'std. dev {name}: {numpy.std(array)}\n')
+          f'std. dev {name}: {numpy.std(array)}\n', file=file)
 
 
 def deep_avg_array(metrics_samples, key):
@@ -232,24 +230,6 @@ def normalize_result(result):
 results_db_path = BASE_DIR.joinpath(f'{PROJECT_NAME}_normalized')
 # rmtree(results_db_path, ignore_errors=True)
 results_norm_db = rocksdb_util.Config(path=str(results_db_path), opts={'create_if_missing': True}).new_db()
-
-# archive_path = BASE_DIR.joinpath(f'{PROJECT_NAME}.zip')
-# archive_path.touch(exist_ok=True)
-# archive_file = ZipFile(archive_path, mode='w', compression=ZIP_DEFLATED, allowZip64=True)
-# results_file = archive_file.open('results.json', mode='w', force_zip64=True)
-# i = 0
-# itr = results_norm_db.itervalues()
-# itr.seek_to_first()
-# for v in itr:
-#     results_file.write(v + b'\n')
-#     print(f'zipping progress: {i / total}%')
-#     # print(str(v, encoding='utf-8'))
-#     i += 1
-# results_file.close()
-# archive_file.close()
-#
-# exit(0)
-
 results = {}
 
 
@@ -261,25 +241,42 @@ def on_result(result):
 
 
 executor = ProcessPoolExecutor(max_workers=int(cpu_count() * 1.5))
-
 itr = results_db.iteritems()
 itr.seek_to_first()
 for k, v in itr:
     if v == SKIP:
         continue
     from_db = results_norm_db.get(k)
-    if from_db:
+    if from_db is not None:
         on_result(json.loads(from_db))
     else:
 
-        def cb(future):
+        def cb(future, key=k):
             result = future.result()
-            results_norm_db.put(k, json.dumps(result).encode())
+            results_norm_db.put(key, json.dumps(result).encode())
             on_result(result)
 
 
         executor.submit(normalize_result, json.loads(v)).add_done_callback(cb)
 executor.shutdown(wait=True)
+
+archive_path = BASE_DIR.joinpath(f'{PROJECT_NAME}.zip')
+archive_path.touch(exist_ok=True)
+archive_file = ZipFile(archive_path, mode='w', compression=ZIP_DEFLATED, allowZip64=True)
+results_file = archive_file.open('results.json', mode='w', force_zip64=True)
+i = 0
+itr = results_norm_db.itervalues()
+itr.seek_to_first()
+for v in itr:
+    results_file.write(v + b'\n')
+    print(f'zipping progress: {i / total}%')
+    # print(str(v, encoding='utf-8'))
+    i += 1
+results_file.close()
+archive_file.close()
+
+exit(0)
+
 # for v in itr:
 #     result = json.loads(v)
 #     mean_metrics_by_config = result['mean_metrics'] = {}
@@ -319,7 +316,9 @@ filtered_configs = {
 comparisons = {}
 total_time_fractions = {}
 for i, result in results.items():
-    mean_metrics_by_config = {k: v for k, v in result['mean_metrics'].items() if k in filtered_configs}
+    if result['txCount'] < 50:
+        continue
+    mean_metrics_by_config = {k: v for k, v in result['mean_metrics'].items() if True}
     for run_config, metrics in mean_metrics_by_config.items():
         main_metrics = metrics.get('main', {})
         fractions = total_time_fractions.setdefault(run_config, {})
@@ -339,13 +338,14 @@ for i, result in results.items():
                      .setdefault(metric, [])
                      .append(value_left / value_right))
 
+log = open('log.txt', mode='w')
 for name, fractions in total_time_fractions.items():
-    print(f'{name} total time fractions:\n')
+    print(f'{name} total time fractions:\n', file=log)
     for k, v in fractions.items():
-        print_summary_stats(k, v)
+        print_summary_stats(k, v, file=log)
 for name, metric_groups in comparisons.items():
-    print(f"Comparing {name}:\n")
+    print(f"Comparing {name}:\n", file=log)
     for group_name, values in metric_groups.items():
-        print(f'Metric group: {group_name}:\n')
+        print(f'Metric group: {group_name}:\n', file=log)
         for metric, value in values.items():
-            print_summary_stats(metric, value)
+            print_summary_stats(metric, value, file=log)

@@ -1,11 +1,11 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"math/big"
 )
@@ -71,7 +71,7 @@ type StateTransitionRequest struct {
 }
 
 type ConcurrentSchedule struct {
-	SequentialTransactions []TxId `json:"sequential"`
+	SequentialTransactions *TxIdSet `json:"sequential"`
 }
 
 type TaraxaReceipt struct {
@@ -96,10 +96,30 @@ type StateTransitionResponse struct {
 	Error  *util.SimpleError     `json:"error"`
 }
 
-type VMConfig struct {
-	StateDB                 StateDBConfig    `json:"stateDB"`
-	Evm                     *vm.StaticConfig `json:"evm"`
-	Genesis                 *core.Genesis    `json:"genesis"`
-	BlockHashDB             *GenericDbConfig `json:"blockDB"`
-	StateTransitionTargetDB *GenericDbConfig `json:"stateTransitionTargetDB"`
+
+type linkedHashSet interface {
+	json.Marshaler
+	json.Unmarshaler
+	Contains(...interface{}) bool
+	Add(...interface{})
+	Size() int
+	Each(func(int, interface{}))
+	fmt.Stringer
+}
+
+type TxIdSet struct {
+	linkedHashSet
+}
+
+func NewTxIdSet(arr interface{}) *TxIdSet {
+	return &TxIdSet{util.NewLinkedHashSet(arr)}
+}
+
+func (this *TxIdSet) UnmarshalJSON(data []byte) error {
+	elements := []TxId{}
+	err := json.Unmarshal(data, &elements)
+	if err == nil {
+		this.linkedHashSet = util.NewLinkedHashSet(elements)
+	}
+	return err
 }

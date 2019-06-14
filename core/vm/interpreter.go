@@ -42,7 +42,7 @@ type StaticConfig struct {
 
 // Config are the configuration options for the Interpreter
 type Config struct {
-	StaticConfig
+	*StaticConfig
 	// Tracer is the op code logger
 	Tracer Tracer
 	// JumpTable contains the EVM instruction table. This
@@ -90,7 +90,7 @@ var NoopExecutionController = func(programCounter uint64) (changedProgramCounter
 // EVMInterpreter represents an EVM interpreter
 type EVMInterpreter struct {
 	evm      *EVM
-	cfg      Config
+	cfg      *Config
 	gasTable params.GasTable
 
 	intPool *intPool
@@ -104,7 +104,7 @@ type EVMInterpreter struct {
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
-func NewEVMInterpreterWithExecutionController(evm *EVM, cfg Config, ctrl ExecutionController) *EVMInterpreter {
+func NewEVMInterpreterWithExecutionController(evm *EVM, cfg *Config, ctrl ExecutionController) *EVMInterpreter {
 	// We use the STOP instruction whether to see
 	// the jump table was initialised. If it was not
 	// we'll set the default jump table.
@@ -130,7 +130,7 @@ func NewEVMInterpreterWithExecutionController(evm *EVM, cfg Config, ctrl Executi
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
-func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
+func NewEVMInterpreter(evm *EVM, cfg *Config) *EVMInterpreter {
 	return NewEVMInterpreterWithExecutionController(evm, cfg, NoopExecutionController)
 }
 

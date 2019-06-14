@@ -22,7 +22,6 @@ type ThreadPoolConfig struct {
 type StaticConfig struct {
 	EvmConfig                           *vm.StaticConfig  `json:"evm"`
 	Genesis                             *core.Genesis     `json:"genesis"`
-	ThreadPool                          *ThreadPoolConfig `json:"threadPool"`
 	ConflictDetectorInboxPerTransaction int               `json:"conflictDetectorInboxPerTransaction"`
 }
 
@@ -31,14 +30,14 @@ type StateDBConfig struct {
 	CacheSize int                  `json:"cacheSize"`
 }
 
-type Config struct {
+type VmConfig struct {
 	*StaticConfig
 	ReadDB  *StateDBConfig       `json:"readDB"`
 	WriteDB *StateDBConfig       `json:"writeDB"`
 	BlockDB *api.GenericDbConfig `json:"blockDB"`
 }
 
-func (this *Config) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
+func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	cleanup = util.DoNothing
 	localErr := new(util.ErrorBarrier)
 	defer util.Recover(
@@ -50,10 +49,6 @@ func (this *Config) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		localErr.Catch(util.SetTo(&err)),
 	)
 	ret = new(TaraxaVM)
-
-	if this.ThreadPool != nil {
-		ret.threadPool = util.LaunchNewSimpleThreadPool(this.ThreadPool.ThreadCount, this.ThreadPool.QueueSize)
-	}
 
 	rec := metric_utils.NewTimeRecorder()
 	readDiksDB, e1 := this.ReadDB.DB.NewDB()

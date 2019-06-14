@@ -6,10 +6,12 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/cornelk/hashmap"
 )
 
 type BlockHashDB struct {
-	db ethdb.Database
+	db    ethdb.Database
+	cache hashmap.HashMap
 }
 
 func New(db ethdb.Database) *BlockHashDB {
@@ -19,6 +21,9 @@ func New(db ethdb.Database) *BlockHashDB {
 }
 
 func (this *BlockHashDB) GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash {
+	if val, cached := this.cache.Get(blockNumber); cached {
+		return val.(common.Hash)
+	}
 	blockNumberStr := fmt.Sprintf("%09d", blockNumber)
 	value, err := this.db.Get([]byte(blockNumberStr))
 	util.PanicIfPresent(err)
@@ -28,5 +33,7 @@ func (this *BlockHashDB) GetHeaderHashByBlockNumber(blockNumber uint64) common.H
 	err = json.Unmarshal(value, header)
 	util.PanicIfPresent(err)
 	util.Assert(header.Hash != nil)
-	return *header.Hash
+	hash := *header.Hash
+	this.cache.Set(blockNumber, hash)
+	return hash
 }

@@ -69,38 +69,62 @@ func (p *intPool) put(is ...*big.Int) {
 	}
 }
 
-// The intPool pool's default capacity
-const poolDefaultCap = 25
-
 // intPoolPool manages a pool of intPools.
 type intPoolPool struct {
-	pools []*intPool
-	lock  sync.Mutex
+	pool *sync.Pool
 }
 
 var poolOfIntPools = &intPoolPool{
-	pools: make([]*intPool, 0, poolDefaultCap),
+	pool: &sync.Pool{
+		New: func() interface{} {
+			return newIntPool()
+		},
+	},
 }
 
 // get is looking for an available pool to return.
-func (ipp *intPoolPool) get() *intPool {
-	ipp.lock.Lock()
-	defer ipp.lock.Unlock()
-
-	if len(poolOfIntPools.pools) > 0 {
-		ip := ipp.pools[len(ipp.pools)-1]
-		ipp.pools = ipp.pools[:len(ipp.pools)-1]
-		return ip
-	}
-	return newIntPool()
+func (this *intPoolPool) get() *intPool {
+	return this.pool.Get().(*intPool)
 }
 
 // put a pool that has been allocated with get.
-func (ipp *intPoolPool) put(ip *intPool) {
-	ipp.lock.Lock()
-	defer ipp.lock.Unlock()
-
-	if len(ipp.pools) < cap(ipp.pools) {
-		ipp.pools = append(ipp.pools, ip)
-	}
+func (this *intPoolPool) put(ip *intPool) {
+	this.pool.Put(ip)
 }
+
+
+//// The intPool pool's default capacity
+//const poolDefaultCap = 25
+//
+//// intPoolPool manages a pool of intPools.
+//type intPoolPool struct {
+//	pools []*intPool
+//	lock  sync.Mutex
+//}
+//
+//var poolOfIntPools = &intPoolPool{
+//	pools: make([]*intPool, 0, poolDefaultCap),
+//}
+//
+//// get is looking for an available pool to return.
+//func (ipp *intPoolPool) get() *intPool {
+//	ipp.lock.Lock()
+//	defer ipp.lock.Unlock()
+//
+//	if len(poolOfIntPools.pools) > 0 {
+//		ip := ipp.pools[len(ipp.pools)-1]
+//		ipp.pools = ipp.pools[:len(ipp.pools)-1]
+//		return ip
+//	}
+//	return newIntPool()
+//}
+//
+//// put a pool that has been allocated with get.
+//func (ipp *intPoolPool) put(ip *intPool) {
+//	ipp.lock.Lock()
+//	defer ipp.lock.Unlock()
+//
+//	if len(ipp.pools) < cap(ipp.pools) {
+//		ipp.pools = append(ipp.pools, ip)
+//	}
+//}

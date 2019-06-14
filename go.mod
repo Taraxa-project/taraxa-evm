@@ -5,6 +5,9 @@ go 1.12
 require (
 	github.com/allegro/bigcache v1.2.0
 	github.com/aristanetworks/goarista v0.0.0-20190325233358-a123909ec740
+	github.com/cespare/xxhash v1.1.0 // indirect
+	github.com/coocood/freecache v1.1.0
+	github.com/cornelk/hashmap v1.0.0
 	github.com/cosiner/argv v0.0.1 // indirect
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -17,6 +20,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.1 // indirect
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect

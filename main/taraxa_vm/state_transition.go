@@ -2,9 +2,8 @@ package taraxa_vm
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/common/math"
+	eth_math "github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
 	"github.com/Taraxa-project/taraxa-evm/core"
@@ -16,7 +15,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/Taraxa-project/taraxa-evm/main/util/barrier"
 	"math/big"
+	"runtime"
 	"sync"
+	"sync/atomic"
 )
 
 type TransactionMetrics struct {
@@ -162,10 +163,10 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 }
 
 type TestModeParams struct {
-	DoCommitsInSeparateDB bool       `json:"doCommitsInSeparateDB"`
-	DoCommits             bool       `json:"doCommits"`
-	CommitSync            bool       `json:"commitSync"`
-	SequentialTx          []api.TxId `json:"sequentialTx"`
+	DoCommitsInSeparateDB bool         `json:"doCommitsInSeparateDB"`
+	DoCommits             bool         `json:"doCommits"`
+	CommitSync            bool         `json:"commitSync"`
+	SequentialTx          *api.TxIdSet `json:"sequentialTx"`
 }
 
 type TestModeTxMetrics struct {
@@ -194,6 +195,7 @@ type TestModeMetrics struct {
 
 func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestModeMetrics) {
 	metrics = new(TestModeMetrics)
+	defer metrics.Main.TotalTime.NewTimeRecorder()()
 	txCount := len(this.Block.Transactions)
 	metrics.TransactionMetrics = make([]TestModeTxMetrics, txCount)
 	var committer *StateDBCommitter
@@ -218,20 +220,17 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 	}
 	var syncCommitLock sync.Mutex
 	allDone := barrier.New(txCount)
-	runTx := func(txId api.TxId, dbFactory func() StateDB) {
+	runTx := func(txId api.TxId, db StateDB) {
 		txMetrics := &metrics.TransactionMetrics[txId]
 		defer txMetrics.TotalTime.NewTimeRecorder()()
 		defer allDone.CheckIn()
-		r1 := txMetrics.CreateDB.NewTimeRecorder()
-		db := dbFactory()
-		r1()
 		r := this.TaraxaVM.executeTransaction(&transactionRequest{
 			txId,
 			this.Block.Transactions[txId],
 			&this.Block.BlockHeader,
 			db,
 			vm.NoopExecutionController,
-			new(core.GasPool).AddGas(math.MaxUint64),
+			new(core.GasPool).AddGas(eth_math.MaxUint64),
 			false,
 			new(TransactionMetrics),
 			func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
@@ -251,26 +250,40 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 			this.commitTrie(db)
 		}
 	}
-	sequentialTransactions := util.NewLinkedHashSet(params.SequentialTx)
-	defer metrics.Main.TotalTime.NewTimeRecorder()()
 	recordTransactionSyncTime := metrics.Main.TransactionsSync.NewTimeRecorder()
-	for txId := range this.Block.Transactions {
-		if sequentialTransactions.Contains(txId) {
-			continue
+	sequentialTx := params.SequentialTx
+	if sequentialTx == nil {
+		sequentialTx = api.NewTxIdSet(nil)
+	}
+	if txCount != sequentialTx.Size() {
+		lastScheduledTxId := int32(-1)
+		parallelismFactor := 1.3 // Good
+		numCPU := runtime.NumCPU()
+		threadCount := int(float64(numCPU) * parallelismFactor)
+		for i := 0; i < threadCount; i++ {
+			go func() {
+				stateDB := this.newStateDBForReading()
+				for {
+					txId := api.TxId(atomic.AddInt32(&lastScheduledTxId, 1))
+					if txId >= txCount {
+						break
+					}
+					if sequentialTx.Contains(txId) {
+						continue
+					}
+					runTx(txId, stateDB)
+					stateDB.(*state.StateDB).Reset()
+					//runtime.Gosched()
+				}
+			}()
 		}
-		txId := txId
-		this.err.CheckIn(this.threadPool.Go(func() {
-			runTx(txId, this.newStateDBForReading)
-		}))
 	}
 	var sequentialStateDB StateDB = nil
-	sequentialTransactions.Each(func(_ int, value interface{}) {
+	sequentialTx.Each(func(_ int, i interface{}) {
 		if sequentialStateDB == nil {
 			sequentialStateDB = this.newStateDBForReading()
 		}
-		runTx(value.(api.TxId), func() StateDB {
-			return sequentialStateDB
-		})
+		runTx(i.(api.TxId), sequentialStateDB)
 	})
 	allDone.Await()
 	recordTransactionSyncTime()
@@ -309,7 +322,8 @@ func (this *stateTransition) onEvmInstruction(programCounter uint64) (programCou
 
 func (this *stateTransition) onConflict(_ *conflict_detector.ConflictDetector, op *conflict_detector.Operation, authors conflict_detector.Authors) {
 	this.err.SetIfAbsent(errors.New(
-		fmt.Sprintf("Conflict detected. Operation: {%s, %s, %s}; Authors: %s", op.Author, op.Type, op.Key, util.Join(", ", authors.Values())),
+		//fmt.Sprintf("Conflict detected. Operation: {%s, %s, %s}; Authors: %s", op.Author, op.Type, op.Key, util.Join(", ", authors.Values())),
+		"Conflict detected: " + util.Join(", ", authors.Values()),
 	))
 }
 

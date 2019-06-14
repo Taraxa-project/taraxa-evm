@@ -127,6 +127,18 @@ func (this *StateDB) CommitStateChange(deleteEmptyObjects bool) StateChange {
 	return ret
 }
 
+func (this *StateDB) Reset() {
+	this.stateObjects = make(map[common.Address]*stateObject)
+	this.stateObjectsDirty = make(map[common.Address]struct{})
+	this.thash = common.Hash{}
+	this.bhash = common.Hash{}
+	this.txIndex = 0
+	this.logs = make(map[common.Hash][]*types.Log)
+	this.logSize = 0
+	this.preimages = make(map[common.Hash][]byte)
+	this.clearJournalAndRefund()
+}
+
 func (this *StateDB) Merge(change StateChange) {
 	for addr, thatObj := range change {
 		this.stateObjectsDirty[addr] = struct{}{}
