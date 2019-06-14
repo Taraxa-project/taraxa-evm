@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/allegro/bigcache v1.2.0
 	github.com/aristanetworks/goarista v0.0.0-20190325233358-a123909ec740
+	github.com/btcsuite/btcd v0.0.0-20190614013741-962a206e94e9
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/coocood/freecache v1.1.0
 	github.com/cornelk/hashmap v1.0.0
