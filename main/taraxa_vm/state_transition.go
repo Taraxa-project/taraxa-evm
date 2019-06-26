@@ -8,7 +8,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/main/api"
 	"github.com/Taraxa-project/taraxa-evm/main/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/main/metric_utils"
@@ -127,7 +129,7 @@ func (this *stateTransition) run() (ret *api.StateTransitionResult, metrics *Sta
 		this.err.CheckIn()
 	})
 	this.metrics.PostProcessingSync.MeasureElapsedTime(func() {
-		ret.StateTransitionReceipt, _ = postProcessor.AwaitResult()
+		//ret.StateTransitionReceipt, _ = postProcessor.AwaitResult()
 		this.err.CheckIn()
 	})
 	//util.Assert(ret.StateRoot == this.ExpectedRoot, ret.StateRoot.Hex(), " != ", this.ExpectedRoot.Hex())
@@ -136,13 +138,19 @@ func (this *stateTransition) run() (ret *api.StateTransitionResult, metrics *Sta
 }
 
 func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error) {
+	util.Recover(this.err.Catch(util.SetTo(&err)))
 	totalTime = new(metric_utils.AtomicCounter)
 	ret = new(api.StateTransitionResult)
 	defer totalTime.NewTimeRecorder()()
+	if this.Block.Number.Sign() == 0 {
+		ret.StateRoot = this.applyGenesisBlock()
+		return
+	}
 	stateDB := this.newStateDBForReading()
+	this.applyHardForks(stateDB)
 	gp := new(core.GasPool).AddGas(this.Block.GasLimit)
 	for txId := range this.Block.Transactions {
-		this.TaraxaVM.executeTransaction(&transactionRequest{
+		txResult := this.TaraxaVM.executeTransaction(&transactionRequest{
 			txId,
 			this.Block.Transactions[txId],
 			&this.Block.BlockHeader,
@@ -153,12 +161,32 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 			new(TransactionMetrics),
 			core.CanTransfer,
 		})
-		ret.StateRoot = this.commitTrie(stateDB)
+		this.err.CheckIn(txResult.ConsensusErr)
+		intermediateRoot := this.commitTrie(stateDB)
+		var intermediateRootBytes []byte
+		if !this.Genesis.Config.IsByzantium(this.Block.Number) {
+			intermediateRootBytes = intermediateRoot.Bytes()
+		}
+		ret.UsedGas += txResult.GasUsed
+		ethReceipt := types.NewReceipt(intermediateRootBytes, txResult.ContractErr != nil, ret.UsedGas)
+		txData := this.Block.Transactions[txId]
+		if txData.To == nil {
+			ethReceipt.ContractAddress = crypto.CreateAddress(txData.From, txData.Nonce)
+		}
+		ethReceipt.TxHash = txData.Hash;
+		ethReceipt.GasUsed = txResult.GasUsed
+		ethReceipt.Logs = txResult.Logs
+		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
+		ret.Receipts = append(ret.Receipts, &api.TaraxaReceipt{
+			ReturnValue:     txResult.EVMReturnValue,
+			ContractError:   txResult.ContractErr,
+			EthereumReceipt: ethReceipt,
+		})
+		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
 	this.applyBlockRewards(stateDB)
 	ret.StateRoot = this.commitTrie(stateDB)
 	this.persistentCommit(ret.StateRoot)
-	this.err.CheckIn()
 	return
 }
 

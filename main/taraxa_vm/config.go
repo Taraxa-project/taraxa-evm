@@ -20,21 +20,21 @@ type ThreadPoolConfig struct {
 }
 
 type StaticConfig struct {
-	EvmConfig                           *vm.StaticConfig  `json:"evm"`
-	Genesis                             *core.Genesis     `json:"genesis"`
-	ConflictDetectorInboxPerTransaction int               `json:"conflictDetectorInboxPerTransaction"`
+	EvmConfig                           *vm.StaticConfig `json:"evm"`
+	Genesis                             *core.Genesis    `json:"genesis"`
+	ConflictDetectorInboxPerTransaction int              `json:"conflictDetectorInboxPerTransaction"`
 }
 
 type StateDBConfig struct {
-	DB        *api.GenericDbConfig `json:"db"`
+	DB        *api.GenericDBConfig `json:"db"`
 	CacheSize int                  `json:"cacheSize"`
 }
 
 type VmConfig struct {
-	*StaticConfig
+	StaticConfig
 	ReadDB  *StateDBConfig       `json:"readDB"`
 	WriteDB *StateDBConfig       `json:"writeDB"`
-	BlockDB *api.GenericDbConfig `json:"blockDB"`
+	BlockDB *api.GenericDBConfig `json:"blockDB"`
 }
 
 func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
@@ -48,8 +48,16 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		},
 		localErr.Catch(util.SetTo(&err)),
 	)
-	ret = new(TaraxaVM)
-
+	ret = &TaraxaVM{
+		StaticConfig: this.StaticConfig,
+	}
+	ret.ConflictDetectorInboxPerTransaction = util.Max(ret.ConflictDetectorInboxPerTransaction, 100)
+	if ret.EvmConfig == nil {
+		ret.EvmConfig = new(vm.StaticConfig)
+	}
+	if ret.Genesis == nil {
+		ret.Genesis = core.DefaultGenesisBlock()
+	}
 	rec := metric_utils.NewTimeRecorder()
 	readDiksDB, e1 := this.ReadDB.DB.NewDB()
 	fmt.Println("create state db took", rec())
@@ -61,15 +69,16 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		new(proxy.BaseProxy),
 		new(proxy.BaseProxy),
 	}
-
-	rec = metric_utils.NewTimeRecorder()
-	blockHashDb, e2 := this.BlockDB.NewDB()
-	fmt.Println("create block db took", rec())
-	localErr.CheckIn(e2)
-	cleanup = util.Chain(cleanup, blockHashDb.Close)
-
-	ret.ExternalApi = block_hash_db.New(blockHashDb)
-
+	if this.BlockDB != nil {
+		rec = metric_utils.NewTimeRecorder()
+		blockHashDb, e2 := this.BlockDB.NewDB()
+		fmt.Println("create block db took", rec())
+		localErr.CheckIn(e2)
+		cleanup = util.Chain(cleanup, blockHashDb.Close)
+		ret.ExternalApi = block_hash_db.New(blockHashDb)
+	} else {
+		ret.ExternalApi = &block_hash_db.NotImplementedBlockHashStore{}
+	}
 	ret.WriteDiskDB = ret.ReadDiskDB
 	ret.WriteDB = ret.ReadDB
 	if this.WriteDB != nil {
@@ -84,14 +93,6 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 			new(proxy.BaseProxy),
 			new(proxy.BaseProxy),
 		}
-	}
-	ret.StaticConfig = this.StaticConfig
-	ret.ConflictDetectorInboxPerTransaction = util.Max(ret.ConflictDetectorInboxPerTransaction, 100)
-	if ret.EvmConfig == nil {
-		ret.EvmConfig = new(vm.StaticConfig)
-	}
-	if ret.Genesis == nil {
-		ret.Genesis = core.DefaultGenesisBlock()
 	}
 	return
 }

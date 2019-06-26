@@ -23,7 +23,7 @@ type ExternalApi interface {
 }
 
 type StateDBConfig struct {
-	DbConfig  *GenericDbConfig `json:"db"`
+	DbConfig  *GenericDBConfig `json:"db"`
 	CacheSize int              `json:"cacheSize"`
 }
 
@@ -88,7 +88,7 @@ type StateTransitionReceipt struct {
 
 type StateTransitionResult struct {
 	StateRoot common.Hash `json:"stateRoot"`
-	*StateTransitionReceipt
+	StateTransitionReceipt
 }
 
 type StateTransitionResponse struct {

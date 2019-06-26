@@ -20,7 +20,7 @@ import (
 )
 
 type TaraxaVM struct {
-	*StaticConfig
+	StaticConfig
 	ExternalApi api.ExternalApi
 	ReadDiskDB  *ethdb_proxy.DatabaseProxy
 	WriteDiskDB *ethdb_proxy.DatabaseProxy

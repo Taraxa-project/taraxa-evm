@@ -29,16 +29,16 @@ type FactoryConfig struct {
 	Factory DBFactory `json:"options"`
 }
 
-type GenericDbConfig struct {
+type GenericDBConfig struct {
 	TypeConfig
 	FactoryConfig
 }
 
-func (this *GenericDbConfig) NewDB() (ethdb.Database, error) {
+func (this *GenericDBConfig) NewDB() (ethdb.Database, error) {
 	return this.Factory.NewDB()
 }
 
-func (this *GenericDbConfig) UnmarshalJSON(b []byte) (err error) {
+func (this *GenericDBConfig) UnmarshalJSON(b []byte) (err error) {
 	var errFatal util.ErrorBarrier
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
 	errFatal.CheckIn(json.Unmarshal(b, &this.TypeConfig))
