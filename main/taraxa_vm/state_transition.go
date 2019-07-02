@@ -149,10 +149,10 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 	stateDB := this.newStateDBForReading()
 	this.applyHardForks(stateDB)
 	gp := new(core.GasPool).AddGas(this.Block.GasLimit)
-	for txId := range this.Block.Transactions {
+	for txId, tx := range this.Block.Transactions {
 		txResult := this.TaraxaVM.executeTransaction(&transactionRequest{
 			txId,
-			this.Block.Transactions[txId],
+			tx,
 			&this.Block.BlockHeader,
 			stateDB,
 			vm.NoopExecutionController,
