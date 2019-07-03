@@ -59,11 +59,11 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		ret.Genesis = core.DefaultGenesisBlock()
 	}
 	rec := metric_utils.NewTimeRecorder()
-	readDiksDB, e1 := this.ReadDB.DB.NewDB()
-	fmt.Println("create state db took", rec())
+	readDiskDB, e1 := this.ReadDB.DB.NewDB()
 	localErr.CheckIn(e1)
-	cleanup = util.Chain(cleanup, readDiksDB.Close)
-	ret.ReadDiskDB = &ethdb_proxy.DatabaseProxy{readDiksDB, new(proxy.BaseProxy)}
+	fmt.Println("create state db took", rec())
+	cleanup = util.Chain(cleanup, readDiskDB.Close)
+	ret.ReadDiskDB = &ethdb_proxy.DatabaseProxy{readDiskDB, new(proxy.BaseProxy)}
 	ret.ReadDB = &state_db_proxy.DatabaseProxy{
 		state.NewDatabaseWithCache(ret.ReadDiskDB, this.ReadDB.CacheSize),
 		new(proxy.BaseProxy),

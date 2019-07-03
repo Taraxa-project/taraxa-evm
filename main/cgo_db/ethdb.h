@@ -3,12 +3,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 #define ID(name) taraxa_cgo_ethdb_##name
 
 typedef char ID(SliceType);
-typedef size_t ID(SliceSize);
+typedef int ID(SliceSize);
 
 typedef struct {
   ID(SliceType) * offset;
@@ -32,10 +31,7 @@ typedef struct {
   void (*Reset)(void *);
 } ID(Batch);
 
-inline void ID(Batch_Free)(ID(Batch) * self) {
-  self->Free(self->self);
-  free(self);
-}
+inline void ID(Batch_Free)(ID(Batch) * self) { self->Free(self->self); }
 
 inline ID(Error) ID(Batch_Put)(ID(Batch) * self, ID(Key) key, ID(Value) value) {
   return self->Put(self->self, key, value);
@@ -72,10 +68,7 @@ typedef struct {
   ID(Batch) * (*NewBatch)(void *);
 } ID(Database);
 
-inline void ID(Database_Free)(ID(Database) * self) {
-  self->Free(self->self);
-  free(self);
-}
+inline void ID(Database_Free)(ID(Database) * self) { self->Free(self->self); }
 
 inline ID(Error)
     ID(Database_Put)(ID(Database) * self, ID(Key) key, ID(Value) value) {

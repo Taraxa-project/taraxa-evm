@@ -1,6 +1,6 @@
 package cgo_db
 
-//#include "../cgo_imports.h"
+//#include "ethdb.h"
 import "C"
 import (
 	"errors"

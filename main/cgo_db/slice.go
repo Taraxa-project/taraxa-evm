@@ -1,6 +1,7 @@
 package cgo_db
 
-//#include "../cgo_imports.h"
+//#include <stdlib.h>
+//#include "ethdb.h"
 import "C"
 import "unsafe"
 
@@ -11,10 +12,14 @@ func slice(b []byte) C.taraxa_cgo_ethdb_Slice {
 	);
 }
 
+func str(s C.taraxa_cgo_ethdb_Slice) string {
+	return C.GoStringN(s.offset, s.size);
+}
+
 func bytes(s C.taraxa_cgo_ethdb_Slice) []byte {
-	return C.GoBytes(unsafe.Pointer(s.offset), C.int(s.size));
+	return []byte(str(s))
 }
 
 func free(s C.taraxa_cgo_ethdb_Slice) {
-	C.free(unsafe.Pointer(s.offset))
+	C.free((unsafe.Pointer)(s.offset))
 }
