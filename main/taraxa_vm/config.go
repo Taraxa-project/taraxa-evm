@@ -23,6 +23,7 @@ type StaticConfig struct {
 	EvmConfig                           *vm.StaticConfig `json:"evm"`
 	Genesis                             *core.Genesis    `json:"genesis"`
 	ConflictDetectorInboxPerTransaction int              `json:"conflictDetectorInboxPerTransaction"`
+	DisableEthereumBlockReward          bool             `json:"disableEthereumBlockReward"`
 }
 
 type StateDBConfig struct {

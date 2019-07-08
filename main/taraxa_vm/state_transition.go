@@ -184,7 +184,9 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 		})
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
-	this.applyBlockRewards(stateDB)
+	if !this.DisableEthereumBlockReward {
+		this.applyBlockRewards(stateDB)
+	}
 	ret.StateRoot = this.commitToTrie(stateDB)
 	this.persistentCommit(ret.StateRoot)
 	return
