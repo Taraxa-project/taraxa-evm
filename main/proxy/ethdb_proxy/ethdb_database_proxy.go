@@ -6,16 +6,11 @@ import (
 )
 
 type DatabaseProxy struct {
-	ethdb.Database
+	ethdb.MutableTransactionalDatabase
 	*proxy.BaseProxy
 }
 
 func (this *DatabaseProxy) Get(key []byte) (b []byte, e error) {
 	defer this.CallDecorator("Get", &key)(&b, &e)
-	return this.Database.Get(key)
-}
-
-func (this *DatabaseProxy) Has(key []byte) (b bool, e error) {
-	defer this.CallDecorator("Has", &key)(&b, &e)
-	return this.Database.Has(key)
+	return this.MutableTransactionalDatabase.Get(key)
 }

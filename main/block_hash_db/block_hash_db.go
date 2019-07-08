@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
+	"github.com/Taraxa-project/taraxa-evm/core/rawdb"
 	"github.com/Taraxa-project/taraxa-evm/main/util"
 	"github.com/cornelk/hashmap"
 )
 
 type BlockHashDB struct {
-	db    ethdb.Database
+	db    rawdb.DatabaseReader
 	cache hashmap.HashMap
 }
 
-func New(db ethdb.Database) *BlockHashDB {
+func New(db rawdb.DatabaseReader) *BlockHashDB {
 	this := new(BlockHashDB)
 	this.db = db
 	return this

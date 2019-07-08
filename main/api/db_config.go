@@ -11,7 +11,7 @@ import (
 )
 
 type DBFactory interface {
-	NewDB() (ethdb.Database, error)
+	NewDB() (ethdb.MutableTransactionalDatabase, error)
 }
 
 var DBFactoryRegistry = map[string]func() DBFactory{
@@ -33,7 +33,7 @@ type memDbFactory struct {
 	InitialCapacity int `json:"initialCapacity"`
 }
 
-func (this *memDbFactory) NewDB() (ethdb.Database, error) {
+func (this *memDbFactory) NewDB() (ethdb.MutableTransactionalDatabase, error) {
 	return ethdb.NewMemDatabaseWithCap(this.InitialCapacity), nil
 }
 
@@ -50,7 +50,7 @@ type GenericDBConfig struct {
 	FactoryConfig
 }
 
-func (this *GenericDBConfig) NewDB() (ethdb.Database, error) {
+func (this *GenericDBConfig) NewDB() (ethdb.MutableTransactionalDatabase, error) {
 	return this.Factory.NewDB()
 }
 

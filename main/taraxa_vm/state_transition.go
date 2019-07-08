@@ -72,7 +72,7 @@ func (this *stateTransition) run() (ret *api.StateTransitionResult, metrics *Sta
 	conflictDetector := conflict_detector.New(conflictDetectorInboxCapacity, this.onConflict)
 	go conflictDetector.Run()
 	defer conflictDetector.SignalShutdown()
-	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitTrie)
+	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitToTrie)
 	defer committer.SignalShutdown()
 	postProcessor := LaunchBlockPostProcessor(block, this.newStateDBForReading, func(err error) {
 		this.err.SetIfAbsent(err)
@@ -103,7 +103,7 @@ func (this *stateTransition) run() (ret *api.StateTransitionResult, metrics *Sta
 	sequentialStateDB := this.newStateDBForReading()
 	// TODO move somewhere else
 	this.applyBlockRewards(sequentialStateDB)
-	committer.Submit(this.commitStateChange(sequentialStateDB))
+	committer.Submit(this.commitAsObject(sequentialStateDB))
 	for i := 0; i < cap(parallelStateChanges); i++ {
 		stateChange := <-parallelStateChanges
 		this.err.CheckIn()
@@ -162,7 +162,7 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 			core.CanTransfer,
 		})
 		this.err.CheckIn(txResult.ConsensusErr)
-		intermediateRoot := this.commitTrie(stateDB)
+		intermediateRoot := this.commitToTrie(stateDB)
 		var intermediateRootBytes []byte
 		if !this.Genesis.Config.IsByzantium(this.Block.Number) {
 			intermediateRootBytes = intermediateRoot.Bytes()
@@ -185,7 +185,7 @@ func (this *stateTransition) RunLikeEthereum() (ret *api.StateTransitionResult, 
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
 	this.applyBlockRewards(stateDB)
-	ret.StateRoot = this.commitTrie(stateDB)
+	ret.StateRoot = this.commitToTrie(stateDB)
 	this.persistentCommit(ret.StateRoot)
 	return
 }
@@ -243,7 +243,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 				defer recLifeSpan()
 			}
 			defer metrics.Committer.ActualCommits.NewTimeRecorder()()
-			return this.commitTrie(db)
+			return this.commitToTrie(db)
 		})
 	}
 	var syncCommitLock sync.Mutex
@@ -268,14 +268,14 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		this.err.CheckIn(r.ConsensusErr)
 		if committer != nil {
 			defer txMetrics.LocalCommit.NewTimeRecorder()()
-			committer.Submit(this.commitStateChange(db))
+			committer.Submit(this.commitAsObject(db))
 		} else if params.CommitSync {
 			syncCommitLock.Lock()
 			defer syncCommitLock.Unlock()
 			defer metrics.Committer.ActualCommits.NewTimeRecorder()()
 			defer metrics.Main.CommitsSync.NewTimeRecorder()()
 			defer txMetrics.LocalCommit.NewTimeRecorder()()
-			this.commitTrie(db)
+			this.commitToTrie(db)
 		}
 	}
 	recordTransactionSyncTime := metrics.Main.TransactionsSync.NewTimeRecorder()
@@ -339,7 +339,7 @@ func (this *stateTransition) executeTransaction(txId api.TxId, db StateDB) *Tran
 		//	return true
 		//},
 	})
-	stateChange := this.commitStateChange(db)
+	stateChange := this.commitAsObject(db)
 	return &TransactionResultWithStateChange{result, stateChange}
 }
 
@@ -382,11 +382,11 @@ func (this *stateTransition) newStateDBForReading() StateDB {
 	return stateDB
 }
 
-func (this *stateTransition) commitStateChange(db StateDB) state.StateChange {
+func (this *stateTransition) commitAsObject(db StateDB) state.StateChange {
 	return db.CommitStateChange(this.Genesis.Config.IsEIP158(this.Block.Number))
 }
 
-func (this *stateTransition) commitTrie(db StateDB) common.Hash {
+func (this *stateTransition) commitToTrie(db StateDB) common.Hash {
 	defer this.metrics.TrieCommitTotal.NewTimeRecorder()()
 	root, err := db.Commit(this.Genesis.Config.IsEIP158(this.Block.Number))
 	this.err.SetIfAbsent(err)

@@ -11,6 +11,6 @@ type Config struct {
 	Pointer uintptr `json:"pointer"`
 }
 
-func (this *Config) NewDB() (ret ethdb.Database, err error) {
+func (this *Config) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
 	return newDatabase((*C.taraxa_cgo_ethdb_Database)(unsafe.Pointer(this.Pointer))), nil
 }

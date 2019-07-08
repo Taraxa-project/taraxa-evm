@@ -55,15 +55,6 @@ var secureKeyPrefix = []byte("secure-key-")
 // secureKeyLength is the length of the above prefix + 32byte hash.
 const secureKeyLength = 11 + 32
 
-// DatabaseReader wraps the Get and Has method of a backing store for the trie.
-type DatabaseReader interface {
-	// Get retrieves the value associated with key from the database.
-	Get(key []byte) (value []byte, err error)
-
-	// Has retrieves whether a key is present in the database.
-	Has(key []byte) (bool, error)
-}
-
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
@@ -545,107 +536,6 @@ func (db *Database) dereference(child common.Hash, parent common.Hash) {
 		delete(db.dirties, child)
 		db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
 	}
-}
-
-// Cap iteratively flushes old but still referenced trie nodes until the total
-// memory usage goes below the given threshold.
-func (db *Database) Cap(limit common.StorageSize) error {
-	// Create a database batch to flush persistent data out. It is important that
-	// outside code doesn't see an inconsistent state (referenced data removed from
-	// memory cache during commit but not yet in persistent storage). This is ensured
-	// by only uncaching existing data when the database write finalizes.
-	db.lock.RLock()
-
-	nodes, storage, start := len(db.dirties), db.dirtiesSize, time.Now()
-	batch := db.diskdb.NewBatch()
-
-	// db.dirtiesSize only contains the useful data in the cache, but when reporting
-	// the total memory consumption, the maintenance metadata is also needed to be
-	// counted. For every useful node, we track 2 extra hashes as the flushlist.
-	size := db.dirtiesSize + common.StorageSize((len(db.dirties)-1)*2*common.HashLength)
-
-	// If the preimage cache got large enough, push to disk. If it's still small
-	// leave for later to deduplicate writes.
-	flushPreimages := db.preimagesSize > 4*1024*1024
-	if flushPreimages {
-		for hash, preimage := range db.preimages {
-			if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {
-				log.Error("Failed to commit preimage from trie database", "err", err)
-				db.lock.RUnlock()
-				return err
-			}
-			if batch.ValueSize() > ethdb.IdealBatchSize {
-				if err := batch.Write(); err != nil {
-					db.lock.RUnlock()
-					return err
-				}
-				batch.Reset()
-			}
-		}
-	}
-	// Keep committing nodes from the flush-list until we're below allowance
-	oldest := db.oldest
-	for size > limit && oldest != (common.Hash{}) {
-		// Fetch the oldest referenced node and push into the batch
-		node := db.dirties[oldest]
-		if err := batch.Put(oldest[:], node.rlp()); err != nil {
-			db.lock.RUnlock()
-			return err
-		}
-		// If we exceeded the ideal batch size, commit and reset
-		if batch.ValueSize() >= ethdb.IdealBatchSize {
-			if err := batch.Write(); err != nil {
-				log.Error("Failed to write flush list to disk", "err", err)
-				db.lock.RUnlock()
-				return err
-			}
-			batch.Reset()
-		}
-		// Iterate to the next flush item, or abort if the size cap was achieved. Size
-		// is the total size, including both the useful cached data (hash -> blob), as
-		// well as the flushlist metadata (2*hash). When flushing items from the cache,
-		// we need to reduce both.
-		size -= common.StorageSize(3*common.HashLength + int(node.size))
-		oldest = node.flushNext
-	}
-	// Flush out any remainder data from the last batch
-	if err := batch.Write(); err != nil {
-		log.Error("Failed to write flush list to disk", "err", err)
-		db.lock.RUnlock()
-		return err
-	}
-	db.lock.RUnlock()
-
-	// Write successful, clear out the flushed data
-	db.lock.Lock()
-	defer db.lock.Unlock()
-
-	if flushPreimages {
-		db.preimages = make(map[common.Hash][]byte)
-		db.preimagesSize = 0
-	}
-	for db.oldest != oldest {
-		node := db.dirties[db.oldest]
-		delete(db.dirties, db.oldest)
-		db.oldest = node.flushNext
-
-		db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
-	}
-	if db.oldest != (common.Hash{}) {
-		db.dirties[db.oldest].flushPrev = common.Hash{}
-	}
-	db.flushnodes += uint64(nodes - len(db.dirties))
-	db.flushsize += storage - db.dirtiesSize
-	db.flushtime += time.Since(start)
-
-	memcacheFlushTimeTimer.Update(time.Since(start))
-	memcacheFlushSizeMeter.Mark(int64(storage - db.dirtiesSize))
-	memcacheFlushNodesMeter.Mark(int64(nodes - len(db.dirties)))
-
-	log.Debug("Persisted nodes from memory database", "nodes", nodes-len(db.dirties), "size", storage-db.dirtiesSize, "time", time.Since(start),
-		"flushnodes", db.flushnodes, "flushsize", db.flushsize, "flushtime", db.flushtime, "livenodes", len(db.dirties), "livesize", db.dirtiesSize)
-
-	return nil
 }
 
 // Commit iterates over all the children of a particular node, writes them out

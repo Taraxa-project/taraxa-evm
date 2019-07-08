@@ -21,7 +21,7 @@ type Config struct {
 	CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
-func (this *Config) NewDB() (ret ethdb.Database, err error) {
+func (this *Config) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
 	opts := gorocksdb.NewDefaultOptions()
 	blockOpts := gorocksdb.NewDefaultBlockBasedTableOptions()
 	bloomFilter := gorocksdb.NewBloomFilter(util.Max(10, this.BloomFilterCapacity))

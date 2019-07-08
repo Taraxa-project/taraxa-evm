@@ -58,7 +58,7 @@ func TestMemoryDB_PutGet(t *testing.T) {
 	testPutGet(ethdb.NewMemDatabase(), t)
 }
 
-func testPutGet(db ethdb.Database, t *testing.T) {
+func testPutGet(db ethdb.MutableDatabase, t *testing.T) {
 	t.Parallel()
 
 	for _, k := range test_values {
@@ -157,7 +157,7 @@ func TestMemoryDB_ParallelPutGet(t *testing.T) {
 	testParallelPutGet(ethdb.NewMemDatabase(), t)
 }
 
-func testParallelPutGet(db ethdb.Database, t *testing.T) {
+func testParallelPutGet(db ethdb.MutableDatabase, t *testing.T) {
 	const n = 8
 	var pending sync.WaitGroup
 

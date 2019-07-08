@@ -8,6 +8,6 @@ type Config struct {
 	Handles int    `json:"handles"`
 }
 
-func (this *Config) NewDB() (ethdb.Database, error) {
+func (this *Config) NewDB() (ethdb.MutableTransactionalDatabase, error) {
 	return ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
 }

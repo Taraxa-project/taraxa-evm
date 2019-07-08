@@ -22,34 +22,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
-
-// ReadDatabaseVersion retrieves the version number of the database.
-func ReadDatabaseVersion(db DatabaseReader) *uint64 {
-	var version uint64
-
-	enc, _ := db.Get(databaseVerisionKey)
-	if len(enc) == 0 {
-		return nil
-	}
-	if err := rlp.DecodeBytes(enc, &version); err != nil {
-		return nil
-	}
-
-	return &version
-}
-
-// WriteDatabaseVersion stores the version number of the database
-func WriteDatabaseVersion(db DatabaseWriter, version uint64) {
-	enc, err := rlp.EncodeToBytes(version)
-	if err != nil {
-		log.Crit("Failed to encode database version", "err", err)
-	}
-	if err = db.Put(databaseVerisionKey, enc); err != nil {
-		log.Crit("Failed to store the database version", "err", err)
-	}
-}
 
 // ReadChainConfig retrieves the consensus settings based on the given genesis hash.
 func ReadChainConfig(db DatabaseReader, hash common.Hash) *params.ChainConfig {
@@ -77,21 +50,4 @@ func WriteChainConfig(db DatabaseWriter, hash common.Hash, cfg *params.ChainConf
 	if err := db.Put(configKey(hash), data); err != nil {
 		log.Crit("Failed to store chain config", "err", err)
 	}
-}
-
-// ReadPreimage retrieves a single preimage of the provided hash.
-func ReadPreimage(db DatabaseReader, hash common.Hash) []byte {
-	data, _ := db.Get(preimageKey(hash))
-	return data
-}
-
-// WritePreimages writes the provided set of preimages to the database.
-func WritePreimages(db DatabaseWriter, preimages map[common.Hash][]byte) {
-	for hash, preimage := range preimages {
-		if err := db.Put(preimageKey(hash), preimage); err != nil {
-			log.Crit("Failed to store trie preimage", "err", err)
-		}
-	}
-	preimageCounter.Inc(int64(len(preimages)))
-	preimageHitCounter.Inc(int64(len(preimages)))
 }
