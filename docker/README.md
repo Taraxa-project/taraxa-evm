@@ -1,1 +1,0 @@
-To test the build: `docker-compose up` from an OS subdirectory

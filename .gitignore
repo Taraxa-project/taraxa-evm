@@ -4,8 +4,6 @@
 # or operating system, you probably want to add a global ignore instead:
 #   git config --global core.excludesfile ~/.gitignore_global
 
-build/dependencies
-/tmp
 */**/*un~
 */**/*.test
 *un~
@@ -15,18 +13,12 @@ build/dependencies
 */**/*tx_database*
 */**/*dapps*
 
-
-node_modules
-
 #*
 .#*
 *#
 *~
 .project
 .settings
-
-# used by the Makefile
-/build/bin/
 
 # IdeaIDE
 .idea

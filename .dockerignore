@@ -2,7 +2,6 @@
 **/.idea
 **/*.iml
 **/*.md
-**/node_modules
 
 /docker
 /build
