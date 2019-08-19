@@ -19,7 +19,7 @@ package state
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
 	"sort"
 

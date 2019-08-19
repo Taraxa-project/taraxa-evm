@@ -20,7 +20,7 @@ package trie
 import (
 	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/main/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
