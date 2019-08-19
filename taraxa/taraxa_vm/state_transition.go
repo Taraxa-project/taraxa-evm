@@ -4,16 +4,15 @@ import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	eth_math "github.com/Taraxa-project/taraxa-evm/common/math"
-	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/barrier"
 	"math/big"
@@ -193,9 +192,9 @@ func (this *stateTransition) RunLikeEthereum() (ret *taraxa_types.StateTransitio
 }
 
 type TestModeParams struct {
-	DoCommitsInSeparateDB bool           `json:"doCommitsInSeparateDB"`
-	DoCommits             bool           `json:"doCommits"`
-	CommitSync            bool           `json:"commitSync"`
+	DoCommitsInSeparateDB bool                  `json:"doCommitsInSeparateDB"`
+	DoCommits             bool                  `json:"doCommits"`
+	CommitSync            bool                  `json:"commitSync"`
 	SequentialTx          *taraxa_types.TxIdSet `json:"sequentialTx"`
 }
 
@@ -374,7 +373,7 @@ func (this *stateTransition) applyHardForks(stateDB StateDB) (stateChanged bool)
 }
 
 func (this *stateTransition) applyBlockRewards(stateDB StateDB) {
-	ethash.AccumulateRewards(this.Genesis.Config, stateDB.(*state.StateDB), &this.Block.BlockNumberAndCoinbase, this.Block.Uncles...)
+	AccumulateRewards(this.Genesis.Config, stateDB.(*state.StateDB), &this.Block.BlockNumberAndCoinbase, this.Block.Uncles...)
 }
 
 func (this *stateTransition) newStateDBForReading() StateDB {
