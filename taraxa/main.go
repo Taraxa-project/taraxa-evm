@@ -1,7 +1,7 @@
 package main
 
 //#include <stdlib.h>
-//#include "cgo_db/index.h"
+//#include "db/cgo/index.h"
 import "C"
 
 import (

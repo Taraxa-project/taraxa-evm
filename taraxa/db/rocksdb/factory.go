@@ -6,7 +6,7 @@ import (
 	"github.com/tecbot/gorocksdb"
 )
 
-type Config struct {
+type Factory struct {
 	File                      string  `json:"file"`
 	ReadOnly                  bool    `json:"readOnly"`
 	ErrorIfExists             bool    `json:"errorIfExists"`
@@ -21,7 +21,7 @@ type Config struct {
 	CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
-func (this *Config) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
+func (this *Factory) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
 	opts := gorocksdb.NewDefaultOptions()
 	blockOpts := gorocksdb.NewDefaultBlockBasedTableOptions()
 	bloomFilter := gorocksdb.NewBloomFilter(util.Max(10, this.BloomFilterCapacity))

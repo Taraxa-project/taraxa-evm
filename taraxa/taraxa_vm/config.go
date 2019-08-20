@@ -5,8 +5,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/block_hash_db"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
@@ -27,15 +27,15 @@ type StaticConfig struct {
 }
 
 type StateDBConfig struct {
-	DB        *taraxa_types.GenericDBConfig `json:"db"`
-	CacheSize int                    `json:"cacheSize"`
+	DB        *db.GenericFactory `json:"db"`
+	CacheSize int                `json:"cacheSize"`
 }
 
 type VmConfig struct {
 	StaticConfig
-	ReadDB  *StateDBConfig         `json:"readDB"`
-	WriteDB *StateDBConfig         `json:"writeDB"`
-	BlockDB *taraxa_types.GenericDBConfig `json:"blockDB"`
+	ReadDB  *StateDBConfig     `json:"readDB"`
+	WriteDB *StateDBConfig     `json:"writeDB"`
+	BlockDB *db.GenericFactory `json:"blockDB"`
 }
 
 func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {

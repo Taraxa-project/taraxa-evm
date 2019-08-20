@@ -14,7 +14,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/barrier"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/rendezvous"
 	"math/big"
 	"runtime"
 	"sync"
@@ -70,7 +70,7 @@ func (this *stateTransition) run() (ret *taraxa_types.StateTransitionResult, met
 	conflictDetectorInboxCapacity := (parallelTxCount + 1) * this.ConflictDetectorInboxPerTransaction
 	conflictDetector := conflict_detector.New(conflictDetectorInboxCapacity, this.onConflict)
 	go conflictDetector.Run()
-	defer conflictDetector.SignalShutdown()
+	defer conflictDetector.Halt()
 	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitToTrie)
 	defer committer.SignalShutdown()
 	postProcessor := LaunchBlockPostProcessor(block, this.newStateDBForReading, func(err error) {
@@ -112,7 +112,7 @@ func (this *stateTransition) run() (ret *taraxa_types.StateTransitionResult, met
 
 	parallelTxSyncMeter()
 
-	conflictDetector.SignalShutdown()
+	conflictDetector.Halt()
 	sequentialTransactions.Each(func(_ int, value interface{}) {
 		defer this.metrics.SequentialTransactions.NewTimeRecorder()()
 		result := this.executeTransaction(value.(taraxa_types.TxId), sequentialStateDB)
@@ -248,7 +248,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		})
 	}
 	var syncCommitLock sync.Mutex
-	allDone := barrier.New(txCount)
+	allDone := rendezvous.New(txCount)
 	runTx := func(txId taraxa_types.TxId, db StateDB) {
 		txMetrics := &metrics.TransactionMetrics[txId]
 		defer txMetrics.TotalTime.NewTimeRecorder()()

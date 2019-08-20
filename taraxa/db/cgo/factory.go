@@ -1,4 +1,4 @@
-package cgo_db
+package cgo
 
 //#include "index.h"
 import "C"
@@ -7,10 +7,10 @@ import (
 	"unsafe"
 )
 
-type Config struct {
+type Factory struct {
 	Pointer uintptr `json:"pointer"`
 }
 
-func (this *Config) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
+func (this *Factory) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
 	return newDatabase((*C.taraxa_cgo_ethdb_Database)(unsafe.Pointer(this.Pointer))), nil
 }

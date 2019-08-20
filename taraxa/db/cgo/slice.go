@@ -1,4 +1,4 @@
-package cgo_db
+package cgo
 
 //#include <stdlib.h>
 //#include "index.h"

@@ -2,6 +2,7 @@ package util
 
 import (
 	"reflect"
+	"sync"
 )
 
 func TryClose(channel interface{}) error {
@@ -24,37 +25,13 @@ func TrySend(channel, value interface{}) error {
 	return nil
 }
 
-//
-//type ConcurrentGroup chan interface{}
-//
-//func (this *ConcurrentGroup) Submit(task func(*ConcurrentGroup) interface{}) *ConcurrentGroup {
-//	go task(this)
-//}
-
-type SimpleThreadPool struct {
-	taskQueue chan func()
+func WithLock(lock sync.Locker, action func()) {
+	lock.Lock()
+	defer lock.Unlock()
+	action()
 }
 
-func LaunchNewSimpleThreadPool(threadCount, queueSize int) *SimpleThreadPool {
-	this := &SimpleThreadPool{make(chan func(), queueSize)}
-	for i := 0; i < threadCount; i++ {
-		go func() {
-			for {
-				task, ok := <-this.taskQueue
-				if !ok {
-					break
-				}
-				task()
-			}
-		}()
-	}
-	return this
-}
-
-func (this *SimpleThreadPool) Go(task func()) error {
-	return TrySend(this.taskQueue, task)
-}
-
-func (this *SimpleThreadPool) Close() error {
-	return TryClose(this.taskQueue)
+func LockUnlock(lock sync.Locker) (unlock func()) {
+	lock.Lock()
+	return lock.Unlock
 }

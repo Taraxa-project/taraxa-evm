@@ -12,7 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/barrier"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/rendezvous"
 	"math/big"
 	"runtime"
 	"sort"
@@ -44,8 +44,8 @@ func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest)
 			})
 		})
 	go conflictDetector.Run()
-	defer conflictDetector.SignalShutdown()
-	allDone := barrier.New(txCount)
+	defer conflictDetector.Halt()
+	allDone := rendezvous.New(txCount)
 	lastScheduledTxId := int32(-1)
 	parallelismFactor := 1.3 // Good
 	numCPU := runtime.NumCPU()
@@ -89,7 +89,8 @@ func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest)
 	allDone.Await()
 	defer metrics.ConflictPostProcessing.NewTimeRecorder()()
 	errFatal.CheckIn()
-	conflictingTx := conflictDetector.SignalShutdown().AwaitResult().Values()
+	conflictDetector.Halt()
+	conflictingTx := conflictDetector.AwaitResult().Values()
 	sort.Slice(conflictingTx, func(i, j int) bool {
 		return conflictingTx[i].(taraxa_types.TxId) < conflictingTx[j].(taraxa_types.TxId)
 	})

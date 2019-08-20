@@ -14,9 +14,7 @@ import (
 const addr_prefix = "__ptr__"
 
 type Address = string
-
 type Functions map[string]interface{}
-
 type memCell struct {
 	objRef          reflect.Value
 	destructor      func()

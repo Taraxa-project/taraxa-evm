@@ -2,12 +2,12 @@ package leveldb
 
 import "github.com/Taraxa-project/taraxa-evm/ethdb"
 
-type Config struct {
+type Factory struct {
 	File    string `json:"file"`
 	Cache   int    `json:"cache"`
 	Handles int    `json:"handles"`
 }
 
-func (this *Config) NewDB() (ethdb.MutableTransactionalDatabase, error) {
+func (this *Factory) NewDB() (ethdb.MutableTransactionalDatabase, error) {
 	return ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
 }

@@ -1,19 +1,20 @@
 package conflict_detector
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
 )
 
-type OnConflict (func(*ConflictDetector, *Operation, Authors))
-
 type ConflictDetector struct {
 	inbox             chan *Operation
 	operationLog      operationLog
+	onConflict        OnConflict
 	keysInConflict    Keys
 	authorsInConflict Authors
 	executionMutex    sync.Mutex
-	onConflict        OnConflict
+	haltMutex         sync.Mutex
+	halted            bool
 }
 
 func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
@@ -24,13 +25,16 @@ func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
 		this.operationLog[opType] = make(map[Key]Authors)
 	}
 	this.onConflict = onConflict
-	this.reset()
 	return this
 }
 
 func (this *ConflictDetector) Run() {
-	this.executionMutex.Lock()
-	defer this.executionMutex.Unlock()
+	defer util.LockUnlock(&this.executionMutex)()
+	this.authorsInConflict = linkedhashset.New()
+	this.keysInConflict = linkedhashset.New()
+	util.WithLock(&this.haltMutex, func() {
+		this.halted = false
+	})
 	for {
 		if op := <-this.inbox; op != nil {
 			this.process(op)
@@ -40,15 +44,16 @@ func (this *ConflictDetector) Run() {
 	}
 }
 
-func (this *ConflictDetector) SignalShutdown() *ConflictDetector {
-	this.inbox <- nil
-	return this
+func (this *ConflictDetector) Halt() {
+	defer util.LockUnlock(&this.haltMutex)()
+	if !this.halted {
+		this.halted = true
+		this.inbox <- nil
+	}
 }
 
 func (this *ConflictDetector) AwaitResult() Authors {
-	this.executionMutex.Lock()
-	defer this.executionMutex.Unlock()
-	defer this.reset()
+	defer util.LockUnlock(&this.executionMutex)()
 	return this.authorsInConflict
 }
 
@@ -64,14 +69,11 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 		} else if cachedKeys.Contains(key) {
 			return
 		}
+		defer util.LockUnlock(&this.haltMutex)()
+		util.Assert(!this.halted)
 		this.inbox <- &Operation{author, opType, key}
 		cachedKeys.Add(key)
 	}
-}
-
-func (this *ConflictDetector) reset() {
-	this.authorsInConflict = linkedhashset.New()
-	this.keysInConflict = linkedhashset.New()
 }
 
 func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
