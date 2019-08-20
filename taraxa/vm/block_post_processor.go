@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 )
 
 type BlockPostProcessor struct {
@@ -37,7 +38,7 @@ func LaunchBlockPostProcessor(block *Block, newStateDB StateDBFactory, onErr uti
 				close(outbox)
 				return
 			}
-			util.TryClose(channel)
+			concurrent.TryClose(channel)
 			stateDB.Merge(request.StateChange)
 			for k := range request.StateChange {
 				if stateDB.GetBalance(k).Sign() < 0 {
@@ -69,7 +70,7 @@ func LaunchBlockPostProcessor(block *Block, newStateDB StateDBFactory, onErr uti
 func (this *BlockPostProcessor) SignalShutdown() error {
 	closedAtLeastOne := false
 	for _, channel := range this.inbox {
-		closedAtLeastOne = util.TryClose(channel) == nil || closedAtLeastOne
+		closedAtLeastOne = concurrent.TryClose(channel) == nil || closedAtLeastOne
 	}
 	if closedAtLeastOne {
 		return nil
@@ -78,7 +79,7 @@ func (this *BlockPostProcessor) SignalShutdown() error {
 }
 
 func (this *BlockPostProcessor) Submit(request *TransactionResultWithStateChange) error {
-	return util.TrySend(this.inbox[request.TxId], request)
+	return concurrent.TrySend(this.inbox[request.TxId], request)
 }
 
 func (this *BlockPostProcessor) AwaitResult() (ret *StateTransitionReceipt, ok bool) {

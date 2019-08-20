@@ -2,6 +2,7 @@ package conflict_detector
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"github.com/emirpasic/gods/sets/linkedhashset"
 	"sync"
 )
@@ -28,10 +29,10 @@ func New(inboxCapacity int) *ConflictDetector {
 }
 
 func (this *ConflictDetector) Run() {
-	defer util.LockUnlock(&this.executionMutex)()
+	defer concurrent.LockUnlock(&this.executionMutex)()
 	this.authorsInConflict = linkedhashset.New()
 	this.keysInConflict = linkedhashset.New()
-	util.WithLock(&this.haltMutex, func() {
+	concurrent.WithLock(&this.haltMutex, func() {
 		this.halted = false
 	})
 	for {
@@ -44,7 +45,7 @@ func (this *ConflictDetector) Run() {
 }
 
 func (this *ConflictDetector) Halt() {
-	defer util.LockUnlock(&this.haltMutex)()
+	defer concurrent.LockUnlock(&this.haltMutex)()
 	if !this.halted {
 		this.halted = true
 		this.inbox <- nil
@@ -52,7 +53,7 @@ func (this *ConflictDetector) Halt() {
 }
 
 func (this *ConflictDetector) AwaitResult() Authors {
-	defer util.LockUnlock(&this.executionMutex)()
+	defer concurrent.LockUnlock(&this.executionMutex)()
 	return this.authorsInConflict
 }
 
@@ -68,7 +69,7 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 		} else if cachedKeys.Contains(key) {
 			return
 		}
-		defer util.LockUnlock(&this.haltMutex)()
+		defer concurrent.LockUnlock(&this.haltMutex)()
 		util.Assert(!this.halted)
 		this.inbox <- &Operation{author, opType, key}
 		cachedKeys.Add(key)
@@ -76,7 +77,7 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 }
 
 func (this *ConflictDetector) AddConflictHanlder(handler OnConflict) {
-	defer util.LockUnlock(&this.onConflictMutex)()
+	defer concurrent.LockUnlock(&this.onConflictMutex)()
 	this.conflictHandlers = append(this.conflictHandlers, handler)
 }
 
@@ -85,7 +86,7 @@ func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
 		this.authorsInConflict.Add(author)
 	})
 	// new goroutine to prevent deadlocking misuse
-	go util.WithLock(&this.onConflictMutex, func() {
+	go concurrent.WithLock(&this.onConflictMutex, func() {
 		for _, handler := range this.conflictHandlers {
 			handler(op, authors)
 		}

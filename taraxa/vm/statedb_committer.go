@@ -3,7 +3,7 @@ package vm
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 )
 
 type StateDBCommitter struct {
@@ -37,11 +37,11 @@ func LaunchStateDBCommitter(numStateChanges int, newStateDB StateDBFactory, comm
 }
 
 func (this *StateDBCommitter) SignalShutdown() error {
-	return util.TryClose(this.inbox)
+	return concurrent.TryClose(this.inbox)
 }
 
 func (this *StateDBCommitter) Submit(change state.StateChange) error {
-	return util.TrySend(this.inbox, change)
+	return concurrent.TrySend(this.inbox, change)
 }
 
 func (this *StateDBCommitter) AwaitResult() (ret common.Hash, ok bool) {

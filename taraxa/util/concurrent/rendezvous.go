@@ -1,4 +1,4 @@
-package rendezvous
+package concurrent
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -11,7 +11,7 @@ type Rendezvous struct {
 	waitChan chan interface{}
 }
 
-func New(size int) *Rendezvous {
+func NewRendezvous(size int) *Rendezvous {
 	util.Assert(size >= 0, "size must be >= 0")
 	this := new(Rendezvous)
 	this.checkInsLeft = int64(size)

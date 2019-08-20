@@ -13,7 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/rendezvous"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"math/big"
 	"runtime"
 	"sync"
@@ -90,13 +90,13 @@ func (this *stateTransition) run() (ret *StateTransitionResult, metrics *StateTr
 		txId := txId
 		go func() {
 			defer util.Recover(this.err.Catch(func(error) {
-				util.TryClose(parallelStateChanges)
+				concurrent.TryClose(parallelStateChanges)
 			}))
 			db := &OperationLoggingStateDB{this.newStateDBForReading(), conflictDetector.NewLogger(txId)}
 			result := this.executeTransaction(txId, db)
 			postProcessor.Submit(result)
 			committer.Submit(result.StateChange)
-			util.TrySend(parallelStateChanges, result.StateChange)
+			concurrent.TrySend(parallelStateChanges, result.StateChange)
 		}()
 	}
 	sequentialStateDB := this.newStateDBForReading()
@@ -235,7 +235,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 			if !params.DoCommitsInSeparateDB {
 				return this.newStateDBForReading()
 			}
-			stateDB, err := state.New(this.BaseStateRoot, this.WriteDB)
+			stateDB, err := state.New(this.BaseStateRoot, this.writeDB)
 			this.err.SetIfAbsent(err)
 			return stateDB
 		}, func(db StateDB) common.Hash {
@@ -247,7 +247,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		})
 	}
 	var syncCommitLock sync.Mutex
-	allDone := rendezvous.New(txCount)
+	allDone := concurrent.NewRendezvous(txCount)
 	runTx := func(txId TxId, db StateDB) {
 		txMetrics := &metrics.TransactionMetrics[txId]
 		defer txMetrics.TotalTime.NewTimeRecorder()()
@@ -397,7 +397,7 @@ func (this *stateTransition) commitToTrie(db StateDB) common.Hash {
 // TODO make public
 func (this *stateTransition) persistentCommit(root common.Hash) {
 	defer this.metrics.PersistentCommit.NewTimeRecorder()()
-	trieDB := this.WriteDB.TrieDB()
+	trieDB := this.writeDB.TrieDB()
 	defer trieDB.SetDiskDB(trieDB.GetDiskDB())
 	trieDB.SetDiskDB(this.WriteDiskDB)
 	this.err.CheckIn(trieDB.Commit(root, false))

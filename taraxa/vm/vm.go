@@ -12,11 +12,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/rendezvous"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"math/big"
-	"runtime"
 	"sort"
-	"sync/atomic"
 )
 
 type VM struct {
@@ -25,7 +23,7 @@ type VM struct {
 	ReadDiskDB   *ethdb_proxy.DatabaseProxy
 	WriteDiskDB  *ethdb_proxy.DatabaseProxy
 	ReadDB       *state_db_proxy.DatabaseProxy
-	WriteDB      *state_db_proxy.DatabaseProxy
+	writeDB      *state_db_proxy.DatabaseProxy
 }
 
 func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
@@ -45,47 +43,31 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 	})
 	go conflictDetector.Run()
 	defer conflictDetector.Halt()
-	allDone := rendezvous.New(txCount)
-	parallelismFactor := 1.3 // Good
-	numCPU := runtime.NumCPU()
-	numProcesses := int(float64(numCPU) * parallelismFactor)
-	lastScheduledTxId := int64(-1)
-	for i := 0; i < numProcesses; i++ {
-		go func() {
-			defer util.Recover(errFatal.Catch())
-			stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
-			errFatal.CheckIn(stateDBCreateErr)
-			for {
-				txId := TxId(atomic.AddInt64(&lastScheduledTxId, 1))
-				if txId >= txCount {
-					break
-				}
-				func() {
-					defer allDone.CheckIn()
-					errConflict := txConflictErrors[txId]
-					defer util.Recover(errConflict.Catch())
-					this.executeTransaction(&transactionRequest{
-						txId:        txId,
-						txData:      req.Block.Transactions[txId],
-						blockHeader: &req.Block.BlockHeader,
-						gasPool:     new(core.GasPool).AddGas(req.Block.GasLimit),
-						checkNonce:  false,
-						stateDB:     &OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
-						onEvmInstruction: func(pc uint64) (uint64, bool) {
-							errConflict.CheckIn()
-							return pc, true
-						},
-						canTransfer: func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
-							return true
-						},
-						metrics: &metrics.TransactionMetrics[txId],
-					})
-				}()
-				stateDB.Reset()
-			}
-		}()
-	}
-	allDone.Await()
+	concurrent.Parallelize(this.NumConcurrentProcesses, txCount, func(int) func(int) {
+		defer util.Recover(errFatal.Catch())
+		stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
+		errFatal.CheckIn(stateDBCreateErr)
+		return func(txId TxId) {
+			errConflict := txConflictErrors[txId]
+			defer util.Recover(errConflict.Catch())
+			this.executeTransaction(&transactionRequest{
+				txId:        txId,
+				txData:      req.Block.Transactions[txId],
+				blockHeader: &req.Block.BlockHeader,
+				gasPool:     new(core.GasPool).AddGas(req.Block.GasLimit),
+				checkNonce:  false,
+				stateDB:     &OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
+				onEvmInstruction: func(pc uint64) (uint64, bool) {
+					errConflict.CheckIn()
+					return pc, true
+				},
+				canTransfer: func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
+					return true
+				},
+				metrics: &metrics.TransactionMetrics[txId],
+			})
+		}
+	})
 	defer metrics.ConflictPostProcessing.NewTimeRecorder()()
 	errFatal.CheckIn()
 	conflictDetector.Halt()

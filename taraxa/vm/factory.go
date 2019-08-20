@@ -10,6 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"runtime"
 )
 
 type StaticConfig struct {
@@ -17,6 +18,8 @@ type StaticConfig struct {
 	Genesis                             *core.Genesis    `json:"genesis"`
 	ConflictDetectorInboxPerTransaction int              `json:"conflictDetectorInboxPerTransaction"`
 	DisableEthereumBlockReward          bool             `json:"disableEthereumBlockReward"`
+	NumConcurrentProcesses              int              `json:"numConcurrentProcesses"`
+	ParallelismFactor                   float32          `json:"parallelismFactor"`
 }
 
 type StateDBConfig struct {
@@ -45,7 +48,21 @@ func (this *Factory) NewInstance() (ret *VM, cleanup func(), err error) {
 	ret = &VM{
 		StaticConfig: this.StaticConfig,
 	}
-	ret.ConflictDetectorInboxPerTransaction = util.Max(ret.ConflictDetectorInboxPerTransaction, 100)
+	if ret.ConflictDetectorInboxPerTransaction == 0 {
+		ret.ConflictDetectorInboxPerTransaction = 5
+	}
+	util.Assert(ret.NumConcurrentProcesses >= 0)
+	util.Assert(ret.ParallelismFactor >= 0)
+	if ret.NumConcurrentProcesses == 0 {
+		if ret.ParallelismFactor == 0 {
+			ret.ParallelismFactor = 1.3
+		}
+		numCPU := runtime.NumCPU()
+		ret.NumConcurrentProcesses = int(float32(numCPU) * ret.ParallelismFactor)
+		if ret.NumConcurrentProcesses < 1 {
+			ret.NumConcurrentProcesses = 1
+		}
+	}
 	if ret.EvmConfig == nil {
 		ret.EvmConfig = new(vm.StaticConfig)
 	}
@@ -68,13 +85,13 @@ func (this *Factory) NewInstance() (ret *VM, cleanup func(), err error) {
 		ret.GetBlockHash = block_hash_db.New(blockHashDb).GetHeaderHashByBlockNumber
 	}
 	ret.WriteDiskDB = ret.ReadDiskDB
-	ret.WriteDB = ret.ReadDB
+	ret.writeDB = ret.ReadDB
 	if this.WriteDB != nil {
 		writeDiskDB, e3 := this.WriteDB.DB.NewInstance()
 		localErr.CheckIn(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = &ethdb_proxy.DatabaseProxy{writeDiskDB, new(proxy.BaseProxy)}
-		ret.WriteDB = &state_db_proxy.DatabaseProxy{
+		ret.writeDB = &state_db_proxy.DatabaseProxy{
 			state.NewDatabaseWithCache(ret.ReadDiskDB, this.WriteDB.CacheSize),
 			new(proxy.BaseProxy),
 			new(proxy.BaseProxy),
