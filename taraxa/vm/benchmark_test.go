@@ -18,14 +18,14 @@ func TestFoo(t *testing.T) {
 
 func BenchmarkStateTransitionTestMode(b *testing.B) {
 	var cfg = new(struct {
-		*VmConfig                     `json:"vmConfig"`
+		*Factory                      `json:"vmConfig"`
 		*types.StateTransitionRequest `json:"stateTransitionRequest"`
 	})
 	config_file_path := os.Getenv("CONFIG_FILE")
 	bytes, err := ioutil.ReadFile(config_file_path)
 	util.PanicIfPresent(err)
 	util.PanicIfPresent(json.Unmarshal(bytes, cfg))
-	taraxaVM, _, createVmErr := cfg.VmConfig.NewInstance()
+	taraxaVM, _, createVmErr := cfg.Factory.NewInstance()
 	util.PanicIfPresent(createVmErr)
 	allTransactions := NewTxIdSet(nil)
 	for txId := range cfg.Block.Transactions {

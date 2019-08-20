@@ -14,7 +14,7 @@ import (
 
 // TODO refactor
 var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
-	"NewVM": func(env *virtual_env.VirtualEnv, config *vm.VmConfig) (vmAddr string, err error) {
+	"NewVM": func(env *virtual_env.VirtualEnv, config *vm.Factory) (vmAddr string, err error) {
 		cleanup := util.DoNothing
 		defer util.CatchAnyErr(func(e error) {
 			err = e

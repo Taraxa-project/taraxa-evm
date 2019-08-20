@@ -24,14 +24,14 @@ type StateDBConfig struct {
 	CacheSize int                `json:"cacheSize"`
 }
 
-type VmConfig struct {
+type Factory struct {
 	StaticConfig
 	ReadDB  *StateDBConfig     `json:"readDB"`
 	WriteDB *StateDBConfig     `json:"writeDB"`
 	BlockDB *db.GenericFactory `json:"blockDB"`
 }
 
-func (this *VmConfig) NewInstance() (ret *VM, cleanup func(), err error) {
+func (this *Factory) NewInstance() (ret *VM, cleanup func(), err error) {
 	cleanup = util.DoNothing
 	localErr := new(util.ErrorBarrier)
 	defer util.Recover(
