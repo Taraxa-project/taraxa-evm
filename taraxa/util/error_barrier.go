@@ -2,15 +2,19 @@ package util
 
 import (
 	"sync/atomic"
-	"unsafe"
 )
 
 type ErrorBarrier struct {
-	err unsafe.Pointer
+	active int32
+	err    atomic.Value
 }
 
 func (this *ErrorBarrier) SetIfAbsent(err error) (hasSet bool) {
-	return !IsNil(err) && atomic.CompareAndSwapPointer(&this.err, nil, unsafe.Pointer(&err))
+	if isReallyNil(err) || !atomic.CompareAndSwapInt32(&this.active, 0, 1) {
+		return false
+	}
+	this.err.Store(err)
+	return true
 }
 
 func (this *ErrorBarrier) CheckIn(errors ...error) {
@@ -27,11 +31,7 @@ func (this *ErrorBarrier) PanicIfPresent() {
 }
 
 func (this *ErrorBarrier) Get() error {
-	ptr := (*error)(atomic.LoadPointer(&this.err))
-	if ptr != nil {
-		return *ptr
-	}
-	return nil
+	return this.err.Load().(error)
 }
 
 func (this *ErrorBarrier) Catch(handlers ...ErrorHandler) Predicate {

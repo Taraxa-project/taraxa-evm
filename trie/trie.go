@@ -20,8 +20,6 @@ package trie
 import (
 	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/log"
@@ -139,9 +137,6 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 			n.Val = newnode
 			n.flags.gen = t.cachegen
 		}
-		if err != nil {
-			util.Noop()
-		}
 		return value, n, didResolve, err
 	case *fullNode:
 		value, newnode, didResolve, err = t.tryGet(n.Children[key[pos]], key, pos+1)
@@ -150,9 +145,6 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 			n.flags.gen = t.cachegen
 			n.Children[key[pos]] = newnode
 		}
-		if err != nil {
-			util.Noop()
-		}
 		return value, n, didResolve, err
 	case hashNode:
 		child, err := t.resolveHash(n, key[:pos])
@@ -160,9 +152,6 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 			return nil, n, true, err
 		}
 		value, newnode, _, err := t.tryGet(child, key, pos)
-		if err != nil {
-			util.Noop()
-		}
 		return value, newnode, true, err
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))

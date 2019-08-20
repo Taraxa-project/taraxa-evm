@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 )
 
+type Predicate func(interface{}) bool
+
 func Sum(x, y *big.Int) *big.Int {
 	if x == nil {
 		x = common.Big0
@@ -18,13 +20,7 @@ func Sum(x, y *big.Int) *big.Int {
 	return new(big.Int).Add(x, y)
 }
 
-func DoNothing() {
-
-}
-
-func Noop(...interface{}) interface{} {
-	return nil
-}
+func DoNothing() {}
 
 func Chain(f, g func()) func() {
 	return func() {
@@ -128,4 +124,16 @@ func (this *IncreasingAtomicRange) Take(size int) *Interval {
 
 func (this *IncreasingAtomicRange) IsEmpty() bool {
 	return atomic.LoadInt32(&this.taken) == int32(this.size)
+}
+
+func isReallyNil(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	reflectValue := reflect.ValueOf(value)
+	switch reflectValue.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return reflectValue.IsNil()
+	}
+	return false
 }

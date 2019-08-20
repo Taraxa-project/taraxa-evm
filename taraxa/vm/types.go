@@ -11,8 +11,21 @@ import (
 
 type TxId = int
 
-type BlockHashStore interface {
-	GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash
+type TxIdSet struct {
+	*util.LinkedHashSet
+}
+
+func NewTxIdSet(arr interface{}) *TxIdSet {
+	return &TxIdSet{util.NewLinkedHashSet(arr)}
+}
+
+func (this *TxIdSet) UnmarshalJSON(data []byte) error {
+	elements := []TxId{}
+	err := json.Unmarshal(data, &elements)
+	if err == nil {
+		this.LinkedHashSet = util.NewLinkedHashSet(elements)
+	}
+	return err
 }
 
 type Transaction struct {
@@ -24,13 +37,6 @@ type Transaction struct {
 	GasPrice *big.Int        `json:"gasPrice"`
 	Data     hexutil.Bytes   `json:"data"`
 	Hash     common.Hash     `json:"hash"`
-}
-
-func (this *Transaction) AsMessage(checkNonce bool) types.Message {
-	return types.NewMessage(
-		this.From, this.To, this.Nonce, this.Amount, this.GasLimit, this.GasPrice, this.Data,
-		checkNonce,
-	)
 }
 
 type BlockNumberAndCoinbase struct {
@@ -81,22 +87,5 @@ type StateTransitionResult struct {
 
 type StateTransitionResponse struct {
 	Result StateTransitionResult `json:"result"`
-	Error  *util.SimpleError     `json:"error"`
-}
-
-type TxIdSet struct {
-	*util.LinkedHashSet
-}
-
-func NewTxIdSet(arr interface{}) *TxIdSet {
-	return &TxIdSet{util.NewLinkedHashSet(arr)}
-}
-
-func (this *TxIdSet) UnmarshalJSON(data []byte) error {
-	elements := []TxId{}
-	err := json.Unmarshal(data, &elements)
-	if err == nil {
-		this.LinkedHashSet = util.NewLinkedHashSet(elements)
-	}
-	return err
+	Error  *util.ErrorString     `json:"error"`
 }

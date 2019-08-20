@@ -2,11 +2,9 @@ package util
 
 import (
 	"errors"
-	"reflect"
 	"strings"
 )
 
-type Predicate func(interface{}) bool
 type ErrorHandler func(error)
 
 func SetTo(errPtr *error) ErrorHandler {
@@ -49,21 +47,9 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 }
 
 func PanicIfPresent(value interface{}) {
-	if !IsNil(value) {
+	if !isReallyNil(value) {
 		panic(value)
 	}
-}
-
-func IsNil(value interface{}) bool {
-	if value == nil {
-		return true
-	}
-	reflectValue := reflect.ValueOf(value)
-	switch reflectValue.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
-		return reflectValue.IsNil()
-	}
-	return false
 }
 
 func Assert(condition bool, msg ...string) {

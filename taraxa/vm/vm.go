@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
@@ -20,11 +21,11 @@ import (
 
 type VM struct {
 	StaticConfig
-	GetBlockHash   vm.GetHashFunc
-	ReadDiskDB     *ethdb_proxy.DatabaseProxy
-	WriteDiskDB    *ethdb_proxy.DatabaseProxy
-	ReadDB         *state_db_proxy.DatabaseProxy
-	WriteDB        *state_db_proxy.DatabaseProxy
+	GetBlockHash vm.GetHashFunc
+	ReadDiskDB   *ethdb_proxy.DatabaseProxy
+	WriteDiskDB  *ethdb_proxy.DatabaseProxy
+	ReadDB       *state_db_proxy.DatabaseProxy
+	WriteDB      *state_db_proxy.DatabaseProxy
 }
 
 func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
@@ -45,7 +46,7 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 	go conflictDetector.Run()
 	defer conflictDetector.Halt()
 	allDone := rendezvous.New(txCount)
-	lastScheduledTxId := int32(-1)
+	lastScheduledTxId := int64(-1)
 	parallelismFactor := 1.3 // Good
 	numCPU := runtime.NumCPU()
 	threadCount := int(float64(numCPU) * parallelismFactor)
@@ -55,7 +56,7 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 			stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
 			errFatal.CheckIn(stateDBCreateErr)
 			for {
-				txId := TxId(atomic.AddInt32(&lastScheduledTxId, 1))
+				txId := TxId(atomic.AddInt64(&lastScheduledTxId, 1))
 				if txId >= txCount {
 					break
 				}
@@ -169,7 +170,8 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 			return vm.NewEVMInterpreterWithExecutionController(evm, evmConfig, req.interpreterController)
 		},
 	)
-	st := core.NewStateTransition(evm, tx.AsMessage(req.checkNonce), req.gasPool)
+	msg := types.NewMessage(tx.From, tx.To, tx.Nonce, tx.Amount, tx.GasLimit, tx.GasPrice, tx.Data, req.checkNonce)
+	st := core.NewStateTransition(evm, msg, req.gasPool)
 	stateDB.BeginTransaction(tx.Hash, block.Hash, req.txId)
 	ret, usedGas, vmErr, consensusErr := st.TransitionDb()
 	return &TransactionResult{req.txId, ret, usedGas, vmErr, consensusErr, stateDB.GetLogs(tx.Hash)}
