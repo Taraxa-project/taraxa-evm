@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/block_hash_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
@@ -73,7 +72,6 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	ret.WriteDiskDB = ret.ReadDiskDB
 	ret.WriteDB = ret.ReadDB
 	if this.WriteDB != nil {
-		rec = metric_utils.NewTimeRecorder()
 		writeDiskDB, e3 := this.WriteDB.DB.NewDB()
 		localErr.CheckIn(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
