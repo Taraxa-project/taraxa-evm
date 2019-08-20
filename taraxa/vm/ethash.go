@@ -1,15 +1,14 @@
-package taraxa_vm
+package vm
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 )
 
-func AccumulateRewards(config *params.ChainConfig, state *state.StateDB, header *taraxa_types.BlockNumberAndCoinbase,
-	uncles ...*taraxa_types.BlockNumberAndCoinbase) {
+func AccumulateRewards(config *params.ChainConfig, state *state.StateDB, header *BlockNumberAndCoinbase,
+	uncles ...*BlockNumberAndCoinbase) {
 	var unclesMapped []*types.Header
 	for _, uncle := range uncles {
 		unclesMapped = append(unclesMapped, &types.Header{Number: uncle.Number, Coinbase: uncle.Coinbase})

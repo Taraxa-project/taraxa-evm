@@ -1,27 +1,26 @@
-package taraxa_vm
+package vm
 
 import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 type BlockPostProcessor struct {
 	inbox  []chan *TransactionResultWithStateChange
-	outbox chan *taraxa_types.StateTransitionReceipt
+	outbox chan *StateTransitionReceipt
 }
 
-func LaunchBlockPostProcessor(block *taraxa_types.Block, newStateDB StateDBFactory, onErr util.ErrorHandler) *BlockPostProcessor {
+func LaunchBlockPostProcessor(block *Block, newStateDB StateDBFactory, onErr util.ErrorHandler) *BlockPostProcessor {
 	inbox := make([]chan *TransactionResultWithStateChange, len(block.Transactions))
-	outbox := make(chan *taraxa_types.StateTransitionReceipt, 1)
+	outbox := make(chan *StateTransitionReceipt, 1)
 	for txId := range block.Transactions {
 		inbox[txId] = make(chan *TransactionResultWithStateChange, 1)
 	}
 	go func() {
-		result := new(taraxa_types.StateTransitionReceipt)
+		result := new(StateTransitionReceipt)
 		var err util.ErrorBarrier
 		defer util.Recover(err.Catch(func(e error) {
 			close(outbox)
@@ -56,7 +55,7 @@ func LaunchBlockPostProcessor(block *taraxa_types.Block, newStateDB StateDBFacto
 				ethReceipt.ContractAddress = crypto.CreateAddress(tx.From, tx.Nonce)
 			}
 			result.AllLogs = append(result.AllLogs, ethReceipt.Logs...)
-			result.Receipts = append(result.Receipts, &taraxa_types.TaraxaReceipt{
+			result.Receipts = append(result.Receipts, &TaraxaReceipt{
 				request.EVMReturnValue,
 				ethReceipt,
 				request.ContractErr,
@@ -82,7 +81,7 @@ func (this *BlockPostProcessor) Submit(request *TransactionResultWithStateChange
 	return util.TrySend(this.inbox[request.TxId], request)
 }
 
-func (this *BlockPostProcessor) AwaitResult() (ret *taraxa_types.StateTransitionReceipt, ok bool) {
+func (this *BlockPostProcessor) AwaitResult() (ret *StateTransitionReceipt, ok bool) {
 	ret, ok = <-this.outbox
 	return
 }

@@ -1,12 +1,10 @@
-package taraxa_vm
+package vm
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"golang.org/x/text/secure/precis"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -15,7 +13,6 @@ import (
 )
 
 func TestFoo(t *testing.T) {
-
 
 }
 
@@ -28,9 +25,9 @@ func BenchmarkStateTransitionTestMode(b *testing.B) {
 	bytes, err := ioutil.ReadFile(config_file_path)
 	util.PanicIfPresent(err)
 	util.PanicIfPresent(json.Unmarshal(bytes, cfg))
-	taraxaVM, _, createVmErr := cfg.VmConfig.NewVM()
+	taraxaVM, _, createVmErr := cfg.VmConfig.NewInstance()
 	util.PanicIfPresent(createVmErr)
-	allTransactions := taraxa_types.NewTxIdSet(nil)
+	allTransactions := NewTxIdSet(nil)
 	for txId := range cfg.Block.Transactions {
 		allTransactions.Add(txId)
 	}

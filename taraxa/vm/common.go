@@ -1,16 +1,15 @@
-package taraxa_vm
+package vm
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 )
 
 type StateDB interface {
 	vm.StateDB
-	BeginTransaction(txHash, blockHash common.Hash, txId taraxa_types.TxId)
+	BeginTransaction(txHash, blockHash common.Hash, txId TxId)
 	CheckPoint(resetDirties bool)
 	GetLogs(txHash common.Hash) []*types.Log
 	CommitStateChange(deleteEmptyObjects bool) state.StateChange
@@ -22,7 +21,7 @@ type StateDBFactory func() StateDB
 type CommitStrategy func(db StateDB) common.Hash
 
 type TransactionResult struct {
-	taraxa_types.TxId
+	TxId
 	EVMReturnValue []byte
 	GasUsed        uint64
 	ContractErr    error

@@ -1,18 +1,15 @@
-package taraxa_types
+package vm
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/cornelk/hashmap"
 	"math/big"
 )
 
 type TxId = int
-type ConcurrentHashMap = hashmap.HashMap
 
 type BlockHashStore interface {
 	GetHeaderHashByBlockNumber(blockNumber uint64) common.Hash
@@ -87,18 +84,8 @@ type StateTransitionResponse struct {
 	Error  *util.SimpleError     `json:"error"`
 }
 
-type linkedHashSet interface {
-	json.Marshaler
-	json.Unmarshaler
-	Contains(...interface{}) bool
-	Add(...interface{})
-	Size() int
-	Each(func(int, interface{}))
-	fmt.Stringer
-}
-
 type TxIdSet struct {
-	linkedHashSet
+	*util.LinkedHashSet
 }
 
 func NewTxIdSet(arr interface{}) *TxIdSet {
@@ -109,7 +96,7 @@ func (this *TxIdSet) UnmarshalJSON(data []byte) error {
 	elements := []TxId{}
 	err := json.Unmarshal(data, &elements)
 	if err == nil {
-		this.linkedHashSet = util.NewLinkedHashSet(elements)
+		this.LinkedHashSet = util.NewLinkedHashSet(elements)
 	}
 	return err
 }

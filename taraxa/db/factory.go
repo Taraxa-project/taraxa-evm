@@ -12,7 +12,7 @@ import (
 )
 
 type Factory interface {
-	NewDB() (ethdb.MutableTransactionalDatabase, error)
+	NewInstance() (ethdb.MutableTransactionalDatabase, error)
 }
 
 var FactoryRegistry = map[string]func() Factory{
@@ -43,8 +43,8 @@ type GenericFactory struct {
 	FactoryOptions
 }
 
-func (this *GenericFactory) NewDB() (ethdb.MutableTransactionalDatabase, error) {
-	return this.Factory.NewDB()
+func (this *GenericFactory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
+	return this.Factory.NewInstance()
 }
 
 func (this *GenericFactory) UnmarshalJSON(b []byte) (err error) {

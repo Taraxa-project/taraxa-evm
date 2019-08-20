@@ -1,4 +1,4 @@
-package taraxa_vm
+package vm
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"

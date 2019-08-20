@@ -8,6 +8,6 @@ type Factory struct {
 	Handles int    `json:"handles"`
 }
 
-func (this *Factory) NewDB() (ethdb.MutableTransactionalDatabase, error) {
+func (this *Factory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
 	return ethdb.NewLDBDatabase(this.File, this.Cache, this.Handles)
 }

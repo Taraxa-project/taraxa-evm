@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/rawdb"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
+	"github.com/Taraxa-project/taraxa-evm/taraxa"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"strconv"
 )
 
 type BlockHashDB struct {
 	db    rawdb.DatabaseReader
-	cache taraxa_types.ConcurrentHashMap
+	cache taraxa.ConcurrentHashMap
 }
 
 func New(db rawdb.DatabaseReader) *BlockHashDB {

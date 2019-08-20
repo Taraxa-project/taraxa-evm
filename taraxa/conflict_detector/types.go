@@ -8,7 +8,7 @@ const (
 	GET OperationType = iota
 	SET
 	ADD //commutative
-	// TODO consider operands of the operators
+	// TODO consider arguments of the operations
 	DEFAULT_INITIALIZE //idempotent
 	OperationType_count uint = iota
 )

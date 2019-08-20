@@ -1,4 +1,4 @@
-package taraxa_vm
+package vm
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
@@ -31,7 +31,7 @@ type VmConfig struct {
 	BlockDB *db.GenericFactory `json:"blockDB"`
 }
 
-func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
+func (this *VmConfig) NewInstance() (ret *VM, cleanup func(), err error) {
 	cleanup = util.DoNothing
 	localErr := new(util.ErrorBarrier)
 	defer util.Recover(
@@ -42,7 +42,7 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		},
 		localErr.Catch(util.SetTo(&err)),
 	)
-	ret = &TaraxaVM{
+	ret = &VM{
 		StaticConfig: this.StaticConfig,
 	}
 	ret.ConflictDetectorInboxPerTransaction = util.Max(ret.ConflictDetectorInboxPerTransaction, 100)
@@ -52,7 +52,7 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	if ret.Genesis == nil {
 		ret.Genesis = core.DefaultGenesisBlock()
 	}
-	readDiskDB, e1 := this.ReadDB.DB.NewDB()
+	readDiskDB, e1 := this.ReadDB.DB.NewInstance()
 	localErr.CheckIn(e1)
 	cleanup = util.Chain(cleanup, readDiskDB.Close)
 	ret.ReadDiskDB = &ethdb_proxy.DatabaseProxy{readDiskDB, new(proxy.BaseProxy)}
@@ -62,7 +62,7 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		new(proxy.BaseProxy),
 	}
 	if this.BlockDB != nil {
-		blockHashDb, e2 := this.BlockDB.NewDB()
+		blockHashDb, e2 := this.BlockDB.NewInstance()
 		localErr.CheckIn(e2)
 		cleanup = util.Chain(cleanup, blockHashDb.Close)
 		ret.BlockHashStore = block_hash_db.New(blockHashDb)
@@ -72,7 +72,7 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	ret.WriteDiskDB = ret.ReadDiskDB
 	ret.WriteDB = ret.ReadDB
 	if this.WriteDB != nil {
-		writeDiskDB, e3 := this.WriteDB.DB.NewDB()
+		writeDiskDB, e3 := this.WriteDB.DB.NewInstance()
 		localErr.CheckIn(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = &ethdb_proxy.DatabaseProxy{writeDiskDB, new(proxy.BaseProxy)}

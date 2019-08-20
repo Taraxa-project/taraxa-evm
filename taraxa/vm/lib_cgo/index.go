@@ -1,13 +1,12 @@
 package main
 
 //#include <stdlib.h>
-//#include "db/cgo/index.h"
 import "C"
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/virtual_env"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/vm"
 	"runtime"
 	"runtime/debug"
 	"unsafe"
@@ -15,13 +14,13 @@ import (
 
 // TODO refactor
 var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
-	"NewVM": func(env *virtual_env.VirtualEnv, config *taraxa_vm.VmConfig) (vmAddr string, err error) {
+	"NewVM": func(env *virtual_env.VirtualEnv, config *vm.VmConfig) (vmAddr string, err error) {
 		cleanup := util.DoNothing
 		defer util.CatchAnyErr(func(e error) {
 			err = e
 			cleanup()
 		})
-		vm, vmCleanup, createErr := config.NewVM()
+		vm, vmCleanup, createErr := config.NewInstance()
 		cleanup = util.Chain(cleanup, vmCleanup)
 		util.PanicIfPresent(createErr)
 		vmAddr, allocErr := env.Alloc(vm, cleanup)

@@ -1,4 +1,4 @@
-package taraxa_vm
+package vm
 
 import (
 	"errors"
@@ -12,7 +12,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/rendezvous"
 	"math/big"
@@ -46,18 +45,18 @@ type StateTransitionMetrics struct {
 }
 
 type stateTransition struct {
-	*TaraxaVM
-	*taraxa_types.StateTransitionRequest
-	*taraxa_types.ConcurrentSchedule
+	*VM
+	*StateTransitionRequest
+	*ConcurrentSchedule
 	metrics StateTransitionMetrics
 	err     util.ErrorBarrier
 }
 
-func (this *stateTransition) run() (ret *taraxa_types.StateTransitionResult, metrics *StateTransitionMetrics, err error) {
+func (this *stateTransition) run() (ret *StateTransitionResult, metrics *StateTransitionMetrics, err error) {
 	//defer util.Recover(this.err.Catch(util.SetTo(&err)))
 	this.metrics.TransactionMetrics = make([]TransactionMetrics, len(this.Block.Transactions))
 	metrics = &this.metrics
-	ret = new(taraxa_types.StateTransitionResult)
+	ret = new(StateTransitionResult)
 	block := this.Block
 	blockNumber := block.Number
 	if blockNumber.Sign() == 0 {
@@ -115,7 +114,7 @@ func (this *stateTransition) run() (ret *taraxa_types.StateTransitionResult, met
 	conflictDetector.Halt()
 	sequentialTransactions.Each(func(_ int, value interface{}) {
 		defer this.metrics.SequentialTransactions.NewTimeRecorder()()
-		result := this.executeTransaction(value.(taraxa_types.TxId), sequentialStateDB)
+		result := this.executeTransaction(value.(TxId), sequentialStateDB)
 		postProcessor.Submit(result)
 		committer.Submit(result.StateChange)
 	})
@@ -136,10 +135,10 @@ func (this *stateTransition) run() (ret *taraxa_types.StateTransitionResult, met
 	return
 }
 
-func (this *stateTransition) RunLikeEthereum() (ret *taraxa_types.StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error) {
+func (this *stateTransition) RunLikeEthereum() (ret *StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error) {
 	util.Recover(this.err.Catch(util.SetTo(&err)))
 	totalTime = new(metric_utils.AtomicCounter)
-	ret = new(taraxa_types.StateTransitionResult)
+	ret = new(StateTransitionResult)
 	defer totalTime.NewTimeRecorder()()
 	if this.Block.Number.Sign() == 0 {
 		ret.StateRoot = this.applyGenesisBlock()
@@ -149,7 +148,7 @@ func (this *stateTransition) RunLikeEthereum() (ret *taraxa_types.StateTransitio
 	this.applyHardForks(stateDB)
 	gp := new(core.GasPool).AddGas(this.Block.GasLimit)
 	for txId, tx := range this.Block.Transactions {
-		txResult := this.TaraxaVM.executeTransaction(&transactionRequest{
+		txResult := this.VM.executeTransaction(&transactionRequest{
 			txId,
 			tx,
 			&this.Block.BlockHeader,
@@ -176,7 +175,7 @@ func (this *stateTransition) RunLikeEthereum() (ret *taraxa_types.StateTransitio
 		ethReceipt.GasUsed = txResult.GasUsed
 		ethReceipt.Logs = txResult.Logs
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
-		ret.Receipts = append(ret.Receipts, &taraxa_types.TaraxaReceipt{
+		ret.Receipts = append(ret.Receipts, &TaraxaReceipt{
 			ReturnValue:     txResult.EVMReturnValue,
 			ContractError:   txResult.ContractErr,
 			EthereumReceipt: ethReceipt,
@@ -192,10 +191,10 @@ func (this *stateTransition) RunLikeEthereum() (ret *taraxa_types.StateTransitio
 }
 
 type TestModeParams struct {
-	DoCommitsInSeparateDB bool                  `json:"doCommitsInSeparateDB"`
-	DoCommits             bool                  `json:"doCommits"`
-	CommitSync            bool                  `json:"commitSync"`
-	SequentialTx          *taraxa_types.TxIdSet `json:"sequentialTx"`
+	DoCommitsInSeparateDB bool     `json:"doCommitsInSeparateDB"`
+	DoCommits             bool     `json:"doCommits"`
+	CommitSync            bool     `json:"commitSync"`
+	SequentialTx          *TxIdSet `json:"sequentialTx"`
 }
 
 type TestModeTxMetrics struct {
@@ -249,11 +248,11 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 	}
 	var syncCommitLock sync.Mutex
 	allDone := rendezvous.New(txCount)
-	runTx := func(txId taraxa_types.TxId, db StateDB) {
+	runTx := func(txId TxId, db StateDB) {
 		txMetrics := &metrics.TransactionMetrics[txId]
 		defer txMetrics.TotalTime.NewTimeRecorder()()
 		defer allDone.CheckIn()
-		r := this.TaraxaVM.executeTransaction(&transactionRequest{
+		r := this.VM.executeTransaction(&transactionRequest{
 			txId,
 			this.Block.Transactions[txId],
 			&this.Block.BlockHeader,
@@ -282,7 +281,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 	recordTransactionSyncTime := metrics.Main.TransactionsSync.NewTimeRecorder()
 	sequentialTx := params.SequentialTx
 	if sequentialTx == nil {
-		sequentialTx = taraxa_types.NewTxIdSet(nil)
+		sequentialTx = NewTxIdSet(nil)
 	}
 	if txCount != sequentialTx.Size() {
 		lastScheduledTxId := int32(-1)
@@ -293,7 +292,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 			go func() {
 				stateDB := this.newStateDBForReading()
 				for {
-					txId := taraxa_types.TxId(atomic.AddInt32(&lastScheduledTxId, 1))
+					txId := TxId(atomic.AddInt32(&lastScheduledTxId, 1))
 					if txId >= txCount {
 						break
 					}
@@ -312,7 +311,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		if sequentialStateDB == nil {
 			sequentialStateDB = this.newStateDBForReading()
 		}
-		runTx(i.(taraxa_types.TxId), sequentialStateDB)
+		runTx(i.(TxId), sequentialStateDB)
 	})
 	allDone.Await()
 	recordTransactionSyncTime()
@@ -324,9 +323,9 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 	return
 }
 
-func (this *stateTransition) executeTransaction(txId taraxa_types.TxId, db StateDB) *TransactionResultWithStateChange {
+func (this *stateTransition) executeTransaction(txId TxId, db StateDB) *TransactionResultWithStateChange {
 	block := this.Block
-	result := this.TaraxaVM.executeTransaction(&transactionRequest{
+	result := this.VM.executeTransaction(&transactionRequest{
 		txId,
 		block.Transactions[txId],
 		&block.BlockHeader,

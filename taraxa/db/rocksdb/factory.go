@@ -21,7 +21,7 @@ type Factory struct {
 	CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
-func (this *Factory) NewDB() (ret ethdb.MutableTransactionalDatabase, err error) {
+func (this *Factory) NewInstance() (ret ethdb.MutableTransactionalDatabase, err error) {
 	opts := gorocksdb.NewDefaultOptions()
 	blockOpts := gorocksdb.NewDefaultBlockBasedTableOptions()
 	bloomFilter := gorocksdb.NewBloomFilter(util.Max(10, this.BloomFilterCapacity))

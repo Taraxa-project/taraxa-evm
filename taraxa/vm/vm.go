@@ -1,4 +1,4 @@
-package taraxa_vm
+package vm
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/taraxa_types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
@@ -19,17 +18,17 @@ import (
 	"sync/atomic"
 )
 
-type TaraxaVM struct {
+type VM struct {
 	StaticConfig
-	BlockHashStore taraxa_types.BlockHashStore
+	BlockHashStore BlockHashStore
 	ReadDiskDB     *ethdb_proxy.DatabaseProxy
 	WriteDiskDB    *ethdb_proxy.DatabaseProxy
 	ReadDB         *state_db_proxy.DatabaseProxy
 	WriteDB        *state_db_proxy.DatabaseProxy
 }
 
-func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest) (result *taraxa_types.ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
-	result = new(taraxa_types.ConcurrentSchedule)
+func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
+	result = new(ConcurrentSchedule)
 	metrics = new(ScheduleGenerationMetrics)
 	metrics.TransactionMetrics = make([]TransactionMetrics, len(req.Block.Transactions))
 	defer metrics.TotalTime.NewTimeRecorder()()
@@ -40,7 +39,7 @@ func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest)
 	conflictDetector := conflict_detector.New((txCount+1)*this.ConflictDetectorInboxPerTransaction,
 		func(_ *conflict_detector.ConflictDetector, _ *conflict_detector.Operation, authors conflict_detector.Authors) {
 			authors.Each(func(_ int, value interface{}) {
-				txConflictErrors[value.(taraxa_types.TxId)].SetIfAbsent(errors.New(""))
+				txConflictErrors[value.(TxId)].SetIfAbsent(errors.New(""))
 			})
 		})
 	go conflictDetector.Run()
@@ -56,7 +55,7 @@ func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest)
 			stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
 			errFatal.CheckIn(stateDBCreateErr)
 			for {
-				txId := taraxa_types.TxId(atomic.AddInt32(&lastScheduledTxId, 1))
+				txId := TxId(atomic.AddInt32(&lastScheduledTxId, 1))
 				if txId >= txCount {
 					break
 				}
@@ -92,43 +91,43 @@ func (this *TaraxaVM) GenerateSchedule(req *taraxa_types.StateTransitionRequest)
 	conflictDetector.Halt()
 	conflictingTx := conflictDetector.AwaitResult().Values()
 	sort.Slice(conflictingTx, func(i, j int) bool {
-		return conflictingTx[i].(taraxa_types.TxId) < conflictingTx[j].(taraxa_types.TxId)
+		return conflictingTx[i].(TxId) < conflictingTx[j].(TxId)
 	})
-	result.SequentialTransactions = taraxa_types.NewTxIdSet(conflictingTx)
+	result.SequentialTransactions = NewTxIdSet(conflictingTx)
 	return
 }
 
-func (this *TaraxaVM) TransitionState(req *taraxa_types.StateTransitionRequest, schedule *taraxa_types.ConcurrentSchedule) (*taraxa_types.StateTransitionResult, *StateTransitionMetrics, error) {
+func (this *VM) TransitionState(req *StateTransitionRequest, schedule *ConcurrentSchedule) (*StateTransitionResult, *StateTransitionMetrics, error) {
 	st := &stateTransition{
-		TaraxaVM:               this,
+		VM:                     this,
 		StateTransitionRequest: req,
 		ConcurrentSchedule:     schedule,
 	}
 	return st.run()
 }
 
-func (this *TaraxaVM) RunLikeEthereum(req *taraxa_types.StateTransitionRequest) (
-	ret *taraxa_types.StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error,
+func (this *VM) RunLikeEthereum(req *StateTransitionRequest) (
+	ret *StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error,
 ) {
 	st := &stateTransition{
-		TaraxaVM:               this,
+		VM:                     this,
 		StateTransitionRequest: req,
 	}
 	return st.RunLikeEthereum()
 }
 
-func (this *TaraxaVM) TestMode(req *taraxa_types.StateTransitionRequest, params *TestModeParams) *TestModeMetrics {
+func (this *VM) TestMode(req *StateTransitionRequest, params *TestModeParams) *TestModeMetrics {
 	st := &stateTransition{
-		TaraxaVM:               this,
+		VM:                     this,
 		StateTransitionRequest: req,
 	}
 	return st.TestMode(params)
 }
 
 type transactionRequest struct {
-	txId                  taraxa_types.TxId
-	txData                *taraxa_types.Transaction
-	blockHeader           *taraxa_types.BlockHeader
+	txId                  TxId
+	txData                *Transaction
+	blockHeader           *BlockHeader
 	stateDB               StateDB
 	interpreterController vm.ExecutionController
 	gasPool               *core.GasPool
@@ -137,7 +136,7 @@ type transactionRequest struct {
 	vm.CanTransferFunc
 }
 
-func (this *TaraxaVM) executeTransaction(req *transactionRequest) *TransactionResult {
+func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	metrics := req.metrics
 	//defer this.ReadDiskDB.RegisterDecorator("Get", metric_utils.MeasureElapsedTime(&metrics.PersistentReads))()
 	//defer this.ReadDiskDB.RegisterDecorator("Has", metric_utils.MeasureElapsedTime(&metrics.PersistentReads))()
