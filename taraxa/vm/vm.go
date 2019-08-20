@@ -98,7 +98,14 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 	return
 }
 
-func (this *VM) TransitionState(req *StateTransitionRequest, schedule *ConcurrentSchedule) (*StateTransitionResult, *StateTransitionMetrics, error) {
+func (this *VM) TransitionState(
+	req *StateTransitionRequest,
+	schedule *ConcurrentSchedule,
+) (
+	*StateTransitionResult,
+	*StateTransitionMetrics,
+	error,
+) {
 	st := &stateTransition{
 		VM:                     this,
 		StateTransitionRequest: req,
@@ -108,7 +115,9 @@ func (this *VM) TransitionState(req *StateTransitionRequest, schedule *Concurren
 }
 
 func (this *VM) RunLikeEthereum(req *StateTransitionRequest) (
-	ret *StateTransitionResult, totalTime *metric_utils.AtomicCounter, err error,
+	ret *StateTransitionResult,
+	totalTime *metric_utils.AtomicCounter,
+	err error,
 ) {
 	st := &stateTransition{
 		VM:                     this,

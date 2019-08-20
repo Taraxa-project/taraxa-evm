@@ -80,7 +80,8 @@ func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
 		this.authorsInConflict.Add(author)
 	})
 	if this.onConflict != nil {
-		this.onConflict(this, op, authors)
+		// new goroutine to prevent deadlocking misuse
+		go this.onConflict(this, op, authors)
 	}
 }
 
