@@ -3,12 +3,10 @@ package virtual_env
 import (
 	"encoding/json"
 	"errors"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/google/uuid"
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 )
 
 const addr_prefix = "__ptr__"
@@ -27,10 +25,6 @@ type VirtualEnv struct {
 }
 
 func (this *VirtualEnv) Call(receiverAddr, funcName, argsEncoded string) (retEncoded string, err error) {
-	record := metric_utils.NewTimeRecorder(func(duration time.Duration) {
-		//fmt.Println("Call took", duration.String())
-	})
-	defer record()
 	decoder := json.NewDecoder(strings.NewReader(argsEncoded))
 	_, err = decoder.Token()
 	if err != nil {

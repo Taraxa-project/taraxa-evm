@@ -56,20 +56,14 @@ func Max(x, y int) int {
 	return y
 }
 
-func Min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
 func isReallyNil(value interface{}) bool {
 	if value == nil {
 		return true
 	}
 	reflectValue := reflect.ValueOf(value)
 	switch reflectValue.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
+		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
 		return reflectValue.IsNil()
 	}
 	return false
