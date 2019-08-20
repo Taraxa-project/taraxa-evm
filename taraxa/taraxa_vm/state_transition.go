@@ -373,7 +373,8 @@ func (this *stateTransition) applyHardForks(stateDB StateDB) (stateChanged bool)
 }
 
 func (this *stateTransition) applyBlockRewards(stateDB StateDB) {
-	AccumulateRewards(this.Genesis.Config, stateDB.(*state.StateDB), &this.Block.BlockNumberAndCoinbase, this.Block.Uncles...)
+	AccumulateRewards(this.Genesis.Config, stateDB.(*state.StateDB),
+		&this.Block.BlockNumberAndCoinbase, this.Block.Uncles...)
 }
 
 func (this *stateTransition) newStateDBForReading() StateDB {

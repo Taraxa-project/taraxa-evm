@@ -1,7 +1,6 @@
 package taraxa_vm
 
 import (
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -13,11 +12,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
-
-type ThreadPoolConfig struct {
-	ThreadCount int `json:"threadCount"`
-	QueueSize   int `json:"queueSize"`
-}
 
 type StaticConfig struct {
 	EvmConfig                           *vm.StaticConfig `json:"evm"`
@@ -59,10 +53,8 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	if ret.Genesis == nil {
 		ret.Genesis = core.DefaultGenesisBlock()
 	}
-	rec := metric_utils.NewTimeRecorder()
 	readDiskDB, e1 := this.ReadDB.DB.NewDB()
 	localErr.CheckIn(e1)
-	fmt.Println("create state db took", rec())
 	cleanup = util.Chain(cleanup, readDiskDB.Close)
 	ret.ReadDiskDB = &ethdb_proxy.DatabaseProxy{readDiskDB, new(proxy.BaseProxy)}
 	ret.ReadDB = &state_db_proxy.DatabaseProxy{
@@ -71,9 +63,7 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 		new(proxy.BaseProxy),
 	}
 	if this.BlockDB != nil {
-		rec = metric_utils.NewTimeRecorder()
 		blockHashDb, e2 := this.BlockDB.NewDB()
-		fmt.Println("create block db took", rec())
 		localErr.CheckIn(e2)
 		cleanup = util.Chain(cleanup, blockHashDb.Close)
 		ret.BlockHashStore = block_hash_db.New(blockHashDb)
@@ -85,7 +75,6 @@ func (this *VmConfig) NewVM() (ret *TaraxaVM, cleanup func(), err error) {
 	if this.WriteDB != nil {
 		rec = metric_utils.NewTimeRecorder()
 		writeDiskDB, e3 := this.WriteDB.DB.NewDB()
-		fmt.Println("create write db took", rec())
 		localErr.CheckIn(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = &ethdb_proxy.DatabaseProxy{writeDiskDB, new(proxy.BaseProxy)}
