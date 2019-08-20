@@ -20,7 +20,7 @@ import (
 
 type VM struct {
 	StaticConfig
-	BlockHashStore BlockHashStore
+	GetBlockHash   vm.GetHashFunc
 	ReadDiskDB     *ethdb_proxy.DatabaseProxy
 	WriteDiskDB    *ethdb_proxy.DatabaseProxy
 	ReadDB         *state_db_proxy.DatabaseProxy
@@ -151,7 +151,7 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	evmContext := vm.Context{
 		CanTransfer: req.CanTransferFunc,
 		Transfer:    core.Transfer,
-		GetHash:     this.BlockHashStore.GetHeaderHashByBlockNumber,
+		GetHash:     this.GetBlockHash,
 		Origin:      tx.From,
 		Coinbase:    block.Coinbase,
 		BlockNumber: blockNumber,

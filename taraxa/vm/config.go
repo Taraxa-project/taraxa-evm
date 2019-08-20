@@ -65,9 +65,7 @@ func (this *VmConfig) NewInstance() (ret *VM, cleanup func(), err error) {
 		blockHashDb, e2 := this.BlockDB.NewInstance()
 		localErr.CheckIn(e2)
 		cleanup = util.Chain(cleanup, blockHashDb.Close)
-		ret.BlockHashStore = block_hash_db.New(blockHashDb)
-	} else {
-		ret.BlockHashStore = &block_hash_db.NotImplementedBlockHashStore{}
+		ret.GetBlockHash = block_hash_db.New(blockHashDb).GetHeaderHashByBlockNumber
 	}
 	ret.WriteDiskDB = ret.ReadDiskDB
 	ret.WriteDB = ret.ReadDB

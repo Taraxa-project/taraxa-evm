@@ -10,17 +10,15 @@ const balance = "balance"
 const code = "code"
 const nonce = "nonce"
 
-type OperationLogger func(conflict_detector.OperationType, conflict_detector.Key)
-
 type OperationLoggingStateDB struct {
 	StateDB
-	OperationLogger conflict_detector.OperationLogger
+	LogOperation conflict_detector.OperationLogger
 }
 
 func (this *OperationLoggingStateDB) CreateAccount(addr common.Address) {
 	this.onCreateOrDeleteAccount(addr)
 	if this.StateDB.Exist(addr) {
-		this.OperationLogger(conflict_detector.SET, accountCompositeKey(addr, balance))
+		this.log(conflict_detector.SET, addr, balance)
 	}
 	this.StateDB.CreateAccount(addr)
 }
@@ -41,14 +39,9 @@ func (this *OperationLoggingStateDB) AddBalance(addr common.Address, value *big.
 func (this *OperationLoggingStateDB) onAddBalance(addr common.Address, value *big.Int) {
 	this.onGetOrCreateAccount(addr)
 	if value.Sign() != 0 {
-		this.OperationLogger(conflict_detector.ADD, accountCompositeKey(addr, balance))
+		this.log(conflict_detector.ADD, addr, balance)
 	}
 }
-
-//func (this *OperationLoggingStateDB) SetBalance(addr common.Address, value *big.Int) {
-//	this.onAccountWrite(addr, balance)
-//	this.StateDB.SetBalance(addr, value)
-//}
 
 func (this *OperationLoggingStateDB) GetBalance(addr common.Address) *big.Int {
 	this.onAccountRead(addr, balance)
@@ -62,7 +55,7 @@ func (this *OperationLoggingStateDB) GetNonce(addr common.Address) uint64 {
 
 func (this *OperationLoggingStateDB) AddNonce(addr common.Address, val uint64) {
 	this.onGetOrCreateAccount(addr)
-	this.OperationLogger(conflict_detector.ADD, accountCompositeKey(addr, nonce))
+	this.log(conflict_detector.ADD, addr, nonce)
 	this.StateDB.AddNonce(addr, val)
 }
 
@@ -129,39 +122,40 @@ func (this *OperationLoggingStateDB) SetState(addr common.Address, hash common.H
 }
 
 func (this *OperationLoggingStateDB) onGetAccount(addr common.Address) {
-	this.OperationLogger(conflict_detector.GET, accountKey(addr))
+	this.log(conflict_detector.GET, addr)
 }
 
 func (this *OperationLoggingStateDB) onCreateOrDeleteAccount(addr common.Address) {
-	this.OperationLogger(conflict_detector.SET, accountKey(addr))
+	this.log(conflict_detector.SET, addr)
 }
 
 func (this *OperationLoggingStateDB) onGetOrCreateAccount(addr common.Address) {
-	this.OperationLogger(conflict_detector.DEFAULT_INITIALIZE, accountKey(addr))
+	this.log(conflict_detector.DEFAULT_INITIALIZE, addr)
 }
 
 func (this *OperationLoggingStateDB) onAccountRead(addr common.Address, key string) {
 	this.onGetAccount(addr)
 	if this.StateDB.Exist(addr) {
-		this.OperationLogger(conflict_detector.GET, accountCompositeKey(addr, key))
+		this.log(conflict_detector.GET, addr, key)
 	}
 }
 
-func (this *OperationLoggingStateDB) onAccountWrite(address common.Address, key string) {
-	this.onGetOrCreateAccount(address)
-	this.OperationLogger(conflict_detector.SET, accountCompositeKey(address, key))
+func (this *OperationLoggingStateDB) onAccountWrite(addr common.Address, key string) {
+	this.onGetOrCreateAccount(addr)
+	this.log(conflict_detector.SET, addr, key)
 }
 
 func (this *OperationLoggingStateDB) onAccountEmptyCheck(addr common.Address) {
-	this.OperationLogger(conflict_detector.GET, accountCompositeKey(addr, balance))
-	this.OperationLogger(conflict_detector.GET, accountCompositeKey(addr, nonce))
-	this.OperationLogger(conflict_detector.GET, accountCompositeKey(addr, code))
+	this.log(conflict_detector.GET, addr, balance, nonce, code)
 }
 
-func accountKey(address common.Address) string {
-	return address.Hex()
-}
-
-func accountCompositeKey(address common.Address, subKey string) string {
-	return accountKey(address) + "_" + subKey
+func (this *OperationLoggingStateDB) log(opType conflict_detector.OperationType, addr common.Address, keys ...string) {
+	accountKey := addr.Hex()
+	if len(keys) == 0 {
+		this.LogOperation(opType, accountKey)
+		return
+	}
+	for _, key := range keys {
+		this.LogOperation(opType, accountKey+"_"+key)
+	}
 }
