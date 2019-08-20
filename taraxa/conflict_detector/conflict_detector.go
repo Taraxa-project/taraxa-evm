@@ -20,7 +20,6 @@ type ConflictDetector struct {
 func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
 	this := new(ConflictDetector)
 	this.inbox = make(chan *Operation, inboxCapacity)
-	this.operationLog = make(operationLog, OperationType_count)
 	for opType := range this.operationLog {
 		this.operationLog[opType] = make(map[Key]Authors)
 	}

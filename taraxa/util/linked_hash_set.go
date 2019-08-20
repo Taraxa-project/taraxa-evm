@@ -6,14 +6,15 @@ type LinkedHashSet struct {
 	*linkedhashset.Set
 }
 
-func NewLinkedHashSet(values interface{}) *LinkedHashSet {
-	ret := &LinkedHashSet{linkedhashset.New()}
-	if values != nil {
-		ForEach(values, func(i int, val interface{}) {
-			ret.Add(val)
-		})
+func NewLinkedHashSet(values interface{}) (this *LinkedHashSet) {
+	this = &LinkedHashSet{linkedhashset.New()}
+	if values == nil {
+		return
 	}
-	return ret
+	ForEach(values, func(i int, val interface{}) {
+		this.Add(val)
+	})
+	return
 }
 
 func (this *LinkedHashSet) UnmarshalJSON(b []byte) error {

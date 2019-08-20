@@ -42,10 +42,3 @@ func (this *BaseProxy) CallDecorator(name string, args ...Argument) (afterCall f
 	}
 	return
 }
-
-func TryRegisterDecorator(obj interface{}, name string, decorator Decorator) (unregister func()) {
-	if proxy, isProxy := obj.(Proxy); isProxy {
-		return proxy.RegisterDecorator(name, decorator)
-	}
-	return func() {}
-}

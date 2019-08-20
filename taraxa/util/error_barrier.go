@@ -36,8 +36,7 @@ func (this *ErrorBarrier) Get() error {
 
 func (this *ErrorBarrier) Catch(handlers ...ErrorHandler) Predicate {
 	return func(caught interface{}) bool {
-		thisErr := this.Get()
-		if caught == thisErr {
+		if thisErr := this.Get(); thisErr != nil && caught == thisErr {
 			for _, handler := range handlers {
 				handler(thisErr)
 			}

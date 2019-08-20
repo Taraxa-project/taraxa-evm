@@ -5,7 +5,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"math/big"
 	"reflect"
-	"sync/atomic"
 )
 
 type Predicate func(interface{}) bool
@@ -30,25 +29,6 @@ func Chain(f, g func()) func() {
 }
 
 type Remapper func(key, oldValue interface{}, wasPresent bool) (newValue interface{})
-
-func Compute(anyMap, key interface{}, remapper Remapper) (newValue interface{}, revert func()) {
-	reflectMap := reflect.ValueOf(anyMap)
-	reflectKey := reflect.ValueOf(key)
-	reflectOldVal := reflectMap.MapIndex(reflectKey)
-	wasPresent := reflectOldVal.IsValid()
-	var oldVal interface{}
-	if wasPresent {
-		oldVal = reflectOldVal.Interface()
-	} else {
-		valueType := reflectMap.Type().Elem()
-		oldVal = reflect.Zero(valueType).Interface()
-	}
-	newValue = remapper(key, oldVal, wasPresent)
-	reflectMap.SetMapIndex(reflectKey, reflect.ValueOf(newValue))
-	return newValue, func() {
-		reflectMap.SetMapIndex(reflectKey, reflectOldVal)
-	}
-}
 
 func ForEach(indexableWithLength interface{}, cb func(i int, val interface{})) {
 	val := reflect.ValueOf(indexableWithLength)
@@ -81,49 +61,6 @@ func Min(x, y int) int {
 		return x
 	}
 	return y
-}
-
-type Interval struct {
-	StartInclusive, EndExclusive int
-}
-
-func (this *Interval) IsEmpty() bool {
-	return this.StartInclusive == this.EndExclusive
-}
-
-type AtomicRange struct {
-	left int32
-}
-
-func NewAtomicRange(size int) AtomicRange {
-	return AtomicRange{int32(size)}
-}
-
-func (this *AtomicRange) Take(size int) *Interval {
-	newVal := int(atomic.AddInt32(&this.left, -int32(size)));
-	return &Interval{Max(newVal, 0), Max(newVal+size, 0)}
-}
-
-func (this *AtomicRange) IsEmpty() bool {
-	return atomic.LoadInt32(&this.left) == 0
-}
-
-type IncreasingAtomicRange struct {
-	taken int32
-	size  int
-}
-
-func NewIncreasingAtomicRange(size int) IncreasingAtomicRange {
-	return IncreasingAtomicRange{size: size}
-}
-
-func (this *IncreasingAtomicRange) Take(size int) *Interval {
-	newVal := int(atomic.AddInt32(&this.taken, int32(size)));
-	return &Interval{Min(newVal-size, this.size), Min(newVal, this.size)}
-}
-
-func (this *IncreasingAtomicRange) IsEmpty() bool {
-	return atomic.LoadInt32(&this.taken) == int32(this.size)
 }
 
 func isReallyNil(value interface{}) bool {

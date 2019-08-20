@@ -25,7 +25,7 @@ type Operation struct {
 	Key    Key
 }
 type OnConflict func(*ConflictDetector, *Operation, Authors)
-type operationLog = []map[Key]Authors
+type operationLog = [OperationType_count]map[Key]Authors
 
 var conflictRelations = func() ConflictRelations {
 	ret := make(ConflictRelations)
