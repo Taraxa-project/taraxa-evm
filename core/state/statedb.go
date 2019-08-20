@@ -102,6 +102,22 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	}, nil
 }
 
+func (this *StateDB) Reset() {
+	this.stateObjects = make(map[common.Address]*stateObject)
+	this.stateObjectsDirty = make(map[common.Address]struct{})
+	this.dbErr = nil
+	this.refund = 0
+	this.thash = common.Hash{}
+	this.bhash = common.Hash{}
+	this.txIndex = 0
+	this.logs = make(map[common.Hash][]*types.Log)
+	this.logSize = 0
+	this.preimages = make(map[common.Hash][]byte)
+	this.journal = newJournal()
+	this.validRevisions = nil
+	this.nextRevisionId = 0
+}
+
 func (this *StateDB) CommitStateChange(deleteEmptyObjects bool) StateChange {
 	defer this.CheckPoint(true)
 	ret := make(StateChange)
@@ -125,18 +141,6 @@ func (this *StateDB) CommitStateChange(deleteEmptyObjects bool) StateChange {
 		}
 	}
 	return ret
-}
-
-func (this *StateDB) Reset() {
-	this.stateObjects = make(map[common.Address]*stateObject)
-	this.stateObjectsDirty = make(map[common.Address]struct{})
-	this.thash = common.Hash{}
-	this.bhash = common.Hash{}
-	this.txIndex = 0
-	this.logs = make(map[common.Hash][]*types.Log)
-	this.logSize = 0
-	this.preimages = make(map[common.Hash][]byte)
-	this.clearJournalAndRefund()
 }
 
 func (this *StateDB) Merge(change StateChange) {
@@ -549,55 +553,6 @@ func (self *StateDB) CreateAccount(addr common.Address) {
 	if prev != nil {
 		newObj.setBalance(prev.data.Balance)
 	}
-}
-
-// Copy creates a deep, independent copy of the state.
-// Snapshots of the copied state cannot be applied to the copy.
-func (self *StateDB) Copy() *StateDB {
-	// Copy all the basic fields, initialize the memory ones
-	state := &StateDB{
-		db:                self.db,
-		trie:              self.db.CopyTrie(self.trie),
-		stateObjects:      make(map[common.Address]*stateObject, len(self.journal.dirties)),
-		stateObjectsDirty: make(map[common.Address]struct{}, len(self.journal.dirties)),
-		refund:            self.refund,
-		logs:              make(map[common.Hash][]*types.Log, len(self.logs)),
-		logSize:           self.logSize,
-		preimages:         make(map[common.Hash][]byte, len(self.preimages)),
-		journal:           newJournal(),
-	}
-	// Copy the dirty states, logs, and preimages
-	for addr := range self.journal.dirties {
-		// As documented [here](https://github.com/ethereum/go-ethereum/pull/16485#issuecomment-380438527),
-		// and in the Finalise-method, there is a case where an object is in the journal but not
-		// in the stateObjects: OOG after touch on ripeMD prior to Byzantium. Thus, we need to check for
-		// nil
-		if object, exist := self.stateObjects[addr]; exist {
-			state.stateObjects[addr] = object.deepCopy(state)
-			state.stateObjectsDirty[addr] = struct{}{}
-		}
-	}
-	// Above, we don't copy the actual journal. This means that if the copy is copied, the
-	// loop above will be a no-op, since the copy's journal is empty.
-	// Thus, here we iterate over stateObjects, to enable copies of copies
-	for addr := range self.stateObjectsDirty {
-		if _, exist := state.stateObjects[addr]; !exist {
-			state.stateObjects[addr] = self.stateObjects[addr].deepCopy(state)
-			state.stateObjectsDirty[addr] = struct{}{}
-		}
-	}
-	for hash, logs := range self.logs {
-		cpy := make([]*types.Log, len(logs))
-		for i, l := range logs {
-			cpy[i] = new(types.Log)
-			*cpy[i] = *l
-		}
-		state.logs[hash] = cpy
-	}
-	for hash, preimage := range self.preimages {
-		state.preimages[hash] = preimage
-	}
-	return state
 }
 
 // Snapshot returns an identifier for the current revision of the state.

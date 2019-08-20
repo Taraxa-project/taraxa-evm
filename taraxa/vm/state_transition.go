@@ -67,7 +67,8 @@ func (this *stateTransition) run() (ret *StateTransitionResult, metrics *StateTr
 	sequentialTransactions := util.NewLinkedHashSet(this.SequentialTransactions)
 	parallelTxCount := txCount - sequentialTransactions.Size()
 	conflictDetectorInboxCapacity := (parallelTxCount + 1) * this.ConflictDetectorInboxPerTransaction
-	conflictDetector := conflict_detector.New(conflictDetectorInboxCapacity, this.onConflict)
+	conflictDetector := conflict_detector.New(conflictDetectorInboxCapacity)
+	conflictDetector.AddConflictHanlder(this.onConflict)
 	go conflictDetector.Run()
 	defer conflictDetector.Halt()
 	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitToTrie)
@@ -146,18 +147,17 @@ func (this *stateTransition) RunLikeEthereum() (ret *StateTransitionResult, tota
 	}
 	stateDB := this.newStateDBForReading()
 	this.applyHardForks(stateDB)
-	gp := new(core.GasPool).AddGas(this.Block.GasLimit)
 	for txId, tx := range this.Block.Transactions {
 		txResult := this.VM.executeTransaction(&transactionRequest{
-			txId,
-			tx,
-			&this.Block.BlockHeader,
-			stateDB,
-			vm.NoopExecutionController,
-			gp,
-			true,
-			new(TransactionMetrics),
-			core.CanTransfer,
+			txId:             txId,
+			txData:           tx,
+			blockHeader:      &this.Block.BlockHeader,
+			stateDB:          stateDB,
+			onEvmInstruction: vm.NoopExecutionController,
+			gasPool:          new(core.GasPool).AddGas(this.Block.GasLimit),
+			checkNonce:       true,
+			metrics:          new(TransactionMetrics),
+			canTransfer:      core.CanTransfer,
 		})
 		this.err.CheckIn(txResult.ConsensusErr)
 		intermediateRoot := this.commitToTrie(stateDB)
@@ -253,15 +253,15 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		defer txMetrics.TotalTime.NewTimeRecorder()()
 		defer allDone.CheckIn()
 		r := this.VM.executeTransaction(&transactionRequest{
-			txId,
-			this.Block.Transactions[txId],
-			&this.Block.BlockHeader,
-			db,
-			vm.NoopExecutionController,
-			new(core.GasPool).AddGas(eth_math.MaxUint64),
-			false,
-			new(TransactionMetrics),
-			func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
+			txId:             txId,
+			txData:           this.Block.Transactions[txId],
+			blockHeader:      &this.Block.BlockHeader,
+			stateDB:          db,
+			onEvmInstruction: vm.NoopExecutionController,
+			gasPool:          new(core.GasPool).AddGas(eth_math.MaxUint64),
+			checkNonce:       false,
+			metrics:          new(TransactionMetrics),
+			canTransfer: func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
 				return true
 			},
 		})
@@ -326,15 +326,15 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 func (this *stateTransition) executeTransaction(txId TxId, db StateDB) *TransactionResultWithStateChange {
 	block := this.Block
 	result := this.VM.executeTransaction(&transactionRequest{
-		txId,
-		block.Transactions[txId],
-		&block.BlockHeader,
-		db,
-		this.onEvmInstruction,
-		new(core.GasPool).AddGas(block.GasLimit),
-		false,
-		&this.metrics.TransactionMetrics[txId],
-		core.CanTransfer,
+		txId:             txId,
+		txData:           block.Transactions[txId],
+		blockHeader:      &block.BlockHeader,
+		stateDB:          db,
+		onEvmInstruction: this.onEvmInstruction,
+		gasPool:          new(core.GasPool).AddGas(block.GasLimit),
+		checkNonce:       false,
+		metrics:          &this.metrics.TransactionMetrics[txId],
+		canTransfer:      core.CanTransfer,
 		//func(vm.StateDB, common.Address, *big.Int) bool {
 		//	return true
 		//},
@@ -348,7 +348,7 @@ func (this *stateTransition) onEvmInstruction(programCounter uint64) (programCou
 	return programCounter, true
 }
 
-func (this *stateTransition) onConflict(_ *conflict_detector.ConflictDetector, op *conflict_detector.Operation, authors conflict_detector.Authors) {
+func (this *stateTransition) onConflict(op *conflict_detector.Operation, authors conflict_detector.Authors) {
 	this.err.SetIfAbsent(errors.New(
 		//fmt.Sprintf("Conflict detected. Operation: {%s, %s, %s}; Authors: %s", op.Author, op.Type, op.Key, util.Join(", ", authors.Values())),
 		"Conflict detected: " + util.Join(", ", authors.Values()),

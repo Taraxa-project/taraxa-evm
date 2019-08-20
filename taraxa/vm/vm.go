@@ -34,23 +34,23 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 	metrics.TransactionMetrics = make([]TransactionMetrics, len(req.Block.Transactions))
 	defer metrics.TotalTime.NewTimeRecorder()()
 	var errFatal util.ErrorBarrier
-	//defer util.Recover(errFatal.Catch(util.SetTo(&err)))
+	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
 	txCount := len(req.Block.Transactions)
 	txConflictErrors := make([]util.ErrorBarrier, txCount)
-	conflictDetector := conflict_detector.New((txCount+1)*this.ConflictDetectorInboxPerTransaction,
-		func(_ *conflict_detector.ConflictDetector, _ *conflict_detector.Operation, authors conflict_detector.Authors) {
-			authors.Each(func(_ int, value interface{}) {
-				txConflictErrors[value.(TxId)].SetIfAbsent(errors.New(""))
-			})
+	conflictDetector := conflict_detector.New((txCount + 1) * this.ConflictDetectorInboxPerTransaction)
+	conflictDetector.AddConflictHanlder(func(_ *conflict_detector.Operation, authors conflict_detector.Authors) {
+		authors.Each(func(_ int, value interface{}) {
+			txConflictErrors[value.(TxId)].SetIfAbsent(errors.New(""))
 		})
+	})
 	go conflictDetector.Run()
 	defer conflictDetector.Halt()
 	allDone := rendezvous.New(txCount)
-	lastScheduledTxId := int64(-1)
 	parallelismFactor := 1.3 // Good
 	numCPU := runtime.NumCPU()
-	threadCount := int(float64(numCPU) * parallelismFactor)
-	for i := 0; i < threadCount; i++ {
+	numProcesses := int(float64(numCPU) * parallelismFactor)
+	lastScheduledTxId := int64(-1)
+	for i := 0; i < numProcesses; i++ {
 		go func() {
 			defer util.Recover(errFatal.Catch())
 			stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
@@ -60,28 +60,27 @@ func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *Concurren
 				if txId >= txCount {
 					break
 				}
-				// TODO move to a function:
-				errConflict := txConflictErrors[txId]
-				defer util.Recover(errConflict.Catch())
-				defer allDone.CheckIn()
-				result := this.executeTransaction(&transactionRequest{
-					txId,
-					req.Block.Transactions[txId],
-					&req.Block.BlockHeader,
-					&OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
-					func(pc uint64) (uint64, bool) {
-						errFatal.CheckIn()
-						errConflict.CheckIn()
-						return pc, true
-					},
-					new(core.GasPool).AddGas(req.Block.GasLimit),
-					false,
-					&metrics.TransactionMetrics[txId],
-					func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
-						return true
-					},
-				})
-				errFatal.CheckIn(result.ConsensusErr)
+				func() {
+					defer allDone.CheckIn()
+					errConflict := txConflictErrors[txId]
+					defer util.Recover(errConflict.Catch())
+					this.executeTransaction(&transactionRequest{
+						txId:        txId,
+						txData:      req.Block.Transactions[txId],
+						blockHeader: &req.Block.BlockHeader,
+						gasPool:     new(core.GasPool).AddGas(req.Block.GasLimit),
+						checkNonce:  false,
+						stateDB:     &OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
+						onEvmInstruction: func(pc uint64) (uint64, bool) {
+							errConflict.CheckIn()
+							return pc, true
+						},
+						canTransfer: func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
+							return true
+						},
+						metrics: &metrics.TransactionMetrics[txId],
+					})
+				}()
 				stateDB.Reset()
 			}
 		}()
@@ -135,15 +134,15 @@ func (this *VM) TestMode(req *StateTransitionRequest, params *TestModeParams) *T
 }
 
 type transactionRequest struct {
-	txId                  TxId
-	txData                *Transaction
-	blockHeader           *BlockHeader
-	stateDB               StateDB
-	interpreterController vm.ExecutionController
-	gasPool               *core.GasPool
-	checkNonce            bool
-	metrics               *TransactionMetrics
-	vm.CanTransferFunc
+	txId             TxId
+	txData           *Transaction
+	blockHeader      *BlockHeader
+	gasPool          *core.GasPool
+	checkNonce       bool
+	stateDB          StateDB
+	onEvmInstruction vm.ExecutionController
+	canTransfer      vm.CanTransferFunc
+	metrics          *TransactionMetrics
 }
 
 func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
@@ -159,7 +158,7 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	chainConfig := this.Genesis.Config
 	blockNumber := block.Number
 	evmContext := vm.Context{
-		CanTransfer: req.CanTransferFunc,
+		CanTransfer: req.canTransfer,
 		Transfer:    core.Transfer,
 		GetHash:     this.GetBlockHash,
 		Origin:      tx.From,
@@ -176,7 +175,7 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	evm := vm.NewEVMWithInterpreter(
 		evmContext, stateDB, chainConfig, evmConfig,
 		func(evm *vm.EVM) vm.Interpreter {
-			return vm.NewEVMInterpreterWithExecutionController(evm, evmConfig, req.interpreterController)
+			return vm.NewEVMInterpreterWithExecutionController(evm, evmConfig, req.onEvmInstruction)
 		},
 	)
 	msg := types.NewMessage(tx.From, tx.To, tx.Nonce, tx.Amount, tx.GasLimit, tx.GasPrice, tx.Data, req.checkNonce)
@@ -185,3 +184,8 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	ret, usedGas, vmErr, consensusErr := st.TransitionDb()
 	return &TransactionResult{req.txId, ret, usedGas, vmErr, consensusErr, stateDB.GetLogs(tx.Hash)}
 }
+
+//TODO
+//func (this *VM) NewConflictDetector() {
+//	return conflict_detector.New((txCount + 1) * this.ConflictDetectorInboxPerTransaction)
+//}

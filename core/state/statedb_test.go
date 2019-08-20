@@ -114,56 +114,6 @@ func TestIntermediateLeaks(t *testing.T) {
 	}
 }
 
-// TestCopy tests that copying a statedb object indeed makes the original and
-// the copy independent of each other. This test is a regression test against
-// https://github.com/ethereum/go-ethereum/pull/15549.
-func TestCopy(t *testing.T) {
-	// Create a random state test to copy and modify "independently"
-	orig, _ := New(common.Hash{}, NewDatabase(ethdb.NewMemDatabase()))
-
-	for i := byte(0); i < 255; i++ {
-		obj := orig.GetOrNewStateObject(common.BytesToAddress([]byte{i}))
-		obj.AddBalance(big.NewInt(int64(i)))
-		orig.updateStateObject(obj)
-	}
-	orig.Finalise(false)
-
-	// Copy the state, modify both in-memory
-	copy := orig.Copy()
-
-	for i := byte(0); i < 255; i++ {
-		origObj := orig.GetOrNewStateObject(common.BytesToAddress([]byte{i}))
-		copyObj := copy.GetOrNewStateObject(common.BytesToAddress([]byte{i}))
-
-		origObj.AddBalance(big.NewInt(2 * int64(i)))
-		copyObj.AddBalance(big.NewInt(3 * int64(i)))
-
-		orig.updateStateObject(origObj)
-		copy.updateStateObject(copyObj)
-	}
-	// Finalise the changes on both concurrently
-	done := make(chan struct{})
-	go func() {
-		orig.Finalise(true)
-		close(done)
-	}()
-	copy.Finalise(true)
-	<-done
-
-	// Verify that the two states have been updated independently
-	for i := byte(0); i < 255; i++ {
-		origObj := orig.GetOrNewStateObject(common.BytesToAddress([]byte{i}))
-		copyObj := copy.GetOrNewStateObject(common.BytesToAddress([]byte{i}))
-
-		if want := big.NewInt(3 * int64(i)); origObj.Balance().Cmp(want) != 0 {
-			t.Errorf("orig obj %d: balance mismatch: have %v, want %v", i, origObj.Balance(), want)
-		}
-		if want := big.NewInt(4 * int64(i)); copyObj.Balance().Cmp(want) != 0 {
-			t.Errorf("copy obj %d: balance mismatch: have %v, want %v", i, copyObj.Balance(), want)
-		}
-	}
-}
-
 // A snapshotTest checks that reverting StateDB snapshots properly undoes all changes
 // captured by the snapshot. Instances of this test with pseudorandom content are created
 // by Generate.
@@ -323,19 +273,4 @@ func (test *snapshotTest) String() string {
 		fmt.Fprintf(out, "%4d: %s\n", i, action.name)
 	}
 	return out.String()
-}
-
-// TestCopyOfCopy tests that modified objects are carried over to the copy, and the copy of the copy.
-// See https://github.com/ethereum/go-ethereum/pull/15225#issuecomment-380191512
-func TestCopyOfCopy(t *testing.T) {
-	sdb, _ := New(common.Hash{}, NewDatabase(ethdb.NewMemDatabase()))
-	addr := common.HexToAddress("aaaa")
-	sdb.SetBalance(addr, big.NewInt(42))
-
-	if got := sdb.Copy().GetBalance(addr).Uint64(); got != 42 {
-		t.Fatalf("1st copy fail, expected 42, got %v", got)
-	}
-	if got := sdb.Copy().Copy().GetBalance(addr).Uint64(); got != 42 {
-		t.Fatalf("2nd copy fail, expected 42, got %v", got)
-	}
 }

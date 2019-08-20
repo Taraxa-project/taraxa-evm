@@ -9,21 +9,21 @@ import (
 type ConflictDetector struct {
 	inbox             chan *Operation
 	operationLog      operationLog
-	onConflict        OnConflict
+	conflictHandlers  []OnConflict
 	keysInConflict    Keys
 	authorsInConflict Authors
 	executionMutex    sync.Mutex
 	haltMutex         sync.Mutex
+	onConflictMutex   sync.Mutex
 	halted            bool
 }
 
-func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
+func New(inboxCapacity int) *ConflictDetector {
 	this := new(ConflictDetector)
 	this.inbox = make(chan *Operation, inboxCapacity)
 	for opType := range this.operationLog {
 		this.operationLog[opType] = make(map[Key]Authors)
 	}
-	this.onConflict = onConflict
 	return this
 }
 
@@ -75,14 +75,21 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 	}
 }
 
+func (this *ConflictDetector) AddConflictHanlder(handler OnConflict) {
+	defer util.LockUnlock(&this.onConflictMutex)()
+	this.conflictHandlers = append(this.conflictHandlers, handler)
+}
+
 func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
 	authors.Each(func(_ int, author Author) {
 		this.authorsInConflict.Add(author)
 	})
-	if this.onConflict != nil {
-		// new goroutine to prevent deadlocking misuse
-		go this.onConflict(this, op, authors)
-	}
+	// new goroutine to prevent deadlocking misuse
+	go util.WithLock(&this.onConflictMutex, func() {
+		for _, handler := range this.conflictHandlers {
+			handler(op, authors)
+		}
+	})
 }
 
 func (this *ConflictDetector) process(op *Operation) {

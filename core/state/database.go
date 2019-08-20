@@ -18,7 +18,7 @@ package state
 
 import (
 	"fmt"
-	"github.com/cornelk/hashmap"
+	"github.com/Taraxa-project/taraxa-evm/taraxa"
 	lru "github.com/hashicorp/golang-lru"
 	"sync"
 
@@ -67,8 +67,6 @@ type Trie interface {
 	TryDelete(key []byte) error
 	Commit(onleaf trie.LeafCallback) (common.Hash, error)
 	Hash() common.Hash
-	//NodeIterator(startKey []byte) trie.NodeIterator
-	//Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for
@@ -96,16 +94,16 @@ type codeSizeCache interface {
 }
 
 type chmCodeCache struct {
-	hashmap.HashMap
+	taraxa.ConcurrentHashMap
 }
 
 func (this *chmCodeCache) Add(hash interface{}, size interface{}) bool {
-	this.HashMap.Set(hash.(common.Hash).Hex(), size)
+	this.ConcurrentHashMap.Set(hash.(common.Hash).Hex(), size)
 	return false
 }
 
 func (this *chmCodeCache) Get(hash interface{}) (interface{}, bool) {
-	return this.HashMap.Get(hash.(common.Hash).Hex())
+	return this.ConcurrentHashMap.Get(hash.(common.Hash).Hex())
 }
 
 type cachingDB struct {

@@ -12,7 +12,6 @@ type StateDBCommitter struct {
 }
 
 func LaunchStateDBCommitter(numStateChanges int, newStateDB StateDBFactory, commit CommitStrategy) *StateDBCommitter {
-	//util.Assert(numStateChanges > 0)
 	this := &StateDBCommitter{
 		make(chan state.StateChange, numStateChanges),
 		make(chan common.Hash, 1),

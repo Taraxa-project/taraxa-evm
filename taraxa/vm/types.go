@@ -60,7 +60,6 @@ type Block struct {
 
 type StateTransitionRequest struct {
 	BaseStateRoot common.Hash `json:"stateRoot"`
-	ExpectedRoot  common.Hash `json:"expectedRoot"`
 	Block         *Block      `json:"block"`
 }
 
