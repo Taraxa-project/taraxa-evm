@@ -1,6 +1,6 @@
 package cgo
 
-//#include "index.h"
+//#include "types.h"
 import "C"
 import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"

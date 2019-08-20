@@ -1,7 +1,7 @@
 package cgo
 
 //#include <stdlib.h>
-//#include "index.h"
+//#include "types.h"
 import "C"
 import "unsafe"
 
