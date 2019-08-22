@@ -23,6 +23,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/log"
 )
 
+var hashKeyBuf [common.HashLength]byte
+
 // SecureTrie wraps a trie with key hashing. In a secure trie, all
 // access operations hash the key using keccak256. This prevents
 // calling code from creating long chains of nodes that
@@ -35,7 +37,6 @@ import (
 // SecureTrie is not safe for concurrent use.
 type SecureTrie struct {
 	trie             Trie
-	hashKeyBuf       [common.HashLength]byte
 	secKeyCache      map[string][]byte
 	secKeyCacheOwner *SecureTrie // Pointer to self, replace the key cache on mismatch
 }
@@ -155,7 +156,7 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 	h := newHasher(0, 0, nil)
 	h.sha.Reset()
 	h.sha.Write(key)
-	buf := h.sha.Sum(t.hashKeyBuf[:0])
+	buf := h.sha.Sum(hashKeyBuf[:0])
 	returnHasherToPool(h)
 	return buf
 }
