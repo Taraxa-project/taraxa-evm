@@ -74,7 +74,6 @@ func NewDatabase(db ethdb.Database) Database {
 // well as a lot of collapsed RLP trie nodes in a large memory cache.
 func NewDatabaseWithCache(db ethdb.Database, cache int) Database {
 	csc, _ := lru.New(codeSizeCacheSize)
-	//csc := new(chmCodeCache) //TODO
 	return &cachingDB{
 		db:            trie.NewDatabaseWithCache(db, cache),
 		codeSizeCache: csc,
