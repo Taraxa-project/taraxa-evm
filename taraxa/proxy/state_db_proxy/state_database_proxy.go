@@ -24,10 +24,6 @@ func (this DatabaseProxy) OpenStorageTrie(addrHash, root common.Hash) (t state.T
 	return TrieProxy{trie, this.TrieProxy}, err
 }
 
-func (this DatabaseProxy) CopyTrie(trie state.Trie) state.Trie {
-	return TrieProxy{this.Database.CopyTrie(trie), this.TrieProxy}
-}
-
 func (this DatabaseProxy) ContractCode(addrHash, codeHash common.Hash) (b []byte, e error) {
 	defer this.CallDecorator("ContractCode", &addrHash, &codeHash)(&b, &e)
 	return this.Database.ContractCode(addrHash, codeHash)
