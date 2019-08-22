@@ -36,14 +36,6 @@ var (
 	memcacheCleanReadMeter  = metrics.NewRegisteredMeter("trie/memcache/clean/read", nil)
 	memcacheCleanWriteMeter = metrics.NewRegisteredMeter("trie/memcache/clean/write", nil)
 
-	memcacheFlushTimeTimer  = metrics.NewRegisteredResettingTimer("trie/memcache/flush/time", nil)
-	memcacheFlushNodesMeter = metrics.NewRegisteredMeter("trie/memcache/flush/nodes", nil)
-	memcacheFlushSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/flush/size", nil)
-
-	memcacheGCTimeTimer  = metrics.NewRegisteredResettingTimer("trie/memcache/gc/time", nil)
-	memcacheGCNodesMeter = metrics.NewRegisteredMeter("trie/memcache/gc/nodes", nil)
-	memcacheGCSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/gc/size", nil)
-
 	memcacheCommitTimeTimer  = metrics.NewRegisteredResettingTimer("trie/memcache/commit/time", nil)
 	memcacheCommitNodesMeter = metrics.NewRegisteredMeter("trie/memcache/commit/nodes", nil)
 	memcacheCommitSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/commit/size", nil)
@@ -426,22 +418,6 @@ func (db *Database) secureKey(key []byte) []byte {
 	return buf
 }
 
-// Nodes retrieves the hashes of all the nodes cached within the memory database.
-// This method is extremely expensive and should only be used to validate internal
-// states in test code.
-func (db *Database) Nodes() []common.Hash {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-
-	var hashes = make([]common.Hash, 0, len(db.dirties))
-	for hash := range db.dirties {
-		if hash != (common.Hash{}) { // Special case for "root" references/nodes
-			hashes = append(hashes, hash)
-		}
-	}
-	return hashes
-}
-
 // Reference adds a new reference from a parent node to a child node.
 func (db *Database) Reference(child common.Hash, parent common.Hash) {
 	db.lock.RLock()
@@ -465,77 +441,6 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 	}
 	node.parents++
 	db.dirties[parent].children[child]++
-}
-
-// Dereference removes an existing reference from a root node.
-func (db *Database) Dereference(root common.Hash) {
-	// Sanity check to ensure that the meta-root is not removed
-	if root == (common.Hash{}) {
-		log.Error("Attempted to dereference the trie cache meta root")
-		return
-	}
-	db.lock.Lock()
-	defer db.lock.Unlock()
-
-	nodes, storage, start := len(db.dirties), db.dirtiesSize, time.Now()
-	db.dereference(root, common.Hash{})
-
-	db.gcnodes += uint64(nodes - len(db.dirties))
-	db.gcsize += storage - db.dirtiesSize
-	db.gctime += time.Since(start)
-
-	memcacheGCTimeTimer.Update(time.Since(start))
-	memcacheGCSizeMeter.Mark(int64(storage - db.dirtiesSize))
-	memcacheGCNodesMeter.Mark(int64(nodes - len(db.dirties)))
-
-	log.Debug("Dereferenced trie from memory database", "nodes", nodes-len(db.dirties), "size", storage-db.dirtiesSize, "time", time.Since(start),
-		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.dirties), "livesize", db.dirtiesSize)
-}
-
-// dereference is the private locked version of Dereference.
-func (db *Database) dereference(child common.Hash, parent common.Hash) {
-	// Dereference the parent-child
-	node := db.dirties[parent]
-
-	if node.children != nil && node.children[child] > 0 {
-		node.children[child]--
-		if node.children[child] == 0 {
-			delete(node.children, child)
-		}
-	}
-	// If the child does not exist, it's a previously committed node.
-	node, ok := db.dirties[child]
-	if !ok {
-		return
-	}
-	// If there are no more references to the child, delete it and cascade
-	if node.parents > 0 {
-		// This is a special cornercase where a node loaded from disk (i.e. not in the
-		// memcache any more) gets reinjected as a new node (short node split into full,
-		// then reverted into short), causing a cached node to have no parents. That is
-		// no problem in itself, but don't make maxint parents out of it.
-		node.parents--
-	}
-	if node.parents == 0 {
-		// Remove the node from the flush-list
-		switch child {
-		case db.oldest:
-			db.oldest = node.flushNext
-			db.dirties[node.flushNext].flushPrev = common.Hash{}
-		case db.newest:
-			db.newest = node.flushPrev
-			db.dirties[node.flushPrev].flushNext = common.Hash{}
-		default:
-			db.dirties[node.flushPrev].flushNext = node.flushNext
-			db.dirties[node.flushNext].flushPrev = node.flushPrev
-		}
-		// Dereference all children and delete the node
-		for _, hash := range node.childs() {
-			db.dereference(hash, child)
-		}
-		delete(db.dirties, child)
-		db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
-	}
 }
 
 // Commit iterates over all the children of a particular node, writes them out
@@ -662,59 +567,4 @@ func (db *Database) uncache(hash common.Hash) {
 	}
 	delete(db.dirties, hash)
 	db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
-}
-
-// Size returns the current storage size of the memory cache in front of the
-// persistent database layer.
-func (db *Database) Size() (common.StorageSize, common.StorageSize) {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-
-	// db.dirtiesSize only contains the useful data in the cache, but when reporting
-	// the total memory consumption, the maintenance metadata is also needed to be
-	// counted. For every useful node, we track 2 extra hashes as the flushlist.
-	var flushlistSize = common.StorageSize((len(db.dirties) - 1) * 2 * common.HashLength)
-	return db.dirtiesSize + flushlistSize, db.preimagesSize
-}
-
-// verifyIntegrity is a debug method to iterate over the entire trie stored in
-// memory and check whether every node is reachable from the meta root. The goal
-// is to find any errors that might cause memory leaks and or trie nodes to go
-// missing.
-//
-// This method is extremely CPU and memory intensive, only use when must.
-func (db *Database) verifyIntegrity() {
-	// Iterate over all the cached nodes and accumulate them into a set
-	reachable := map[common.Hash]struct{}{{}: {}}
-
-	for child := range db.dirties[common.Hash{}].children {
-		db.accumulate(child, reachable)
-	}
-	// Find any unreachable but cached nodes
-	unreachable := []string{}
-	for hash, node := range db.dirties {
-		if _, ok := reachable[hash]; !ok {
-			unreachable = append(unreachable, fmt.Sprintf("%x: {Node: %v, Parents: %d, Prev: %x, Next: %x}",
-				hash, node.node, node.parents, node.flushPrev, node.flushNext))
-		}
-	}
-	if len(unreachable) != 0 {
-		panic(fmt.Sprintf("trie cache memory leak: %v", unreachable))
-	}
-}
-
-// accumulate iterates over the trie defined by hash and accumulates all the
-// cached children found in memory.
-func (db *Database) accumulate(hash common.Hash, reachable map[common.Hash]struct{}) {
-	// Mark the node reachable if present in the memory cache
-	node, ok := db.dirties[hash]
-	if !ok {
-		return
-	}
-	reachable[hash] = struct{}{}
-
-	// Iterate over all the children and accumulate them too
-	for _, child := range node.childs() {
-		db.accumulate(child, reachable)
-	}
 }
