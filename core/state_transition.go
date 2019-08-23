@@ -18,14 +18,12 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"math"
 	"math/big"
-	"strconv"
 )
 
 var (
@@ -170,24 +168,14 @@ func (st *StateTransition) buyGas() error {
 func (st *StateTransition) preCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
-		nonceErr := CheckNonce(st.state, st.msg.From(), st.msg.Nonce())
-		if nonceErr != nil {
-			return nonceErr
+		nonce := st.state.GetNonce(st.msg.From())
+		if nonce < st.msg.Nonce() {
+			return ErrNonceTooHigh
+		} else if nonce > st.msg.Nonce() {
+			return ErrNonceTooLow
 		}
 	}
 	return st.buyGas()
-}
-
-func CheckNonce(db vm.StateDB, address common.Address, nonce uint64) error {
-	actualNonce := db.GetNonce(address)
-	if actualNonce == nonce {
-		return nil
-	}
-	fmt.Printf("Nonce check failed: %s != %s\n", strconv.FormatUint(actualNonce, 10), strconv.FormatUint(nonce, 10))
-	if actualNonce < nonce {
-		return ErrNonceTooHigh
-	}
-	return ErrNonceTooLow
 }
 
 // TransitionDb will transition the state by applying the current message and
@@ -238,7 +226,6 @@ func (st *StateTransition) refundGas() {
 		refund = st.state.GetRefund()
 	}
 	st.gas += refund
-	//fmt.Println("refundGas", refund, string(debug.Stack()))
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)

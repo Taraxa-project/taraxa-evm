@@ -61,13 +61,11 @@ func (self Storage) Copy() Storage {
 // Account values can be accessed and modified through the object.
 // Finally, call CommitTrie to write the modified storage trie into a database.
 type stateObject struct {
-	address         common.Address // TODO in state
-	addrHash        common.Hash    // hash of ethereum address of the account // TODO in state
-	data            Account
-	originData      Account
-	balanceAdditive bool
-	nonceAdditive   bool
-	db              *StateDB
+	address  common.Address
+	addrHash common.Hash // hash of ethereum address of the account
+	data     Account
+	db       *StateDB
+
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
@@ -81,27 +79,13 @@ type stateObject struct {
 
 	originStorage Storage // Storage cache of original entries to dedup rewrites
 	dirtyStorage  Storage // Storage entries that need to be flushed to disk
+
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode bool // true if the code was updated // TODO in state
-	suicided  bool // TODO in state
-	deleted   bool // TODO in state
-}
-
-func (this *stateObject) BalanceDelta() *big.Int {
-	return new(big.Int).Sub(this.data.Balance, this.originData.Balance)
-}
-
-func (this *stateObject) NonceDelta() uint64 {
-	return this.data.Nonce - this.originData.Nonce
-}
-
-func (this *stateObject) reset() *stateObject {
-	this.nonceAdditive = true
-	this.balanceAdditive = true
-	this.originData = this.data
-	return this
+	dirtyCode bool // true if the code was updated
+	suicided  bool
+	deleted   bool
 }
 
 // empty returns whether the account is considered empty.
@@ -126,7 +110,7 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 	if data.CodeHash == nil {
 		data.CodeHash = emptyCodeHash
 	}
-	ret := &stateObject{
+	return &stateObject{
 		db:            db,
 		address:       address,
 		addrHash:      crypto.Keccak256Hash(address[:]),
@@ -134,8 +118,6 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		originStorage: make(Storage),
 		dirtyStorage:  make(Storage),
 	}
-	ret.reset()
-	return ret
 }
 
 // EncodeRLP implements rlp.Encoder.
@@ -275,6 +257,8 @@ func (self *stateObject) CommitTrie(db Database) error {
 	return err
 }
 
+// AddBalance removes amount from c's balance.
+// It is used to add funds to the destination account of a transfer.
 func (c *stateObject) AddBalance(amount *big.Int) {
 	// EIP158: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
@@ -288,6 +272,8 @@ func (c *stateObject) AddBalance(amount *big.Int) {
 	c.SetBalance(new(big.Int).Add(c.Balance(), amount))
 }
 
+// SubBalance removes amount from c's balance.
+// It is used to remove funds from the origin account of a transfer.
 func (c *stateObject) SubBalance(amount *big.Int) {
 	if amount.Sign() == 0 {
 		return
@@ -297,9 +283,8 @@ func (c *stateObject) SubBalance(amount *big.Int) {
 
 func (self *stateObject) SetBalance(amount *big.Int) {
 	self.db.journal.append(balanceChange{
-		account:      &self.address,
-		prev:         new(big.Int).Set(self.data.Balance),
-		prevAdditive: self.balanceAdditive,
+		account: &self.address,
+		prev:    new(big.Int).Set(self.data.Balance),
 	})
 	self.setBalance(amount)
 }
@@ -310,9 +295,6 @@ func (self *stateObject) setBalance(amount *big.Int) {
 
 func (self *stateObject) deepCopy(db *StateDB) *stateObject {
 	stateObject := newObject(db, self.address, self.data)
-	stateObject.originData = self.originData
-	stateObject.balanceAdditive = self.balanceAdditive
-	stateObject.nonceAdditive = self.nonceAdditive
 	if self.trie != nil {
 		stateObject.trie = db.db.CopyTrie(self.trie)
 	}
@@ -368,9 +350,8 @@ func (self *stateObject) setCode(codeHash common.Hash, code []byte) {
 
 func (self *stateObject) SetNonce(nonce uint64) {
 	self.db.journal.append(nonceChange{
-		account:      &self.address,
-		prev:         self.data.Nonce,
-		prevAdditive: self.nonceAdditive,
+		account: &self.address,
+		prev:    self.data.Nonce,
 	})
 	self.setNonce(nonce)
 }
