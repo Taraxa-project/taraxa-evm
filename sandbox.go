@@ -39,6 +39,7 @@ func main() {
 		gorocksdb.NewDefaultOptions(), "/workspace/data/ethereum_blockchain_mainnet_rocksdb", false)
 	util.PanicIfPresent(err)
 	itr := db.NewIterator(gorocksdb.NewDefaultReadOptions())
+	fmt.Println("foo")
 	for itr.SeekToFirst(); itr.Valid(); itr.Next() {
 		_k, _v := itr.Key(), itr.Value()
 		k, v := string(_k.Data()), string(_v.Data())
