@@ -10,7 +10,7 @@ RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-
 RUN apt-get -y install librocksdb-dev libleveldb-dev
 # Go
 RUN wget -qO- --show-progress --progress=bar:force \
-    https://dl.google.com/go/go1.12.1.linux-amd64.tar.gz | tar xvz -C /usr/local
+    https://dl.google.com/go/go1.12.9.linux-amd64.tar.gz | tar xvz -C /usr/local
 ENV GOROOT=/usr/local/go
 ENV GOPATH=$HOME/.go
 ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
