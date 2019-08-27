@@ -23,6 +23,6 @@ RUN virtualenv --no-site-packages --python=python3.7 /venv
 WORKDIR /workspace
 RUN echo '#!/bin/bash\n\
 . /venv/bin/activate \n\
-exec "\$@" \n\
+exec "$@" \n\
 ' >> /entrypoint.sh
 #ENTRYPOINT ["/entrypoint.sh"]
