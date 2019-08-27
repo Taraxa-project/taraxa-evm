@@ -22,4 +22,3 @@ RUN apt-get -y autoremove
 WORKDIR /workspace
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
-ENTRYPOINT ["/bin/bash", "-c", ". /venv/bin/activate"]
