@@ -18,9 +18,7 @@ RUN pip3 install --upgrade pip virtualenv
 RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
 RUN apt-get -y install librocksdb-dev libleveldb-dev
 
-WORKDIR /workspace/taraxa-evm
+WORKDIR /workspace
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
-#RUN . /venv/bin/activate && python /workspace/taraxa-evm/install.py
-RUN ls
-ENTRYPOINT ["/bin/bash", "-c", ". /venv/bin/activate && python /workspace/taraxa-evm/tests_perf/install.py"]
+ENTRYPOINT ["/bin/bash", "-c", ". /venv/bin/activate"]
