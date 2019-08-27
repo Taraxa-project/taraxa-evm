@@ -25,4 +25,4 @@ exec "\$@" \n\
 ' >> /entrypoint.sh
 RUN apt-get -y autoremove
 WORKDIR /workspace
-#ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
