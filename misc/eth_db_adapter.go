@@ -1,4 +1,4 @@
-package main
+package misc
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"

@@ -1,4 +1,4 @@
-package main
+package misc
 
 import (
 	"fmt"
@@ -8,11 +8,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"math/big"
-	"os"
 )
 
-func main() {
-	db_path_source, root_str := os.Args[1], os.Args[2]
+func DumpStateRocksdb(db_path_source, root_str string) {
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
 		File:     db_path_source,
