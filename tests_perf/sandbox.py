@@ -15,3 +15,4 @@ block_db_to = BlockDB(
 
 for k, v in block_db.iteritems(from_block=from_block):
     block_db_to.put_block(v)
+    print(k)
