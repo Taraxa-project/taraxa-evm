@@ -2,7 +2,7 @@ import rocksdb
 
 from apps.blockchain_data import BlockDB
 
-from_block = 4500000
+from_block = 4800000
 
 block_db = BlockDB(
     rocksdb.DB('/workspace/data/ethereum_blockchain_mainnet_rocksdb',
