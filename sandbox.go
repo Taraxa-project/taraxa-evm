@@ -40,7 +40,7 @@ func main() {
 	util.PanicIfPresent(err)
 	itr := db.NewIterator(gorocksdb.NewDefaultReadOptions())
 	fmt.Println("foo")
-	for itr.SeekToFirst(); itr.Valid(); itr.Next() {
+	for ; itr.Valid(); itr.Next() {
 		_k, _v := itr.Key(), itr.Value()
 		k, v := string(_k.Data()), string(_v.Data())
 		fmt.Printf("Key: %s Value: %s\n", k, v)
