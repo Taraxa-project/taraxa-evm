@@ -25,4 +25,4 @@ RUN echo '#!/bin/bash\n\
 . /venv/bin/activate \n\
 exec "\$@" \n\
 ' >> /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
+#ENTRYPOINT ["/entrypoint.sh"]
