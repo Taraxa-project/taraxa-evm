@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"math/big"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/tecbot/gorocksdb"
 )
 
 type AccountKey = [common.AddressLength]byte
@@ -34,17 +35,15 @@ func accountStorageKey(addr *common.Address, location *common.Hash) *AccountStor
 }
 
 func main() {
-	addr := common.Address{}
-	h := common.BigToHash(new(big.Int).SetUint64(3234342422342443423))
-	var f1, f2 interface{} = accountStorageKey(&addr, &h), accountStorageKey(&addr, &h)
-	f3 := f1.(*AccountStorageKey)
-	m := make(map[interface{}]interface{})
-	m[f1] = 1
-	m[f2] = 1
-	m[f3] = 1
-	m[*f3] = 1
-	m[new(int)] = 1
-	fmt.Println(f1 == f2)
-	fmt.Println(m[f1] == m[f2] && m[f2] == m[f3] && m[f3] == m[*f3])
-	//fmt.Println(ff)
+	db, err := gorocksdb.OpenDbForReadOnly(
+		gorocksdb.NewDefaultOptions(), "~/data/ethereum_blockchain_mainnet_rocksdb", false)
+	util.PanicIfPresent(err)
+	itr := db.NewIterator(gorocksdb.NewDefaultReadOptions())
+	for itr.SeekToFirst(); itr.Valid(); itr.Next() {
+		_k, _v := itr.Key(), itr.Value()
+		k, v := string(_k.Data()), string(_v.Data())
+		fmt.Printf("Key: %s Value: %s\n", k, v)
+		_k.Free()
+		_v.Free()
+	}
 }
