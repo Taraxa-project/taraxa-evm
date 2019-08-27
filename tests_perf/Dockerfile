@@ -5,6 +5,10 @@ VOLUME /workspace
 RUN apt-get -y upgrade
 RUN apt-get -y update --fix-missing
 RUN apt-get -y install wget git gnupg2
+# RocksDB & LevelDB
+RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
+RUN apt-get -y install librocksdb-dev libleveldb-dev
+RUN apt-get -y autoremove
 # Go
 RUN wget -qO- --show-progress --progress=bar:force \
     https://dl.google.com/go/go1.12.1.linux-amd64.tar.gz | tar xvz -C /usr/local
@@ -14,11 +18,12 @@ ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 # Python
 RUN apt-get -y install python3.7 python3.7-dev python3-pip
 RUN pip3 install --upgrade pip virtualenv
-# RocksDB & LevelDB
-RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
-RUN apt-get -y install librocksdb-dev libleveldb-dev
-RUN apt-get -y autoremove
-
-WORKDIR /workspace
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
+RUN printf " \
+    #!/bin/sh \n\
+    . /venv/bin/activate \n\
+    exec '$@' \n\
+    " > /entrypoint.sh
+WORKDIR /workspace
+ENTRYPOINT ["/entrypoint.sh"]
