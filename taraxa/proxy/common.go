@@ -9,7 +9,7 @@ type Argument = interface{}
 type Decorator func(arguments ...Argument) func(returnArgs ...Argument)
 
 type Proxy interface {
-	RegisterDecorator(name string, decorator Decorator) (unregister func())
+	Decorate(name string, decorator Decorator) (unregister func())
 }
 
 type BaseProxy struct {
@@ -17,7 +17,7 @@ type BaseProxy struct {
 	lastDecoratorId uint64
 }
 
-func (this *BaseProxy) RegisterDecorator(name string, decorator Decorator) (unregister func()) {
+func (this *BaseProxy) Decorate(name string, decorator Decorator) (unregister func()) {
 	v, _ := this.storage.LoadOrStore(name, new(sync.Map))
 	idToDecoratorMap := v.(*sync.Map)
 	id := atomic.AddUint64(&this.lastDecoratorId, 1)

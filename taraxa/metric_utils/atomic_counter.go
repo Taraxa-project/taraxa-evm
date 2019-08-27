@@ -20,24 +20,23 @@ func (this *AtomicCounter) Get() uint64 {
 	return atomic.LoadUint64((*uint64)(this))
 }
 
-func (this *AtomicCounter) NewTimeRecorder() func() time.Duration {
-	return NewTimeRecorder(this.AddDuration)
+func (this *AtomicCounter) Recorder() func() {
+	start := time.Now()
+	return func() {
+		this.AddDuration(time.Since(start))
+	}
 }
 
-func (this *AtomicCounter) MeasureElapsedTime(action func()) *AtomicCounter {
-	recorder := this.NewTimeRecorder()
+func (this *AtomicCounter) RecordElapsedTime(action func()) *AtomicCounter {
+	recorder := this.Recorder()
 	defer recorder()
 	action()
 	return this
 }
 
-func MeasureElapsedTime(counters ...*AtomicCounter) proxy.Decorator {
+func (this *AtomicCounter) Decorator() proxy.Decorator {
 	return func(...proxy.Argument) func(...proxy.Argument) {
-		recordTime := NewTimeRecorder(func(duration time.Duration) {
-			for _, counter := range counters {
-				counter.AddDuration(duration)
-			}
-		})
+		recordTime := this.Recorder()
 		return func(...proxy.Argument) {
 			recordTime()
 		}

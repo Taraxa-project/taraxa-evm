@@ -31,8 +31,7 @@ func LaunchBlockPostProcessor(block *Block, newStateDB StateDBFactory, onErr uti
 		gasPool := new(core.GasPool).AddGas(block.GasLimit)
 		for txId, channel := range inbox {
 			tx := block.Transactions[txId]
-			//err.CheckIn(core.CheckNonce(stateDB, tx.From, tx.Nonce))
-			//err.CheckIn(gasPool.SubGas(tx.GasLimit))
+			err.CheckIn(gasPool.SubGas(tx.GasLimit))
 			request, ok := <-channel
 			if !ok {
 				close(outbox)
@@ -67,7 +66,7 @@ func LaunchBlockPostProcessor(block *Block, newStateDB StateDBFactory, onErr uti
 	return &BlockPostProcessor{inbox, outbox}
 }
 
-func (this *BlockPostProcessor) SignalShutdown() error {
+func (this *BlockPostProcessor) Halt() error {
 	closedAtLeastOne := false
 	for _, channel := range this.inbox {
 		closedAtLeastOne = concurrent.TryClose(channel) == nil || closedAtLeastOne

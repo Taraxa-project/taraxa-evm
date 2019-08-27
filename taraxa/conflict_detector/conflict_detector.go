@@ -9,19 +9,20 @@ import (
 
 type ConflictDetector struct {
 	inbox             chan *Operation
+	onConflict        OnConflict
 	operationLog      operationLog
-	conflictHandlers  []OnConflict
 	keysInConflict    Keys
 	authorsInConflict Authors
 	executionMutex    sync.Mutex
 	haltMutex         sync.Mutex
-	onConflictMutex   sync.Mutex
 	halted            bool
 }
 
-func New(inboxCapacity int) *ConflictDetector {
-	this := new(ConflictDetector)
-	this.inbox = make(chan *Operation, inboxCapacity)
+func New(inboxCapacity int, onConflict OnConflict) *ConflictDetector {
+	this := &ConflictDetector{
+		inbox:      make(chan *Operation, util.Max(inboxCapacity, 1)),
+		onConflict: onConflict,
+	}
 	for opType := range this.operationLog {
 		this.operationLog[opType] = make(map[Key]Authors)
 	}
@@ -76,21 +77,14 @@ func (this *ConflictDetector) NewLogger(author Author) OperationLogger {
 	}
 }
 
-func (this *ConflictDetector) AddConflictHanlder(handler OnConflict) {
-	defer concurrent.LockUnlock(&this.onConflictMutex)()
-	this.conflictHandlers = append(this.conflictHandlers, handler)
-}
-
 func (this *ConflictDetector) registerConflict(op *Operation, authors Authors) {
 	authors.Each(func(_ int, author Author) {
 		this.authorsInConflict.Add(author)
 	})
-	// new goroutine to prevent deadlocking misuse
-	go concurrent.WithLock(&this.onConflictMutex, func() {
-		for _, handler := range this.conflictHandlers {
-			handler(op, authors)
-		}
-	})
+	if this.onConflict != nil {
+		// new goroutine to prevent deadlocking misuse
+		go this.onConflict(op, authors)
+	}
 }
 
 func (this *ConflictDetector) process(op *Operation) {

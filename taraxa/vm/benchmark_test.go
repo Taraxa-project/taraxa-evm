@@ -39,13 +39,13 @@ func BenchmarkStateTransitionTestMode(b *testing.B) {
 	debug.SetGCPercent(-1)
 
 	for i := 0; i < 10; i++ {
-		rec := metric_utils.NewTimeRecorder()
+		rec := metric_utils.Recorder()
 		taraxaVM.TestMode(cfg.StateTransitionRequest, &TestModeParams{})
 		fmt.Println("elapsed", rec())
 
 	}
 	for i := 0; i < 10; i++ {
-		rec := metric_utils.NewTimeRecorder()
+		rec := metric_utils.Recorder()
 		taraxaVM.TestMode(cfg.StateTransitionRequest, &TestModeParams{})
 		fmt.Println("elapsed", rec())
 	}

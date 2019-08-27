@@ -44,7 +44,7 @@ func Parallelize(numGoroutines, N int, prepare func(goroutineIndex int) (action 
 		numGoroutines = N
 	}
 	allDone := NewRendezvous(N)
-	scheduledCount := uint32(N)
+	scheduledCount := uint32(0)
 	for goroutineIndex := 0; goroutineIndex < numGoroutines; goroutineIndex++ {
 		go func() {
 			action := prepare(goroutineIndex)

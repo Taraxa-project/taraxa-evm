@@ -3,6 +3,7 @@ module github.com/Taraxa-project/taraxa-evm
 go 1.12
 
 require (
+	bitbucket.org/pcas/tools v0.0.0-20190702103926-f25877a3c694
 	github.com/allegro/bigcache v1.2.0
 	github.com/aristanetworks/goarista v0.0.0-20190325233358-a123909ec740
 	github.com/btcsuite/btcd v0.0.0-20190614013741-962a206e94e9
@@ -12,6 +13,7 @@ require (
 	github.com/cosiner/argv v0.0.1 // indirect
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dchest/siphash v1.1.0
 	github.com/deckarep/golang-set v1.7.1
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/emirpasic/gods v1.12.0

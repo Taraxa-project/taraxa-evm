@@ -19,9 +19,6 @@ func LaunchStateDBCommitter(numStateChanges int, newStateDB StateDBFactory, comm
 	go func() {
 		var root common.Hash
 		stateDB := newStateDB()
-		if stateDB == nil {
-			this.SignalShutdown()
-		}
 		for i := 0; i < cap(this.inbox); i++ {
 			stateChange, ok := <-this.inbox
 			if !ok {
@@ -36,7 +33,7 @@ func LaunchStateDBCommitter(numStateChanges int, newStateDB StateDBFactory, comm
 	return this
 }
 
-func (this *StateDBCommitter) SignalShutdown() error {
+func (this *StateDBCommitter) Halt() error {
 	return concurrent.TryClose(this.inbox)
 }
 

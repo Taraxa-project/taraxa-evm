@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
 )
@@ -74,17 +75,20 @@ type TaraxaReceipt struct {
 }
 
 type StateTransitionReceipt struct {
-	Receipts []*TaraxaReceipt `json:"receipts"`
-	AllLogs  []*types.Log     `json:"allLogs"`
-	UsedGas  uint64           `json:"usedGas"`
+	Receipts        []*TaraxaReceipt            `json:"receipts"`
+	Preimages       map[common.Hash][]byte      `json:"preimages"`
+	ChangedBalances map[common.Address]*big.Int `json:"changedBalances"`
+	AllLogs         []*types.Log                `json:"allLogs"`
+	UsedGas         uint64                      `json:"usedGas"`
 }
 
 type StateTransitionResult struct {
 	StateRoot common.Hash `json:"stateRoot"`
-	StateTransitionReceipt
+	*StateTransitionReceipt
 }
 
-type StateTransitionResponse struct {
-	Result StateTransitionResult `json:"result"`
-	Error  *util.ErrorString     `json:"error"`
+type TransactionMetrics struct {
+	TotalTime       metric_utils.AtomicCounter `json:"totalTime"`
+	TrieReads       metric_utils.AtomicCounter `json:"trieReads"`
+	PersistentReads metric_utils.AtomicCounter `json:"persistentReads"`
 }

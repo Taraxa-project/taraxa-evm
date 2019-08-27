@@ -1,20 +1,15 @@
 package vm
 
 import (
-	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"math/big"
-	"sort"
 )
 
 type VM struct {
@@ -26,73 +21,20 @@ type VM struct {
 	writeDB      *state_db_proxy.DatabaseProxy
 }
 
-func (this *VM) GenerateSchedule(req *StateTransitionRequest) (result *ConcurrentSchedule, metrics *ScheduleGenerationMetrics, err error) {
-	result = new(ConcurrentSchedule)
-	metrics = new(ScheduleGenerationMetrics)
-	metrics.TransactionMetrics = make([]TransactionMetrics, len(req.Block.Transactions))
-	defer metrics.TotalTime.NewTimeRecorder()()
-	var errFatal util.ErrorBarrier
-	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
-	txCount := len(req.Block.Transactions)
-	txConflictErrors := make([]util.ErrorBarrier, txCount)
-	conflictDetector := conflict_detector.New((txCount + 1) * this.ConflictDetectorInboxPerTransaction)
-	conflictDetector.AddConflictHanlder(func(_ *conflict_detector.Operation, authors conflict_detector.Authors) {
-		authors.Each(func(_ int, value interface{}) {
-			txConflictErrors[value.(TxId)].SetIfAbsent(errors.New(""))
-		})
-	})
-	go conflictDetector.Run()
-	defer conflictDetector.Halt()
-	concurrent.Parallelize(this.NumConcurrentProcesses, txCount, func(int) func(int) {
-		defer util.Recover(errFatal.Catch())
-		stateDB, stateDBCreateErr := state.New(req.BaseStateRoot, this.ReadDB)
-		errFatal.CheckIn(stateDBCreateErr)
-		return func(txId TxId) {
-			errConflict := txConflictErrors[txId]
-			defer util.Recover(errConflict.Catch())
-			this.executeTransaction(&transactionRequest{
-				txId:        txId,
-				txData:      req.Block.Transactions[txId],
-				blockHeader: &req.Block.BlockHeader,
-				gasPool:     new(core.GasPool).AddGas(req.Block.GasLimit),
-				checkNonce:  false,
-				stateDB:     &OperationLoggingStateDB{stateDB, conflictDetector.NewLogger(txId)},
-				onEvmInstruction: func(pc uint64) (uint64, bool) {
-					errConflict.CheckIn()
-					return pc, true
-				},
-				canTransfer: func(db vm.StateDB, addresses common.Address, i *big.Int) bool {
-					return true
-				},
-				metrics: &metrics.TransactionMetrics[txId],
-			})
-		}
-	})
-	defer metrics.ConflictPostProcessing.NewTimeRecorder()()
-	errFatal.CheckIn()
-	conflictDetector.Halt()
-	conflictingTx := conflictDetector.AwaitResult().Values()
-	sort.Slice(conflictingTx, func(i, j int) bool {
-		return conflictingTx[i].(TxId) < conflictingTx[j].(TxId)
-	})
-	result.SequentialTransactions = NewTxIdSet(conflictingTx)
-	return
+func (this *VM) GenerateSchedule(req *StateTransitionRequest) (*ConcurrentSchedule, *ScheduleGenerationMetrics, error) {
+	process := newScheduleGeneration(this, req)
+	process.run()
+	return process.result, process.metrics, process.err.Get()
 }
 
 func (this *VM) TransitionState(
-	req *StateTransitionRequest,
-	schedule *ConcurrentSchedule,
+	req *StateTransitionRequest, schedule *ConcurrentSchedule,
 ) (
-	*StateTransitionResult,
-	*StateTransitionMetrics,
-	error,
+	*StateTransitionResult, *StateTransitionMetrics, error,
 ) {
-	st := &stateTransition{
-		VM:                     this,
-		StateTransitionRequest: req,
-		ConcurrentSchedule:     schedule,
-	}
-	return st.run()
+	process := newStateTransition(this, req, schedule)
+	process.run()
+	return process.result, process.metrics, process.err.Get()
 }
 
 func (this *VM) RunLikeEthereum(req *StateTransitionRequest) (
@@ -115,6 +57,14 @@ func (this *VM) TestMode(req *StateTransitionRequest, params *TestModeParams) *T
 	return st.TestMode(params)
 }
 
+func (this *VM) ApplyGenesis() (*params.ChainConfig, common.Hash, error) {
+	return core.SetupGenesisBlock(this.WriteDiskDB, this.Genesis)
+}
+
+func (this *VM) GenesisRoot() common.Hash {
+	return this.Genesis.ToBlock(nil).Root()
+}
+
 type transactionRequest struct {
 	txId             TxId
 	txData           *Transaction
@@ -129,13 +79,13 @@ type transactionRequest struct {
 
 func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	metrics := req.metrics
-	//defer this.ReadDiskDB.RegisterDecorator("Get", metric_utils.MeasureElapsedTime(&metrics.PersistentReads))()
-	//defer this.ReadDiskDB.RegisterDecorator("Has", metric_utils.MeasureElapsedTime(&metrics.PersistentReads))()
-	//defer this.ReadDB.RegisterDecorator("OpenTrie", metric_utils.MeasureElapsedTime(&metrics.TrieReads))()
-	//defer this.ReadDB.RegisterDecorator("OpenStorageTrie", metric_utils.MeasureElapsedTime(&metrics.TrieReads))()
-	//defer this.ReadDB.RegisterDecorator("ContractCode", metric_utils.MeasureElapsedTime(&metrics.TrieReads))()
-	//defer this.ReadDB.TrieProxy.RegisterDecorator("TryGet", metric_utils.MeasureElapsedTime(&metrics.TrieReads))()
-	defer metrics.TotalTime.NewTimeRecorder()()
+	defer this.ReadDiskDB.Decorate("Get", metrics.PersistentReads.Decorator())()
+	defer this.ReadDiskDB.Decorate("Has", metrics.PersistentReads.Decorator())()
+	defer this.ReadDB.Decorate("OpenTrie", metrics.TrieReads.Decorator())()
+	defer this.ReadDB.Decorate("OpenStorageTrie", metrics.TrieReads.Decorator())()
+	defer this.ReadDB.Decorate("ContractCode", metrics.TrieReads.Decorator())()
+	defer this.ReadDB.TrieProxy.Decorate("TryGet", metrics.TrieReads.Decorator())()
+	defer metrics.TotalTime.Recorder()()
 	block, tx, stateDB := req.blockHeader, req.txData, req.stateDB
 	chainConfig := this.Genesis.Config
 	blockNumber := block.Number
@@ -166,8 +116,3 @@ func (this *VM) executeTransaction(req *transactionRequest) *TransactionResult {
 	ret, usedGas, vmErr, consensusErr := st.TransitionDb()
 	return &TransactionResult{req.txId, ret, usedGas, vmErr, consensusErr, stateDB.GetLogs(tx.Hash)}
 }
-
-//TODO
-//func (this *VM) NewConflictDetector() {
-//	return conflict_detector.New((txCount + 1) * this.ConflictDetectorInboxPerTransaction)
-//}

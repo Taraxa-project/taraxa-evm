@@ -15,6 +15,9 @@ type StateDB interface {
 	CommitStateChange(deleteEmptyObjects bool) state.StateChange
 	Merge(state.StateChange)
 	Commit(deleteEmptyObjects bool) (common.Hash, error)
+	Finalise(deleteEmptyObjects bool)
+	IntermediateRoot(deleteEmptyObjects bool) common.Hash
+	Reset()
 }
 
 type StateDBFactory func() StateDB

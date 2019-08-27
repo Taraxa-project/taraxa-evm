@@ -2,6 +2,7 @@ package vm
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	eth_math "github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -20,18 +21,6 @@ import (
 	"sync/atomic"
 )
 
-type TransactionMetrics struct {
-	TotalTime metric_utils.AtomicCounter `json:"totalTime"`
-	//TrieReads          metric_utils.AtomicCounter `json:"trieReads"`
-	//PersistentReads    metric_utils.AtomicCounter `json:"persistentReads"`
-}
-
-type ScheduleGenerationMetrics struct {
-	TransactionMetrics     []TransactionMetrics       `json:"transactionMetrics"`
-	TotalTime              metric_utils.AtomicCounter `json:"totalTime"`
-	ConflictPostProcessing metric_utils.AtomicCounter `json:"conflictPostProcessing"`
-}
-
 type StateTransitionMetrics struct {
 	TransactionMetrics       []TransactionMetrics       `json:"transactionMetrics"`
 	TotalTime                metric_utils.AtomicCounter `json:"totalTime"`
@@ -48,91 +37,103 @@ type stateTransition struct {
 	*VM
 	*StateTransitionRequest
 	*ConcurrentSchedule
-	metrics StateTransitionMetrics
+	result  *StateTransitionResult
+	metrics *StateTransitionMetrics
 	err     util.ErrorBarrier
 }
 
-func (this *stateTransition) run() (ret *StateTransitionResult, metrics *StateTransitionMetrics, err error) {
-	//defer util.Recover(this.err.Catch(util.SetTo(&err)))
-	this.metrics.TransactionMetrics = make([]TransactionMetrics, len(this.Block.Transactions))
-	metrics = &this.metrics
-	ret = new(StateTransitionResult)
+func newStateTransition(vm *VM, req *StateTransitionRequest, sched *ConcurrentSchedule) *stateTransition {
+	return &stateTransition{
+		VM:                     vm,
+		StateTransitionRequest: req,
+		ConcurrentSchedule:     sched,
+		result:                 &StateTransitionResult{},
+		metrics: &StateTransitionMetrics{
+			TransactionMetrics: make([]TransactionMetrics, len(req.Block.Transactions)),
+		},
+	}
+}
+
+func (this *stateTransition) run() {
+	defer util.Recover(this.err.Catch())
 	block := this.Block
 	blockNumber := block.Number
 	if blockNumber.Sign() == 0 {
-		ret.StateRoot = this.applyGenesisBlock()
+		this.result.StateRoot = this.applyGenesisBlock()
 		return
 	}
 	txCount := len(block.Transactions)
-	sequentialTransactions := util.NewLinkedHashSet(this.SequentialTransactions)
-	parallelTxCount := txCount - sequentialTransactions.Size()
-	conflictDetectorInboxCapacity := (parallelTxCount + 1) * this.ConflictDetectorInboxPerTransaction
-	conflictDetector := conflict_detector.New(conflictDetectorInboxCapacity)
-	conflictDetector.AddConflictHanlder(this.onConflict)
+	parallelTxCount := txCount - this.SequentialTransactions.Size()
+	conflictDetector := conflict_detector.New(
+		(parallelTxCount+1)*this.ConflictDetectorInboxPerTransaction,
+		func(op *conflict_detector.Operation, authors conflict_detector.Authors) {
+			this.err.SetIfAbsent(errors.New(fmt.Sprintf(
+				"Conflict detected. Operation: {%s, %s, %s}; Authors: %s",
+				op.Author, op.Type, op.Key, util.Join(", ", authors.Values())),
+			))
+		})
 	go conflictDetector.Run()
 	defer conflictDetector.Halt()
-	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitToTrie)
-	defer committer.SignalShutdown()
+	committer := LaunchStateDBCommitter(txCount+1, this.newStateDBForReading, this.commitToTrieAndCommitTrie)
+	defer committer.Halt()
 	postProcessor := LaunchBlockPostProcessor(block, this.newStateDBForReading, func(err error) {
 		this.err.SetIfAbsent(err)
 	})
-	defer postProcessor.SignalShutdown()
-
-	defer metrics.TotalTime.NewTimeRecorder()()
-
-	parallelTxSyncMeter := this.metrics.ParallelTransactionsSync.NewTimeRecorder()
-
+	defer postProcessor.Halt()
+	defer this.metrics.TotalTime.Recorder()()
+	parallelTxSyncMeter := this.metrics.ParallelTransactionsSync.Recorder()
 	parallelStateChanges := make(chan state.StateChange, parallelTxCount)
-	for txId := range this.Block.Transactions {
-		if sequentialTransactions.Contains(txId) {
-			continue
-		}
-		txId := txId
-		go func() {
+	concurrent.Parallelize(this.NumConcurrentProcesses, txCount, func(int) func(int) {
+		stateDB := this.newStateDBForReading()
+		return func(txId TxId) {
+			if this.SequentialTransactions.Contains(txId) {
+				return
+			}
 			defer util.Recover(this.err.Catch(func(error) {
 				concurrent.TryClose(parallelStateChanges)
 			}))
-			db := &OperationLoggingStateDB{this.newStateDBForReading(), conflictDetector.NewLogger(txId)}
-			result := this.executeTransaction(txId, db)
+			this.applyHardForks(stateDB)
+			result := this.executeTransaction(txId, &OperationLoggingStateDB{
+				stateDB,
+				conflictDetector.NewLogger(txId),
+			})
 			postProcessor.Submit(result)
 			committer.Submit(result.StateChange)
 			concurrent.TrySend(parallelStateChanges, result.StateChange)
-		}()
+		}
+	})
+	sequentialStateDB := &OperationLoggingStateDB{
+		this.newStateDBForReading(),
+		conflictDetector.NewLogger("sequential_set"),
 	}
-	sequentialStateDB := this.newStateDBForReading()
-	// TODO move somewhere else
 	this.applyBlockRewards(sequentialStateDB)
 	committer.Submit(this.commitAsObject(sequentialStateDB))
+	sequentialStateDB.CheckPoint(true)
 	for i := 0; i < cap(parallelStateChanges); i++ {
 		stateChange := <-parallelStateChanges
 		this.err.CheckIn()
 		sequentialStateDB.Merge(stateChange)
 		sequentialStateDB.CheckPoint(true)
 	}
-
 	parallelTxSyncMeter()
-
-	conflictDetector.Halt()
-	sequentialTransactions.Each(func(_ int, value interface{}) {
-		defer this.metrics.SequentialTransactions.NewTimeRecorder()()
+	this.SequentialTransactions.Each(func(_ int, value interface{}) {
+		defer this.metrics.SequentialTransactions.Recorder()()
 		result := this.executeTransaction(value.(TxId), sequentialStateDB)
 		postProcessor.Submit(result)
 		committer.Submit(result.StateChange)
 	})
-	metrics.TrieCommitSync.MeasureElapsedTime(func() {
-		ret.StateRoot, _ = committer.AwaitResult()
-		this.err.CheckIn()
+	conflictDetector.Halt()
+	this.metrics.TrieCommitSync.RecordElapsedTime(func() {
+		this.result.StateRoot, _ = committer.AwaitResult()
 	})
-	this.metrics.ConflictDetectionSync.MeasureElapsedTime(func() {
+	this.metrics.ConflictDetectionSync.RecordElapsedTime(func() {
 		conflictDetector.AwaitResult()
-		this.err.CheckIn()
 	})
-	this.metrics.PostProcessingSync.MeasureElapsedTime(func() {
-		//ret.StateTransitionReceipt, _ = postProcessor.AwaitResult()
-		this.err.CheckIn()
+	this.metrics.PostProcessingSync.RecordElapsedTime(func() {
+		this.result.StateTransitionReceipt, _ = postProcessor.AwaitResult()
 	})
-	//util.Assert(ret.StateRoot == this.ExpectedRoot, ret.StateRoot.Hex(), " != ", this.ExpectedRoot.Hex())
-	this.persistentCommit(ret.StateRoot)
+	this.err.CheckIn()
+	this.persistentCommit(this.result.StateRoot)
 	return
 }
 
@@ -140,13 +141,12 @@ func (this *stateTransition) RunLikeEthereum() (ret *StateTransitionResult, tota
 	util.Recover(this.err.Catch(util.SetTo(&err)))
 	totalTime = new(metric_utils.AtomicCounter)
 	ret = new(StateTransitionResult)
-	defer totalTime.NewTimeRecorder()()
+	defer totalTime.Recorder()()
 	if this.Block.Number.Sign() == 0 {
 		ret.StateRoot = this.applyGenesisBlock()
 		return
 	}
 	stateDB := this.newStateDBForReading()
-	this.applyHardForks(stateDB)
 	for txId, tx := range this.Block.Transactions {
 		txResult := this.VM.executeTransaction(&transactionRequest{
 			txId:             txId,
@@ -160,13 +160,8 @@ func (this *stateTransition) RunLikeEthereum() (ret *StateTransitionResult, tota
 			canTransfer:      core.CanTransfer,
 		})
 		this.err.CheckIn(txResult.ConsensusErr)
-		intermediateRoot := this.commitToTrie(stateDB)
-		var intermediateRootBytes []byte
-		if !this.Genesis.Config.IsByzantium(this.Block.Number) {
-			intermediateRootBytes = intermediateRoot.Bytes()
-		}
 		ret.UsedGas += txResult.GasUsed
-		ethReceipt := types.NewReceipt(intermediateRootBytes, txResult.ContractErr != nil, ret.UsedGas)
+		ethReceipt := types.NewReceipt(this.commitToTrie(stateDB), txResult.ContractErr != nil, ret.UsedGas)
 		txData := this.Block.Transactions[txId]
 		if txData.To == nil {
 			ethReceipt.ContractAddress = crypto.CreateAddress(txData.From, txData.Nonce)
@@ -182,10 +177,8 @@ func (this *stateTransition) RunLikeEthereum() (ret *StateTransitionResult, tota
 		})
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
-	if !this.DisableEthereumBlockReward {
-		this.applyBlockRewards(stateDB)
-	}
-	ret.StateRoot = this.commitToTrie(stateDB)
+	this.applyBlockRewards(stateDB)
+	ret.StateRoot = this.commitToTrieAndCommitTrie(stateDB)
 	this.persistentCommit(ret.StateRoot)
 	return
 }
@@ -223,15 +216,15 @@ type TestModeMetrics struct {
 
 func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestModeMetrics) {
 	metrics = new(TestModeMetrics)
-	defer metrics.Main.TotalTime.NewTimeRecorder()()
+	defer metrics.Main.TotalTime.Recorder()()
 	txCount := len(this.Block.Transactions)
 	metrics.TransactionMetrics = make([]TestModeTxMetrics, txCount)
 	var committer *StateDBCommitter
 	if txCount > 0 && (params.DoCommits || params.DoCommitsInSeparateDB) {
 		commitsLeft := txCount
-		recLifeSpan := metrics.Committer.TotalLifespan.NewTimeRecorder()
+		recLifeSpan := metrics.Committer.TotalLifespan.Recorder()
 		committer = LaunchStateDBCommitter(txCount, func() StateDB {
-			defer metrics.Committer.CreateDB.NewTimeRecorder()()
+			defer metrics.Committer.CreateDB.Recorder()()
 			if !params.DoCommitsInSeparateDB {
 				return this.newStateDBForReading()
 			}
@@ -242,15 +235,15 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 			if commitsLeft -= 1; commitsLeft == 0 {
 				defer recLifeSpan()
 			}
-			defer metrics.Committer.ActualCommits.NewTimeRecorder()()
-			return this.commitToTrie(db)
+			defer metrics.Committer.ActualCommits.Recorder()()
+			return this.commitToTrieAndCommitTrie(db)
 		})
 	}
 	var syncCommitLock sync.Mutex
 	allDone := concurrent.NewRendezvous(txCount)
 	runTx := func(txId TxId, db StateDB) {
 		txMetrics := &metrics.TransactionMetrics[txId]
-		defer txMetrics.TotalTime.NewTimeRecorder()()
+		defer txMetrics.TotalTime.Recorder()()
 		defer allDone.CheckIn()
 		r := this.VM.executeTransaction(&transactionRequest{
 			txId:             txId,
@@ -267,18 +260,18 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 		})
 		this.err.CheckIn(r.ConsensusErr)
 		if committer != nil {
-			defer txMetrics.LocalCommit.NewTimeRecorder()()
+			defer txMetrics.LocalCommit.Recorder()()
 			committer.Submit(this.commitAsObject(db))
 		} else if params.CommitSync {
 			syncCommitLock.Lock()
 			defer syncCommitLock.Unlock()
-			defer metrics.Committer.ActualCommits.NewTimeRecorder()()
-			defer metrics.Main.CommitsSync.NewTimeRecorder()()
-			defer txMetrics.LocalCommit.NewTimeRecorder()()
-			this.commitToTrie(db)
+			defer metrics.Committer.ActualCommits.Recorder()()
+			defer metrics.Main.CommitsSync.Recorder()()
+			defer txMetrics.LocalCommit.Recorder()()
+			this.commitToTrieAndCommitTrie(db)
 		}
 	}
-	recordTransactionSyncTime := metrics.Main.TransactionsSync.NewTimeRecorder()
+	recordTransactionSyncTime := metrics.Main.TransactionsSync.Recorder()
 	sequentialTx := params.SequentialTx
 	if sequentialTx == nil {
 		sequentialTx = NewTxIdSet(nil)
@@ -299,9 +292,9 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 					if sequentialTx.Contains(txId) {
 						continue
 					}
+					this.applyHardForks(stateDB)
 					runTx(txId, stateDB)
-					stateDB.(*state.StateDB).Reset()
-					//runtime.Gosched()
+					stateDB.Reset()
 				}
 			}()
 		}
@@ -316,7 +309,7 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 	allDone.Await()
 	recordTransactionSyncTime()
 	if committer != nil {
-		defer metrics.Main.CommitsSync.NewTimeRecorder()()
+		defer metrics.Main.CommitsSync.Recorder()()
 		committer.AwaitResult()
 	}
 	this.err.CheckIn()
@@ -326,39 +319,26 @@ func (this *stateTransition) TestMode(params *TestModeParams) (metrics *TestMode
 func (this *stateTransition) executeTransaction(txId TxId, db StateDB) *TransactionResultWithStateChange {
 	block := this.Block
 	result := this.VM.executeTransaction(&transactionRequest{
-		txId:             txId,
-		txData:           block.Transactions[txId],
-		blockHeader:      &block.BlockHeader,
-		stateDB:          db,
-		onEvmInstruction: this.onEvmInstruction,
-		gasPool:          new(core.GasPool).AddGas(block.GasLimit),
-		checkNonce:       false,
-		metrics:          &this.metrics.TransactionMetrics[txId],
-		canTransfer:      core.CanTransfer,
-		//func(vm.StateDB, common.Address, *big.Int) bool {
-		//	return true
-		//},
+		txId:        txId,
+		txData:      block.Transactions[txId],
+		blockHeader: &block.BlockHeader,
+		stateDB:     db,
+		gasPool:     new(core.GasPool).AddGas(block.GasLimit),
+		checkNonce:  false,
+		metrics:     &this.metrics.TransactionMetrics[txId],
+		canTransfer: core.CanTransfer,
+		onEvmInstruction: func(pc uint64) (uint64, bool) {
+			this.err.CheckIn()
+			return pc, true
+		},
 	})
-	stateChange := this.commitAsObject(db)
-	return &TransactionResultWithStateChange{result, stateChange}
-}
-
-func (this *stateTransition) onEvmInstruction(programCounter uint64) (programCounterChanged uint64, canProceed bool) {
-	this.err.CheckIn()
-	return programCounter, true
-}
-
-func (this *stateTransition) onConflict(op *conflict_detector.Operation, authors conflict_detector.Authors) {
-	this.err.SetIfAbsent(errors.New(
-		//fmt.Sprintf("Conflict detected. Operation: {%s, %s, %s}; Authors: %s", op.Author, op.Type, op.Key, util.Join(", ", authors.Values())),
-		"Conflict detected: " + util.Join(", ", authors.Values()),
-	))
+	return &TransactionResultWithStateChange{result, this.commitAsObject(db)}
 }
 
 func (this *stateTransition) applyGenesisBlock() common.Hash {
-	_, _, genesisSetupErr := core.SetupGenesisBlock(this.WriteDiskDB, this.Genesis)
-	this.err.CheckIn(genesisSetupErr)
-	return this.Genesis.ToBlock(nil).Root()
+	_, _, err := this.ApplyGenesis()
+	this.err.CheckIn(err)
+	return this.GenesisRoot()
 }
 
 func (this *stateTransition) applyHardForks(stateDB StateDB) (stateChanged bool) {
@@ -372,44 +352,46 @@ func (this *stateTransition) applyHardForks(stateDB StateDB) (stateChanged bool)
 }
 
 func (this *stateTransition) applyBlockRewards(stateDB StateDB) {
-	AccumulateRewards(this.Genesis.Config, stateDB.(*state.StateDB),
+	if this.DisableEthereumBlockReward {
+		return
+	}
+	AccumulateMiningRewards(this.Genesis.Config, stateDB.(*state.StateDB),
 		&this.Block.BlockNumberAndCoinbase, this.Block.Uncles...)
 }
 
 func (this *stateTransition) newStateDBForReading() StateDB {
-	stateDB, err := state.New(this.BaseStateRoot, this.ReadDB)
+	ret, err := state.New(this.BaseStateRoot, this.ReadDB)
 	this.err.CheckIn(err)
-	util.Assert(!this.applyHardForks(stateDB))
-	return stateDB
+	return ret
 }
 
-func (this *stateTransition) commitAsObject(db StateDB) state.StateChange {
-	return db.CommitStateChange(this.Genesis.Config.IsEIP158(this.Block.Number))
+func (this *stateTransition) commitToTrie(db StateDB) (root []byte) {
+	blockNumber := this.Block.Number
+	chainConfig := this.Genesis.Config
+	if chainConfig.IsByzantium(blockNumber) {
+		db.Finalise(true)
+	} else {
+		root = db.IntermediateRoot(chainConfig.IsEIP158(blockNumber)).Bytes()
+	}
+	return
 }
 
-func (this *stateTransition) commitToTrie(db StateDB) common.Hash {
-	defer this.metrics.TrieCommitTotal.NewTimeRecorder()()
-	root, err := db.Commit(this.Genesis.Config.IsEIP158(this.Block.Number))
-	this.err.SetIfAbsent(err)
-	return root
+func (this *stateTransition) commitToTrieAndCommitTrie(db StateDB) common.Hash {
+	defer this.metrics.TrieCommitTotal.Recorder()()
+	ret, err := db.Commit(this.Genesis.Config.IsEIP158(this.Block.Number))
+	this.err.CheckIn(err)
+	return ret
 }
 
 // TODO make public
 func (this *stateTransition) persistentCommit(root common.Hash) {
-	defer this.metrics.PersistentCommit.NewTimeRecorder()()
+	defer this.metrics.PersistentCommit.Recorder()()
 	trieDB := this.writeDB.TrieDB()
 	defer trieDB.SetDiskDB(trieDB.GetDiskDB())
 	trieDB.SetDiskDB(this.WriteDiskDB)
 	this.err.CheckIn(trieDB.Commit(root, false))
 }
 
-//func (this *stateTransition) commitToTrie(db *state.StateDB) (root common.Hash) {
-//	blockNumber := this.Block.Number
-//	chainConfig := this.Genesis.Config
-//	if chainConfig.IsByzantium(blockNumber) {
-//		db.Finalise(true)
-//	} else {
-//		root = db.IntermediateRoot(chainConfig.IsEIP158(blockNumber))
-//	}
-//	return
-//}
+func (this *stateTransition) commitAsObject(db StateDB) state.StateChange {
+	return db.CommitStateChange(this.Genesis.Config.IsEIP158(this.Block.Number))
+}

@@ -7,7 +7,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
-func AccumulateRewards(
+func AccumulateMiningRewards(
 	config *params.ChainConfig,
 	state *state.StateDB,
 	header *BlockNumberAndCoinbase,
