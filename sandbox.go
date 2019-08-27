@@ -36,7 +36,7 @@ func accountStorageKey(addr *common.Address, location *common.Hash) *AccountStor
 
 func main() {
 	db, err := gorocksdb.OpenDbForReadOnly(
-		gorocksdb.NewDefaultOptions(), "~/data/ethereum_blockchain_mainnet_rocksdb", false)
+		gorocksdb.NewDefaultOptions(), "/workspace/data/ethereum_blockchain_mainnet_rocksdb", false)
 	util.PanicIfPresent(err)
 	itr := db.NewIterator(gorocksdb.NewDefaultReadOptions())
 	for itr.SeekToFirst(); itr.Valid(); itr.Next() {
