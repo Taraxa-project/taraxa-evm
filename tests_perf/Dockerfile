@@ -8,7 +8,6 @@ RUN apt-get -y install wget git gnupg2
 # RocksDB & LevelDB
 RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
 RUN apt-get -y install librocksdb-dev libleveldb-dev
-RUN apt-get -y autoremove
 # Go
 RUN wget -qO- --show-progress --progress=bar:force \
     https://dl.google.com/go/go1.12.1.linux-amd64.tar.gz | tar xvz -C /usr/local
@@ -25,5 +24,6 @@ RUN printf " \
     . /venv/bin/activate \n\
     exec '$@' \n\
     " > /entrypoint.sh
+RUN apt-get -y autoremove
 WORKDIR /workspace
 ENTRYPOINT ["/entrypoint.sh"]
