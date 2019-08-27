@@ -18,11 +18,11 @@ ENV PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 RUN apt-get -y install python3.7 python3.7-dev python3-pip
 RUN pip3 install --upgrade pip virtualenv
 # Python env
+RUN apt-get -y autoremove
 RUN virtualenv --no-site-packages --python=python3.7 /venv
+WORKDIR /workspace
 RUN echo '#!/bin/bash\n\
 . /venv/bin/activate \n\
 exec "\$@" \n\
 ' >> /entrypoint.sh
-RUN apt-get -y autoremove
-WORKDIR /workspace
 ENTRYPOINT ["/entrypoint.sh"]
