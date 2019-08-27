@@ -16,7 +16,9 @@ require (
 	github.com/dchest/siphash v1.1.0
 	github.com/deckarep/golang-set v1.7.1
 	github.com/edsrzf/mmap-go v1.0.0
+	github.com/elastic/gosigar v0.10.4 // indirect
 	github.com/emirpasic/gods v1.12.0
+	github.com/ethereum/go-ethereum v1.9.2
 	github.com/go-delve/delve v1.2.0 // indirect
 	github.com/go-stack/stack v1.8.0
 	github.com/golang/protobuf v1.3.1
@@ -33,6 +35,8 @@ require (
 	github.com/sirupsen/logrus v1.4.1 // indirect
 	github.com/spf13/cobra v0.0.3 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570 // indirect
+	github.com/steakknife/hamming v0.0.0-20180906055917-c99c65617cd3 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/goleveldb v1.0.0

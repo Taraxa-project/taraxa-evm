@@ -23,11 +23,6 @@ func (this *Database) Get(key []byte) ([]byte, error) {
 	return this.db.GetBytes(this.readOpts, key)
 }
 
-func (this *Database) Has(key []byte) (bool, error) {
-	ret, err := this.Get(key)
-	return ret != nil, err
-}
-
 func (this *Database) Close() {
 	this.db.Close()
 	this.db = nil

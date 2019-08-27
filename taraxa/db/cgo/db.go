@@ -66,21 +66,22 @@ func (this *database) Get(key []byte) (ret []byte, err error) {
 	return
 }
 
-func (this *database) Has(key []byte) (ret bool, err error) {
-	keySlice := slice(key)
-	defer free(keySlice)
-	cRet, cErr := C.taraxa_cgo_ethdb_Database_Has(this.ptr, keySlice)
-	defer free(cRet.err)
-	if cErr != nil {
-		err = cErr
-		return
-	}
-	ret = bool(cRet.ret)
-	if errBytes := bytes(cRet.err); len(errBytes) > 0 {
-		err = errors.New(string(errBytes))
-	}
-	return
-}
+// TODO remove
+//func (this *database) Has(key []byte) (ret bool, err error) {
+//	keySlice := slice(key)
+//	defer free(keySlice)
+//	cRet, cErr := C.taraxa_cgo_ethdb_Database_Has(this.ptr, keySlice)
+//	defer free(cRet.err)
+//	if cErr != nil {
+//		err = cErr
+//		return
+//	}
+//	ret = bool(cRet.ret)
+//	if errBytes := bytes(cRet.err); len(errBytes) > 0 {
+//		err = errors.New(string(errBytes))
+//	}
+//	return
+//}
 
 func (this *database) Close() {
 	C.taraxa_cgo_ethdb_Database_Close(this.ptr)

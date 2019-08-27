@@ -13,7 +13,7 @@ type Factory struct {
 	DontCreateIfMissing       bool    `json:"dontCreateIfMissing"`
 	MaxOpenFiles              int     `json:"maxOpenFiles"`
 	BloomFilterCapacity       int     `json:"bloomFilterCapacity"`
-	BlockCacheSize            uint64     `json:"blockCacheSize"`
+	BlockCacheSize            uint64  `json:"blockCacheSize"`
 	WriteBufferSize           int     `json:"writeBufferSize"`
 	Parallelism               int     `json:"parallelism"`
 	OptimizeForPointLookup    *uint64 `json:"optimizeForPointLookup"`
