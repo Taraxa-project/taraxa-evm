@@ -1,6 +1,6 @@
 FROM ubuntu:19.04
 
-VOLUME /mnt
+VOLUME /workspace
 # General
 RUN apt-get -y upgrade
 RUN apt-get -y update --fix-missing
@@ -17,7 +17,6 @@ RUN pip3 install --upgrade pip virtualenv
 # RocksDB & LevelDB
 RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
 RUN apt-get -y install librocksdb-dev libleveldb-dev
-# The Project
-WORKDIR /mnt/workspace/taraxa-evm/tests_perf
-#RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 venv
-#RUN . venv/bin/activate && python install.py
+# Python env
+RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 venv
+RUN . venv/bin/activate && python install.py
