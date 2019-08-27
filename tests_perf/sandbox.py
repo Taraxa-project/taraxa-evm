@@ -13,7 +13,7 @@ block_db_to = BlockDB(
     rocksdb.DB(f'/workspace/data/ethereum_blockchain_mainnet_rocksdb_{from_block}_{from_block + 1000000}',
                rocksdb.Options(create_if_missing=True)))
 
-state_db = rocksdb.DB(f'/workspace/data/ethereum_blockchain_mainnet_rocksdb_ethereum_state_mainnet_rocksdb',
+state_db = rocksdb.DB(f'/workspace/data/ethereum_state_mainnet_rocksdb',
                       rocksdb.Options(create_if_missing=True),
                       read_only=True)
 
