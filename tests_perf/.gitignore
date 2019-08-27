@@ -1,3 +1,4 @@
 out
 venv
 tmp
+*__pycache__*
