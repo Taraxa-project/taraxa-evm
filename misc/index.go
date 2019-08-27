@@ -23,9 +23,9 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	db_dest := ethdb.NewMemDatabase()
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
-	fmt.Println("bar")
 	dump := state_source.RawDump(false, false, false)
 	for addr, acc := range dump.Accounts {
+		fmt.Println(addr.Hex())
 		state_dest.SetNonce(addr, acc.Nonce)
 		balance, parsed := new(big.Int).SetString(acc.Balance, 10)
 		util.Assert(parsed)
