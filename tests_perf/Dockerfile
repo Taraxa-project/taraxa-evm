@@ -19,7 +19,8 @@ RUN apt-get -y install python3.7 python3.7-dev python3-pip
 RUN pip3 install --upgrade pip virtualenv
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
-RUN echo '#!/bin/bash\n\
+RUN echo '\
+#!/bin/bash \n\
 . /venv/bin/activate \n\
 exec "\$@" \n\
 ' >> /entrypoint.sh
