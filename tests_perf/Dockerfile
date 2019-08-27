@@ -22,7 +22,7 @@ RUN virtualenv --no-site-packages --python=python3.7 /venv
 RUN printf " \
     #!/bin/sh \n\
     . /venv/bin/activate \n\
-    exec "$@" \n\
+    exec \"$@\" \n\
     " > /entrypoint.sh
 RUN apt-get -y autoremove
 WORKDIR /workspace
