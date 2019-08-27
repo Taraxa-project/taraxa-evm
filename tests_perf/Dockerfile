@@ -20,7 +20,7 @@ RUN pip3 install --upgrade pip virtualenv
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
 RUN cat << EOF > /entrypoint.sh \
-#!/bin/sh \
+\#!/bin/sh \
 . /venv/bin/activate \
 exec "\$@" \
 EOF
