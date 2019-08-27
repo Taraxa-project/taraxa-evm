@@ -19,5 +19,5 @@ RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-
 RUN apt-get -y install librocksdb-dev libleveldb-dev
 WORKDIR /workspace/taraxa-evm/
 # Python env
-RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 /workspace/taraxa-evm/venv
-RUN . /workspace/taraxa-evm/venv/bin/activate && python install.py
+#RUN rm -rf venv && virtualenv --no-site-packages --python=python3.7 /workspace/taraxa-evm/venv
+#RUN . /workspace/taraxa-evm/venv/bin/activate && python install.py
