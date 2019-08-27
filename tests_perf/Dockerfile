@@ -19,11 +19,11 @@ RUN apt-get -y install python3.7 python3.7-dev python3-pip
 RUN pip3 install --upgrade pip virtualenv
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
-RUN cat << EOF > /entrypoint.sh \
-\#!/bin/sh \
-. /venv/bin/activate \
-exec "\$@" \
-EOF
+RUN echo -e '\
+#!/bin/bash \n\
+. /venv/bin/activate \n\
+exec "\$@" \n\
+' >> /entrypoint.sh
 RUN apt-get -y autoremove
 WORKDIR /workspace
 #ENTRYPOINT ["/entrypoint.sh"]
