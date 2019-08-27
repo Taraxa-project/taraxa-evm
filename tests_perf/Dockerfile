@@ -17,7 +17,7 @@ RUN pip3 install --upgrade pip virtualenv
 # RocksDB & LevelDB
 RUN apt-get -y install liblz4-dev libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev libzstd-dev
 RUN apt-get -y install librocksdb-dev libleveldb-dev
-RUN apt -y autoremove
+RUN apt-get -y autoremove
 
 WORKDIR /workspace
 # Python env
