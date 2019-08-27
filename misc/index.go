@@ -11,6 +11,7 @@ import (
 )
 
 func DumpStateRocksdb(db_path_source, root_str string) {
+	fmt.Println("foo")
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
 		File:     db_path_source,
@@ -22,6 +23,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	db_dest := ethdb.NewMemDatabase()
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
+	fmt.Println("bar")
 	dump := state_source.RawDump(false, false, false)
 	for addr, acc := range dump.Accounts {
 		state_dest.SetNonce(addr, acc.Nonce)
@@ -35,6 +37,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		}
 		state_dest.SetStorage(addr, storage)
 	}
+	fmt.Println("baz")
 	root_dest, err3 := state_dest.Commit(false)
 	util.PanicIfPresent(err3)
 	util.Assert(root == root_dest)
