@@ -22,4 +22,5 @@ WORKDIR /workspace/taraxa-evm
 # Python env
 RUN virtualenv --no-site-packages --python=python3.7 /venv
 #RUN . /venv/bin/activate && python /workspace/taraxa-evm/install.py
+RUN ls
 ENTRYPOINT ["/bin/bash", "-c", ". /venv/bin/activate && python /workspace/taraxa-evm/tests_perf/install.py"]
