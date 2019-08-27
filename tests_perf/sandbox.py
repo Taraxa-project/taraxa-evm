@@ -18,8 +18,10 @@ state_db = rocksdb.DB(f'/workspace/data/ethereum_state_mainnet_rocksdb',
                       read_only=True)
 
 for k, v in block_db.iteritems(from_block=from_block):
-    block_db_to.put_block(v)
-    state_root = bytes.fromhex(v['stateRoot'].replace('0x', ''))
-    if not state_db.get(state_root):
+    # block_db_to.put_block(v)
+    state_root = v['stateRoot']
+    state_root_bytes = bytes.fromhex(state_root.replace('0x', ''))
+    if not state_db.get(state_root_bytes):
         break
     print(k)
+    print(state_root)
