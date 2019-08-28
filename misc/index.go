@@ -27,7 +27,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		Parallelism: concurrent.NUM_CPU,
 		OptimizeForPointLookup: func() *uint64 {
 			ret := new(uint64)
-			*ret = 2048
+			*ret = 4096
 			return ret
 		}(),
 	}).NewInstance()
