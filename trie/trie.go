@@ -439,13 +439,13 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	return common.BytesToHash(hash.(hashNode)), nil
 }
 
-func (t *Trie) hashRoot(db *Database, onleaf LeafCallback, alwaysStore bool) (node, node, error) {
+func (t *Trie) hashRoot(db *Database, onleaf LeafCallback, nocache bool) (node, node, error) {
 	if t.root == nil {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	h := newHasher(t.cachegen, t.cachelimit, onleaf)
 	defer returnHasherToPool(h)
-	return h.hash(t.root, db, true, alwaysStore)
+	return h.hash(t.root, db, true, nocache)
 }
 
 func (t *Trie) Dump(db *Database) (common.Hash, error) {

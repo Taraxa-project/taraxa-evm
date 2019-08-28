@@ -75,11 +75,9 @@ func returnHasherToPool(h *hasher) {
 
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
-func (h *hasher) hash(n node, db *Database, force, alwaysStore bool) (node, node, error) {
-	fmt.Println("hashing", n.fstring(""))
-	//if !alwaysStore {
-	if false {
-		panic("fwfrwfwr")
+func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, error) {
+	fmt.Println("hashing", n.fstring(""), nocache)
+	if !nocache {
 		// If we're not storing the node, just hashing, use available cached data
 		if hash, dirty := n.cache(); hash != nil {
 			if db == nil {
@@ -97,7 +95,7 @@ func (h *hasher) hash(n node, db *Database, force, alwaysStore bool) (node, node
 		}
 	}
 	// Trie not processed yet or needs storage, walk the children
-	collapsed, cached, err := h.hashChildren(n, db, alwaysStore)
+	collapsed, cached, err := h.hashChildren(n, db, nocache)
 	if err != nil {
 		return hashNode{}, n, err
 	}
@@ -105,29 +103,32 @@ func (h *hasher) hash(n node, db *Database, force, alwaysStore bool) (node, node
 	if err != nil {
 		return hashNode{}, n, err
 	}
-	// Cache the hash of the node for later reuse and remove
-	// the dirty flag in commit mode. It's fine to assign these values directly
-	// without copying the node first because hashChildren copies it.
-	//cachedHash, _ := hashed.(hashNode)
-	//switch cn := cached.(type) {
-	//case *shortNode:
-	//	cn.flags.hash = cachedHash
-	//	if db != nil {
-	//		cn.flags.dirty = false
-	//	}
-	//case *fullNode:
-	//	cn.flags.hash = cachedHash
-	//	if db != nil {
-	//		cn.flags.dirty = false
-	//	}
-	//}
+	if !nocache {
+		// Cache the hash of the node for later reuse and remove
+		// the dirty flag in commit mode. It's fine to assign these values directly
+		// without copying the node first because hashChildren copies it.
+		cachedHash, _ := hashed.(hashNode)
+		switch cn := cached.(type) {
+		case *shortNode:
+			cn.flags.hash = cachedHash
+			if db != nil {
+				cn.flags.dirty = false
+			}
+		case *fullNode:
+			cn.flags.hash = cachedHash
+			if db != nil {
+				cn.flags.dirty = false
+			}
+		}
+	}
 	return hashed, cached, nil
 }
 
 // hashChildren replaces the children of a node with their hashes if the encoded
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
-func (h *hasher) hashChildren(original node, db *Database, alwaysStore bool) (node, node, error) {
+func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, node, error) {
+	fmt.Println("hash children", original.fstring(""), nocache)
 	var err error
 
 	switch n := original.(type) {
@@ -138,7 +139,7 @@ func (h *hasher) hashChildren(original node, db *Database, alwaysStore bool) (no
 		cached.Key = common.CopyBytes(n.Key)
 
 		if _, ok := n.Val.(valueNode); !ok {
-			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false, alwaysStore)
+			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false, nocache)
 			if err != nil {
 				return original, original, err
 			}
@@ -151,7 +152,7 @@ func (h *hasher) hashChildren(original node, db *Database, alwaysStore bool) (no
 
 		for i := 0; i < 16; i++ {
 			if n.Children[i] != nil {
-				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false, alwaysStore)
+				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false, nocache)
 				if err != nil {
 					return original, original, err
 				}
