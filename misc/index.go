@@ -1,9 +1,7 @@
 package misc
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -12,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/trie"
 	"runtime"
-	"sync"
 	"sync/atomic"
 )
 
@@ -41,46 +38,47 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	util.PanicIfPresent(err1)
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
-	state_lock := new(sync.Mutex)
+	//state_lock := new(sync.Mutex)
 	running_count := new(int32)
 	scheduled_count := int32(0)
 	for acc_itr := trie.NewIterator(acc_trie_source.NodeIterator(nil)); acc_itr.Next(); {
-		var acc state.Account
-		err := rlp.DecodeBytes(acc_itr.Value, &acc)
-		util.PanicIfPresent(err)
-		addr := common.BytesToAddress(acc_trie_source.GetKey(acc_itr.Key))
-		fmt.Println("acc", addr.Hex())
-		addrHash := crypto.Keccak256Hash(addr[:])
-		var code []byte
-		if !bytes.Equal(acc.CodeHash, emptyCodeHash) {
-			var err error
-			code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
-			util.PanicIfPresent(err)
-		}
-		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
-		util.PanicIfPresent(err1)
-		for atomic.LoadInt32(running_count) > int32(concurrent.NUM_CPU) {
-			runtime.Gosched()
-		}
-		atomic.AddInt32(running_count, 1)
-		go func() {
-			defer atomic.AddInt32(running_count, -1)
-			storage := make(map[common.Hash]common.Hash)
-			for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
-				//fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
-				_, content, _, err := rlp.Split(storage_itr.Value)
-				util.PanicIfPresent(err)
-				storage[common.BytesToHash(storage_trie.GetKey(storage_itr.Key))] = common.BytesToHash(content)
-			}
-			defer concurrent.LockUnlock(state_lock)()
-			state_dest.SetBalance(addr, acc.Balance)
-			state_dest.SetNonce(addr, acc.Nonce)
-			state_dest.SetCode(addr, code)
-			state_dest.SetStorage(addr, storage)
-		}()
-		scheduled_count++
+		//var acc state.Account
+		//err := rlp.DecodeBytes(acc_itr.Value, &acc)
+		//util.PanicIfPresent(err)
+		//addr := common.BytesToAddress(acc_trie_source.GetKey(acc_itr.Key))
+		//fmt.Println("acc", addr.Hex())
+		//addrHash := crypto.Keccak256Hash(addr[:])
+		//var code []byte
+		//if !bytes.Equal(acc.CodeHash, emptyCodeHash) {
+		//	var err error
+		//	code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
+		//	util.PanicIfPresent(err)
+		//}
+		////storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
+		//util.PanicIfPresent(err1)
+		//for atomic.LoadInt32(running_count) > int32(concurrent.NUM_CPU) {
+		//	runtime.Gosched()
+		//}
+		//atomic.AddInt32(running_count, 1)
+		//go func() {
+		//	defer atomic.AddInt32(running_count, -1)
+		//	storage := make(map[common.Hash]common.Hash)
+		//	for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
+		//		//fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
+		//		_, content, _, err := rlp.Split(storage_itr.Value)
+		//		util.PanicIfPresent(err)
+		//		storage[common.BytesToHash(storage_trie.GetKey(storage_itr.Key))] = common.BytesToHash(content)
+		//	}
+		//	defer concurrent.LockUnlock(state_lock)()
+		//	state_dest.SetBalance(addr, acc.Balance)
+		//	state_dest.SetNonce(addr, acc.Nonce)
+		//	state_dest.SetCode(addr, code)
+		//	state_dest.SetStorage(addr, storage)
+		//}()
+		//scheduled_count++
 		fmt.Println("scheduled", scheduled_count)
 	}
+	panic("foo")
 	for atomic.LoadInt32(running_count) != 0 {
 		runtime.Gosched()
 	}
