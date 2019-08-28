@@ -178,6 +178,7 @@ func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, 
 func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	// Don't store hashes or empty nodes.
 	if _, isHash := n.(hashNode); n == nil || isHash {
+		fmt.Println("ishash", isHash)
 		return n, nil
 	}
 	// Generate the RLP encoding of the node
@@ -185,9 +186,9 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	if err := rlp.Encode(&h.tmp, n); err != nil {
 		panic("encode error: " + err.Error())
 	}
-	//if len(h.tmp) < 32 && !force {
-	//	return n, nil // Nodes smaller than 32 bytes are stored inside their parent
-	//}
+	if len(h.tmp) < 32 && !force {
+		return n, nil // Nodes smaller than 32 bytes are stored inside their parent
+	}
 	// Larger nodes are replaced by their hash and stored in the database.
 	hash, _ := n.cache()
 	if hash == nil {
