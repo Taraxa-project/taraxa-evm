@@ -53,7 +53,8 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		//if err != nil {
 		//	return err
 		//}
-		db_dest.Put(key, value)
+		err := db_dest.Put(key, value)
+		util.PanicIfPresent(err)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
 		fmt.Println(atomic.AddInt32(acc_cnt, 1))
 		return nil
