@@ -42,8 +42,7 @@ func (this *Factory) NewInstance() (ret ethdb.MutableTransactionalDatabase, err 
 	}
 	if this.OptimizeForPointLookup != nil {
 		opts.SetAllowConcurrentMemtableWrites(false)
-		//TODO
-		//opts.OptimizeForPointLookup()
+		opts.OptimizeForPointLookup(*this.OptimizeForPointLookup)
 	}
 	opts.SetErrorIfExists(this.ErrorIfExists)
 	database := new(Database)

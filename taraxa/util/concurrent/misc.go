@@ -3,9 +3,12 @@ package concurrent
 import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 )
+
+var NUM_CPU = runtime.NumCPU()
 
 func TryClose(channel interface{}) error {
 	ret := util.Try(func() {
@@ -61,4 +64,12 @@ func Parallelize(numGoroutines, N int, prepare func(goroutineIndex int) (action 
 		}()
 	}
 	allDone.Await()
+}
+
+func SimpleParallelize(action func()) {
+	Parallelize(NUM_CPU, NUM_CPU, func(int) func(int) {
+		return func(i int) {
+			action()
+		}
+	})
 }

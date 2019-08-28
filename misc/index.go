@@ -20,9 +20,14 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	rocksdb_source, err0 := (&rocksdb.Factory{
 		File:     db_path_source,
 		ReadOnly: true,
+		OptimizeForPointLookup: func() *uint64 {
+			ret := new(uint64)
+			*ret = 1024
+			return ret
+		}(),
 	}).NewInstance()
 	util.PanicIfPresent(err0)
-	db_source := state.NewDatabase(&dbAdapter{rocksdb_source})
+	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 1024)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
 	db_dest := ethdb.NewMemDatabase()
