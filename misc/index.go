@@ -18,14 +18,17 @@ var emptyCodeHash = crypto.Keccak256(nil)
 func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
-		File:        db_path_source,
-		ReadOnly:    true,
-		Parallelism: concurrent.NUM_CPU,
+		File:         db_path_source,
+		ReadOnly:     true,
+		MaxOpenFiles: 1000 * 4,
+		Parallelism:  concurrent.NUM_CPU,
 		OptimizeForPointLookup: func() *uint64 {
 			ret := new(uint64)
 			*ret = 4096 * 4
 			return ret
 		}(),
+		MaxFileOpeningThreads: &concurrent.NUM_CPU,
+		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
 	db_dest, err343 := (&rocksdb.Factory{
@@ -33,7 +36,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		Parallelism: concurrent.NUM_CPU,
 	}).NewInstance()
 	util.PanicIfPresent(err343)
-	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 2048 * 4)
+	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 2048*4)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))

@@ -7,30 +7,36 @@ import (
 )
 
 type Factory struct {
-	File                      string  `json:"file"`
-	ReadOnly                  bool    `json:"readOnly"`
-	ErrorIfExists             bool    `json:"errorIfExists"`
-	DontCreateIfMissing       bool    `json:"dontCreateIfMissing"`
-	MaxOpenFiles              int     `json:"maxOpenFiles"`
-	BloomFilterCapacity       int     `json:"bloomFilterCapacity"`
-	BlockCacheSize            uint64  `json:"blockCacheSize"`
-	WriteBufferSize           int     `json:"writeBufferSize"`
-	Parallelism               int     `json:"parallelism"`
-	OptimizeForPointLookup    *uint64 `json:"optimizeForPointLookup"`
-	MaxFileOpeningThreads     *int    `json:"maxFileOpeningThreads"`
+	File                   string  `json:"file"`
+	ReadOnly               bool    `json:"readOnly"`
+	ErrorIfExists          bool    `json:"errorIfExists"`
+	DontCreateIfMissing    bool    `json:"dontCreateIfMissing"`
+	MaxOpenFiles           int     `json:"maxOpenFiles"`
+	BloomFilterCapacity    int     `json:"bloomFilterCapacity"`
+	BlockCacheSize         uint64  `json:"blockCacheSize"`
+	WriteBufferSize        int     `json:"writeBufferSize"`
+	Parallelism            int     `json:"parallelism"`
+	OptimizeForPointLookup *uint64 `json:"optimizeForPointLookup"`
+	MaxFileOpeningThreads  *int    `json:"maxFileOpeningThreads"`
+	UseDirectReads         bool    `json:"useDirectReads"`
+	AllowMmapReads         bool    `json:"allowMmapReads"`
 	//TODO CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
-func (this *Factory) NewInstance() (ret ethdb.MutableTransactionalDatabase, err error) {
+func (this *Factory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
 	opts := gorocksdb.NewDefaultOptions()
-	blockOpts := gorocksdb.NewDefaultBlockBasedTableOptions()
-	bloomFilter := gorocksdb.NewBloomFilter(util.Max(10, this.BloomFilterCapacity))
-	blockOpts.SetFilterPolicy(bloomFilter)
-	if this.BlockCacheSize > 0 {
-		blockOpts.SetBlockCache(gorocksdb.NewLRUCache(this.BlockCacheSize))
+	if this.OptimizeForPointLookup != nil {
+		opts.SetAllowConcurrentMemtableWrites(false)
+		opts.OptimizeForPointLookup(*this.OptimizeForPointLookup)
+	} else {
+		blockOpts := gorocksdb.NewDefaultBlockBasedTableOptions()
+		bloomFilter := gorocksdb.NewBloomFilter(util.Max(10, this.BloomFilterCapacity))
+		blockOpts.SetFilterPolicy(bloomFilter)
+		if this.BlockCacheSize > 0 {
+			blockOpts.SetBlockCache(gorocksdb.NewLRUCache(this.BlockCacheSize))
+		}
+		opts.SetBlockBasedTableFactory(blockOpts)
 	}
-	opts.SetCreateIfMissing(!this.DontCreateIfMissing)
-	opts.SetBlockBasedTableFactory(blockOpts)
 	if this.WriteBufferSize > 0 {
 		opts.SetWriteBufferSize(this.WriteBufferSize)
 	}
@@ -40,19 +46,20 @@ func (this *Factory) NewInstance() (ret ethdb.MutableTransactionalDatabase, err 
 	if this.Parallelism > 0 {
 		opts.IncreaseParallelism(this.Parallelism)
 	}
-	if this.OptimizeForPointLookup != nil {
-		opts.SetAllowConcurrentMemtableWrites(false)
-		opts.OptimizeForPointLookup(*this.OptimizeForPointLookup)
+	if this.MaxFileOpeningThreads != nil {
+		opts.SetMaxFileOpeningThreads(*this.MaxFileOpeningThreads)
 	}
+	opts.SetUseDirectReads(this.UseDirectReads)
+	opts.SetAllowMmapReads(this.AllowMmapReads)
 	opts.SetErrorIfExists(this.ErrorIfExists)
-	database := new(Database)
-	ret = database
-	database.writeOpts = gorocksdb.NewDefaultWriteOptions()
-	database.readOpts = gorocksdb.NewDefaultReadOptions()
+	opts.SetCreateIfMissing(!this.DontCreateIfMissing)
+	ret, err := new(Database), error(nil)
+	ret.writeOpts = gorocksdb.NewDefaultWriteOptions()
+	ret.readOpts = gorocksdb.NewDefaultReadOptions()
 	if this.ReadOnly {
-		database.db, err = gorocksdb.OpenDbForReadOnly(opts, this.File, this.ErrorIfExists)
+		ret.db, err = gorocksdb.OpenDbForReadOnly(opts, this.File, this.ErrorIfExists)
 	} else {
-		database.db, err = gorocksdb.OpenDb(opts, this.File)
+		ret.db, err = gorocksdb.OpenDb(opts, this.File)
 	}
-	return
+	return ret, err
 }
