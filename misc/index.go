@@ -23,7 +23,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		Parallelism: concurrent.NUM_CPU,
 		OptimizeForPointLookup: func() *uint64 {
 			ret := new(uint64)
-			*ret = 4096
+			*ret = 4096 * 4
 			return ret
 		}(),
 	}).NewInstance()
@@ -33,7 +33,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		Parallelism: concurrent.NUM_CPU,
 	}).NewInstance()
 	util.PanicIfPresent(err343)
-	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 2048)
+	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 2048 * 4)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
