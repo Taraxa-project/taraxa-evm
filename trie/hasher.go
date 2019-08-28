@@ -19,6 +19,7 @@ package trie
 import (
 	"fmt"
 	"hash"
+	"reflect"
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -128,7 +129,7 @@ func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, er
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
 func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, node, error) {
-	fmt.Println("hash children", original.fstring(""), nocache)
+	fmt.Println("hash children", original.fstring(""), nocache, reflect.TypeOf(original).String())
 	var err error
 
 	switch n := original.(type) {
