@@ -160,7 +160,10 @@ func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, 
 			}
 		}
 		cached.Children[16] = n.Children[16]
-		fmt.Println("ololo", reflect.TypeOf(n.Children[16]).String())
+		foo := n.Children[16]
+		if foo != nil {
+			fmt.Println("ololo", reflect.TypeOf(foo).String())
+		}
 		return collapsed, cached, nil
 
 	default:
