@@ -51,7 +51,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
 		util.PanicIfPresent(err1)
 		for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
-			fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
+			//fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
 			_, content, _, err := rlp.Split(storage_itr.Value)
 			util.PanicIfPresent(err)
 			state_dest.SetState(
