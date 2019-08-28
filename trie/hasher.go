@@ -77,7 +77,8 @@ func returnHasherToPool(h *hasher) {
 // original node initialized with the computed hash to replace the original one.
 func (h *hasher) hash(n node, db *Database, force, alwaysStore bool) (node, node, error) {
 	fmt.Println("hashing", n.fstring(""))
-	if !alwaysStore {
+	//if !alwaysStore {
+	if false {
 		panic("fwfrwfwr")
 		// If we're not storing the node, just hashing, use available cached data
 		if hash, dirty := n.cache(); hash != nil {
