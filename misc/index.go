@@ -22,6 +22,9 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		File:     db_path_source,
 		ReadOnly: true,
 	}).NewInstance()
+	rootval, err33 := rocksdb_source.Get(root.Bytes())
+	util.PanicIfPresent(err33)
+	fmt.Println(root.Hex(), string(rootval))
 	util.PanicIfPresent(err0)
 	db_source := state.NewDatabase(&dbAdapter{rocksdb_source})
 	acc_trie_source, err1 := db_source.OpenTrie(root)
