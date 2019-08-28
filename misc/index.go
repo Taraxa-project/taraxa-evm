@@ -91,7 +91,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	//for atomic.LoadInt32(running_count) != 0 {
 	//	runtime.Gosched()
 	//}
-	eth_db := eth_state.NewDatabase(&dbAdapter{rocksdb_source})
+	eth_db := eth_state.NewDatabase(&dbAdapter{db_dest})
 	eth_root := eth_common.Hash(root)
 	tr, err3434 := eth_db.OpenTrie(eth_root)
 	util.PanicIfPresent(err3434)
