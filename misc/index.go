@@ -3,7 +3,6 @@ package misc
 import (
 	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -19,7 +18,7 @@ import (
 
 var emptyCodeHash = crypto.Keccak256(nil)
 
-func DumpStateRocksdb(db_path_source, root_str string) {
+func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
 		File:        db_path_source,
@@ -32,10 +31,14 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		}(),
 	}).NewInstance()
 	util.PanicIfPresent(err0)
+	db_dest, err343 := (&rocksdb.Factory{
+		File:        db_path_dest,
+		Parallelism: concurrent.NUM_CPU,
+	}).NewInstance()
+	util.PanicIfPresent(err343)
 	db_source := state.NewDatabaseWithCache(&dbAdapter{rocksdb_source}, 2048)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
-	db_dest := ethdb.NewMemDatabase()
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
 	state_lock := new(sync.Mutex)
@@ -81,11 +84,12 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	root_dest, err3 := state_dest.Commit(false)
 	util.PanicIfPresent(err3)
 	util.Assert(root == root_dest)
+	fmt.Println("Committing")
 	err4 := state_dest.Database().TrieDB().Commit(root_dest, false)
 	util.PanicIfPresent(err4)
-	for _, k := range db_dest.Keys() {
-		v, err5 := db_dest.Get(k)
-		util.PanicIfPresent(err5)
-		fmt.Println(string(k), string(v))
-	}
+	//for _, k := range db_dest.Keys() {
+	//	v, err5 := db_dest.Get(k)
+	//	util.PanicIfPresent(err5)
+	//	fmt.Println(string(k), string(v))
+	//}
 }
