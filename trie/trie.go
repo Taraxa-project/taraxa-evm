@@ -23,6 +23,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
+	"reflect"
 )
 
 var (
@@ -419,7 +420,7 @@ func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.
 func (t *Trie) Hash() common.Hash {
-	hash, cached, _ := t.hashRoot(nil, nil, false)
+	hash, cached, _ := t.hashRoot(nil, nil)
 	t.root = cached
 	return common.BytesToHash(hash.(hashNode))
 }
@@ -430,7 +431,7 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	if t.db == nil {
 		panic("commit called on trie with nil database")
 	}
-	hash, cached, err := t.hashRoot(t.db, onleaf, false)
+	hash, cached, err := t.hashRoot(t.db, onleaf)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -439,22 +440,43 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	return common.BytesToHash(hash.(hashNode)), nil
 }
 
-func (t *Trie) hashRoot(db *Database, onleaf LeafCallback, nocache bool) (node, node, error) {
+func (t *Trie) hashRoot(db *Database, onleaf LeafCallback) (node, node, error) {
 	if t.root == nil {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	h := newHasher(t.cachegen, t.cachelimit, onleaf)
 	defer returnHasherToPool(h)
-	return h.hash(t.root, db, true, nocache)
+	return h.hash(t.root, db, true)
 }
 
-func (t *Trie) Dump(db *Database) (common.Hash, error) {
-	hash, _, err := t.hashRoot(db, func(leaf []byte, parent common.Hash) error {
-		fmt.Println("leaf", string(leaf), parent.Hex())
-		return nil
-	}, true)
-	if err != nil {
-		return common.Hash{}, err
+type LeafVisitor = func(key, value []byte, parent_hash common.Hash) error
+
+func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
+	if err := this.visitLeaves(nil, nil, this.root, visitor); err != nil {
+		return err
 	}
-	return common.BytesToHash(hash.(hashNode)), nil
+	return nil
+}
+
+func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor) error {
+	switch n := n.(type) {
+	case *shortNode:
+		return this.visitLeaves(append(path[:], n.Key...), n, n.Val, visitor)
+	case *fullNode:
+		for pos, child := range n.Children {
+			if err := this.visitLeaves(append(path[:], byte(pos)), n, child, visitor); err != nil {
+				return err
+			}
+		}
+		return nil
+	case *hashNode:
+		child, err := this.resolveHash(*n, path)
+		if err != nil {
+			return err
+		}
+		return this.visitLeaves(path, n, child, visitor)
+	case *valueNode:
+		return visitor(path[:], (*n)[:], common.Hash{})
+	}
+	panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
 }

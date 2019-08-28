@@ -142,14 +142,14 @@ func (t *SecureTrie) Hash() common.Hash {
 	return t.trie.Hash()
 }
 
-func (t *SecureTrie) Dump(db *Database) (common.Hash, error) {
-	return t.trie.Dump(db)
-}
-
 // Copy returns a copy of SecureTrie.
 func (t *SecureTrie) Copy() *SecureTrie {
 	cpy := *t
 	return &cpy
+}
+
+func (this *SecureTrie) VisitLeaves(visitor LeafVisitor) error {
+	return this.trie.VisitLeaves(visitor)
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.

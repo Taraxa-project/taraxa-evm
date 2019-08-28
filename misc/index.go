@@ -7,10 +7,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
-	"github.com/Taraxa-project/taraxa-evm/trie"
-	eth_common "github.com/ethereum/go-ethereum/common"
-	eth_state "github.com/ethereum/go-ethereum/core/state"
-	eth_trie "github.com/ethereum/go-ethereum/trie"
 )
 
 func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
@@ -31,23 +27,24 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
-	db_dest, err343 := (&rocksdb.Factory{
-		File:                  db_path_dest,
-		MaxOpenFiles:          1000 * 2,
-		Parallelism:           concurrent.NUM_CPU,
-		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		BlockCacheSize:        1024 * 5,
-		BloomFilterCapacity:   10,
-	}).NewInstance()
-	util.PanicIfPresent(err343)
+	//db_dest, err343 := (&rocksdb.Factory{
+	//	File:                  db_path_dest,
+	//	MaxOpenFiles:          1000 * 2,
+	//	Parallelism:           concurrent.NUM_CPU,
+	//	MaxFileOpeningThreads: &concurrent.NUM_CPU,
+	//	BlockCacheSize:        1024 * 5,
+	//	BloomFilterCapacity:   10,
+	//}).NewInstance()
+	//util.PanicIfPresent(err343)
 	db_source := state.NewDatabaseWithCache(rocksdb_source, 1024*30)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
-	trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
-	root_dest, err2 := acc_trie_source.Dump(trie_db_dest)
+	//trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
+	err2 := acc_trie_source.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
+		fmt.Println(string(key), string(value))
+		return nil
+	})
 	util.PanicIfPresent(err2)
-	fmt.Println(root.Hex(), root_dest.Hex())
-	util.Assert(root == root_dest)
 	//state_lock := new(sync.Mutex)
 	//running_count := new(int32)
 	//scheduled_count := int32(0)
@@ -91,15 +88,15 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	//for atomic.LoadInt32(running_count) != 0 {
 	//	runtime.Gosched()
 	//}
-	eth_db := eth_state.NewDatabase(&dbAdapter{db_dest})
-	eth_root := eth_common.Hash(root)
-	tr, err3434 := eth_db.OpenTrie(eth_root)
-	util.PanicIfPresent(err3434)
-	util.Assert(tr.Hash() == eth_root)
-	acc_cnt := 0
-	fmt.Println("foo")
-	for acc_itr := eth_trie.NewIterator(tr.NodeIterator(nil)); acc_itr.Next(); {
-		acc_cnt++
-		fmt.Println(acc_cnt, acc_itr)
-	}
+	//eth_db := eth_state.NewDatabase(&dbAdapter{db_dest})
+	//eth_root := eth_common.Hash(root)
+	//tr, err3434 := eth_db.OpenTrie(eth_root)
+	//util.PanicIfPresent(err3434)
+	//util.Assert(tr.Hash() == eth_root)
+	//acc_cnt := 0
+	//fmt.Println("foo")
+	//for acc_itr := eth_trie.NewIterator(tr.NodeIterator(nil)); acc_itr.Next(); {
+	//	acc_cnt++
+	//	fmt.Println(acc_cnt, acc_itr)
+	//}
 }

@@ -265,11 +265,9 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 	var cleans *bigcache.BigCache
 	if cache > 0 {
-		//shardCount := 4096
-		shardCount := 2048
 		cleans, _ = bigcache.NewBigCache(bigcache.Config{
-			// TODO increase the number of shards
-			Shards:             shardCount,
+			// TODO increase the number of shards?
+			Shards:             1024,
 			LifeWindow:         time.Hour,
 			MaxEntriesInWindow: cache * 1024,
 			MaxEntrySize:       512,
@@ -350,19 +348,38 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 // node retrieves a cached trie node from memory, or returns nil if none can be
 // found in the memory cache.
 func (db *Database) node(hash common.Hash, cachegen uint16) node {
-	enc, err := db.Node(hash)
-	if enc == nil {
+	// Retrieve the node from the clean cache if available
+	if db.cleans != nil {
+		if enc, err := db.cleans.Get(string(hash[:])); err == nil && enc != nil {
+			memcacheCleanHitMeter.Mark(1)
+			memcacheCleanReadMeter.Mark(int64(len(enc)))
+			return mustDecodeNode(hash[:], enc, cachegen)
+		}
+	}
+	// Retrieve the node from the dirty cache if available
+	db.lock.RLock()
+	dirty := db.dirties[hash]
+	db.lock.RUnlock()
+
+	if dirty != nil {
+		return dirty.obj(hash, cachegen)
+	}
+	// Content unavailable in memory, attempt to retrieve from disk
+	enc, err := db.diskdb.Get(hash[:])
+	if err != nil || enc == nil {
 		return nil
 	}
-	if err != nil {
-		panic(err)
+	if db.cleans != nil {
+		db.cleans.Set(string(hash[:]), enc)
+		memcacheCleanMissMeter.Mark(1)
+		memcacheCleanWriteMeter.Mark(int64(len(enc)))
 	}
 	return mustDecodeNode(hash[:], enc, cachegen)
 }
 
 // Node retrieves an encoded cached trie node from memory. If it cannot be found
 // cached, the method queries the persistent database for the content.
-func (db *Database) Node(hash common.Hash) (ret []byte, err error) {
+func (db *Database) Node(hash common.Hash) ([]byte, error) {
 	// Retrieve the node from the clean cache if available
 	if db.cleans != nil {
 		if enc, err := db.cleans.Get(string(hash[:])); err == nil && enc != nil {

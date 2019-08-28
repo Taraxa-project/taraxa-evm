@@ -17,10 +17,7 @@
 package trie
 
 import (
-	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"hash"
-	"reflect"
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -77,52 +74,45 @@ func returnHasherToPool(h *hasher) {
 
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
-func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, error) {
-	fmt.Println("hashing", n.fstring(""), nocache)
-	if !nocache {
-		// If we're not storing the node, just hashing, use available cached data
-		if hash, dirty := n.cache(); hash != nil {
-			if db == nil {
-				return hash, n, nil
-			}
-			if n.canUnload(h.cachegen, h.cachelimit) {
-				// Unload the node from cache. All of its subnodes will have a lower or equal
-				// cache generation number.
-				cacheUnloadCounter.Inc(1)
-				return hash, hash, nil
-			}
-			if !dirty {
-				return hash, n, nil
-			}
+func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
+	// If we're not storing the node, just hashing, use available cached data
+	if hash, dirty := n.cache(); hash != nil {
+		if db == nil {
+			return hash, n, nil
+		}
+		if n.canUnload(h.cachegen, h.cachelimit) {
+			// Unload the node from cache. All of its subnodes will have a lower or equal
+			// cache generation number.
+			cacheUnloadCounter.Inc(1)
+			return hash, hash, nil
+		}
+		if !dirty {
+			return hash, n, nil
 		}
 	}
 	// Trie not processed yet or needs storage, walk the children
-	collapsed, cached, err := h.hashChildren(n, db, nocache)
+	collapsed, cached, err := h.hashChildren(n, db)
 	if err != nil {
 		return hashNode{}, n, err
 	}
-	fmt.Println("ololo", cached.fstring(""), reflect.TypeOf(cached).String())
-
-	hashed, err := h.store(util.Either(nocache, cached, collapsed).(node), db, force)
+	hashed, err := h.store(collapsed, db, force)
 	if err != nil {
 		return hashNode{}, n, err
 	}
-	if !nocache {
-		// Cache the hash of the node for later reuse and remove
-		// the dirty flag in commit mode. It's fine to assign these values directly
-		// without copying the node first because hashChildren copies it.
-		cachedHash, _ := hashed.(hashNode)
-		switch cn := cached.(type) {
-		case *shortNode:
-			cn.flags.hash = cachedHash
-			if db != nil {
-				cn.flags.dirty = false
-			}
-		case *fullNode:
-			cn.flags.hash = cachedHash
-			if db != nil {
-				cn.flags.dirty = false
-			}
+	// Cache the hash of the node for later reuse and remove
+	// the dirty flag in commit mode. It's fine to assign these values directly
+	// without copying the node first because hashChildren copies it.
+	cachedHash, _ := hashed.(hashNode)
+	switch cn := cached.(type) {
+	case *shortNode:
+		cn.flags.hash = cachedHash
+		if db != nil {
+			cn.flags.dirty = false
+		}
+	case *fullNode:
+		cn.flags.hash = cachedHash
+		if db != nil {
+			cn.flags.dirty = false
 		}
 	}
 	return hashed, cached, nil
@@ -131,22 +121,20 @@ func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, er
 // hashChildren replaces the children of a node with their hashes if the encoded
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
-func (h *hasher) hashChildren(n node, db *Database, nocache bool) (node, node, error) {
-	fmt.Println("hash children", n.fstring(""), nocache, reflect.TypeOf(n).String())
+func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 	var err error
 
-	switch n := n.(type) {
+	switch n := original.(type) {
 	case *shortNode:
-		panic("fwrf")
 		// Hash the short node's child, caching the newly hashed subtree
 		collapsed, cached := n.copy(), n.copy()
 		collapsed.Key = hexToCompact(n.Key)
 		cached.Key = common.CopyBytes(n.Key)
 
 		if _, ok := n.Val.(valueNode); !ok {
-			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false, nocache)
+			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false)
 			if err != nil {
-				return n, n, err
+				return original, original, err
 			}
 		}
 		return collapsed, cached, nil
@@ -157,9 +145,9 @@ func (h *hasher) hashChildren(n node, db *Database, nocache bool) (node, node, e
 
 		for i := 0; i < 16; i++ {
 			if n.Children[i] != nil {
-				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false, nocache)
+				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false)
 				if err != nil {
-					return n, n, err
+					return original, original, err
 				}
 			}
 		}
@@ -168,7 +156,7 @@ func (h *hasher) hashChildren(n node, db *Database, nocache bool) (node, node, e
 
 	default:
 		// Value and hash nodes don't have children so they're left as were
-		return n, n, nil
+		return n, original, nil
 	}
 }
 
@@ -178,7 +166,6 @@ func (h *hasher) hashChildren(n node, db *Database, nocache bool) (node, node, e
 func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	// Don't store hashes or empty nodes.
 	if _, isHash := n.(hashNode); n == nil || isHash {
-		fmt.Println("ishash", isHash)
 		return n, nil
 	}
 	// Generate the RLP encoding of the node
@@ -213,7 +200,6 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 			case *fullNode:
 				for i := 0; i < 16; i++ {
 					if child, ok := n.Children[i].(valueNode); ok {
-						panic("fwfwf")
 						h.onleaf(child, hash)
 					}
 				}
