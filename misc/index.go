@@ -8,6 +8,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"github.com/Taraxa-project/taraxa-evm/trie"
+	eth_common "github.com/ethereum/go-ethereum/common"
+	eth_state "github.com/ethereum/go-ethereum/core/state"
+	eth_trie "github.com/ethereum/go-ethereum/trie"
 )
 
 func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
@@ -88,9 +91,14 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	//for atomic.LoadInt32(running_count) != 0 {
 	//	runtime.Gosched()
 	//}
-	err3 := trie_db_dest.Commit(root, false)
-	util.PanicIfPresent(err3)
-	tr, err4 := trie.NewSecure(root_dest, trie_db_dest, 0)
-	util.PanicIfPresent(err4)
-	util.Assert(tr.Hash() == root_dest)
+	eth_db := eth_state.NewDatabase(&dbAdapter{rocksdb_source})
+	eth_root := eth_common.Hash(root)
+	tr, err3434 := eth_db.OpenTrie(eth_root)
+	util.PanicIfPresent(err3434)
+	util.Assert(tr.Hash() == eth_root)
+	acc_cnt := 0
+	for acc_itr := eth_trie.NewIterator(tr.NodeIterator(nil)); acc_itr.Next(); {
+		acc_cnt++
+		fmt.Println(acc_cnt, acc_itr)
+	}
 }
