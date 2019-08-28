@@ -28,17 +28,17 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
-	db_dest, err343 := (&rocksdb.Factory{
-		File:                  db_path_dest,
-		MaxOpenFiles:          1000 * 4,
-		Parallelism:           concurrent.NUM_CPU,
-		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		//BlockCacheSize:        1024 * 1024 * 1024 * 5,
-		//WriteBufferSize:       512 * 1024 * 1024,
-		//BloomFilterCapacity:   10,
-		//MergeOperartor:        rocksdb.NeverOverwrite,
-	}).NewInstance()
-	util.PanicIfPresent(err343)
+	//_, err343 := (&rocksdb.Factory{
+	//	File:                  db_path_dest,
+	//	MaxOpenFiles:          1000 * 4,
+	//	Parallelism:           concurrent.NUM_CPU,
+	//	MaxFileOpeningThreads: &concurrent.NUM_CPU,
+	//	//BlockCacheSize:        1024 * 1024 * 1024 * 5,
+	//	//WriteBufferSize:       512 * 1024 * 1024,
+	//	//BloomFilterCapacity:   10,
+	//	//MergeOperartor:        rocksdb.NeverOverwrite,
+	//}).NewInstance()
+	//util.PanicIfPresent(err343)
 	db_source := state.NewDatabaseWithCache(rocksdb_source, 1024*30)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
@@ -53,8 +53,8 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		//if err != nil {
 		//	return err
 		//}
-		err := db_dest.Put(key, value)
-		util.PanicIfPresent(err)
+		//err := db_dest.Put(key, value)
+		//util.PanicIfPresent(err)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
 		fmt.Println(atomic.AddInt32(acc_cnt, 1))
 		return nil
