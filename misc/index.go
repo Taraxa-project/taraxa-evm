@@ -90,4 +90,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	//}
 	err3 := trie_db_dest.Commit(root, false)
 	util.PanicIfPresent(err3)
+	tr, err4 := trie.NewSecure(root_dest, trie_db_dest, 0)
+	util.PanicIfPresent(err4)
+	util.Assert(tr.Hash() == root_dest)
 }
