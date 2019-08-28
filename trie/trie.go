@@ -450,7 +450,7 @@ func (t *Trie) hashRoot(db *Database, onleaf LeafCallback, nocache bool) (node, 
 
 func (t *Trie) Dump(db *Database) (common.Hash, error) {
 	hash, _, err := t.hashRoot(db, func(leaf []byte, parent common.Hash) error {
-		fmt.Println(string(leaf), parent.Hex())
+		fmt.Println("leaf", string(leaf), parent.Hex())
 		return nil
 	}, true)
 	if err != nil {
