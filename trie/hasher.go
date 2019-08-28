@@ -131,21 +131,22 @@ func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, er
 // hashChildren replaces the children of a node with their hashes if the encoded
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
-func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, node, error) {
-	fmt.Println("hash children", original.fstring(""), nocache, reflect.TypeOf(original).String())
+func (h *hasher) hashChildren(n node, db *Database, nocache bool) (node, node, error) {
+	fmt.Println("hash children", n.fstring(""), nocache, reflect.TypeOf(n).String())
 	var err error
 
-	switch n := original.(type) {
+	switch n := n.(type) {
 	case *shortNode:
+		panic("fwrf")
 		// Hash the short node's child, caching the newly hashed subtree
 		collapsed, cached := n.copy(), n.copy()
 		collapsed.Key = hexToCompact(n.Key)
 		cached.Key = common.CopyBytes(n.Key)
 
 		if _, ok := n.Val.(valueNode); !ok {
-			collapsed.Val, cached.Val, err = h.hash(n.Val, db, nocache, nocache)
+			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false, nocache)
 			if err != nil {
-				return original, original, err
+				return n, n, err
 			}
 		}
 		return collapsed, cached, nil
@@ -156,22 +157,18 @@ func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, 
 
 		for i := 0; i < 16; i++ {
 			if n.Children[i] != nil {
-				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, nocache, nocache)
+				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false, nocache)
 				if err != nil {
-					return original, original, err
+					return n, n, err
 				}
 			}
 		}
 		cached.Children[16] = n.Children[16]
-		foo := n.Children[16]
-		if foo != nil {
-			fmt.Println("ololo", reflect.TypeOf(foo).String())
-		}
 		return collapsed, cached, nil
 
 	default:
 		// Value and hash nodes don't have children so they're left as were
-		return n, original, nil
+		return n, n, nil
 	}
 }
 
