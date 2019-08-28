@@ -28,7 +28,8 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 			return ret
 		}(),
 		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		UseDirectReads: true,
+		UseDirectReads:        true,
+		AllowMmapReads:        true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
 	db_dest, err343 := (&rocksdb.Factory{
