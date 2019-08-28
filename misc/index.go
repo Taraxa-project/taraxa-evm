@@ -97,6 +97,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	util.PanicIfPresent(err3434)
 	util.Assert(tr.Hash() == eth_root)
 	acc_cnt := 0
+	fmt.Println("foo")
 	for acc_itr := eth_trie.NewIterator(tr.NodeIterator(nil)); acc_itr.Next(); {
 		acc_cnt++
 		fmt.Println(acc_cnt, acc_itr)
