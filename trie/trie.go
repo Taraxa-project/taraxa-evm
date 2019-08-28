@@ -466,23 +466,30 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor
 		}()
 		return
 	case *fullNode:
-		for pos, child := range n.Children {
-			if child == nil {
-				continue
+		defer func() {
+			for pos, child := range n.Children {
+				if child == nil {
+					continue
+				}
+				if err = this.visitLeaves(append(path[:], byte(pos)), n, child, visitor); err != nil {
+					return
+				}
 			}
-			if err := this.visitLeaves(append(path[:], byte(pos)), n, child, visitor); err != nil {
-				return err
-			}
-		}
-		return nil
+		}()
+		return
 	case hashNode:
-		child, err := this.resolveHash(n, path)
-		if err != nil {
-			return err
-		}
-		return this.visitLeaves(path, n, child, visitor)
+		defer func() {
+			var child node
+			if child, err = this.resolveHash(n, path); err == nil {
+				err = this.visitLeaves(path, n, child, visitor)
+			}
+		}()
+		return
 	case valueNode:
-		return visitor(path[:], n[:], common.Hash{})
+		defer func() {
+			err = visitor(path[:], n[:], common.Hash{})
+		}()
+		return
 	}
 	panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
 }
