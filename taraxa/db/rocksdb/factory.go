@@ -18,7 +18,7 @@ type Factory struct {
 	Parallelism               int     `json:"parallelism"`
 	OptimizeForPointLookup    *uint64 `json:"optimizeForPointLookup"`
 	MaxFileOpeningThreads     *int    `json:"maxFileOpeningThreads"`
-	CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
+	//TODO CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
 func (this *Factory) NewInstance() (ret ethdb.MutableTransactionalDatabase, err error) {
