@@ -469,14 +469,14 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor
 			}
 		}
 		return nil
-	case *hashNode:
-		child, err := this.resolveHash(*n, path)
+	case hashNode:
+		child, err := this.resolveHash(n, path)
 		if err != nil {
 			return err
 		}
 		return this.visitLeaves(path, n, child, visitor)
-	case *valueNode:
-		return visitor(path[:], (*n)[:], common.Hash{})
+	case valueNode:
+		return visitor(path[:], n[:], common.Hash{})
 	}
 	panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
 }
