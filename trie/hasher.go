@@ -211,9 +211,9 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 					h.onleaf(child, hash)
 				}
 			case *fullNode:
-				panic("fwfwf")
 				for i := 0; i < 16; i++ {
 					if child, ok := n.Children[i].(valueNode); ok {
+						panic("fwfwf")
 						h.onleaf(child, hash)
 					}
 				}
