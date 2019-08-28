@@ -24,10 +24,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"reflect"
 	"runtime"
-	"sync"
 	"sync/atomic"
 )
 
@@ -460,12 +458,11 @@ type visitContext struct {
 	visitor               LeafVisitor
 	maxConcurrentBranches int32
 	numConcurrentBranches int32
-	visitorMutex          sync.Mutex
 	err                   util.ErrorBarrier
 }
 
 func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
-	ctx := visitContext{visitor: visitor, maxConcurrentBranches: int32(45)}
+	ctx := visitContext{visitor: visitor, maxConcurrentBranches: int32(40)}
 	this.visitLeaves(nil, nil, this.root, &ctx)
 	for !atomic.CompareAndSwapInt32(&ctx.numConcurrentBranches, 0, 0) {
 		runtime.Gosched()
@@ -502,7 +499,6 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 			defer action()
 		}
 	case valueNode:
-		defer concurrent.LockUnlock(&ctx.visitorMutex)()
 		ctx.err.SetIfAbsent(ctx.visitor(path[:], n[:], common.Hash{}))
 	default:
 		panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
