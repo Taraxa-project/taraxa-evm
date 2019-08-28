@@ -100,6 +100,7 @@ func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, er
 	if err != nil {
 		return hashNode{}, n, err
 	}
+	fmt.Println("ololo", cached.fstring(""), reflect.TypeOf(cached).String())
 	hashed, err := h.store(collapsed, db, force)
 	if err != nil {
 		return hashNode{}, n, err
