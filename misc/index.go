@@ -36,7 +36,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		BlockCacheSize:        1024 * 1024 * 1024 * 5,
 		WriteBufferSize:       512 * 1024 * 1024,
 		BloomFilterCapacity:   10,
-		MergeOperartor:        rocksdb.NeverOverwrite,
+		//MergeOperartor:        rocksdb.NeverOverwrite,
 	}).NewInstance()
 	util.PanicIfPresent(err343)
 	db_source := state.NewDatabaseWithCache(rocksdb_source, 1024*30)
