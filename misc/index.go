@@ -1,6 +1,7 @@
 package misc
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
@@ -42,6 +43,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
 	root_dest, err2 := acc_trie_source.Dump(trie_db_dest)
 	util.PanicIfPresent(err2)
+	fmt.Println(root.Hex(), root_dest.Hex())
 	util.Assert(root == root_dest)
 	//state_lock := new(sync.Mutex)
 	//running_count := new(int32)
