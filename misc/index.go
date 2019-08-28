@@ -33,9 +33,9 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		MaxOpenFiles:          1000 * 4,
 		Parallelism:           concurrent.NUM_CPU,
 		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		BlockCacheSize:        1024 * 1024 * 1024 * 5,
-		WriteBufferSize:       512 * 1024 * 1024,
-		BloomFilterCapacity:   10,
+		//BlockCacheSize:        1024 * 1024 * 1024 * 5,
+		//WriteBufferSize:       512 * 1024 * 1024,
+		//BloomFilterCapacity:   10,
 		//MergeOperartor:        rocksdb.NeverOverwrite,
 	}).NewInstance()
 	util.PanicIfPresent(err343)
