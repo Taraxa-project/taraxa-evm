@@ -445,13 +445,11 @@ func (t *Trie) hashRoot(db *Database, onleaf LeafCallback, alwaysStore bool) (no
 	}
 	h := newHasher(t.cachegen, t.cachelimit, onleaf)
 	defer returnHasherToPool(h)
-	return h.hash(t.root, db, true, false)
+	return h.hash(t.root, db, true, alwaysStore)
 }
 
 func (t *Trie) Dump(db *Database) (common.Hash, error) {
-	h := newHasher(t.cachegen, t.cachelimit, nil)
-	defer returnHasherToPool(h)
-	hash, _, err := h.hash(t.root, db, true, true)
+	hash, _, err := t.hashRoot(db, nil, true)
 	if err != nil {
 		return common.Hash{}, err
 	}
