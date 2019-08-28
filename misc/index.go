@@ -1,9 +1,11 @@
 package misc
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -41,7 +43,15 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	util.PanicIfPresent(err1)
 	//trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
 	err2 := acc_trie_source.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-		fmt.Println(string(key), string(value))
+		acc := new(state.Account)
+		if err := rlp.DecodeBytes(value, acc); err != nil {
+			return err
+		}
+		acc_json_bytes, err := json.Marshal(acc)
+		if err != nil {
+			return err
+		}
+		fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
 		return nil
 	})
 	util.PanicIfPresent(err2)
