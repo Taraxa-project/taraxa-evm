@@ -465,7 +465,7 @@ type visitContext struct {
 }
 
 func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
-	ctx := visitContext{visitor: visitor, maxConcurrentBranches: int32(concurrent.NUM_CPU)}
+	ctx := visitContext{visitor: visitor, maxConcurrentBranches: int32(45)}
 	this.visitLeaves(nil, nil, this.root, &ctx)
 	for !atomic.CompareAndSwapInt32(&ctx.numConcurrentBranches, 0, 0) {
 		runtime.Gosched()
