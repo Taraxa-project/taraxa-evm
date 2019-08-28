@@ -18,7 +18,6 @@ package trie
 
 import (
 	"fmt"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/log"
 )
@@ -141,6 +140,10 @@ func (t *SecureTrie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 // database and can be used even if the trie doesn't have one.
 func (t *SecureTrie) Hash() common.Hash {
 	return t.trie.Hash()
+}
+
+func (t *SecureTrie) Dump(db *Database) (common.Hash, error) {
+	return t.trie.Dump(db)
 }
 
 // Copy returns a copy of SecureTrie.
