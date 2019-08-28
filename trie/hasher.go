@@ -140,7 +140,7 @@ func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, 
 		cached.Key = common.CopyBytes(n.Key)
 
 		if _, ok := n.Val.(valueNode); !ok {
-			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false, nocache)
+			collapsed.Val, cached.Val, err = h.hash(n.Val, db, nocache, nocache)
 			if err != nil {
 				return original, original, err
 			}
@@ -153,7 +153,7 @@ func (h *hasher) hashChildren(original node, db *Database, nocache bool) (node, 
 
 		for i := 0; i < 16; i++ {
 			if n.Children[i] != nil {
-				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false, nocache)
+				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, nocache, nocache)
 				if err != nil {
 					return original, original, err
 				}
