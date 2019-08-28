@@ -75,3 +75,10 @@ var CRC64_ISO_TABLE = crc64.MakeTable(crc64.ISO)
 func CRC64(b []byte) uint64 {
 	return crc64.Checksum(b, CRC64_ISO_TABLE)
 }
+
+func Either(cond bool, left, right interface{}) interface{} {
+	if cond {
+		return left
+	}
+	return right
+}

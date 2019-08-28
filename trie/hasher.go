@@ -18,6 +18,7 @@ package trie
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"hash"
 	"reflect"
 	"sync"
@@ -101,7 +102,8 @@ func (h *hasher) hash(n node, db *Database, force, nocache bool) (node, node, er
 		return hashNode{}, n, err
 	}
 	fmt.Println("ololo", cached.fstring(""), reflect.TypeOf(cached).String())
-	hashed, err := h.store(collapsed, db, force)
+
+	hashed, err := h.store(util.Either(nocache, cached, collapsed).(node), db, force)
 	if err != nil {
 		return hashNode{}, n, err
 	}
