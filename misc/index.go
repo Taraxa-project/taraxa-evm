@@ -34,6 +34,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	util.PanicIfPresent(err2)
 	fmt.Println("bar")
 	for acc_itr := trie.NewIterator(acc_trie_source.NodeIterator(nil)); acc_itr.Next(); {
+		fmt.Println("fwfwff")
 		var acc state.Account
 		err := rlp.DecodeBytes(acc_itr.Value, &acc)
 		util.PanicIfPresent(err)
@@ -47,6 +48,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 			code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
 			util.PanicIfPresent(err)
 		}
+		fmt.Println("fwrfqwfqwf")
 		state_dest.SetCode(addr, code)
 		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
 		util.PanicIfPresent(err1)
