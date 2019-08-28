@@ -477,7 +477,6 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 	if ctx.err.Check() {
 		return
 	}
-	fmt.Println("concurrency:", atomic.LoadInt32(&ctx.numConcurrentBranches))
 	switch n := n.(type) {
 	case *shortNode:
 		defer this.visitLeaves(append(path[:], n.Key...), n, n.Val, ctx)
@@ -499,9 +498,7 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 			go util.Chain(action, func() {
 				atomic.AddInt32(&ctx.numConcurrentBranches, -1)
 			})()
-			fmt.Println("concurrent")
 		} else {
-			//fmt.Println("non-concurrent")
 			defer action()
 		}
 	case valueNode:
