@@ -38,6 +38,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		err := rlp.DecodeBytes(acc_itr.Value, &acc)
 		util.PanicIfPresent(err)
 		addr := common.BytesToAddress(acc_trie_source.GetKey(acc_itr.Key))
+		fmt.Println("acc", addr.Hex())
 		addrHash := crypto.Keccak256Hash(addr[:])
 		state_dest.SetBalance(addr, acc.Balance)
 		state_dest.SetNonce(addr, acc.Nonce)
@@ -51,7 +52,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
 		util.PanicIfPresent(err1)
 		for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
-			//fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
+			fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
 			_, content, _, err := rlp.Split(storage_itr.Value)
 			util.PanicIfPresent(err)
 			state_dest.SetState(
@@ -59,7 +60,6 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 				common.BytesToHash(storage_trie.GetKey(storage_itr.Key)),
 				common.BytesToHash(content))
 		}
-		fmt.Println("acc", addr.Hex())
 	}
 	root_dest, err3 := state_dest.Commit(false)
 	util.PanicIfPresent(err3)

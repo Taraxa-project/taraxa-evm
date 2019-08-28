@@ -34,7 +34,7 @@ func accountStorageKey(addr *common.Address, location *common.Hash) *AccountStor
 
 func main() {
 	misc.DumpStateRocksdb(
-		"/workspace/data/ethereum_state_mainnet_rocksdb",
+		"/workspace/data/eth_mainnet_rocksdb/state",
 		"0x03c6d7095795ac2fa6fc6fc3a83c6c9cb085b7637ab2fa31b228f3d7bfeaac55")
 	//db, err := gorocksdb.OpenDbForReadOnly(
 	//	gorocksdb.NewDefaultOptions(), "/workspace/data/ethereum_blockchain_mainnet_rocksdb", false)
