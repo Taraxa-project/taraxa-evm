@@ -22,15 +22,17 @@ var emptyCodeHash = crypto.Keccak256(nil)
 func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
-		File:         db_path_source,
-		ReadOnly:     true,
-		MaxOpenFiles: 1000 * 4,
-		Parallelism:  concurrent.NUM_CPU,
-		OptimizeForPointLookup: func() *uint64 {
-			ret := new(uint64)
-			*ret = 1024 * 20
-			return ret
-		}(),
+		File:                db_path_source,
+		ReadOnly:            true,
+		MaxOpenFiles:        1000 * 4,
+		Parallelism:         concurrent.NUM_CPU,
+		BlockCacheSize:      1024 * 20,
+		BloomFilterCapacity: 20,
+		//OptimizeForPointLookup: func() *uint64 {
+		//	ret := new(uint64)
+		//	*ret = 1024 * 20
+		//	return ret
+		//}(),
 		MaxFileOpeningThreads: &concurrent.NUM_CPU,
 		UseDirectReads:        true,
 	}).NewInstance()
@@ -60,7 +62,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 			code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
 			util.PanicIfPresent(err)
 		}
-		for atomic.LoadInt32(running_count) > int32(concurrent.NUM_CPU*10) {
+		for atomic.LoadInt32(running_count) > int32(concurrent.NUM_CPU*1) {
 			//runtime.Gosched()
 			time.Sleep(time.Second * 5)
 		}
