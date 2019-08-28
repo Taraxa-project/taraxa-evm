@@ -55,6 +55,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 				common.BytesToHash(storage_trie.GetKey(storage_itr.Key)),
 				common.BytesToHash(content))
 		}
+		fmt.Println(addr.Hex())
 	}
 	fmt.Println("baz")
 	root_dest, err3 := state_dest.Commit(false)
