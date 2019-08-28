@@ -16,15 +16,11 @@ import (
 var emptyCodeHash = crypto.Keccak256(nil)
 
 func DumpStateRocksdb(db_path_source, root_str string) {
-	fmt.Println("foo")
 	root := common.HexToHash(root_str)
 	rocksdb_source, err0 := (&rocksdb.Factory{
 		File:     db_path_source,
 		ReadOnly: true,
 	}).NewInstance()
-	rootval, err33 := rocksdb_source.Get(root.Bytes())
-	util.PanicIfPresent(err33)
-	fmt.Println(root.Hex(), string(rootval))
 	util.PanicIfPresent(err0)
 	db_source := state.NewDatabase(&dbAdapter{rocksdb_source})
 	acc_trie_source, err1 := db_source.OpenTrie(root)
@@ -32,9 +28,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	db_dest := ethdb.NewMemDatabase()
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
-	fmt.Println("bar")
 	for acc_itr := trie.NewIterator(acc_trie_source.NodeIterator(nil)); acc_itr.Next(); {
-		fmt.Println("fwfwff")
 		var acc state.Account
 		err := rlp.DecodeBytes(acc_itr.Value, &acc)
 		util.PanicIfPresent(err)
@@ -48,11 +42,11 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 			code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
 			util.PanicIfPresent(err)
 		}
-		fmt.Println("fwrfqwfqwf")
 		state_dest.SetCode(addr, code)
 		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
 		util.PanicIfPresent(err1)
 		for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
+			fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
 			_, content, _, err := rlp.Split(storage_itr.Value)
 			util.PanicIfPresent(err)
 			state_dest.SetState(
@@ -60,9 +54,8 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 				common.BytesToHash(storage_trie.GetKey(storage_itr.Key)),
 				common.BytesToHash(content))
 		}
-		fmt.Println(addr.Hex())
+		fmt.Println("acc", addr.Hex())
 	}
-	fmt.Println("baz")
 	root_dest, err3 := state_dest.Commit(false)
 	util.PanicIfPresent(err3)
 	util.Assert(root == root_dest)
