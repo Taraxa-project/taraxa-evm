@@ -24,8 +24,8 @@ func DoNothing() {}
 
 func Chain(f, g func()) func() {
 	return func() {
+		defer g()
 		f()
-		g()
 	}
 }
 

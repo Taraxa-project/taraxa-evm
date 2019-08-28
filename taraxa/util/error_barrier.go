@@ -17,6 +17,14 @@ func (this *ErrorBarrier) SetIfAbsent(err error) (hasSet bool) {
 	return true
 }
 
+func (this *ErrorBarrier) SetAndCheck(err error) bool {
+	return this.SetIfAbsent(err) || this.Check()
+}
+
+func (this *ErrorBarrier) Check() bool {
+	return atomic.CompareAndSwapInt32(&this.active, 1, 1)
+}
+
 func (this *ErrorBarrier) CheckIn(errors ...error) {
 	this.PanicIfPresent()
 	for _, err := range errors {
