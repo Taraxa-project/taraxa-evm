@@ -464,6 +464,9 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor
 		return this.visitLeaves(append(path[:], n.Key...), n, n.Val, visitor)
 	case *fullNode:
 		for pos, child := range n.Children {
+			if child == nil {
+				continue
+			}
 			if err := this.visitLeaves(append(path[:], byte(pos)), n, child, visitor); err != nil {
 				return err
 			}
