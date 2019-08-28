@@ -501,7 +501,7 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 			})()
 			fmt.Println("concurrent")
 		} else {
-			fmt.Println("non-concurrent")
+			//fmt.Println("non-concurrent")
 			defer action()
 		}
 	case valueNode:
