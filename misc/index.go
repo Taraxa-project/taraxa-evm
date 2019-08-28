@@ -17,13 +17,13 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		MaxOpenFiles:          1000 * 4,
 		Parallelism:           concurrent.NUM_CPU,
 		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		BlockCacheSize:        1024 * 20,
-		BloomFilterCapacity:   20,
-		//OptimizeForPointLookup: func() *uint64 {
-		//	ret := new(uint64)
-		//	*ret = 1024 * 20
-		//	return ret
-		//}(),
+		//BlockCacheSize:        1024 * 20,
+		//BloomFilterCapacity:   20,
+		OptimizeForPointLookup: func() *uint64 {
+			ret := new(uint64)
+			*ret = 1024 * 20
+			return ret
+		}(),
 		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
