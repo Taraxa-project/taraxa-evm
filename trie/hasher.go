@@ -17,6 +17,7 @@
 package trie
 
 import (
+	"fmt"
 	"hash"
 	"sync"
 
@@ -75,6 +76,7 @@ func returnHasherToPool(h *hasher) {
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
 func (h *hasher) hash(n node, db *Database, force, alwaysStore bool) (node, node, error) {
+	fmt.Println("hashing", n.fstring(""))
 	if !alwaysStore {
 		// If we're not storing the node, just hashing, use available cached data
 		if hash, dirty := n.cache(); hash != nil {
