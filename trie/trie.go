@@ -458,10 +458,12 @@ func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
 	return nil
 }
 
-func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor) error {
+func (this *Trie) visitLeaves(path []byte, n_parent, n node, visitor LeafVisitor) (err error) {
 	switch n := n.(type) {
 	case *shortNode:
-		return this.visitLeaves(append(path[:], n.Key...), n, n.Val, visitor)
+		defer func() {
+			err = this.visitLeaves(append(path[:], n.Key...), n, n.Val, visitor)
+		}()
 	case *fullNode:
 		for pos, child := range n.Children {
 			if child == nil {
