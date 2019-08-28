@@ -1,11 +1,9 @@
 package misc
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -30,29 +28,32 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
-	//db_dest, err343 := (&rocksdb.Factory{
-	//	File:                  db_path_dest,
-	//	MaxOpenFiles:          1000 * 2,
-	//	Parallelism:           concurrent.NUM_CPU,
-	//	MaxFileOpeningThreads: &concurrent.NUM_CPU,
-	//	BlockCacheSize:        1024 * 5,
-	//	BloomFilterCapacity:   10,
-	//}).NewInstance()
-	//util.PanicIfPresent(err343)
+	db_dest, err343 := (&rocksdb.Factory{
+		File:                  db_path_dest,
+		MaxOpenFiles:          1000 * 4,
+		Parallelism:           concurrent.NUM_CPU,
+		MaxFileOpeningThreads: &concurrent.NUM_CPU,
+		BlockCacheSize:        1024 * 1024 * 1024 * 5,
+		WriteBufferSize:       512 * 1024 * 1024,
+		BloomFilterCapacity:   10,
+		MergeOperartor:        rocksdb.NeverOverwrite,
+	}).NewInstance()
+	util.PanicIfPresent(err343)
 	db_source := state.NewDatabaseWithCache(rocksdb_source, 1024*30)
 	acc_trie_source, err1 := db_source.OpenTrie(root)
 	util.PanicIfPresent(err1)
 	//trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
 	acc_cnt := new(int32)
 	err2 := acc_trie_source.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-		acc := new(state.Account)
-		if err := rlp.DecodeBytes(value, acc); err != nil {
-			return err
-		}
-		_, err := json.Marshal(acc)
-		if err != nil {
-			return err
-		}
+		//acc := new(state.Account)
+		//if err := rlp.DecodeBytes(value, acc); err != nil {
+		//	return err
+		//}
+		//_, err := json.Marshal(acc)
+		//if err != nil {
+		//	return err
+		//}
+		db_dest.Put(key, value)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
 		fmt.Println(atomic.AddInt32(acc_cnt, 1))
 		return nil

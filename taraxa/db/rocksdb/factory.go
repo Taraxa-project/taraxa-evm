@@ -20,11 +20,15 @@ type Factory struct {
 	MaxFileOpeningThreads  *int    `json:"maxFileOpeningThreads"`
 	UseDirectReads         bool    `json:"useDirectReads"`
 	AllowMmapReads         bool    `json:"allowMmapReads"`
+	MergeOperartor         gorocksdb.MergeOperator
 	//TODO CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
 func (this *Factory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
 	opts := gorocksdb.NewDefaultOptions()
+	if this.MergeOperartor != nil {
+		opts.SetMergeOperator(this.MergeOperartor)
+	}
 	if this.OptimizeForPointLookup != nil {
 		opts.SetAllowConcurrentMemtableWrites(false)
 		opts.OptimizeForPointLookup(*this.OptimizeForPointLookup)
