@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var emptyCodeHash = crypto.Keccak256(nil)
@@ -52,7 +53,6 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		err := rlp.DecodeBytes(acc_itr.Value, &acc)
 		util.PanicIfPresent(err)
 		addr := common.BytesToAddress(acc_trie_source.GetKey(acc_itr.Key))
-		fmt.Println("acc", addr.Hex())
 		addrHash := crypto.Keccak256Hash(addr[:])
 		var code []byte
 		if !bytes.Equal(acc.CodeHash, emptyCodeHash) {
@@ -60,14 +60,15 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 			code, err = db_source.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
 			util.PanicIfPresent(err)
 		}
-		storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
-		util.PanicIfPresent(err1)
 		for atomic.LoadInt32(running_count) > int32(concurrent.NUM_CPU*10) {
-			runtime.Gosched()
+			//runtime.Gosched()
+			time.Sleep(time.Second * 5)
 		}
 		atomic.AddInt32(running_count, 1)
 		go func() {
 			defer atomic.AddInt32(running_count, -1)
+			storage_trie, err1 := db_source.OpenStorageTrie(addrHash, root)
+			util.PanicIfPresent(err1)
 			storage := make(map[common.Hash]common.Hash)
 			for storage_itr := trie.NewIterator(storage_trie.NodeIterator(nil)); storage_itr.Next(); {
 				//fmt.Println("storage", addr.Hex(), common.Bytes2Hex(storage_itr.Key))
