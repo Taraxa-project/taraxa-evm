@@ -75,7 +75,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		//	state_dest.SetCode(addr, code)
 		//	state_dest.SetStorage(addr, storage)
 		//}()
-		//scheduled_count++
+		scheduled_count++
 		fmt.Println("scheduled", scheduled_count)
 	}
 	panic("foo")
