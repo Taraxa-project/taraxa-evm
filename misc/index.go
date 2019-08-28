@@ -38,7 +38,7 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 	db_dest := ethdb.NewMemDatabase()
 	state_dest, err2 := state.New(common.Hash{}, state.NewDatabase(&dbAdapter{db_dest}))
 	util.PanicIfPresent(err2)
-	set_state_mu := new(sync.Mutex)
+	state_lock := new(sync.Mutex)
 	running_count := new(int32)
 	for acc_itr := trie.NewIterator(acc_trie_source.NodeIterator(nil)); acc_itr.Next(); {
 		var acc state.Account
@@ -68,13 +68,12 @@ func DumpStateRocksdb(db_path_source, root_str string) {
 				util.PanicIfPresent(err)
 				storage[common.BytesToHash(storage_trie.GetKey(storage_itr.Key))] = common.BytesToHash(content)
 			}
-			defer concurrent.LockUnlock(set_state_mu)()
+			defer concurrent.LockUnlock(state_lock)()
+			state_dest.SetBalance(addr, acc.Balance)
+			state_dest.SetNonce(addr, acc.Nonce)
+			state_dest.SetCode(addr, code)
 			state_dest.SetStorage(addr, storage)
 		}()
-		defer concurrent.LockUnlock(set_state_mu)()
-		state_dest.SetBalance(addr, acc.Balance)
-		state_dest.SetNonce(addr, acc.Nonce)
-		state_dest.SetCode(addr, code)
 	}
 	for atomic.LoadInt32(running_count) != 0 {
 		runtime.Gosched()
