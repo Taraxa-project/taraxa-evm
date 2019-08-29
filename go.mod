@@ -18,7 +18,6 @@ require (
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.10.4 // indirect
 	github.com/emirpasic/gods v1.12.0
-	github.com/ethereum/go-ethereum v1.9.2
 	github.com/go-delve/delve v1.2.0 // indirect
 	github.com/go-stack/stack v1.8.0
 	github.com/golang/protobuf v1.3.1
