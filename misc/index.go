@@ -52,37 +52,38 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	state_db_mu := new(sync.Mutex)
 	acc_cnt := new(uint32)
 	err2 := acc_trie_source.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-		addr := common.BytesToAddress(key)
-		acc := new(state.Account)
-		if err := rlp.DecodeBytes(value, acc); err != nil {
-			return err
-		}
-		addrHash := crypto.Keccak256Hash(addr[:])
-		code, err23 := db_dest.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
-		util.PanicIfPresent(err23)
-		storage, storage_mu := make(map[common.Hash]common.Hash), new(sync.Mutex)
-		storage_trie, err1 := db_source.OpenTrie(acc.Root)
-		util.PanicIfPresent(err1)
-		storage_trie.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-			defer concurrent.LockUnlock(storage_mu)()
-			storage[common.BytesToHash(key)] = common.BytesToHash(value)
-			return nil
-		})
-		var intermediate_root *common.Hash
-		concurrent.WithLock(state_db_mu, func() {
-			state_db_dest.SetBalance(addr, new(big.Int).Set(acc.Balance))
-			state_db_dest.SetNonce(addr, acc.Nonce)
-			state_db_dest.SetCode(addr, code)
-			for k, v := range storage {
-				state_db_dest.SetState(addr, k, v)
-			}
-			root, err133 := state_db_dest.Commit(false)
-			util.PanicIfPresent(err133)
-			*intermediate_root = root
-		})
-		err13443 := db_dest.TrieDB().Commit(*intermediate_root, false)
-		util.PanicIfPresent(err13443)
-		fmt.Println(atomic.AddUint32(acc_cnt, 1))
+		go func() {
+			addr := common.BytesToAddress(key)
+			acc := new(state.Account)
+			err := rlp.DecodeBytes(value, acc)
+			util.PanicIfPresent(err)
+			addrHash := crypto.Keccak256Hash(addr[:])
+			code, err23 := db_dest.ContractCode(addrHash, common.BytesToHash(acc.CodeHash))
+			util.PanicIfPresent(err23)
+			storage, storage_mu := make(map[common.Hash]common.Hash), new(sync.Mutex)
+			storage_trie, err1 := db_source.OpenTrie(acc.Root)
+			util.PanicIfPresent(err1)
+			storage_trie.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
+				defer concurrent.LockUnlock(storage_mu)()
+				storage[common.BytesToHash(key)] = common.BytesToHash(value)
+				return nil
+			})
+			var intermediate_root *common.Hash
+			concurrent.WithLock(state_db_mu, func() {
+				state_db_dest.SetBalance(addr, new(big.Int).Set(acc.Balance))
+				state_db_dest.SetNonce(addr, acc.Nonce)
+				state_db_dest.SetCode(addr, code)
+				for k, v := range storage {
+					state_db_dest.SetState(addr, k, v)
+				}
+				root, err133 := state_db_dest.Commit(false)
+				util.PanicIfPresent(err133)
+				*intermediate_root = root
+			})
+			err13443 := db_dest.TrieDB().Commit(*intermediate_root, false)
+			util.PanicIfPresent(err13443)
+			fmt.Println(atomic.AddUint32(acc_cnt, 1))
+		}()
 		return nil
 	})
 	util.PanicIfPresent(err2)
