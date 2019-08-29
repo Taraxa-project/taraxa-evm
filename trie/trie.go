@@ -501,6 +501,8 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 	case valueNode:
 		ctx.err.SetIfAbsent(ctx.visitor(path[:], n[:], common.Hash{}))
 	default:
-		panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
+		if n != nil {
+			panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
+		}
 	}
 }
