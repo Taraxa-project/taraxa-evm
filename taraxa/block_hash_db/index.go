@@ -27,12 +27,12 @@ func (this *BlockHashDB) GetHeaderHashByBlockNumber(blockNumber uint64) common.H
 	// TODO base 16?
 	blockNumberStr := strconv.FormatUint(blockNumber, 10)
 	value, err := this.db.Get([]byte(blockNumberStr))
-	util.PanicIfPresent(err)
+	util.PanicIfNotNil(err)
 	header := new(struct {
 		Hash *common.Hash `json:"hash"`
 	})
 	err = json.Unmarshal(value, header)
-	util.PanicIfPresent(err)
+	util.PanicIfNotNil(err)
 	util.Assert(header.Hash != nil)
 	hash := *header.Hash
 	this.cache.Set(blockNumber, hash)

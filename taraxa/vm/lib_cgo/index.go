@@ -22,9 +22,9 @@ var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
 		})
 		vm, vmCleanup, createErr := config.NewInstance()
 		cleanup = util.Chain(cleanup, vmCleanup)
-		util.PanicIfPresent(createErr)
+		util.PanicIfNotNil(createErr)
 		vmAddr, allocErr := env.Alloc(vm, cleanup)
-		util.PanicIfPresent(allocErr)
+		util.PanicIfNotNil(allocErr)
 		return
 	},
 }}
@@ -32,14 +32,14 @@ var env = virtual_env.VirtualEnv{Functions: virtual_env.Functions{
 //export taraxa_cgo_env_Call
 func taraxa_cgo_env_Call(receiverAddr, methodName, argsEncoded *C.char) *C.char {
 	ret, err := env.Call(C.GoString(receiverAddr), C.GoString(methodName), C.GoString(argsEncoded))
-	util.PanicIfPresent(err)
+	util.PanicIfNotNil(err)
 	return C.CString(ret)
 }
 
 //export taraxa_cgo_env_Free
 func taraxa_cgo_env_Free(addr *C.char) {
 	err := env.Free(C.GoString(addr))
-	util.PanicIfPresent(err)
+	util.PanicIfNotNil(err)
 }
 
 //export taraxa_cgo_SetGCPercent

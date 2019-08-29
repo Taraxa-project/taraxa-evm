@@ -46,7 +46,7 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 	return false
 }
 
-func PanicIfPresent(value interface{}) {
+func PanicIfNotNil(value interface{}) {
 	if !isReallyNil(value) {
 		panic(value)
 	}

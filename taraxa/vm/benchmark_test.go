@@ -23,16 +23,16 @@ func BenchmarkStateTransitionTestMode(b *testing.B) {
 	})
 	config_file_path := os.Getenv("CONFIG_FILE")
 	bytes, err := ioutil.ReadFile(config_file_path)
-	util.PanicIfPresent(err)
-	util.PanicIfPresent(json.Unmarshal(bytes, cfg))
+	util.PanicIfNotNil(err)
+	util.PanicIfNotNil(json.Unmarshal(bytes, cfg))
 	taraxaVM, _, createVmErr := cfg.Factory.NewInstance()
-	util.PanicIfPresent(createVmErr)
+	util.PanicIfNotNil(createVmErr)
 	allTransactions := NewTxIdSet(nil)
 	for txId := range cfg.Block.Transactions {
 		allTransactions.Add(txId)
 	}
 	concurrentSchedule, _, scheduleErr := taraxaVM.GenerateSchedule(cfg.StateTransitionRequest)
-	util.PanicIfPresent(scheduleErr)
+	util.PanicIfNotNil(scheduleErr)
 	fmt.Println("tx count", len(cfg.Block.Transactions))
 	fmt.Println("confict %:",
 		float64(concurrentSchedule.SequentialTransactions.Size())/float64(len(cfg.Block.Transactions)))

@@ -82,3 +82,9 @@ func Either(cond bool, left, right interface{}) interface{} {
 	}
 	return right
 }
+
+func Times(N int, action func(int)) {
+	for i := 0; i < N; i++ {
+		action(i)
+	}
+}
