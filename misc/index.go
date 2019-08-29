@@ -61,6 +61,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		if err != nil {
 			return err
 		}
+		fmt.Println("fwf")
 		value_from_db, err2 := rocksdb_source.Get(key)
 		util.PanicIfPresent(err2)
 		util.Assert(bytes.Equal(value, value_from_db))
