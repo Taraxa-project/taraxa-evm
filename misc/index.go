@@ -1,9 +1,12 @@
 package misc
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -28,7 +31,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		UseDirectReads: true,
 	}).NewInstance()
 	util.PanicIfPresent(err0)
-	//_, err343 := (&rocksdb.Factory{
+	//db_dest, err343 := (&rocksdb.Factory{
 	//	File:                  db_path_dest,
 	//	MaxOpenFiles:          1000 * 4,
 	//	Parallelism:           concurrent.NUM_CPU,
@@ -45,14 +48,22 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	//trie_db_dest := trie.NewDatabaseWithCache(db_dest, 1024*4)
 	acc_cnt := new(int32)
 	err2 := acc_trie_source.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-		//acc := new(state.Account)
-		//if err := rlp.DecodeBytes(value, acc); err != nil {
-		//	return err
-		//}
-		//_, err := json.Marshal(acc)
-		//if err != nil {
-		//	return err
-		//}
+		acc := new(state.Account)
+		if err := rlp.DecodeBytes(value, acc); err != nil {
+			return err
+		}
+		storage_trie, err1 := db_source.OpenTrie(acc.Root)
+		util.PanicIfPresent(err1)
+		storage_trie.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
+			db_dest.Put(key, value)
+		})
+		_, err := json.Marshal(acc)
+		if err != nil {
+			return err
+		}
+		value_from_db, err2 := rocksdb_source.Get(key)
+		util.PanicIfPresent(err2)
+		util.Assert(bytes.Equal(value, value_from_db))
 		//err := db_dest.Put(key, value)
 		//util.PanicIfPresent(err)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
