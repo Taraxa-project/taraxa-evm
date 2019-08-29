@@ -5,12 +5,12 @@ from apps.blockchain_data import BlockDB
 from_block = 4821013
 
 block_db = BlockDB(
-    rocksdb.DB('/workspace/data/ethereum_blockchain_mainnet_rocksdb',
+    rocksdb.DB('/workspace/data/eth_mainnet_rocksdb/blockchain',
                rocksdb.Options(create_if_missing=True),
                read_only=True))
 
 block_db_to = BlockDB(
-    rocksdb.DB(f'/workspace/data/ethereum_blockchain_mainnet_{from_block}_{from_block + 1000000}_rocksdb',
+    rocksdb.DB(f'/workspace/data/eth_mainnet_rocksdb/blockchain_{from_block}_{from_block + 1000000}',
                rocksdb.Options(create_if_missing=True)))
 
 # state_db = rocksdb.DB(f'/workspace/data/ethereum_state_mainnet_rocksdb',
