@@ -78,7 +78,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 				}
 				root, err133 := state_db_dest.Commit(false)
 				util.PanicIfPresent(err133)
-				*intermediate_root = root
+				intermediate_root = &root
 			})
 			err13443 := db_dest.TrieDB().Commit(*intermediate_root, false)
 			util.PanicIfPresent(err13443)
