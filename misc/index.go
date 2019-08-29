@@ -66,6 +66,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		util.PanicIfPresent(err2)
 		fmt.Println("bar")
 		util.Assert(bytes.Equal(value, value_from_db))
+		fmt.Println("baz")
 		//err := db_dest.Put(key, value)
 		//util.PanicIfPresent(err)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
