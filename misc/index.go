@@ -52,11 +52,11 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		if err := rlp.DecodeBytes(value, acc); err != nil {
 			return err
 		}
-		storage_trie, err1 := db_source.OpenTrie(acc.Root)
-		util.PanicIfPresent(err1)
-		storage_trie.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
-			db_dest.Put(key, value)
-		})
+		//storage_trie, err1 := db_source.OpenTrie(acc.Root)
+		//util.PanicIfPresent(err1)
+		//storage_trie.VisitLeaves(func(key, value []byte, parent_hash common.Hash) error {
+		//	db_dest.Put(key, value)
+		//})
 		_, err := json.Marshal(acc)
 		if err != nil {
 			return err
