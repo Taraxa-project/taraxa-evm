@@ -1,7 +1,6 @@
 package misc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -62,11 +61,9 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 			return err
 		}
 		value_from_db, err2 := rocksdb_source.Get(key)
-		fmt.Println("fwf")
 		util.PanicIfPresent(err2)
-		fmt.Println("bar")
-		util.Assert(bytes.Equal(value, value_from_db))
-		fmt.Println("baz")
+		fmt.Println(string(value), string(value_from_db))
+		//util.Assert(bytes.Equal(value, value_from_db))
 		//err := db_dest.Put(key, value)
 		//util.PanicIfPresent(err)
 		//fmt.Println(common.BytesToAddress(key).Hex(), string(acc_json_bytes))
