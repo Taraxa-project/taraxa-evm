@@ -39,7 +39,11 @@ func (this *ErrorBarrier) PanicIfPresent() {
 }
 
 func (this *ErrorBarrier) Get() error {
-	return this.err.Load().(error)
+	val := this.err.Load();
+	if val == nil {
+		return nil
+	}
+	return val.(error)
 }
 
 func (this *ErrorBarrier) Catch(handlers ...ErrorHandler) Predicate {
