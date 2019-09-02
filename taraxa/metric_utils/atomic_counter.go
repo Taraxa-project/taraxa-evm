@@ -20,10 +20,12 @@ func (this *AtomicCounter) Get() uint64 {
 	return atomic.LoadUint64((*uint64)(this))
 }
 
-func (this *AtomicCounter) Recorder() func() {
+func (this *AtomicCounter) Recorder() func() time.Duration {
 	start := time.Now()
-	return func() {
-		this.AddDuration(time.Since(start))
+	return func() time.Duration {
+		ret := time.Since(start)
+		this.AddDuration(ret)
+		return ret
 	}
 }
 

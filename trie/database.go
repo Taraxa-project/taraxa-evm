@@ -287,10 +287,6 @@ func (db *Database) GetDiskDB() ethdb.Database {
 	return db.diskdb
 }
 
-func (db *Database) SetDiskDB(diskdb ethdb.Database) {
-	db.diskdb = diskdb
-}
-
 // InsertBlob writes a new reference tracked blob to the memory database if it's
 // yet unknown. This method should only be used for non-trie nodes that require
 // reference counting, since trie nodes are garbage collected directly through
@@ -446,15 +442,18 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 // to disk, forcefully tearing down all references in both directions.
 //
 // As a side effect, all pre-images accumulated up to this point are also written.
-func (db *Database) Commit(node common.Hash, report bool) error {
+func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database) error {
 	// Create a database batch to flush persistent data out. It is important that
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent storage). This is ensured
 	// by only uncaching existing data when the database write finalizes.
+	if target == nil {
+		target = db.diskdb
+	}
 	db.lock.RLock()
 
 	start := time.Now()
-	batch := db.diskdb.NewBatch()
+	batch := target.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
 	for hash, preimage := range db.preimages {

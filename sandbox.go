@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/misc"
 )
 
 type AccountKey = [common.AddressLength]byte
@@ -32,9 +31,19 @@ func accountStorageKey(addr *common.Address, location *common.Hash) *AccountStor
 	return ret
 }
 
+type A = struct {
+	Foo int
+	Bar string
+}
+
+type B = struct {
+	Foo int
+	Bar string
+}
+
 func main() {
-	misc.DumpStateRocksdb(
-		"/workspace/data/eth_mainnet_rocksdb/state",
-		"/workspace/data1/eth_mainnet_rocksdb/state_snapshot",
-		"0x03c6d7095795ac2fa6fc6fc3a83c6c9cb085b7637ab2fa31b228f3d7bfeaac55")
+	//misc.DumpStateRocksdb(
+	//	"/workspace/data/eth_mainnet_rocksdb/state",
+	//	"/workspace/data1/eth_mainnet_rocksdb/state_snapshot",
+	//	"0x03c6d7095795ac2fa6fc6fc3a83c6c9cb085b7637ab2fa31b228f3d7bfeaac55")
 }

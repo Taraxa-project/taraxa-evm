@@ -458,7 +458,7 @@ type visitContext struct {
 	visitor               LeafVisitor
 	maxConcurrentBranches int32
 	numConcurrentBranches int32
-	err                   util.ErrorBarrier
+	err                   util.AtomicError
 }
 
 func (this *Trie) VisitLeaves(visitor LeafVisitor) error {

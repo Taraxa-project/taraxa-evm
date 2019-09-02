@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 )
 
-var NUM_CPU = runtime.NumCPU()
+var CPU_COUNT = runtime.NumCPU()
 
 func TryClose(channel interface{}) error {
 	ret := util.Try(func() {
@@ -67,7 +67,7 @@ func Parallelize(numGoroutines, N int, prepare func(goroutineIndex int) (action 
 }
 
 func SimpleParallelize(action func()) {
-	Parallelize(NUM_CPU, NUM_CPU, func(int) func(int) {
+	Parallelize(CPU_COUNT, CPU_COUNT, func(int) func(int) {
 		return func(i int) {
 			action()
 		}

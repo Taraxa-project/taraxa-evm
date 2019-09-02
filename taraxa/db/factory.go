@@ -48,14 +48,14 @@ func (this *GenericFactory) NewInstance() (ethdb.MutableTransactionalDatabase, e
 }
 
 func (this *GenericFactory) UnmarshalJSON(b []byte) (err error) {
-	var errFatal util.ErrorBarrier
+	var errFatal util.AtomicError
 	defer util.Recover(errFatal.Catch(util.SetTo(&err)))
-	errFatal.CheckIn(json.Unmarshal(b, &this.FactoryType))
+	errFatal.SetOrPanicIfPresent(json.Unmarshal(b, &this.FactoryType))
 	if newFactory, ok := FactoryRegistry[this.Type]; ok {
 		this.Factory = newFactory()
 	} else {
 		return errors.New("Unknown db factory type: " + this.Type)
 	}
-	errFatal.CheckIn(json.Unmarshal(b, &this.FactoryOptions))
+	errFatal.SetOrPanicIfPresent(json.Unmarshal(b, &this.FactoryOptions))
 	return
 }

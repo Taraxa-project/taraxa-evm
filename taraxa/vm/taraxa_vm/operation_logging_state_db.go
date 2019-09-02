@@ -1,7 +1,8 @@
-package vm
+package taraxa_vm
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
 	"math/big"
 )
@@ -11,7 +12,7 @@ const code = "code"
 const nonce = "nonce"
 
 type OperationLoggingStateDB struct {
-	StateDB
+	vm.StateDB
 	LogOperation conflict_detector.OperationLogger
 }
 

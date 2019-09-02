@@ -11,6 +11,10 @@ type Database struct {
 	db        *gorocksdb.DB
 }
 
+func (this *Database) GetDB() *gorocksdb.DB {
+	return this.db
+}
+
 func (this *Database) Put(key []byte, value []byte) error {
 	return this.db.Put(this.writeOpts, key, value)
 }

@@ -20,13 +20,11 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 		File:                  db_path_source,
 		ReadOnly:              true,
 		MaxOpenFiles:          1000 * 4,
-		Parallelism:           concurrent.NUM_CPU,
-		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		//BlockCacheSize:        1024 * 20,
-		//BloomFilterCapacity:   20,
+		Parallelism:           concurrent.CPU_COUNT,
+		MaxFileOpeningThreads: &concurrent.CPU_COUNT,
 		OptimizeForPointLookup: func() *uint64 {
 			ret := new(uint64)
-			*ret = 1024 * 20
+			*ret = 1024 * 4
 			return ret
 		}(),
 		UseDirectReads: true,
@@ -35,12 +33,8 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 	rocksdb_dest, err343 := (&rocksdb.Factory{
 		File:                  db_path_dest,
 		MaxOpenFiles:          1000 * 4,
-		Parallelism:           concurrent.NUM_CPU,
-		MaxFileOpeningThreads: &concurrent.NUM_CPU,
-		//BlockCacheSize:        1024 * 1024 * 1024 * 5,
-		//WriteBufferSize:       512 * 1024 * 1024,
-		//BloomFilterCapacity:   10,
-		//MergeOperartor:        rocksdb.NeverOverwrite,
+		Parallelism:           concurrent.CPU_COUNT,
+		MaxFileOpeningThreads: &concurrent.CPU_COUNT,
 	}).NewInstance()
 	util.PanicIfNotNil(err343)
 	db_source := state.NewDatabaseWithCache(rocksdb_source, 1024*30)
@@ -80,7 +74,7 @@ func DumpStateRocksdb(db_path_source, db_path_dest, root_str string) {
 				util.PanicIfNotNil(err133)
 				intermediate_root = &root
 			})
-			err13443 := db_dest.TrieDB().Commit(*intermediate_root, false)
+			err13443 := db_dest.TrieDB().Commit(*intermediate_root, false, nil)
 			util.PanicIfNotNil(err13443)
 			fmt.Println(atomic.AddUint32(acc_cnt, 1))
 		}()
