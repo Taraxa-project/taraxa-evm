@@ -113,7 +113,7 @@ type EVM struct {
 	chainRules params.Rules
 	// virtual machine configuration options used to initialise the
 	// evm.
-	vmConfig *Config
+	vmConfig Config
 	// global (to this context) ethereum virtual machine
 	// used throughout the execution of the tx.
 	interpreters []Interpreter
@@ -128,7 +128,7 @@ type EVM struct {
 }
 
 func NewEVMWithInterpreter(
-	ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig *Config,
+	ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config,
 	createInterpreter func(*EVM) Interpreter) *EVM {
 
 	evm := &EVM{
@@ -166,7 +166,7 @@ func NewEVMWithInterpreter(
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
-func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig *Config) *EVM {
+func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config) *EVM {
 	return NewEVMWithInterpreter(ctx, statedb, chainConfig, vmConfig, func(evm *EVM) Interpreter {
 		return NewEVMInterpreter(evm, vmConfig)
 	})
@@ -392,8 +392,8 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	evm.StateDB.AddNonce(caller.Address(), 1)
 
 	// Ensure there's no existing contract already at the designated address
-	contractHash := evm.StateDB.GetCodeHash(address)
 	// TODO conflict prone
+	contractHash := evm.StateDB.GetCodeHash(address)
 	if evm.StateDB.GetNonce(address) != 0 || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}

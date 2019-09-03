@@ -1,16 +1,12 @@
 package base_vm
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	evm "github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/vm"
 )
 
@@ -65,7 +61,7 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 		BlockNumber: req.BlockHeader.Number,
 		Time:        req.BlockHeader.Time.ToInt(),
 		Difficulty:  req.BlockHeader.Difficulty.ToInt(),
-		GasLimit:    msg.Gas(),
+		GasLimit:    uint64(req.BlockHeader.GasLimit),
 		GasPrice:    msg.GasPrice(),
 	}
 	evm := evm.NewEVMWithInterpreter(
@@ -74,17 +70,6 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 			return evm.NewEVMInterpreterWithExecutionController(vm, this.EvmConfig, req.OnEvmInstruction)
 		},
 	)
-	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
-		b, err := json.Marshal(req.Transaction)
-		util.PanicIfNotNil(err)
-		fmt.Println(string(b))
-		b, err = json.Marshal(req.BlockHeader)
-		util.PanicIfNotNil(err)
-		fmt.Println(string(b))
-	}
 	ret, usedGas, vmErr, consensusErr := core.NewStateTransition(evm, msg, req.GasPool).TransitionDb()
-	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
-		fmt.Println(hexutil.Uint64(usedGas).String())
-	}
 	return &TransactionResult{ret, usedGas, vmErr, consensusErr}
 }
