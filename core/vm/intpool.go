@@ -74,14 +74,6 @@ type intPoolPool struct {
 	pool *sync.Pool
 }
 
-func newIntPoolPool() *intPoolPool {
-	return &intPoolPool{&sync.Pool{
-		New: func() interface{} {
-			return newIntPool()
-		},
-	}}
-}
-
 // get is looking for an available pool to return.
 func (this *intPoolPool) get() *intPool {
 	return this.pool.Get().(*intPool)
@@ -92,4 +84,8 @@ func (this *intPoolPool) put(ip *intPool) {
 	this.pool.Put(ip)
 }
 
-var poolOfIntPools = newIntPoolPool()
+var poolOfIntPools = &intPoolPool{&sync.Pool{
+	New: func() interface{} {
+		return newIntPool()
+	},
+}}

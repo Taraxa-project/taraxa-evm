@@ -55,7 +55,7 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 	msg := types.NewMessage(
 		req.Transaction.From, req.Transaction.To, uint64(req.Transaction.Nonce),
 		req.Transaction.Value.ToInt(), uint64(req.Transaction.Gas),
-		req.Transaction.GasPrice.ToInt(), *req.Transaction.Input, req.CheckNonce)
+		req.Transaction.GasPrice.ToInt(), req.Transaction.Input, req.CheckNonce)
 	evmContext := evm.Context{
 		CanTransfer: req.CanTransfer,
 		Transfer:    core.Transfer,
@@ -74,7 +74,6 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 			return evm.NewEVMInterpreterWithExecutionController(vm, this.EvmConfig, req.OnEvmInstruction)
 		},
 	)
-	ret, usedGas, vmErr, consensusErr := core.NewStateTransition(evm, msg, req.GasPool).TransitionDb()
 	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
 		b, err := json.Marshal(req.Transaction)
 		util.PanicIfNotNil(err)
@@ -82,10 +81,10 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 		b, err = json.Marshal(req.BlockHeader)
 		util.PanicIfNotNil(err)
 		fmt.Println(string(b))
-		fmt.Println(hexutil.Uint64(usedGas).String())
 	}
+	ret, usedGas, vmErr, consensusErr := core.NewStateTransition(evm, msg, req.GasPool).TransitionDb()
 	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
-		fmt.Println()
+		fmt.Println(hexutil.Uint64(usedGas).String())
 	}
 	return &TransactionResult{ret, usedGas, vmErr, consensusErr}
 }

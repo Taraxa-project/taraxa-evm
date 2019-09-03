@@ -282,11 +282,6 @@ func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 	}
 }
 
-// DiskDB retrieves the persistent storage backing the trie database.
-func (db *Database) GetDiskDB() ethdb.Database {
-	return db.diskdb
-}
-
 // InsertBlob writes a new reference tracked blob to the memory database if it's
 // yet unknown. This method should only be used for non-trie nodes that require
 // reference counting, since trie nodes are garbage collected directly through

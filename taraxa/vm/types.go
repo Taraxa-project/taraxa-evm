@@ -36,7 +36,7 @@ type Transaction = struct {
 	Value    *hexutil.Big    `json:"value" gencodec:"required"`
 	Gas      hexutil.Uint64  `json:"gas" gencodec:"required"`
 	GasPrice *hexutil.Big    `json:"gasPrice" gencodec:"required"`
-	Input    *hexutil.Bytes  `json:"input" gencodec:"required"`
+	Input    hexutil.Bytes   `json:"input" gencodec:"required"`
 	Hash     common.Hash     `json:"hash" gencodec:"required"`
 }
 

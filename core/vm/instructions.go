@@ -411,9 +411,7 @@ func opAddress(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memo
 func opBalance(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	slot := stack.peek()
 	// TODO conflict prone
-	balance := interpreter.evm.StateDB.GetBalance(common.BigToAddress(slot))
-	//fmt.Println("opBalance", balance, contract.caller.Address().Hex(), contract.self.Address().Hex(), string(debug.Stack()))
-	slot.Set(balance)
+	slot.Set(interpreter.evm.StateDB.GetBalance(common.BigToAddress(slot)))
 	return nil, nil
 }
 
