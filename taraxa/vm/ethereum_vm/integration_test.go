@@ -42,8 +42,7 @@ func (this *EthereumVMIntegrationTest) Run(t *testing.T) {
 		}
 		result, err := ethereumVM.TransitionState(stateTransitionRequest)
 		util.PanicIfNotNil(err)
-		fmt.Println(result.StateRoot.Hex(), block.StateRoot.Hex())
-		util.Assert(result.StateRoot == block.StateRoot)
+		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), block.StateRoot.Hex())
 		//ethereumVM.CommitToDisk(result.StateRoot)
 		prevBlock = block
 	}
