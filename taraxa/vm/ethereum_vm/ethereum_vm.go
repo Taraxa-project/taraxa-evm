@@ -1,7 +1,6 @@
 package ethereum_vm
 
 import (
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
@@ -57,9 +56,7 @@ func (this *EthereumVM) TransitionState(req *vm.StateTransitionRequest) (ret *vm
 		if this.Genesis.Config.IsByzantium(req.Block.Number) {
 			this.stateDB.Finalise(true)
 		} else {
-			intermediateRootHash := this.calculateRoot(req.Block)
-			fmt.Println(i, intermediateRootHash.Hex())
-			intermediateRoot = intermediateRootHash.Bytes()
+			intermediateRoot = this.calculateRoot(req.Block).Bytes()
 		}
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(intermediateRoot, txResult.ContractErr != nil, uint64(ret.UsedGas))

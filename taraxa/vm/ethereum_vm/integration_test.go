@@ -64,7 +64,6 @@ func TestEthereumVMIntegration(t *testing.T) {
 		key := []byte(fmt.Sprintf("%09d", block_num))
 		block_json, err := block_db.Get(key)
 		util.PanicIfNotNil(err)
-		fmt.Println(string(block_json))
 		ret := new(BlockWithStateRoot)
 		util.PanicIfNotNil(json.Unmarshal(block_json, ret))
 		return ret
