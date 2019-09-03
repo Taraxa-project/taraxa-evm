@@ -1,6 +1,7 @@
 package ethereum_vm
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
@@ -25,20 +26,21 @@ type EthereumVM struct {
 
 func (this *EthereumVM) TransitionState(req *vm.StateTransitionRequest) (ret *vm.StateTransitionResult, err error) {
 	defer concurrent.LockUnlock(&this.mutex)()
-	if this.stateDB == nil || this.calculateRoot(req.Block) != req.BaseStateRoot {
-		if this.stateDB, err = state.New(req.BaseStateRoot, this.ReadDB); err != nil {
-			return
-		}
-	}
 	ret = new(vm.StateTransitionResult)
 	if req.Block.Number.Sign() == 0 {
 		this.ApplyGenesis()
 		ret.StateRoot = this.GenesisBlock.Root()
 		return
 	}
+	if this.stateDB == nil || this.calculateRoot(req.Block) != req.BaseStateRoot {
+		if this.stateDB, err = state.New(req.BaseStateRoot, this.ReadDB); err != nil {
+			return
+		}
+	}
 	this.applyHardForks(req.Block)
 	gasPool := new(core.GasPool).AddGas(uint64(req.Block.GasLimit))
-	for _, tx := range req.Block.Transactions {
+	for i, tx := range req.Block.Transactions {
+		this.stateDB.Prepare(tx.Hash, req.Block.Hash, i)
 		txResult := this.BaseVM.ExecuteTransaction(&base_vm.TransactionRequest{
 			Transaction:      tx,
 			BlockHeader:      &req.Block.BlockHeader,
@@ -55,7 +57,9 @@ func (this *EthereumVM) TransitionState(req *vm.StateTransitionRequest) (ret *vm
 		if this.Genesis.Config.IsByzantium(req.Block.Number) {
 			this.stateDB.Finalise(true)
 		} else {
-			intermediateRoot = this.calculateRoot(req.Block).Bytes()
+			intermediateRootHash := this.calculateRoot(req.Block)
+			fmt.Println(i, intermediateRootHash.Hex())
+			intermediateRoot = intermediateRootHash.Bytes()
 		}
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(intermediateRoot, txResult.ContractErr != nil, uint64(ret.UsedGas))
@@ -78,22 +82,18 @@ func (this *EthereumVM) TransitionState(req *vm.StateTransitionRequest) (ret *vm
 	return
 }
 
-func (this *EthereumVM) CommitToDisk(root common.Hash) error {
-	return this.ReadDB.TrieDB().Commit(root, false, this.WriteDiskDB)
-}
-
 func (this *EthereumVM) applyMinerReward(block *vm.Block) {
 	if this.DisableMinerReward {
 		return
 	}
 	var unclesMapped []*types.Header
 	for _, uncle := range block.UncleBlocks {
-		unclesMapped = append(unclesMapped, &types.Header{Number: uncle.Number, Coinbase: uncle.Coinbase})
+		unclesMapped = append(unclesMapped, &types.Header{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner})
 	}
 	ethash.AccumulateRewards(
 		this.Genesis.Config,
 		this.stateDB,
-		&types.Header{Number: block.Number, Coinbase: block.Coinbase},
+		&types.Header{Number: block.Number, Coinbase: block.Miner},
 		unclesMapped)
 }
 

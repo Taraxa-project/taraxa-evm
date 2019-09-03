@@ -1,13 +1,17 @@
 package base_vm
 
 import (
+	"encoding/json"
+	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	evm "github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/vm"
-	"math/big"
 )
 
 type BaseVM struct {
@@ -15,15 +19,19 @@ type BaseVM struct {
 	GenesisBlock *types.Block
 	EvmConfig    *evm.Config
 	GetBlockHash evm.GetHashFunc
-	ReadDiskDB   *ethdb_proxy.DatabaseProxy
-	WriteDiskDB  *ethdb_proxy.DatabaseProxy
 	ReadDB       *state_db_proxy.DatabaseProxy
-	writeDB      *state_db_proxy.DatabaseProxy
+	ReadDiskDB   *ethdb_proxy.DatabaseProxy
+	WriteDB      *state_db_proxy.DatabaseProxy
+	WriteDiskDB  *ethdb_proxy.DatabaseProxy
 }
 
 func (this *BaseVM) ApplyGenesis() error {
 	_, _, err := core.SetupGenesisBlock(this.WriteDiskDB, this.Genesis)
 	return err
+}
+
+func (this *BaseVM) CommitToDisk(root common.Hash) error {
+	return this.ReadDB.TrieDB().Commit(root, false, this.WriteDiskDB)
 }
 
 type TransactionRequest = struct {
@@ -45,14 +53,15 @@ type TransactionResult = struct {
 
 func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
 	msg := types.NewMessage(
-		req.Transaction.From, req.Transaction.To, uint64(req.Transaction.Nonce), req.Transaction.Amount.ToInt(), uint64(req.Transaction.GasLimit),
-		new(big.Int).Set(req.Transaction.GasPrice.ToInt()), req.Transaction.Data, req.CheckNonce)
+		req.Transaction.From, req.Transaction.To, uint64(req.Transaction.Nonce),
+		req.Transaction.Value.ToInt(), uint64(req.Transaction.Gas),
+		req.Transaction.GasPrice.ToInt(), *req.Transaction.Input, req.CheckNonce)
 	evmContext := evm.Context{
 		CanTransfer: req.CanTransfer,
 		Transfer:    core.Transfer,
 		GetHash:     this.GetBlockHash,
 		Origin:      msg.From(),
-		Coinbase:    req.BlockHeader.Coinbase,
+		Coinbase:    req.BlockHeader.Miner,
 		BlockNumber: req.BlockHeader.Number,
 		Time:        req.BlockHeader.Time.ToInt(),
 		Difficulty:  req.BlockHeader.Difficulty.ToInt(),
@@ -66,5 +75,17 @@ func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResu
 		},
 	)
 	ret, usedGas, vmErr, consensusErr := core.NewStateTransition(evm, msg, req.GasPool).TransitionDb()
+	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
+		b, err := json.Marshal(req.Transaction)
+		util.PanicIfNotNil(err)
+		fmt.Println(string(b))
+		b, err = json.Marshal(req.BlockHeader)
+		util.PanicIfNotNil(err)
+		fmt.Println(string(b))
+		fmt.Println(hexutil.Uint64(usedGas).String())
+	}
+	if req.Transaction.Hash.Hex() == "0x769018442ceb0f93c94699299ad8abf39a718a82d7bc517fc4482268d8a76ce9" {
+		fmt.Println()
+	}
 	return &TransactionResult{ret, usedGas, vmErr, consensusErr}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
@@ -31,17 +32,10 @@ func accountStorageKey(addr *common.Address, location *common.Hash) *AccountStor
 	return ret
 }
 
-type A = struct {
-	Foo int
-	Bar string
-}
-
-type B = struct {
-	Foo int
-	Bar string
-}
-
 func main() {
+	for _, b := range common.Hex2Bytes("61461954") {
+		fmt.Println(b)
+	}
 	//misc.DumpStateRocksdb(
 	//	"/workspace/data/eth_mainnet_rocksdb/state",
 	//	"/workspace/data1/eth_mainnet_rocksdb/state_snapshot",

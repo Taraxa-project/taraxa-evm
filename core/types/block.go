@@ -117,10 +117,6 @@ func rlpHash(x interface{}) (h common.Hash) {
 	return h
 }
 
-func RlpHash(x interface{}) (h common.Hash) {
-	return rlpHash(x);
-}
-
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
 type Body struct {

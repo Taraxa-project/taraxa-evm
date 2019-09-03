@@ -5,7 +5,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/metric_utils"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
@@ -32,34 +31,40 @@ func (this *TxIdSet) UnmarshalJSON(data []byte) error {
 
 type Transaction = struct {
 	To       *common.Address `json:"to"`
-	From     common.Address  `json:"from"`
-	Nonce    hexutil.Uint64  `json:"nonce"`
-	Amount   *hexutil.Big    `json:"amount"`
-	GasLimit hexutil.Uint64  `json:"gasLimit"`
-	GasPrice *hexutil.Big    `json:"gasPrice"`
-	Data     hexutil.Bytes   `json:"data"`
-	Hash     common.Hash     `json:"hash"`
+	From     common.Address  `json:"from" gencodec:"required"`
+	Nonce    hexutil.Uint64  `json:"nonce" gencodec:"required"`
+	Value    *hexutil.Big    `json:"value" gencodec:"required"`
+	Gas      hexutil.Uint64  `json:"gas" gencodec:"required"`
+	GasPrice *hexutil.Big    `json:"gasPrice" gencodec:"required"`
+	Input    *hexutil.Bytes  `json:"input" gencodec:"required"`
+	Hash     common.Hash     `json:"hash" gencodec:"required"`
 }
 
 type BlockNumberAndCoinbase = struct {
-	Number *big.Int `json:"number"`
+	Number *big.Int `json:"number" gencodec:"required"`
 	// TODO
 	//Number   *hexutil.Big   `json:"number"`
-	Coinbase common.Address `json:"coinbase"`
+	Miner common.Address `json:"miner" gencodec:"required"`
+}
+
+// TODO remove
+type UncleBlock = struct {
+	Number *hexutil.Big   `json:"number"  gencodec:"required"`
+	Miner  common.Address `json:"miner"  gencodec:"required"`
 }
 
 type BlockHeader = struct {
 	BlockNumberAndCoinbase
-	Time       *hexutil.Big   `json:"time"`
-	Difficulty *hexutil.Big   `json:"difficulty"`
-	GasLimit   hexutil.Uint64 `json:"gasLimit"`
-	Hash       common.Hash    `json:"hash"`
+	Time       *hexutil.Big   `json:"timestamp"  gencodec:"required"`
+	Difficulty *hexutil.Big   `json:"difficulty"  gencodec:"required"`
+	GasLimit   hexutil.Uint64 `json:"gasLimit"  gencodec:"required"`
+	Hash       common.Hash    `json:"hash"  gencodec:"required"`
 }
 
 type Block = struct {
 	BlockHeader
-	UncleBlocks  []*BlockNumberAndCoinbase `json:"uncleBlocks"`
-	Transactions []*Transaction            `json:"transactions"`
+	UncleBlocks  []*UncleBlock  `json:"uncleBlocks"  gencodec:"required"`
+	Transactions []*Transaction `json:"transactions"  gencodec:"required"`
 }
 
 type StateTransitionRequest = struct {
@@ -94,9 +99,4 @@ type TransactionMetrics = struct {
 	TotalTime       metric_utils.AtomicCounter `json:"totalTime"`
 	TrieReads       metric_utils.AtomicCounter `json:"trieReads"`
 	PersistentReads metric_utils.AtomicCounter `json:"persistentReads"`
-}
-
-type StateDBConfig struct {
-	DB        *db.GenericFactory `json:"db"`
-	CacheSize int                `json:"cacheSize"`
 }

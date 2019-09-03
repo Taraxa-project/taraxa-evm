@@ -4,7 +4,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/block_hash_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/ethdb_proxy"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/proxy/state_db_proxy"
@@ -12,9 +11,11 @@ import (
 )
 
 type BaseVMFactory struct {
-	VmIOConfig
 	BaseVMConfig
-	EvmStaticConfig *vm.StaticConfig `json:"evm"`
+	EvmStaticConfig        *vm.StaticConfig `json:"evm"`
+	ReadDBConfig           *StateDBConfig   `json:"readDB"`
+	WriteDBConfig          *StateDBConfig   `json:"writeDB"`
+	BlockHashSourceFactory `json:"blockHashSource"`
 }
 
 func (this *BaseVMFactory) NewInstance() (ret *BaseVM, cleanup func(), err error) {
@@ -39,34 +40,31 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseVM, cleanup func(), err error
 	if ret.Genesis == nil {
 		ret.Genesis = core.DefaultGenesisBlock()
 	}
-	readDiskDB, e1 := this.ReadDB.DB.NewInstance()
+	ret.GenesisBlock = ret.Genesis.ToBlock(nil)
+	readDiskDB, e1 := this.ReadDBConfig.DBFactory.NewInstance()
 	localErr.SetOrPanicIfPresent(e1)
 	cleanup = util.Chain(cleanup, readDiskDB.Close)
 	ret.ReadDiskDB = &ethdb_proxy.DatabaseProxy{readDiskDB, new(proxy.BaseProxy)}
 	ret.ReadDB = &state_db_proxy.DatabaseProxy{
-		state.NewDatabaseWithCache(ret.ReadDiskDB, this.ReadDB.CacheSize),
+		state.NewDatabaseWithCache(ret.ReadDiskDB, this.ReadDBConfig.CacheSize),
 		new(proxy.BaseProxy),
 		new(proxy.BaseProxy),
-	}
-	if this.BlockDB != nil {
-		blockHashDb, e2 := this.BlockDB.NewInstance()
-		localErr.SetOrPanicIfPresent(e2)
-		cleanup = util.Chain(cleanup, blockHashDb.Close)
-		ret.GetBlockHash = block_hash_db.New(blockHashDb).GetHeaderHashByBlockNumber
 	}
 	ret.WriteDiskDB = ret.ReadDiskDB
-	ret.writeDB = ret.ReadDB
-	if this.WriteDB != nil {
-		writeDiskDB, e3 := this.WriteDB.DB.NewInstance()
+	ret.WriteDB = ret.ReadDB
+	if this.WriteDBConfig != nil {
+		writeDiskDB, e3 := this.WriteDBConfig.DBFactory.NewInstance()
 		localErr.SetOrPanicIfPresent(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = &ethdb_proxy.DatabaseProxy{writeDiskDB, new(proxy.BaseProxy)}
-		ret.writeDB = &state_db_proxy.DatabaseProxy{
-			state.NewDatabaseWithCache(ret.ReadDiskDB, this.WriteDB.CacheSize),
+		ret.WriteDB = &state_db_proxy.DatabaseProxy{
+			state.NewDatabaseWithCache(ret.ReadDiskDB, this.WriteDBConfig.CacheSize),
 			new(proxy.BaseProxy),
 			new(proxy.BaseProxy),
 		}
 	}
-	ret.GenesisBlock = this.Genesis.ToBlock(nil)
+	getBlockHash, err11 := this.BlockHashSourceFactory.NewInstance()
+	localErr.SetOrPanicIfPresent(err11)
+	ret.GetBlockHash = getBlockHash
 	return
 }

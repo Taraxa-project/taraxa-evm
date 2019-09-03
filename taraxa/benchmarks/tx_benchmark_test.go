@@ -61,7 +61,7 @@ func BenchmarkRoot(b *testing.B) {
 	//		BlockNumber: common.Big0,
 	//		Time:        common.Big0,
 	//		Difficulty:  common.Big0,
-	//		GasLimit:    gas_limit,
+	//		Gas:    gas_limit,
 	//		GasPrice:    common.Big0,
 	//	}
 	//	evm := vm.NewEVM(evm_ctx, state_db, params.MainnetChainConfig, evm_cfg)

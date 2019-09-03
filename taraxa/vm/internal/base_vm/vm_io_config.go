@@ -1,12 +1,18 @@
 package base_vm
 
-import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/db"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/vm"
-)
+import "github.com/Taraxa-project/taraxa-evm/core/vm"
 
-type VmIOConfig = struct {
-	ReadDB  *vm.StateDBConfig  `json:"readDB"`
-	WriteDB *vm.StateDBConfig  `json:"writeDB"`
-	BlockDB *db.GenericFactory `json:"blockDB"`
+type BlockHashSourceFactory interface {
+	NewInstance() (vm.GetHashFunc, error)
+}
+
+type SimpleBlockHashSourceFactory vm.GetHashFunc
+
+func (this SimpleBlockHashSourceFactory) NewInstance() (vm.GetHashFunc, error) {
+	return vm.GetHashFunc(this), nil
+}
+
+type StateDBConfig = struct {
+	DBFactory DBFactory `json:"db"`
+	CacheSize int       `json:"cacheSize"`
 }

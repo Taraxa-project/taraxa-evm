@@ -36,7 +36,7 @@ package taraxa_vm
 //		gasPool := new(core.GasPool).AddGas(uint64(block.GasLimit))
 //		for txId, channel := range inbox {
 //			tx := block.Transactions[txId]
-//			err.SetOrPanicIfPresent(gasPool.SubGas(tx.GasLimit))
+//			err.SetOrPanicIfPresent(gasPool.SubGas(tx.Gas))
 //			request, ok := <-channel
 //			if !ok {
 //				close(outbox)
@@ -49,7 +49,7 @@ package taraxa_vm
 //					//err.SetOrPanicIfPresent(vm.ErrInsufficientBalance)
 //				}
 //			}
-//			gasPool.AddGas(tx.GasLimit - request.GasUsed)
+//			gasPool.AddGas(tx.Gas - request.GasUsed)
 //			result.UsedGas += request.GasUsed
 //			ethReceipt := types.NewReceipt(nil, request.ContractErr != nil, result.UsedGas)
 //			ethReceipt.GasUsed = request.GasUsed

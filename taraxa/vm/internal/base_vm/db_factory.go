@@ -1,4 +1,4 @@
-package db
+package base_vm
 
 import (
 	"encoding/json"
@@ -11,31 +11,31 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
-type Factory interface {
+type DBFactory interface {
 	NewInstance() (ethdb.MutableTransactionalDatabase, error)
 }
 
-var FactoryRegistry = map[string]func() Factory{
-	"leveldb": func() Factory {
+var FactoryRegistry = map[string]func() DBFactory{
+	"leveldb": func() DBFactory {
 		return new(leveldb.Factory)
 	},
-	"rocksdb": func() Factory {
+	"rocksdb": func() DBFactory {
 		return new(rocksdb.Factory)
 	},
-	"memory": func() Factory {
+	"memory": func() DBFactory {
 		return new(memory.Factory)
 	},
-	"cgo": func() Factory {
+	"cgo": func() DBFactory {
 		return new(cgo.Factory)
 	},
 }
 
-type FactoryType struct {
+type FactoryType = struct {
 	Type string `json:"type"`
 }
 
-type FactoryOptions struct {
-	Factory Factory `json:"options"`
+type FactoryOptions = struct {
+	Factory DBFactory `json:"options"`
 }
 
 type GenericFactory struct {
