@@ -10,12 +10,6 @@ type Healthcheck interface {
 
 // NewHealthcheck constructs a new Healthcheck which will use the given
 // function to update its status.
-func NewHealthcheck(f func(Healthcheck)) Healthcheck {
-	if !Enabled {
-		return NilHealthcheck{}
-	}
-	return &StandardHealthcheck{nil, f}
-}
 
 // NilHealthcheck is a no-op.
 type NilHealthcheck struct{}

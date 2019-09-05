@@ -126,8 +126,6 @@ func bloom9(b []byte) *big.Int {
 	return r
 }
 
-var Bloom9 = bloom9
-
 func BloomLookup(bin Bloom, topic bytesBacked) bool {
 	bloom := bin.Big()
 	cmp := bloom9(topic.Bytes())

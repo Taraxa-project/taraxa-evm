@@ -25,9 +25,6 @@ import (
 )
 
 var (
-	// Common encoded values.
-	// These are useful when implementing EncodeRLP.
-	EmptyString = []byte{0x80}
 	EmptyList   = []byte{0xC0}
 )
 

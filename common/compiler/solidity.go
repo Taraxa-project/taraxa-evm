@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
-	"io/ioutil"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -130,22 +129,6 @@ func CompileSolidityString(solc, source string) (map[string]*Contract, error) {
 }
 
 // CompileSolidity compiles all given Solidity source files.
-func CompileSolidity(solc string, sourcefiles ...string) (map[string]*Contract, error) {
-	if len(sourcefiles) == 0 {
-		return nil, errors.New("solc: no source files")
-	}
-	source, err := slurpFiles(sourcefiles)
-	if err != nil {
-		return nil, err
-	}
-	s, err := SolidityVersion(solc)
-	if err != nil {
-		return nil, err
-	}
-	args := append(s.makeArgs(), "--")
-	cmd := exec.Command(s.Path, append(args, sourcefiles...)...)
-	return s.run(cmd, source)
-}
 
 func (s *Solidity) run(cmd *exec.Cmd, source string) (map[string]*Contract, error) {
 	var stderr, stdout bytes.Buffer
@@ -210,14 +193,3 @@ func ParseCombinedJSON(combinedJSON []byte, source string, languageVersion strin
 	return contracts, nil
 }
 
-func slurpFiles(files []string) (string, error) {
-	var concat bytes.Buffer
-	for _, file := range files {
-		content, err := ioutil.ReadFile(file)
-		if err != nil {
-			return "", err
-		}
-		concat.Write(content)
-	}
-	return concat.String(), nil
-}

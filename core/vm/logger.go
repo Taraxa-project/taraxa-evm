@@ -17,16 +17,13 @@
 package vm
 
 import (
-	"encoding/hex"
 	"fmt"
-	"io"
 	"math/big"
 	"time"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 )
 
 // Storage represents a contract's storage.
@@ -213,44 +210,5 @@ func (l *StructLogger) Error() error { return l.err }
 func (l *StructLogger) Output() []byte { return l.output }
 
 // WriteTrace writes a formatted trace to the given writer
-func WriteTrace(writer io.Writer, logs []StructLog) {
-	for _, log := range logs {
-		fmt.Fprintf(writer, "%-16spc=%08d gas=%v cost=%v", log.Op, log.Pc, log.Gas, log.GasCost)
-		if log.Err != nil {
-			fmt.Fprintf(writer, " ERROR: %v", log.Err)
-		}
-		fmt.Fprintln(writer)
-
-		if len(log.Stack) > 0 {
-			fmt.Fprintln(writer, "Stack:")
-			for i := len(log.Stack) - 1; i >= 0; i-- {
-				fmt.Fprintf(writer, "%08d  %x\n", len(log.Stack)-i-1, math.PaddedBigBytes(log.Stack[i], 32))
-			}
-		}
-		if len(log.Memory) > 0 {
-			fmt.Fprintln(writer, "Memory:")
-			fmt.Fprint(writer, hex.Dump(log.Memory))
-		}
-		if len(log.Storage) > 0 {
-			fmt.Fprintln(writer, "Storage:")
-			for h, item := range log.Storage {
-				fmt.Fprintf(writer, "%x: %x\n", h, item)
-			}
-		}
-		fmt.Fprintln(writer)
-	}
-}
 
 // WriteLogs writes vm logs in a readable format to the given writer
-func WriteLogs(writer io.Writer, logs []*types.Log) {
-	for _, log := range logs {
-		fmt.Fprintf(writer, "LOG%d: %x bn=%d txi=%x\n", len(log.Topics), log.Address, log.BlockNumber, log.TxIndex)
-
-		for i, topic := range log.Topics {
-			fmt.Fprintf(writer, "%08d  %x\n", i, topic)
-		}
-
-		fmt.Fprint(writer, hex.Dump(log.Data))
-		fmt.Fprintln(writer)
-	}
-}

@@ -3,7 +3,6 @@ package metrics
 import (
 	"encoding/json"
 	"io"
-	"time"
 )
 
 // MarshalJSON returns a byte slice containing a JSON representation of all
@@ -14,11 +13,6 @@ func (r *StandardRegistry) MarshalJSON() ([]byte, error) {
 
 // WriteJSON writes metrics from the given registry  periodically to the
 // specified io.Writer as JSON.
-func WriteJSON(r Registry, d time.Duration, w io.Writer) {
-	for range time.Tick(d) {
-		WriteJSONOnce(r, w)
-	}
-}
 
 // WriteJSONOnce writes metrics from the given registry to the specified
 // io.Writer as JSON.

@@ -6,8 +6,6 @@ import (
 
 var (
 	root          = &logger{[]interface{}{}, new(swapHandler)}
-	StdoutHandler = StreamHandler(os.Stdout, LogfmtFormat())
-	StderrHandler = StreamHandler(os.Stderr, LogfmtFormat())
 )
 
 func init() {
@@ -21,18 +19,12 @@ func New(ctx ...interface{}) Logger {
 }
 
 // Root returns the root logger
-func Root() Logger {
-	return root
-}
 
 // The following functions bypass the exported logger methods (logger.Debug,
 // etc.) to keep the call depth the same for all paths to logger.write so
 // runtime.Caller(2) always refers to the call site in client code.
 
 // Trace is a convenient alias for Root().Trace
-func Trace(msg string, ctx ...interface{}) {
-	root.write(msg, LvlTrace, ctx, skipLevel)
-}
 
 // Debug is a convenient alias for Root().Debug
 func Debug(msg string, ctx ...interface{}) {
@@ -65,6 +57,3 @@ func Crit(msg string, ctx ...interface{}) {
 // calldepth influences the reported line number of the log message.
 // A calldepth of zero reports the immediate caller of Output.
 // Non-zero calldepth skips as many stack frames.
-func Output(msg string, lvl Lvl, calldepth int, ctx ...interface{}) {
-	root.write(msg, lvl, ctx, calldepth+skipLevel)
-}

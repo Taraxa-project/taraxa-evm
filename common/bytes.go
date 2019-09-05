@@ -31,15 +31,6 @@ func ToHex(b []byte) string {
 	return "0x" + hex
 }
 
-// ToHexArray creates a array of hex-string based on []byte
-func ToHexArray(b [][]byte) []string {
-	r := make([]string, len(b))
-	for i := range b {
-		r[i] = ToHex(b[i])
-	}
-	return r
-}
-
 // FromHex returns the bytes represented by the hexadecimal string s.
 // s may be prefixed with "0x".
 func FromHex(s string) []byte {
@@ -97,20 +88,6 @@ func Bytes2Hex(d []byte) string {
 func Hex2Bytes(str string) []byte {
 	h, _ := hex.DecodeString(str)
 	return h
-}
-
-// Hex2BytesFixed returns bytes of a specified fixed length flen.
-func Hex2BytesFixed(str string, flen int) []byte {
-	h, _ := hex.DecodeString(str)
-	if len(h) == flen {
-		return h
-	}
-	if len(h) > flen {
-		return h[len(h)-flen:]
-	}
-	hh := make([]byte, flen)
-	copy(hh[flen-len(h):flen], h)
-	return hh
 }
 
 // RightPadBytes zero-pads slice to the right up to length l.

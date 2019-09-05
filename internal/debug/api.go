@@ -37,9 +37,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/log"
 )
 
-// Handler is the global debugging handler.
-var Handler = new(HandlerT)
-
 // HandlerT implements the debugging API.
 // Do not create values of this type, use the one
 // in the Handler variable instead.

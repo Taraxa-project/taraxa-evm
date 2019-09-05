@@ -23,12 +23,6 @@ type ResettingTimer interface {
 
 // GetOrRegisterResettingTimer returns an existing ResettingTimer or constructs and registers a
 // new StandardResettingTimer.
-func GetOrRegisterResettingTimer(name string, r Registry) ResettingTimer {
-	if nil == r {
-		r = DefaultRegistry
-	}
-	return r.GetOrRegister(name, NewResettingTimer).(ResettingTimer)
-}
 
 // NewRegisteredResettingTimer constructs and registers a new StandardResettingTimer.
 func NewRegisteredResettingTimer(name string, r Registry) ResettingTimer {

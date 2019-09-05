@@ -127,11 +127,6 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (ret []byte, gasUsed uint64, isVmErr bool, err error) {
-	ret, gasUsed, vmErr, err := NewStateTransition(evm, msg, gp).TransitionDb()
-	isVmErr = vmErr != nil
-	return
-}
 
 // to returns the recipient of the message.
 func (st *StateTransition) to() common.Address {

@@ -27,9 +27,6 @@ import (
 type AbsTime time.Duration
 
 // Now returns the current absolute monotonic time.
-func Now() AbsTime {
-	return AbsTime(monotime.Now())
-}
 
 // Add returns t + d.
 func (t AbsTime) Add(d time.Duration) AbsTime {

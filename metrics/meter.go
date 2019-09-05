@@ -33,12 +33,6 @@ func GetOrRegisterMeter(name string, r Registry) Meter {
 // new StandardMeter no matter the global switch is enabled or not.
 // Be sure to unregister the meter from the registry once it is of no use to
 // allow for garbage collection.
-func GetOrRegisterMeterForced(name string, r Registry) Meter {
-	if nil == r {
-		r = DefaultRegistry
-	}
-	return r.GetOrRegister(name, NewMeterForced).(Meter)
-}
 
 // NewMeter constructs a new StandardMeter and launches a goroutine.
 // Be sure to call Stop() once the meter is of no use to allow for garbage collection.
@@ -60,17 +54,6 @@ func NewMeter() Meter {
 // NewMeterForced constructs a new StandardMeter and launches a goroutine no matter
 // the global switch is enabled or not.
 // Be sure to call Stop() once the meter is of no use to allow for garbage collection.
-func NewMeterForced() Meter {
-	m := newStandardMeter()
-	arbiter.Lock()
-	defer arbiter.Unlock()
-	arbiter.meters[m] = struct{}{}
-	if !arbiter.started {
-		arbiter.started = true
-		go arbiter.tick()
-	}
-	return m
-}
 
 // NewRegisteredMeter constructs and registers a new StandardMeter
 // and launches a goroutine.
@@ -89,14 +72,6 @@ func NewRegisteredMeter(name string, r Registry) Meter {
 // and launches a goroutine no matter the global switch is enabled or not.
 // Be sure to unregister the meter from the registry once it is of no use to
 // allow for garbage collection.
-func NewRegisteredMeterForced(name string, r Registry) Meter {
-	c := NewMeterForced()
-	if nil == r {
-		r = DefaultRegistry
-	}
-	r.Register(name, c)
-	return c
-}
 
 // MeterSnapshot is a read-only copy of another Meter.
 type MeterSnapshot struct {

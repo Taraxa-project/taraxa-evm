@@ -103,13 +103,6 @@ func DecodeUint64(input string) (uint64, error) {
 
 // MustDecodeUint64 decodes a hex string with 0x prefix as a quantity.
 // It panics for invalid input.
-func MustDecodeUint64(input string) uint64 {
-	dec, err := DecodeUint64(input)
-	if err != nil {
-		panic(err)
-	}
-	return dec
-}
 
 // EncodeUint64 encodes i as a hex string with 0x prefix.
 func EncodeUint64(i uint64) string {

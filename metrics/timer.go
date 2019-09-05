@@ -40,15 +40,6 @@ func GetOrRegisterTimer(name string, r Registry) Timer {
 
 // NewCustomTimer constructs a new StandardTimer from a Histogram and a Meter.
 // Be sure to call Stop() once the timer is of no use to allow for garbage collection.
-func NewCustomTimer(h Histogram, m Meter) Timer {
-	if !Enabled {
-		return NilTimer{}
-	}
-	return &StandardTimer{
-		histogram: h,
-		meter:     m,
-	}
-}
 
 // NewRegisteredTimer constructs and registers a new StandardTimer.
 // Be sure to unregister the meter from the registry once it is of no use to

@@ -104,6 +104,7 @@ type EVMInterpreter struct {
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
+// TODO rollback this code and use EVM.Cancel
 func NewEVMInterpreterWithExecutionController(evm *EVM, cfg *Config, ctrl ExecutionController) *EVMInterpreter {
 	// We use the STOP instruction whether to see
 	// the jump table was initialised. If it was not

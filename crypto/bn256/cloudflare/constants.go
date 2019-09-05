@@ -19,9 +19,6 @@ var u = bigFromBase10("4965661367192848881")
 // Order is the number of elements in both G₁ and G₂: 36u⁴+36u³+18u²+6u+1.
 var Order = bigFromBase10("21888242871839275222246405745257275088548364400416034343698204186575808495617")
 
-// P is a prime over which we form a basic field: 36u⁴+36u³+24u²+6u+1.
-var P = bigFromBase10("21888242871839275222246405745257275088696311157297823662689037894645226208583")
-
 // p2 is p, represented as little-endian 64-bit words.
 var p2 = [4]uint64{0x3c208c16d87cfd47, 0x97816a916871ca8d, 0xb85045b68181585d, 0x30644e72e131a029}
 

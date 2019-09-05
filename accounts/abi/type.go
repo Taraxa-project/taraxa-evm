@@ -38,7 +38,6 @@ const (
 	FixedBytesTy
 	BytesTy
 	HashTy
-	FixedPointTy
 	FunctionTy
 )
 

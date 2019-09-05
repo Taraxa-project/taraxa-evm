@@ -319,18 +319,8 @@ type MixedcaseAddress struct {
 }
 
 // NewMixedcaseAddress constructor (mainly for testing)
-func NewMixedcaseAddress(addr Address) MixedcaseAddress {
-	return MixedcaseAddress{addr: addr, original: addr.Hex()}
-}
 
 // NewMixedcaseAddressFromString is mainly meant for unit-testing
-func NewMixedcaseAddressFromString(hexaddr string) (*MixedcaseAddress, error) {
-	if !IsHexAddress(hexaddr) {
-		return nil, fmt.Errorf("Invalid address")
-	}
-	a := FromHex(hexaddr)
-	return &MixedcaseAddress{addr: BytesToAddress(a), original: hexaddr}, nil
-}
 
 // UnmarshalJSON parses MixedcaseAddress
 func (ma *MixedcaseAddress) UnmarshalJSON(input []byte) error {

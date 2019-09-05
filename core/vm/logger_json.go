@@ -18,7 +18,6 @@ package vm
 
 import (
 	"encoding/json"
-	"io"
 	"math/big"
 	"time"
 
@@ -33,13 +32,6 @@ type JSONLogger struct {
 
 // NewJSONLogger creates a new EVM tracer that prints execution steps as JSON objects
 // into the provided stream.
-func NewJSONLogger(cfg *LogConfig, writer io.Writer) *JSONLogger {
-	l := &JSONLogger{json.NewEncoder(writer), cfg}
-	if l.cfg == nil {
-		l.cfg = &LogConfig{}
-	}
-	return l
-}
 
 func (l *JSONLogger) CaptureStart(from common.Address, to common.Address, create bool, input []byte, gas uint64, value *big.Int) error {
 	return nil

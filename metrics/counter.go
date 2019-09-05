@@ -26,12 +26,6 @@ func GetOrRegisterCounter(name string, r Registry) Counter {
 // new Counter no matter the global switch is enabled or not.
 // Be sure to unregister the counter from the registry once it is of no use to
 // allow for garbage collection.
-func GetOrRegisterCounterForced(name string, r Registry) Counter {
-	if nil == r {
-		r = DefaultRegistry
-	}
-	return r.GetOrRegister(name, NewCounterForced).(Counter)
-}
 
 // NewCounter constructs a new StandardCounter.
 func NewCounter() Counter {
@@ -43,9 +37,6 @@ func NewCounter() Counter {
 
 // NewCounterForced constructs a new StandardCounter and returns it no matter if
 // the global switch is enabled or not.
-func NewCounterForced() Counter {
-	return &StandardCounter{0}
-}
 
 // NewRegisteredCounter constructs and registers a new StandardCounter.
 func NewRegisteredCounter(name string, r Registry) Counter {
@@ -61,14 +52,6 @@ func NewRegisteredCounter(name string, r Registry) Counter {
 // and launches a goroutine no matter the global switch is enabled or not.
 // Be sure to unregister the counter from the registry once it is of no use to
 // allow for garbage collection.
-func NewRegisteredCounterForced(name string, r Registry) Counter {
-	c := NewCounterForced()
-	if nil == r {
-		r = DefaultRegistry
-	}
-	r.Register(name, c)
-	return c
-}
 
 // CounterSnapshot is a read-only copy of another Counter.
 type CounterSnapshot int64

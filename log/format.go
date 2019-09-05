@@ -2,7 +2,6 @@ package log
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -23,16 +22,6 @@ const (
 // locationTrims are trimmed for display to avoid unwieldy log lines.
 var locationTrims = []string{
 	"github.com/Taraxa-project/taraxa-evm/",
-}
-
-// PrintOrigins sets or unsets log location (file:line) printing for terminal
-// format output.
-func PrintOrigins(print bool) {
-	if print {
-		atomic.StoreUint32(&locationEnabled, 1)
-	} else {
-		atomic.StoreUint32(&locationEnabled, 0)
-	}
 }
 
 // locationEnabled is an atomic flag controlling whether the terminal formatter
@@ -148,14 +137,6 @@ func TerminalFormat(usecolor bool) Format {
 //
 // For more details see: http://godoc.org/github.com/kr/logfmt
 //
-func LogfmtFormat() Format {
-	return FormatFunc(func(r *Record) []byte {
-		common := []interface{}{r.KeyNames.Time, r.Time, r.KeyNames.Lvl, r.Lvl, r.KeyNames.Msg, r.Msg}
-		buf := &bytes.Buffer{}
-		logfmt(buf, append(common, r.Ctx...), 0, false)
-		return buf.Bytes()
-	})
-}
 
 func logfmt(buf *bytes.Buffer, ctx []interface{}, color int, term bool) {
 	for i := 0; i < len(ctx); i += 2 {
@@ -198,93 +179,14 @@ func logfmt(buf *bytes.Buffer, ctx []interface{}, color int, term bool) {
 
 // JSONFormat formats log records as JSON objects separated by newlines.
 // It is the equivalent of JSONFormatEx(false, true).
-func JSONFormat() Format {
-	return JSONFormatEx(false, true)
-}
 
 // JSONFormatOrderedEx formats log records as JSON arrays. If pretty is true,
 // records will be pretty-printed. If lineSeparated is true, records
 // will be logged with a new line between each record.
-func JSONFormatOrderedEx(pretty, lineSeparated bool) Format {
-	jsonMarshal := json.Marshal
-	if pretty {
-		jsonMarshal = func(v interface{}) ([]byte, error) {
-			return json.MarshalIndent(v, "", "    ")
-		}
-	}
-	return FormatFunc(func(r *Record) []byte {
-		props := make(map[string]interface{})
-
-		props[r.KeyNames.Time] = r.Time
-		props[r.KeyNames.Lvl] = r.Lvl.String()
-		props[r.KeyNames.Msg] = r.Msg
-
-		ctx := make([]string, len(r.Ctx))
-		for i := 0; i < len(r.Ctx); i += 2 {
-			k, ok := r.Ctx[i].(string)
-			if !ok {
-				props[errorKey] = fmt.Sprintf("%+v is not a string key,", r.Ctx[i])
-			}
-			ctx[i] = k
-			ctx[i+1] = formatLogfmtValue(r.Ctx[i+1], true)
-		}
-		props[r.KeyNames.Ctx] = ctx
-
-		b, err := jsonMarshal(props)
-		if err != nil {
-			b, _ = jsonMarshal(map[string]string{
-				errorKey: err.Error(),
-			})
-			return b
-		}
-		if lineSeparated {
-			b = append(b, '\n')
-		}
-		return b
-	})
-}
 
 // JSONFormatEx formats log records as JSON objects. If pretty is true,
 // records will be pretty-printed. If lineSeparated is true, records
 // will be logged with a new line between each record.
-func JSONFormatEx(pretty, lineSeparated bool) Format {
-	jsonMarshal := json.Marshal
-	if pretty {
-		jsonMarshal = func(v interface{}) ([]byte, error) {
-			return json.MarshalIndent(v, "", "    ")
-		}
-	}
-
-	return FormatFunc(func(r *Record) []byte {
-		props := make(map[string]interface{})
-
-		props[r.KeyNames.Time] = r.Time
-		props[r.KeyNames.Lvl] = r.Lvl.String()
-		props[r.KeyNames.Msg] = r.Msg
-
-		for i := 0; i < len(r.Ctx); i += 2 {
-			k, ok := r.Ctx[i].(string)
-			if !ok {
-				props[errorKey] = fmt.Sprintf("%+v is not a string key", r.Ctx[i])
-			}
-			props[k] = formatJSONValue(r.Ctx[i+1])
-		}
-
-		b, err := jsonMarshal(props)
-		if err != nil {
-			b, _ = jsonMarshal(map[string]string{
-				errorKey: err.Error(),
-			})
-			return b
-		}
-
-		if lineSeparated {
-			b = append(b, '\n')
-		}
-
-		return b
-	})
-}
 
 func formatShared(value interface{}) (result interface{}) {
 	defer func() {
@@ -309,16 +211,6 @@ func formatShared(value interface{}) (result interface{}) {
 
 	default:
 		return v
-	}
-}
-
-func formatJSONValue(value interface{}) interface{} {
-	value = formatShared(value)
-	switch value.(type) {
-	case int, int8, int16, int32, int64, float32, float64, uint, uint8, uint16, uint32, uint64, string:
-		return value
-	default:
-		return fmt.Sprintf("%+v", value)
 	}
 }
 
