@@ -65,7 +65,7 @@ type Trie interface {
 	TryDelete(key []byte) error
 	Commit(onleaf trie.LeafCallback) (common.Hash, error)
 	Hash() common.Hash
-	VisitLeaves(visitor trie.LeafVisitor) error
+	VisitLeavesParallel(visitor trie.LeafVisitor) error
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for

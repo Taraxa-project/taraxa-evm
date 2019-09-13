@@ -47,7 +47,9 @@ var secureKeyPrefix = []byte("secure-key-")
 // secureKeyLength is the length of the above prefix + 32byte hash.
 const secureKeyLength = 11 + 32
 
-var seckeybuf [secureKeyLength]byte // Ephemeral buffer for calculating preimage keys
+type secureKeyBuffer = [secureKeyLength]byte
+
+var seckeyBuf secureKeyBuffer
 
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
@@ -70,8 +72,9 @@ type Database struct {
 	flushnodes uint64             // Nodes flushed since last commit
 	flushsize  common.StorageSize // Data storage flushed since last commit
 
-	dirtiesSize   common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
-	preimagesSize common.StorageSize // Storage size of the preimages cache
+	dirtiesSize           common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
+	preimagesSize         common.StorageSize // Storage size of the preimages cache
+	enableConcurrentReads bool
 
 	lock sync.RWMutex
 }
@@ -266,7 +269,7 @@ func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 	var cleans *bigcache.BigCache
 	if cache > 0 {
 		cleans, _ = bigcache.NewBigCache(bigcache.Config{
-			// TODO increase the number of shards?
+			// TODO tweak
 			Shards:             1024,
 			LifeWindow:         time.Hour,
 			MaxEntriesInWindow: cache * 1024,
@@ -291,6 +294,18 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	defer db.lock.Unlock()
 
 	db.insert(hash, blob, rawNode(blob))
+}
+
+func (this *Database) EnableConcurrentReads() {
+	this.enableConcurrentReads = true
+}
+
+func (this *Database) getKeyBufferForReuse() (*secureKeyBuffer) {
+	if this.enableConcurrentReads {
+		return new(secureKeyBuffer)
+	} else {
+		return &seckeyBuf
+	}
 }
 
 // insert inserts a collapsed trie node into the memory database. This method is
@@ -399,11 +414,26 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 	return enc, err
 }
 
+// preimage retrieves a cached trie node pre-image from memory. If it cannot be
+// found cached, the method queries the persistent database for the content.
+func (db *Database) preimage(hash common.Hash) ([]byte, error) {
+	// Retrieve the node from cache if available
+	db.lock.RLock()
+	preimage := db.preimages[hash]
+	db.lock.RUnlock()
+
+	if preimage != nil {
+		return preimage, nil
+	}
+	// Content unavailable in memory, attempt to retrieve from disk
+	return db.diskdb.Get(db.secureKey(hash[:], db.getKeyBufferForReuse()))
+}
+
 // secureKey returns the database key for the preimage of key, as an ephemeral
 // buffer. The caller must not hold onto the return value because it will become
 // invalid on the next call.
-func (db *Database) secureKey(key []byte) []byte {
-	buf := append(seckeybuf[:0], secureKeyPrefix...)
+func (db *Database) secureKey(key []byte, reuseBuf *secureKeyBuffer) []byte {
+	buf := append(reuseBuf[:0], secureKeyPrefix...)
 	buf = append(buf, key...)
 	return buf
 }
@@ -451,8 +481,9 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 	batch := target.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
+	keyBuffer := db.getKeyBufferForReuse()
 	for hash, preimage := range db.preimages {
-		if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {
+		if err := batch.Put(db.secureKey(hash[:], keyBuffer), preimage); err != nil {
 			log.Error("Failed to commit preimage from trie database", "err", err)
 			db.lock.RUnlock()
 			return err

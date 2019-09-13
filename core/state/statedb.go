@@ -108,26 +108,6 @@ func (self *StateDB) Error() error {
 	return self.dbErr
 }
 
-// Reset clears out all ephemeral state objects from the state db, but keeps
-// the underlying state trie to avoid reloading data for the next operations.
-func (self *StateDB) Reset(root common.Hash) error {
-	tr, err := self.db.OpenTrie(root)
-	if err != nil {
-		return err
-	}
-	self.trie = tr
-	self.stateObjects = make(map[common.Address]*stateObject)
-	self.stateObjectsDirty = make(map[common.Address]struct{})
-	self.thash = common.Hash{}
-	self.bhash = common.Hash{}
-	self.txIndex = 0
-	self.logs = make(map[common.Hash][]*types.Log)
-	self.logSize = 0
-	self.preimages = make(map[common.Hash][]byte)
-	self.clearJournalAndRefund()
-	return nil
-}
-
 func (self *StateDB) AddLog(log *types.Log) {
 	self.journal.append(addLogChange{txhash: self.thash})
 
@@ -159,11 +139,6 @@ func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
 		copy(pi, preimage)
 		self.preimages[hash] = pi
 	}
-}
-
-// Preimages returns a list of SHA3 preimages that have been submitted.
-func (self *StateDB) Preimages() map[common.Hash][]byte {
-	return self.preimages
 }
 
 // AddRefund adds gas to the refund counter
@@ -204,7 +179,11 @@ func (self *StateDB) GetBalance(addr common.Address) *big.Int {
 	return common.Big0
 }
 
-func (this *StateDB) HasBalance(address common.Address, amount *big.Int) bool {
+func (this *StateDB) BalanceEQ(address common.Address, amount *big.Int) bool {
+	return this.GetBalance(address).Cmp(amount) == 0
+}
+
+func (this *StateDB) AssertBalanceGTE(address common.Address, amount *big.Int) bool {
 	return this.GetBalance(address).Cmp(amount) >= 0
 }
 
@@ -215,6 +194,10 @@ func (self *StateDB) GetNonce(addr common.Address) uint64 {
 	}
 
 	return 0
+}
+
+func (this *StateDB) NonceEQ(addr common.Address, expected uint64) bool {
+	return this.GetNonce(addr) == expected
 }
 
 func (self *StateDB) GetCode(addr common.Address) []byte {
@@ -286,49 +269,42 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.AddBalance(amount)
-	}
+	stateObject.AddBalance(amount)
 }
 
 // SubBalance subtracts amount from the account associated with addr.
 func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SubBalance(amount)
-	}
+	stateObject.SubBalance(amount)
+}
+
+func (self *StateDB) Transfer(from, to common.Address, amount *big.Int) {
+	self.SubBalance(from, amount)
+	self.AddBalance(to, amount)
 }
 
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SetBalance(amount)
-	}
+	stateObject.SetBalance(amount)
 }
 
 func (self *StateDB) SetNonce(addr common.Address, nonce uint64) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SetNonce(nonce)
-	}
+	stateObject.SetNonce(nonce)
 }
 
-func (this *StateDB) AddNonce(addr common.Address, value uint64) {
-	this.SetNonce(addr, this.GetNonce(addr)+value)
+func (this *StateDB) IncrementNonce(addr common.Address) {
+	this.SetNonce(addr, this.GetNonce(addr)+1)
 }
 
 func (self *StateDB) SetCode(addr common.Address, code []byte) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SetCode(crypto.Keccak256Hash(code), code)
-	}
+	stateObject.SetCode(crypto.Keccak256Hash(code), code)
 }
 
 func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := self.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SetState(self.db, key, value)
-	}
+	stateObject.SetState(self.db, key, value)
 }
 
 // Suicide marks the given account as suicided.
@@ -336,11 +312,13 @@ func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
 //
 // The account's state object is still available until the state is committed,
 // getStateObject will return a non-nil account after Suicide.
-func (self *StateDB) Suicide(addr common.Address) bool {
+func (self *StateDB) Suicide(addr common.Address, newAddr common.Address) {
 	stateObject := self.getStateObject(addr)
 	if stateObject == nil {
-		return false
+		self.AddBalance(newAddr, common.Big0)
+		return
 	}
+	self.AddBalance(newAddr, stateObject.Balance())
 	self.journal.append(suicideChange{
 		account:     &addr,
 		prev:        stateObject.suicided,
@@ -348,8 +326,6 @@ func (self *StateDB) Suicide(addr common.Address) bool {
 	})
 	stateObject.markSuicided()
 	stateObject.data.Balance = new(big.Int)
-
-	return true
 }
 
 //

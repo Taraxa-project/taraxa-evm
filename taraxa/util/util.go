@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"hash/crc64"
 	"math/big"
+	"math/rand"
 	"reflect"
 )
 
@@ -57,7 +58,7 @@ func Max(x, y int) int {
 	return y
 }
 
-func isReallyNil(value interface{}) bool {
+func IsReallyNil(value interface{}) bool {
 	if value == nil {
 		return true
 	}
@@ -76,15 +77,16 @@ func CRC64(b []byte) uint64 {
 	return crc64.Checksum(b, CRC64_ISO_TABLE)
 }
 
-func Either(cond bool, left, right interface{}) interface{} {
-	if cond {
-		return left
-	}
-	return right
-}
-
 func Times(N int, action func(int)) {
 	for i := 0; i < N; i++ {
 		action(i)
 	}
+}
+
+func RandomBytes(N int) (ret []byte) {
+	buf := new(big.Int)
+	for len(ret) < N {
+		ret = append(ret, buf.SetUint64(rand.Uint64()).Bytes()...)
+	}
+	return ret[:N]
 }

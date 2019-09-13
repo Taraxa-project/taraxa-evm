@@ -147,7 +147,8 @@ func (st *StateTransition) useGas(amount uint64) error {
 
 func (st *StateTransition) buyGas() error {
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
-	if !st.evm.CanTransfer(st.state, st.msg.From(), mgval) {
+	// TODO this check potentially invalidates the whole block
+	if !st.state.AssertBalanceGTE(st.msg.From(), mgval) {
 		return errInsufficientBalanceForGas
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
@@ -192,13 +193,12 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 	if consensusErr = st.useGas(gas); consensusErr != nil {
 		return nil, 0, nil, consensusErr
 	}
-	var evm = st.evm
 	if contractCreation {
-		ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else {
 		// Increment the nonce for the next transaction
-		st.state.AddNonce(sender.Address(), 1)
-		ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		st.state.IncrementNonce(sender.Address())
+		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)

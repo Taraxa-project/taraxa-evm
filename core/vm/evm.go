@@ -31,10 +31,6 @@ import (
 var emptyCodeHash = crypto.Keccak256Hash(nil)
 
 type (
-	// CanTransferFunc is the signature of a transfer guard function
-	CanTransferFunc func(StateDB, common.Address, *big.Int) bool
-	// TransferFunc is the signature of a transfer function
-	TransferFunc func(StateDB, common.Address, common.Address, *big.Int)
 	// GetHashFunc returns the nth block hash in the blockchain
 	// and is used by the BLOCKHASH EVM op code.
 	GetHashFunc func(uint64) common.Hash
@@ -70,11 +66,6 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 // Context provides the EVM with auxiliary information. Once provided
 // it shouldn't be modified.
 type Context struct {
-	// CanTransfer returns whether the account contains
-	// sufficient ether to transfer the value
-	CanTransfer CanTransferFunc
-	// Transfer transfers ether from one account to the other
-	Transfer TransferFunc
 	// GetHash returns the hash corresponding to n
 	GetHash GetHashFunc
 
@@ -197,7 +188,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		return nil, gas, ErrDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
-	if !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
+	if !evm.StateDB.AssertBalanceGTE(caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
 	}
 
@@ -220,7 +211,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		}
 		evm.StateDB.CreateAccount(addr)
 	}
-	evm.Transfer(evm.StateDB, caller.Address(), to.Address(), value)
+	evm.StateDB.Transfer(caller.Address(), to.Address(), value)
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, to, value, gas)
@@ -268,7 +259,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 		return nil, gas, ErrDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
-	if !evm.CanTransfer(evm.StateDB, caller.Address(), value) {
+	if !evm.StateDB.AssertBalanceGTE(caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
 	}
 
@@ -386,24 +377,23 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, common.Address{}, gas, ErrDepth
 	}
-	if !evm.CanTransfer(evm.StateDB, caller.Address(), value) {
+	if !evm.StateDB.AssertBalanceGTE(caller.Address(), value) {
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
-	evm.StateDB.AddNonce(caller.Address(), 1)
+	evm.StateDB.IncrementNonce(caller.Address())
 
 	// Ensure there's no existing contract already at the designated address
-	// TODO conflict prone
 	contractHash := evm.StateDB.GetCodeHash(address)
-	if evm.StateDB.GetNonce(address) != 0 || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
+	if !evm.StateDB.NonceEQ(address, 0) || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}
 	// Create a new account on the state
 	snapshot := evm.StateDB.Snapshot()
 	evm.StateDB.CreateAccount(address)
 	if evm.ChainConfig().IsEIP158(evm.BlockNumber) {
-		evm.StateDB.AddNonce(address, 1)
+		evm.StateDB.IncrementNonce(address)
 	}
-	evm.Transfer(evm.StateDB, caller.Address(), address, value)
+	evm.StateDB.Transfer(caller.Address(), address, value)
 
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
@@ -459,7 +449,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 // Create creates a new contract using code as deployment code.
 func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
-	// TODO conflict prone
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.StateDB.GetNonce(caller.Address()))
 	return evm.create(caller, &codeAndHash{code: code}, gas, value, contractAddr)
 }

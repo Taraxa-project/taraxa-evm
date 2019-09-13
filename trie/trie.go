@@ -21,9 +21,11 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"reflect"
 	"runtime"
 	"sync/atomic"
@@ -32,6 +34,9 @@ import (
 var (
 	// emptyRoot is the known root hash of an empty trie.
 	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+	// emptyState is the known hash of an empty state trie entry.
+	emptyState = crypto.Keccak256Hash(nil)
 )
 
 var (
@@ -106,6 +111,12 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 		trie.root = rootnode
 	}
 	return trie, nil
+}
+
+// NodeIterator returns an iterator that returns nodes of the trie. Iteration starts at
+// the key after the given start key.
+func (t *Trie) NodeIterator(start []byte) NodeIterator {
+	return newNodeIterator(t, start)
 }
 
 // TryGet returns the value for key stored in the trie.
@@ -456,13 +467,13 @@ type LeafVisitor = func(key, value []byte, parent_hash common.Hash) error
 
 type visitContext struct {
 	visitor               LeafVisitor
-	maxConcurrentBranches int32
+	maxParallelBranches   int32
 	numConcurrentBranches int32
-	err                   util.AtomicError
+	err                   concurrent.AtomicError
 }
 
-func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
-	ctx := visitContext{visitor: visitor, maxConcurrentBranches: int32(40)}
+func (this *Trie) VisitLeavesParallel(visitor LeafVisitor) error {
+	ctx := visitContext{visitor: visitor, maxParallelBranches: int32(40)}
 	this.visitLeaves(nil, nil, this.root, &ctx)
 	for !atomic.CompareAndSwapInt32(&ctx.numConcurrentBranches, 0, 0) {
 		runtime.Gosched()
@@ -471,18 +482,18 @@ func (this *Trie) VisitLeaves(visitor LeafVisitor) error {
 }
 
 func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) {
-	if ctx.err.Check() {
+	if ctx.err.IsPresent() {
 		return
 	}
 	switch n := n.(type) {
 	case *shortNode:
-		defer this.visitLeaves(append(path[:], n.Key...), n, n.Val, ctx)
+		this.visitLeaves(append(path[:], n.Key...), n, n.Val, ctx)
 	case *fullNode:
 		for pos, child := range n.Children {
 			if child == nil {
 				continue
 			}
-			defer this.visitLeaves(append(path[:], byte(pos)), n, child, ctx)
+			this.visitLeaves(append(path[:], byte(pos)), n, child, ctx)
 		}
 	case hashNode:
 		action := func() {
@@ -490,13 +501,13 @@ func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) 
 			ctx.err.SetIfAbsent(err)
 			this.visitLeaves(path, n, child, ctx)
 		}
-		if atomic.LoadInt32(&ctx.numConcurrentBranches) < atomic.LoadInt32(&ctx.maxConcurrentBranches) {
+		if atomic.LoadInt32(&ctx.numConcurrentBranches) < atomic.LoadInt32(&ctx.maxParallelBranches) {
 			atomic.AddInt32(&ctx.numConcurrentBranches, 1)
 			go util.Chain(action, func() {
 				atomic.AddInt32(&ctx.numConcurrentBranches, -1)
 			})()
 		} else {
-			defer action()
+			action()
 		}
 	case valueNode:
 		ctx.err.SetIfAbsent(ctx.visitor(path[:], n[:], common.Hash{}))

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type ErrorHandler func(error)
+type ErrorHandler func(_ error)
 
 func SetTo(errPtr *error) ErrorHandler {
 	return func(err error) {
@@ -47,7 +47,7 @@ func AnyMatches(obj interface{}, handlers ...Predicate) bool {
 }
 
 func PanicIfNotNil(value interface{}) {
-	if !isReallyNil(value) {
+	if !IsReallyNil(value) {
 		panic(value)
 	}
 }

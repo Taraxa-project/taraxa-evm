@@ -192,7 +192,7 @@ func newTestAction(addr common.Address, r *rand.Rand) testAction {
 		{
 			name: "Suicide",
 			fn: func(a testAction, s *StateDB) {
-				s.Suicide(addr)
+				s.Suicide(addr, common.BigToAddress(big.NewInt(r.Int63())))
 			},
 		},
 		{

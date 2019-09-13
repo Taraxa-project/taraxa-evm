@@ -63,32 +63,6 @@ func makeTestSecureTrie() (*Database, *SecureTrie, map[string][]byte) {
 	return triedb, trie, content
 }
 
-func TestSecureDelete(t *testing.T) {
-	trie := newEmptySecure()
-	vals := []struct{ k, v string }{
-		{"do", "verb"},
-		{"ether", "wookiedoo"},
-		{"horse", "stallion"},
-		{"shaman", "horse"},
-		{"doge", "coin"},
-		{"ether", ""},
-		{"dog", "puppy"},
-		{"shaman", ""},
-	}
-	for _, val := range vals {
-		if val.v != "" {
-			trie.Update([]byte(val.k), []byte(val.v))
-		} else {
-			trie.Delete([]byte(val.k))
-		}
-	}
-	hash := trie.Hash()
-	exp := common.HexToHash("29b235a58c3c25ab83010c327d5932bcf05324b7d6b1185e650798034783ca9d")
-	if hash != exp {
-		t.Errorf("expected %x got %x", exp, hash)
-	}
-}
-
 func TestSecureGetKey(t *testing.T) {
 	trie := newEmptySecure()
 	trie.Update([]byte("foo"), []byte("bar"))

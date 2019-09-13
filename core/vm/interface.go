@@ -29,11 +29,14 @@ type StateDB interface {
 
 	SubBalance(common.Address, *big.Int)
 	AddBalance(common.Address, *big.Int)
+	Transfer(common.Address, common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
-	HasBalance(address common.Address, amount *big.Int) bool
+	BalanceEQ(common.Address, *big.Int) bool
+	AssertBalanceGTE(common.Address, *big.Int) bool
 
 	GetNonce(common.Address) uint64
-	AddNonce(common.Address, uint64)
+	NonceEQ(common.Address, uint64) bool
+	IncrementNonce(common.Address)
 
 	GetCodeHash(common.Address) common.Hash
 	GetCode(common.Address) []byte
@@ -48,7 +51,7 @@ type StateDB interface {
 	GetState(common.Address, common.Hash) common.Hash
 	SetState(common.Address, common.Hash, common.Hash)
 
-	Suicide(common.Address) bool
+	Suicide(addr, newAddr common.Address)
 	HasSuicided(common.Address) bool
 
 	// Exist reports whether the given account exists in state.
