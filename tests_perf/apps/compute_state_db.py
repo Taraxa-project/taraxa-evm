@@ -1,18 +1,16 @@
 import json
-from pathlib import Path
-from tempfile import gettempdir
-
 import rocksdb
-
-from taraxa.rocksdb_util import ceil_entry
-from .blockchain_data import BlockDB
+from ethereumetl.utils import hex_to_dec
+from pathlib import Path
+from taraxa import rocksdb_util
+from taraxa.context_util import current_exit_stack, with_exit_stack
 from taraxa.lib_taraxa_evm import LibTaraxaEvm
+from taraxa.rocksdb_util import ceil_entry
 from taraxa.type_util import *
 from taraxa.util import raise_if_not_none, assert_eq
-from taraxa.context_util import current_exit_stack, with_exit_stack
-from . import shell
-from taraxa import rocksdb_util
-from ethereumetl.utils import hex_to_dec
+from tempfile import gettempdir
+
+from .blockchain_data import BlockDB
 
 
 class TaraxaVMResultDB:
@@ -36,7 +34,6 @@ class TaraxaVMResultDB:
             return BlockDB.block_key_decode(entry[0]), json.loads(entry[1])
 
 
-@shell.command
 @with_exit_stack
 def execute_transactions(vm_opts,
                          from_block=0,
