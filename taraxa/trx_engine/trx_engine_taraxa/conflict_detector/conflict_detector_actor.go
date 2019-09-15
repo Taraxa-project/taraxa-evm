@@ -38,7 +38,7 @@ func (this *ConflictDetectorActor) Run() {
 	defer close(this.quitChan)
 	for {
 		op := <-this.inbox
-		if op == nil || atomic.LoadUint32(&this.status) == running {
+		if op == nil || atomic.LoadUint32(&this.status) == stopped_forcibly {
 			break
 		}
 		if conflicts, hasCaused := this.conflictDetector.Process(op); conflicts != nil {

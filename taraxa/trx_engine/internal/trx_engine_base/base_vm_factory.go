@@ -8,6 +8,19 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 )
 
+type BaseVMConfig = struct {
+	Genesis *core.Genesis `json:"genesis"`
+}
+
+type StateDBConfig = struct {
+	DBFactory DBFactory `json:"db"`
+	CacheSize int       `json:"cacheSize"`
+}
+
+type BlockHashSourceFactory interface {
+	NewInstance() (vm.GetHashFunc, error)
+}
+
 type BaseVMFactory struct {
 	BaseVMConfig
 	EvmStaticConfig        *vm.StaticConfig `json:"evm"`
@@ -56,4 +69,10 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseVM, cleanup func(), err error
 	localErr.SetOrPanicIfPresent(err11)
 	ret.GetBlockHash = getBlockHash
 	return
+}
+
+type SimpleBlockHashSourceFactory vm.GetHashFunc
+
+func (this SimpleBlockHashSourceFactory) NewInstance() (vm.GetHashFunc, error) {
+	return vm.GetHashFunc(this), nil
 }

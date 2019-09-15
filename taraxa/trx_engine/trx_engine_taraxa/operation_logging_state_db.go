@@ -3,13 +3,12 @@ package trx_engine_taraxa
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_taraxa/conflict_detector"
 	"math/big"
 )
 
 type StateDBForConflictDetection struct {
 	vm.StateDB
-	EIP158       bool
 	LogOperation conflict_detector.OperationLogger
 }
 
@@ -114,7 +113,7 @@ func (this *StateDBForConflictDetection) Empty(addr common.Address) bool {
 	if !this.StateDB.Exist(addr) {
 		return true
 	}
-	this.logAndCheckIfEmpty(&addr)
+	this.logAccountEmptyCheck(&addr)
 	return this.StateDB.Empty(addr)
 }
 
@@ -137,8 +136,8 @@ func (this *StateDBForConflictDetection) logAddOrSubBalance(addr *common.Address
 	this.logGetOrCreateAccount(addr)
 	if !isZero {
 		this.log(conflict_detector.ADD, addr, balance)
-	} else if isAdd && this.logAndCheckIfEmpty(addr) && this.EIP158 {
-		this.log(conflict_detector.DELETE, addr)
+	} else if isAdd {
+		this.logAccountEmptyCheck(addr)
 	}
 }
 
@@ -168,9 +167,8 @@ func (this *StateDBForConflictDetection) logSetAccountField(addr *common.Address
 	this.log(conflict_detector.SET, addr, field)
 }
 
-func (this *StateDBForConflictDetection) logAndCheckIfEmpty(addr *common.Address) bool {
+func (this *StateDBForConflictDetection) logAccountEmptyCheck(addr *common.Address) {
 	this.log(conflict_detector.GET, addr, balance, nonce, code)
-	return this.StateDB.Empty(*addr)
 }
 
 type AccountKey = common.Address

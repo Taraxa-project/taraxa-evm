@@ -18,7 +18,7 @@ type TransactionState struct {
 	reverted             bool
 	refund               uint64
 	preimages            Preimages
-	logs                 []*types.Log
+	logs                 Logs
 	onError              util.ErrorHandler
 }
 type LoggingContext = struct {

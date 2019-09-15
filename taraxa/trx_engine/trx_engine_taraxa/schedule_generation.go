@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/conflict_detector"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/internal/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -65,7 +65,6 @@ func (this *scheduleGeneration) run() (ret *trx_engine.ConcurrentSchedule, err e
 				GasPool:     new(core.GasPool).AddGas(uint64(tx.Gas)),
 				DB: &StateDBForConflictDetection{
 					StateDB:      stateDB,
-					EIP158:       this.Genesis.Config.IsEIP158(this.Block.Number),
 					LogOperation: conflictDetectorActor.NewOperationLogger(txIndex),
 				},
 				OnEvmInstruction: func(pc uint64) (uint64, bool) {

@@ -2,6 +2,7 @@ package trx_engine_taraxa
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
@@ -29,6 +30,9 @@ type StorageCell = struct {
 type StorageKeySet = map[common.Hash]bool
 type Storage = map[common.Hash]*StorageCell
 type Preimages = map[common.Hash][]byte
+type Logs = []*types.Log
+
+
 
 var EmptyHash = crypto.Keccak256Hash(nil)
 var EmptyCodeHash = EmptyHash
