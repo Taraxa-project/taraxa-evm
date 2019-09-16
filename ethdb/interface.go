@@ -52,7 +52,6 @@ type Transactional interface {
 type MutableDatabase interface {
 	Getter
 	Putter
-	Delete(key []byte) error
 }
 
 type MutableTransactionalDatabase interface {

@@ -2,11 +2,11 @@ package trx_engine_taraxa
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/internal/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 )
 
 type TaraxaTrxEngine struct {
-	*trx_engine_base.BaseVM
+	*trx_engine_base.BaseTrxEngine
 	TaraxaTrxEngineConfig
 }
 

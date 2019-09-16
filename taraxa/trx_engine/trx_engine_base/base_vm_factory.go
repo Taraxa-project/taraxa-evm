@@ -29,7 +29,7 @@ type BaseVMFactory struct {
 	BlockHashSourceFactory `json:"blockHashSource"`
 }
 
-func (this *BaseVMFactory) NewInstance() (ret *BaseVM, cleanup func(), err error) {
+func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), err error) {
 	cleanup = util.DoNothing
 	localErr := new(concurrent.AtomicError)
 	defer util.Recover(
@@ -44,7 +44,7 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseVM, cleanup func(), err error
 	if evmStaticConfig == nil {
 		evmStaticConfig = new(vm.StaticConfig)
 	}
-	ret = &BaseVM{
+	ret = &BaseTrxEngine{
 		BaseVMConfig: this.BaseVMConfig,
 		EvmConfig:    &vm.Config{StaticConfig: evmStaticConfig},
 	}

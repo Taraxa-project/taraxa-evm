@@ -1,6 +1,6 @@
 package cgo
 
-//#include "types.h"
+//#include "index.h"
 import "C"
 import (
 	"errors"
@@ -9,36 +9,24 @@ import (
 )
 
 type database struct {
-	ptr *C.taraxa_cgo_ethdb_Database
+	c_self *C.taraxa_cgo_ethdb_Database
 }
 
 func newDatabase(ptr *C.taraxa_cgo_ethdb_Database) *database {
 	ret := &database{ptr}
-	runtime.SetFinalizer(ret, func(db *database) {
-		C.taraxa_cgo_ethdb_Database_Free(db.ptr)
-	})
+	runtime.SetFinalizer(ret, (*database).c_Free)
 	return ret
+}
+
+func (this *database) c_Free() {
+	C.taraxa_cgo_ethdb_Database_Free(this.c_self)
 }
 
 func (this *database) Put(key []byte, value []byte) error {
 	keySlice, valueSlice := slice(key), slice(value)
 	defer free(keySlice)
 	defer free(valueSlice)
-	cRet, cErr := C.taraxa_cgo_ethdb_Database_Put(this.ptr, keySlice, valueSlice)
-	defer free(cRet)
-	if cErr != nil {
-		return cErr
-	}
-	if errBytes := bytes(cRet); len(errBytes) > 0 {
-		return errors.New(string(errBytes))
-	}
-	return nil
-}
-
-func (this *database) Delete(key []byte) error {
-	keySlice := slice(key)
-	defer free(keySlice)
-	cRet, cErr := C.taraxa_cgo_ethdb_Database_Delete(this.ptr, keySlice)
+	cRet, cErr := C.taraxa_cgo_ethdb_Database_Put(this.c_self, keySlice, valueSlice)
 	defer free(cRet)
 	if cErr != nil {
 		return cErr
@@ -52,7 +40,7 @@ func (this *database) Delete(key []byte) error {
 func (this *database) Get(key []byte) (ret []byte, err error) {
 	keySlice := slice(key)
 	defer free(keySlice)
-	cRet, cErr := C.taraxa_cgo_ethdb_Database_Get(this.ptr, keySlice)
+	cRet, cErr := C.taraxa_cgo_ethdb_Database_Get(this.c_self, keySlice)
 	defer free(cRet.ret)
 	defer free(cRet.err)
 	if cErr != nil {
@@ -66,10 +54,12 @@ func (this *database) Get(key []byte) (ret []byte, err error) {
 	return
 }
 
-func (this *database) Close() {
-	C.taraxa_cgo_ethdb_Database_Close(this.ptr)
+func (this *database) c_NewBatch() *C.taraxa_cgo_ethdb_Batch {
+	return C.taraxa_cgo_ethdb_Database_NewBatch(this.c_self)
 }
 
 func (this *database) NewBatch() ethdb.Batch {
-	return newBatch(C.taraxa_cgo_ethdb_Database_NewBatch(this.ptr))
+	return newBatch(this)
 }
+
+func (this *database) Close() {}

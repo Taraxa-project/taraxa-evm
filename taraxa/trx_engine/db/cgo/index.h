@@ -26,9 +26,7 @@ typedef struct {
   void *self;
   void (*Free)(void *);
   ID(Error) (*Put)(void *, ID(Key), ID(Value));
-  ID(Error) (*Delete)(void *, ID(Key));
   ID(Error) (*Write)(void *);
-  void (*Reset)(void *);
 } ID(Batch);
 
 inline void ID(Batch_Free)(ID(Batch) * self) { self->Free(self->self); }
@@ -37,20 +35,9 @@ inline ID(Error) ID(Batch_Put)(ID(Batch) * self, ID(Key) key, ID(Value) value) {
   return self->Put(self->self, key, value);
 }
 
-inline ID(Error) ID(Batch_Delete)(ID(Batch) * self, ID(Key) key) {
-  return self->Delete(self->self, key);
-}
-
 inline ID(Error) ID(Batch_Write)(ID(Batch) * self) {
   return self->Write(self->self);
 }
-
-inline void ID(Batch_Reset)(ID(Batch) * self) { self->Reset(self->self); }
-
-typedef struct {
-  bool ret;
-  ID(Error) err;
-} ID(BoolAndErr);
 
 typedef struct {
   ID(Value) ret;
@@ -61,33 +48,19 @@ typedef struct {
   void *self;
   void (*Free)(void *);
   ID(Error) (*Put)(void *, ID(Key), ID(Value));
-  ID(Error) (*Delete)(void *, ID(Key));
   ID(ValueAndErr) (*Get)(void *, ID(Key));
-  ID(BoolAndErr) (*Has)(void *, ID(Key));
-  void (*Close)(void *);
   ID(Batch) * (*NewBatch)(void *);
 } ID(Database);
 
 inline void ID(Database_Free)(ID(Database) * self) { self->Free(self->self); }
 
-inline ID(Error)
-    ID(Database_Put)(ID(Database) * self, ID(Key) key, ID(Value) value) {
+inline ID(Error) ID(Database_Put)(ID(Database) * self, ID(Key) key, ID(Value) value) {
   return self->Put(self->self, key, value);
-}
-
-inline ID(Error) ID(Database_Delete)(ID(Database) * self, ID(Key) key) {
-  return self->Delete(self->self, key);
 }
 
 inline ID(ValueAndErr) ID(Database_Get)(ID(Database) * self, ID(Key) key) {
   return self->Get(self->self, key);
 }
-
-inline ID(BoolAndErr) ID(Database_Has)(ID(Database) * self, ID(Key) key) {
-  return self->Has(self->self, key);
-}
-
-inline void ID(Database_Close)(ID(Database) * self) { self->Close(self->self); }
 
 inline ID(Batch) * ID(Database_NewBatch)(ID(Database) * self) {
   return self->NewBatch(self->self);

@@ -1,7 +1,7 @@
 package trx_engine_taraxa
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/internal/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 )
@@ -12,12 +12,12 @@ type TaraxaTrxEngineFactory struct {
 }
 
 func (this *TaraxaTrxEngineFactory) NewInstance() (ret *TaraxaTrxEngine, cleanup func(), err error) {
-	var baseVm *trx_engine_base.BaseVM
+	var baseVm *trx_engine_base.BaseTrxEngine
 	baseVm, cleanup, err = this.BaseVMFactory.NewInstance()
 	if err != nil {
 		return
 	}
-	ret = &TaraxaTrxEngine{BaseVM: baseVm, TaraxaTrxEngineConfig: this.TaraxaTrxEngineConfig}
+	ret = &TaraxaTrxEngine{BaseTrxEngine: baseVm, TaraxaTrxEngineConfig: this.TaraxaTrxEngineConfig}
 	if ret.ConflictDetectorInboxPerTransaction == 0 {
 		ret.ConflictDetectorInboxPerTransaction = 5
 	}

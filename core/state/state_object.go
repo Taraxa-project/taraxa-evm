@@ -83,9 +83,10 @@ type stateObject struct {
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode bool // true if the code was updated
-	suicided  bool
-	deleted   bool
+	dirtyCode    bool // true if the code was updated
+	suicided     bool
+	deleted      bool
+	balanceDirty bool
 }
 
 // empty returns whether the account is considered empty.
@@ -291,6 +292,7 @@ func (self *stateObject) SetBalance(amount *big.Int) {
 
 func (self *stateObject) setBalance(amount *big.Int) {
 	self.data.Balance = amount
+	self.balanceDirty = true
 }
 
 func (self *stateObject) deepCopy(db *StateDB) *stateObject {

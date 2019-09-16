@@ -6,7 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_taraxa/conflict_detector"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/internal/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 )
 

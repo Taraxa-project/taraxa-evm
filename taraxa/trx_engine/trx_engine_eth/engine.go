@@ -11,13 +11,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/internal/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"sync"
 )
 
 type EthTrxEngine struct {
-	*trx_engine_base.BaseVM
+	*trx_engine_base.BaseTrxEngine
 	EthTrxEngineConfig
 	stateDB *state.StateDB
 	mutex   sync.Mutex
@@ -40,7 +40,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	gasPool := new(core.GasPool).AddGas(uint64(req.Block.GasLimit))
 	for i, tx := range req.Block.Transactions {
 		this.stateDB.Prepare(tx.Hash, req.Block.Hash, i)
-		txResult := this.BaseVM.ExecuteTransaction(&trx_engine_base.TransactionRequest{
+		txResult := this.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 			Transaction:      tx,
 			BlockHeader:      &req.Block.BlockHeader,
 			DB:               this.stateDB,
@@ -75,6 +75,10 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	}
 	this.applyMinerReward(req.Block)
 	ret.StateRoot, err = this.stateDB.Commit(this.Genesis.Config.IsEIP158(req.Block.Number))
+	ret.UpdatedBalances = make(map[common.Address]*hexutil.Big)
+	for k, v := range this.stateDB.GetAndResetUpdatedBalances() {
+		ret.UpdatedBalances[k] = (*hexutil.Big)(v)
+	}
 	return
 }
 

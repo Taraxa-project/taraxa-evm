@@ -24,7 +24,7 @@ type Transaction = struct {
 
 type BlockNumberAndCoinbase = struct {
 	Number *big.Int `json:"number" gencodec:"required"`
-	// TODO
+	// TODO blk num hex
 	//Number   *hexutil.Big   `json:"number"`
 	Miner common.Address `json:"miner" gencodec:"required"`
 }
@@ -67,8 +67,9 @@ type TaraxaReceipt = struct {
 type StateTransitionResult = struct {
 	StateRoot       common.Hash                     `json:"stateRoot"`
 	Receipts        []*TaraxaReceipt                `json:"receipts"`
-	Preimages       map[common.Hash]hexutil.Bytes   `json:"preimages"`
-	ChangedBalances map[common.Address]*hexutil.Big `json:"changedBalances"`
 	AllLogs         []*types.Log                    `json:"allLogs"`
 	UsedGas         hexutil.Uint64                  `json:"usedGas"`
+	UpdatedBalances map[common.Address]*hexutil.Big `json:"updatedBalances"`
+	// TODO:
+	Preimages map[common.Hash]hexutil.Bytes `json:"preimages"`
 }

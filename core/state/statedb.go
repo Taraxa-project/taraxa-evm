@@ -75,10 +75,13 @@ type StateDB struct {
 
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
-	journal        *journal
-	validRevisions []revision
-	nextRevisionId int
+	journal         *journal
+	validRevisions  []revision
+	nextRevisionId  int
+	updatedBalances BalanceTable
 }
+
+type BalanceTable = map[common.Address]*big.Int
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
@@ -94,6 +97,7 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		logs:              make(map[common.Hash][]*types.Log),
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
+		updatedBalances:   make(BalanceTable),
 	}, nil
 }
 
@@ -325,7 +329,7 @@ func (self *StateDB) Suicide(addr common.Address, newAddr common.Address) {
 		prevbalance: new(big.Int).Set(stateObject.Balance()),
 	})
 	stateObject.markSuicided()
-	stateObject.data.Balance = new(big.Int)
+	stateObject.setBalance(new(big.Int))
 }
 
 //
@@ -508,6 +512,10 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	}
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
+		if stateObject.balanceDirty {
+			s.updatedBalances[addr] = new(big.Int).Set(stateObject.Balance())
+			stateObject.balanceDirty = false
+		}
 		_, isDirty := s.stateObjectsDirty[addr]
 		switch {
 		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
@@ -546,4 +554,10 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	})
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
+}
+
+func (this *StateDB) GetAndResetUpdatedBalances() (ret BalanceTable) {
+	ret = this.updatedBalances
+	this.updatedBalances = make(BalanceTable)
+	return
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 )
 
-type BaseVM struct {
+type BaseTrxEngine struct {
 	BaseVMConfig
 	GenesisBlock *types.Block
 	EvmConfig    *vm.Config
@@ -20,12 +20,12 @@ type BaseVM struct {
 	WriteDiskDB  ethdb.MutableTransactionalDatabase
 }
 
-func (this *BaseVM) ApplyGenesis() error {
+func (this *BaseTrxEngine) ApplyGenesis() error {
 	_, _, err := core.SetupGenesisBlock(this.WriteDiskDB, this.Genesis)
 	return err
 }
 
-func (this *BaseVM) CommitToDisk(root common.Hash) error {
+func (this *BaseTrxEngine) CommitToDisk(root common.Hash) error {
 	return this.ReadDB.TrieDB().Commit(root, false, this.WriteDiskDB)
 }
 
@@ -45,7 +45,7 @@ type TransactionResult = struct {
 	ConsensusErr   error
 }
 
-func (this *BaseVM) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
+func (this *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
 	msg := types.NewMessage(
 		req.Transaction.From, req.Transaction.To, uint64(req.Transaction.Nonce),
 		req.Transaction.Value.ToInt(), uint64(req.Transaction.Gas),

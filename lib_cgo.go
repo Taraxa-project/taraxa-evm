@@ -4,6 +4,10 @@ package main
 import "C"
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/cgo"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_eth"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/managed_memory"
@@ -12,20 +16,22 @@ import (
 	"unsafe"
 )
 
-// TODO does not work presently
-// TODO refactor
 var env = managed_memory.ManagedMemory{Functions: managed_memory.Functions{
-	"NewEthTrxEngine": func(env *managed_memory.ManagedMemory, config *trx_engine_eth.EthTrxEngineFactory) (vmAddr string, err error) {
-		cleanup := util.DoNothing
-		defer util.CatchAnyErr(func(e error) {
-			err = e
-			cleanup()
+	"NewTaraxaTrxEngine": func(env *managed_memory.ManagedMemory, db_ptr uintptr) (addr string, err error) {
+		var factory trx_engine_eth.EthTrxEngineFactory
+		factory.Genesis = trx_engine.TaraxaGenesisConfig
+		factory.DisableMinerReward = true
+		factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
+			DBFactory: &cgo.Factory{Pointer: db_ptr},
+		}
+		factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(uint64) (ret common.Hash) {
+			panic("block has by number is not implemented")
 		})
-		vm, vmCleanup, createErr := config.NewInstance()
-		cleanup = util.Chain(cleanup, vmCleanup)
-		util.PanicIfNotNil(createErr)
-		vmAddr, allocErr := env.Alloc(vm, cleanup)
-		util.PanicIfNotNil(allocErr)
+		val, cleanup, initErr := factory.NewInstance()
+		if err = initErr; err != nil {
+			return
+		}
+		addr, err = env.Alloc(val, cleanup)
 		return
 	},
 }}
