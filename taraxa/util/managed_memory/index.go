@@ -3,7 +3,6 @@ package managed_memory
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"reflect"
 	"strings"
@@ -26,7 +25,6 @@ type ManagedMemory struct {
 }
 
 func (this *ManagedMemory) Call(receiverAddr, funcName, argsEncoded string) (retEncoded string, err error) {
-	defer fmt.Println("CALL:", receiverAddr, funcName, argsEncoded, "RET:", retEncoded, err)
 	decoder := json.NewDecoder(strings.NewReader(argsEncoded))
 	_, err = decoder.Token()
 	if err != nil {
