@@ -12,6 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"sync"
 )
@@ -24,6 +25,7 @@ type EthTrxEngine struct {
 }
 
 func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
+	defer util.Stringify(&err)
 	defer concurrent.LockUnlock(&this.mutex)()
 	ret = new(trx_engine.StateTransitionResult)
 	if req.Block.Number.Sign() == 0 {
@@ -46,7 +48,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			DB:               this.stateDB,
 			OnEvmInstruction: vm.NoopExecutionController,
 			GasPool:          gasPool,
-			CheckNonce:       true,
+			CheckNonce:       !this.DisableNonceCheck,
 		})
 		if err = txResult.ConsensusErr; err != nil {
 			return

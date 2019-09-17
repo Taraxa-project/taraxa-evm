@@ -7,6 +7,18 @@ import (
 
 type ErrorHandler func(_ error)
 
+type ErrorString string
+
+func (this ErrorString) Error() string {
+	return string(this)
+}
+
+func Stringify(err_ptr *error) {
+	if err := *err_ptr; err != nil {
+		*err_ptr = ErrorString(err.Error())
+	}
+}
+
 func SetTo(errPtr *error) ErrorHandler {
 	return func(err error) {
 		*errPtr = err
