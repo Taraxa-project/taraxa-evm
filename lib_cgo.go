@@ -27,7 +27,7 @@ var env = managed_memory.ManagedMemory{Functions: managed_memory.Functions{
 			DBFactory: &cgo.Factory{Pointer: db_ptr},
 		}
 		factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(uint64) (ret common.Hash) {
-			panic("block has by number is not implemented")
+			panic("block hash by number is not implemented")
 		})
 		val, cleanup, initErr := factory.NewInstance()
 		if err = initErr; err != nil {
