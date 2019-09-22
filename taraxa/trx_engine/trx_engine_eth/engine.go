@@ -41,6 +41,11 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	this.applyHardForks(req.Block)
 	gasPool := new(core.GasPool).AddGas(uint64(req.Block.GasLimit))
 	for i, tx := range req.Block.Transactions {
+		if this.FreeGas {
+			tx_cpy := *tx
+			tx_cpy.GasPrice = new(hexutil.Big)
+			tx = &tx_cpy
+		}
 		this.stateDB.Prepare(tx.Hash, req.Block.Hash, i)
 		txResult := this.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 			Transaction:      tx,
