@@ -44,6 +44,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		if this.FreeGas {
 			tx_cpy := *tx
 			tx_cpy.GasPrice = new(hexutil.Big)
+			tx_cpy.Gas = ^hexutil.Uint64(0) / 100000
 			tx = &tx_cpy
 		}
 		this.stateDB.Prepare(tx.Hash, req.Block.Hash, i)
