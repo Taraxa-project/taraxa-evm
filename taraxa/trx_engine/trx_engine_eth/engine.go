@@ -54,9 +54,6 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			GasPool:          gasPool,
 			CheckNonce:       !this.DisableNonceCheck,
 		})
-		if err = txResult.ConsensusErr; err != nil {
-			return
-		}
 		var intermediateRoot []byte
 		if chainConfig.IsByzantium(block.Number) {
 			stateDB.Finalise(true)
@@ -72,12 +69,16 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ethReceipt.GasUsed = txResult.GasUsed
 		ethReceipt.Logs = stateDB.GetLogs(tx.Hash)
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
+		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
+		txErr := txResult.ConsensusErr
+		if txErr == nil {
+			txErr = txResult.ContractErr
+		}
 		ret.Receipts = append(ret.Receipts, &trx_engine.TaraxaReceipt{
 			ReturnValue:     txResult.EVMReturnValue,
-			ContractError:   txResult.ContractErr,
+			Error:           txErr,
 			EthereumReceipt: ethReceipt,
 		})
-		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
 	}
 	if !this.DisableMinerReward {
 		var unclesMapped []*types.Header

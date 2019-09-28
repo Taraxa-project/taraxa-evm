@@ -61,7 +61,8 @@ type ConcurrentSchedule = struct {
 type TaraxaReceipt = struct {
 	ReturnValue     hexutil.Bytes  `json:"returnValue"`
 	EthereumReceipt *types.Receipt `json:"ethereumReceipt"`
-	ContractError   error          `json:"contractError"`
+	// TODO: error codes + messages
+	Error error `json:"error"`
 }
 
 type StateTransitionResult = struct {
