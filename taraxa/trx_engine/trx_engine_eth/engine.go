@@ -45,6 +45,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			tx_cpy.Gas = ^hexutil.Uint64(0) / 100000
 			tx = &tx_cpy
 		}
+		snapshot := stateDB.Snapshot()
 		stateDB.Prepare(tx.Hash, block.Hash, i)
 		txResult := this.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 			Transaction:      tx,
@@ -54,6 +55,13 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			GasPool:          gasPool,
 			CheckNonce:       !this.DisableNonceCheck,
 		})
+		txErr := txResult.ConsensusErr
+		if txErr == nil {
+			txErr = txResult.ContractErr
+		}
+		if txErr != nil {
+			stateDB.RevertToSnapshot(snapshot)
+		}
 		var intermediateRoot []byte
 		if chainConfig.IsByzantium(block.Number) {
 			stateDB.Finalise(true)
@@ -70,10 +78,6 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ethReceipt.Logs = stateDB.GetLogs(tx.Hash)
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
 		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
-		txErr := txResult.ConsensusErr
-		if txErr == nil {
-			txErr = txResult.ContractErr
-		}
 		ret.Receipts = append(ret.Receipts, &trx_engine.TaraxaReceipt{
 			ReturnValue:     txResult.EVMReturnValue,
 			Error:           txErr,
