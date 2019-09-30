@@ -59,6 +59,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		if txErr == nil {
 			txErr = txResult.ContractErr
 		}
+		util.Stringify(&txErr)
 		if txErr != nil {
 			stateDB.RevertToSnapshot(snapshot)
 		}
