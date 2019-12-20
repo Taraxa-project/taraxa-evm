@@ -83,10 +83,10 @@ type stateObject struct {
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode    bool // true if the code was updated
-	suicided     bool
-	deleted      bool
-	balanceDirty bool
+	dirtyCode      bool // true if the code was updated
+	suicided       bool
+	deleted        bool
+	balanceTouched bool
 }
 
 // empty returns whether the account is considered empty.
@@ -264,6 +264,7 @@ func (c *stateObject) AddBalance(amount *big.Int) {
 	// EIP158: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
+		c.balanceTouched = true
 		if c.empty() {
 			c.touch()
 		}
@@ -277,6 +278,7 @@ func (c *stateObject) AddBalance(amount *big.Int) {
 // It is used to remove funds from the origin account of a transfer.
 func (c *stateObject) SubBalance(amount *big.Int) {
 	if amount.Sign() == 0 {
+		c.balanceTouched = true
 		return
 	}
 	c.SetBalance(new(big.Int).Sub(c.Balance(), amount))
@@ -291,8 +293,8 @@ func (self *stateObject) SetBalance(amount *big.Int) {
 }
 
 func (self *stateObject) setBalance(amount *big.Int) {
+	self.balanceTouched = true
 	self.data.Balance = amount
-	self.balanceDirty = true
 }
 
 func (self *stateObject) deepCopy(db *StateDB) *stateObject {

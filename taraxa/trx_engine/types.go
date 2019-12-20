@@ -3,6 +3,7 @@ package trx_engine
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
+	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"math/big"
 )
@@ -40,7 +41,7 @@ type BlockHeader = struct {
 	Time       *hexutil.Big   `json:"timestamp"  gencodec:"required"`
 	Difficulty *hexutil.Big   `json:"difficulty"  gencodec:"required"`
 	GasLimit   hexutil.Uint64 `json:"gasLimit"  gencodec:"required"`
-	Hash       common.Hash    `json:"hash"  gencodec:"required"`
+	Hash       common.Hash    `json:"hash"`
 }
 
 type Block = struct {
@@ -58,19 +59,18 @@ type ConcurrentSchedule = struct {
 	SequentialTransactions []TxIndex `json:"sequential"`
 }
 
-type TaraxaReceipt = struct {
-	ReturnValue     hexutil.Bytes  `json:"returnValue"`
-	EthereumReceipt *types.Receipt `json:"ethereumReceipt"`
+type TransactionOutput = struct {
+	ReturnValue hexutil.Bytes `json:"returnValue"`
 	// TODO: error codes + messages
 	Error error `json:"error"`
 }
 
 type StateTransitionResult = struct {
-	StateRoot       common.Hash                     `json:"stateRoot"`
-	Receipts        []*TaraxaReceipt                `json:"receipts"`
-	AllLogs         []*types.Log                    `json:"allLogs"`
-	UsedGas         hexutil.Uint64                  `json:"usedGas"`
-	UpdatedBalances map[common.Address]*hexutil.Big `json:"updatedBalances"`
+	StateRoot                             common.Hash          `json:"stateRoot"`
+	Receipts                              types.Receipts       `json:"receipts"`
+	TransactionOutputs                    []*TransactionOutput `json:"transactionOutputs"`
+	UsedGas                               hexutil.Uint64       `json:"usedGas"`
+	TouchedExternallyOwnedAccountBalances state.BalanceTable   `json:"touchedExternallyOwnedAccountBalances"`
 	// TODO:
 	Preimages map[common.Hash]hexutil.Bytes `json:"preimages"`
 }

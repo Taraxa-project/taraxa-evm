@@ -1,7 +1,6 @@
 package trx_engine_eth
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -78,11 +77,10 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ethReceipt.GasUsed = txResult.GasUsed
 		ethReceipt.Logs = stateDB.GetLogs(tx.Hash)
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
-		ret.AllLogs = append(ret.AllLogs, ethReceipt.Logs...)
-		ret.Receipts = append(ret.Receipts, &trx_engine.TaraxaReceipt{
-			ReturnValue:     txResult.EVMReturnValue,
-			Error:           txErr,
-			EthereumReceipt: ethReceipt,
+		ret.Receipts = append(ret.Receipts, ethReceipt)
+		ret.TransactionOutputs = append(ret.TransactionOutputs, &trx_engine.TransactionOutput{
+			ReturnValue: txResult.EVMReturnValue,
+			Error:       txErr,
 		})
 	}
 	if !this.DisableMinerReward {
@@ -99,9 +97,14 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	if ret.StateRoot, err = stateDB.Commit(chainConfig.IsEIP158(block.Number)); err != nil {
 		return
 	}
-	ret.UpdatedBalances = make(map[common.Address]*hexutil.Big)
-	for k, v := range stateDB.GetAndResetUpdatedBalances() {
-		ret.UpdatedBalances[k] = (*hexutil.Big)(v)
+	ret.TouchedExternallyOwnedAccountBalances = stateDB.TouchedExternallyOwnedAccountBalances
+	return
+}
+
+func (this *EthTrxEngine) TransitionStateAndCommit(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
+	ret, err = this.TransitionState(req)
+	if (err == nil) {
+		err = this.CommitToDisk(ret.StateRoot)
 	}
 	return
 }

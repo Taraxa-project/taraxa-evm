@@ -19,6 +19,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"math/big"
 	"sort"
 
@@ -75,13 +76,14 @@ type StateDB struct {
 
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
-	journal         *journal
-	validRevisions  []revision
-	nextRevisionId  int
-	updatedBalances BalanceTable
+	journal        *journal
+	validRevisions []revision
+	nextRevisionId int
+	// TODO abstract from this, cause it's horrible
+	TouchedExternallyOwnedAccountBalances BalanceTable
 }
 
-type BalanceTable = map[common.Address]*big.Int
+type BalanceTable = map[common.Address]*hexutil.Big
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
@@ -97,7 +99,6 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		logs:              make(map[common.Hash][]*types.Log),
 		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
-		updatedBalances:   make(BalanceTable),
 	}, nil
 }
 
@@ -510,12 +511,13 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
+	s.TouchedExternallyOwnedAccountBalances = make(BalanceTable)
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
-		if stateObject.balanceDirty {
-			s.updatedBalances[addr] = new(big.Int).Set(stateObject.Balance())
-			stateObject.balanceDirty = false
+		if stateObject.code == nil && stateObject.balanceTouched {
+			s.TouchedExternallyOwnedAccountBalances[addr] = (*hexutil.Big)(new(big.Int).Set(stateObject.Balance()))
 		}
+		stateObject.balanceTouched = false
 		_, isDirty := s.stateObjectsDirty[addr]
 		switch {
 		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
@@ -554,10 +556,4 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	})
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
-}
-
-func (this *StateDB) GetAndResetUpdatedBalances() (ret BalanceTable) {
-	ret = this.updatedBalances
-	this.updatedBalances = make(BalanceTable)
-	return
 }
