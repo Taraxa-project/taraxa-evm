@@ -8,14 +8,15 @@ import (
 )
 
 var TaraxaGenesisConfig = &core.Genesis{
+	// TODO consume from taraxa_node
 	Config: &params.ChainConfig{
-		ChainID:             big.NewInt(7),
+		ChainID:             big.NewInt(66),
 		HomesteadBlock:      common.Big0,
 		EIP150Block:         common.Big0,
 		EIP155Block:         common.Big0,
 		EIP158Block:         common.Big0,
 		ByzantiumBlock:      common.Big0,
 		ConstantinopleBlock: common.Big0,
-		PetersburgBlock:     common.Big0,
+		//PetersburgBlock:     common.Big0,
 	},
 }
