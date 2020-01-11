@@ -73,7 +73,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		if tx.To == nil {
 			ethReceipt.ContractAddress = crypto.CreateAddress(tx.From, uint64(tx.Nonce))
 		}
-		ethReceipt.TxHash = tx.Hash;
+		ethReceipt.TxHash = tx.Hash
 		ethReceipt.GasUsed = txResult.GasUsed
 		ethReceipt.Logs = stateDB.GetLogs(tx.Hash)
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
@@ -103,7 +103,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 
 func (this *EthTrxEngine) TransitionStateAndCommit(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
 	ret, err = this.TransitionState(req)
-	if (err == nil) {
+	if err == nil {
 		err = this.CommitToDisk(ret.StateRoot)
 	}
 	return

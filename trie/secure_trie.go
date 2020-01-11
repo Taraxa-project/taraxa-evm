@@ -169,7 +169,7 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 	h.sha.Reset()
 	h.sha.Write(key)
 	var reuseBuf []byte
-	if t.trie.db.enableConcurrentReads {
+	if t.trie.db.concurrent_access_enabled {
 		if t.hashKeyBuf == nil {
 			t.hashKeyBuf = new(hashKeyBuffer)
 		}

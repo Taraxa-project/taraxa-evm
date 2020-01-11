@@ -72,9 +72,9 @@ type Database struct {
 	flushnodes uint64             // Nodes flushed since last commit
 	flushsize  common.StorageSize // Data storage flushed since last commit
 
-	dirtiesSize           common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
-	preimagesSize         common.StorageSize // Storage size of the preimages cache
-	enableConcurrentReads bool
+	dirtiesSize               common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
+	preimagesSize             common.StorageSize // Storage size of the preimages cache
+	concurrent_access_enabled bool
 
 	lock sync.RWMutex
 }
@@ -296,12 +296,12 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.insert(hash, blob, rawNode(blob))
 }
 
-func (this *Database) EnableConcurrentReads() {
-	this.enableConcurrentReads = true
+func (this *Database) EnableConcurrentAccess() {
+	this.concurrent_access_enabled = true
 }
 
-func (this *Database) getKeyBufferForReuse() (*secureKeyBuffer) {
-	if this.enableConcurrentReads {
+func (this *Database) getKeyBufferForReuse() *secureKeyBuffer {
+	if this.concurrent_access_enabled {
 		return new(secureKeyBuffer)
 	} else {
 		return &seckeyBuf
