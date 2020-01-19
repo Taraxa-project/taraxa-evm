@@ -13,7 +13,7 @@ import (
 )
 
 type DBFactory interface {
-	NewInstance() (ethdb.MutableTransactionalDatabase, error)
+	NewInstance() (ethdb.Database, error)
 }
 
 var FactoryRegistry = map[string]func() DBFactory{
@@ -44,7 +44,7 @@ type GenericFactory struct {
 	FactoryOptions
 }
 
-func (this *GenericFactory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
+func (this *GenericFactory) NewInstance() (ethdb.Database, error) {
 	return this.Factory.NewInstance()
 }
 

@@ -17,7 +17,7 @@ type BaseTrxEngine struct {
 	GetBlockHash vm.GetHashFunc
 	ReadDB       state.Database
 	WriteDB      state.Database
-	WriteDiskDB  ethdb.MutableTransactionalDatabase
+	WriteDiskDB  ethdb.Database
 }
 
 func (this *BaseTrxEngine) ApplyGenesis() error {

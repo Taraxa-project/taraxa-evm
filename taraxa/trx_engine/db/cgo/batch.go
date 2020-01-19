@@ -3,7 +3,6 @@ package cgo
 //#include "index.h"
 import "C"
 import (
-	"errors"
 	"runtime"
 )
 
@@ -27,32 +26,21 @@ func (this *batch) Put(key []byte, value []byte) error {
 	keySlice, valueSlice := slice(key), slice(value)
 	defer free(keySlice)
 	defer free(valueSlice)
-	cRet, cErr := C.taraxa_cgo_ethdb_Batch_Put(this.c_self, keySlice, valueSlice)
-	defer free(cRet)
-	if cErr != nil {
-		return cErr
-	}
-	if errBytes := bytes(cRet); len(errBytes) > 0 {
-		return errors.New(string(errBytes))
+	_, err := C.taraxa_cgo_ethdb_Batch_Put(this.c_self, keySlice, valueSlice)
+	if err != nil {
+		return err
 	}
 	this.valueSize += len(value)
 	return nil
 }
 
 func (this *batch) Write() error {
-	cRet, cErr := C.taraxa_cgo_ethdb_Batch_Write(this.c_self)
-	defer free(cRet)
-	if cErr != nil {
-		return cErr
-	}
-	if errBytes := bytes(cRet); len(errBytes) > 0 {
-		return errors.New(string(errBytes))
-	}
-	return nil
+	_, err := C.taraxa_cgo_ethdb_Batch_Write(this.c_self)
+	return err
 }
 
 func (this *batch) ValueSize() int {
-	return this.valueSize;
+	return this.valueSize
 }
 
 func (this *batch) Reset() {

@@ -150,10 +150,10 @@ func (e *GenesisMismatchError) Error() string {
 // error is a *params.ConfigCompatError and the new, unwritten config is returned.
 //
 // The returned chain configuration is never nil.
-func SetupGenesisBlock(db ethdb.MutableTransactionalDatabase, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
 	return SetupGenesisBlockWithOverride(db, genesis, nil)
 }
-func SetupGenesisBlockWithOverride(db ethdb.MutableTransactionalDatabase, genesis *Genesis, constantinopleOverride *big.Int) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, constantinopleOverride *big.Int) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
@@ -187,8 +187,9 @@ func SetupGenesisBlockWithOverride(db ethdb.MutableTransactionalDatabase, genesi
 	storedcfg := rawdb.ReadChainConfig(db, stored)
 	if storedcfg == nil {
 		log.Warn("Found genesis block without chain config")
-		rawdb.WriteChainConfig(db, stored, newcfg)
-		return newcfg, stored, nil
+		batch := db.NewBatch()
+		rawdb.WriteChainConfig(batch, stored, newcfg)
+		return newcfg, stored, batch.Write()
 	}
 	// Special case: don't change the existing config of a non-mainnet chain if no new
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
@@ -207,8 +208,9 @@ func SetupGenesisBlockWithOverride(db ethdb.MutableTransactionalDatabase, genesi
 	if compatErr != nil && *height != 0 && compatErr.RewindTo != 0 {
 		return newcfg, stored, compatErr
 	}
-	rawdb.WriteChainConfig(db, stored, newcfg)
-	return newcfg, stored, nil
+	batch := db.NewBatch()
+	rawdb.WriteChainConfig(batch, stored, newcfg)
+	return newcfg, stored, batch.Write()
 }
 
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
@@ -267,29 +269,30 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
-func (g *Genesis) Commit(db ethdb.MutableTransactionalDatabase) (*types.Block, error) {
+func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	block := g.ToBlock(db)
+	batch := db.NewBatch()
 	if block.Number().Sign() != 0 {
 		return nil, fmt.Errorf("can't commit genesis block with number > 0")
 	}
-	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), g.Difficulty)
-	rawdb.WriteBlock(db, block)
-	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(), nil)
-	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64())
-	rawdb.WriteHeadBlockHash(db, block.Hash())
-	rawdb.WriteHeadHeaderHash(db, block.Hash())
+	rawdb.WriteTd(batch, block.Hash(), block.NumberU64(), g.Difficulty)
+	rawdb.WriteBlock(batch, block)
+	rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), nil)
+	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
+	rawdb.WriteHeadBlockHash(batch, block.Hash())
+	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 
 	config := g.Config
 	if config == nil {
 		config = params.AllEthashProtocolChanges
 	}
-	rawdb.WriteChainConfig(db, block.Hash(), config)
-	return block, nil
+	rawdb.WriteChainConfig(batch, block.Hash(), config)
+	return block, batch.Write()
 }
 
 // MustCommit writes the genesis block and state to db, panicking on error.
 // The block is committed as the canonical head block.
-func (g *Genesis) MustCommit(db ethdb.MutableTransactionalDatabase) *types.Block {
+func (g *Genesis) MustCommit(db ethdb.Database) *types.Block {
 	block, err := g.Commit(db)
 	if err != nil {
 		panic(err)

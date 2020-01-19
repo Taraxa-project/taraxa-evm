@@ -18,47 +18,37 @@ inline ID(Slice) ID(Slice_New)(ID(SliceType) * offset, ID(SliceSize) size) {
   return (ID(Slice)){offset, size};
 }
 
-typedef ID(Slice) ID(Error);
 typedef ID(Slice) ID(Key);
 typedef ID(Slice) ID(Value);
 
 typedef struct {
   void *self;
   void (*Free)(void *);
-  ID(Error) (*Put)(void *, ID(Key), ID(Value));
-  ID(Error) (*Write)(void *);
+  void (*Put)(void *, ID(Key), ID(Value));
+  void (*Write)(void *);
 } ID(Batch);
 
 inline void ID(Batch_Free)(ID(Batch) * self) { self->Free(self->self); }
 
-inline ID(Error) ID(Batch_Put)(ID(Batch) * self, ID(Key) key, ID(Value) value) {
+inline void ID(Batch_Put)(ID(Batch) * self, ID(Key) key, ID(Value) value) {
   return self->Put(self->self, key, value);
 }
 
-inline ID(Error) ID(Batch_Write)(ID(Batch) * self) {
+inline void ID(Batch_Write)(ID(Batch) * self) {
   return self->Write(self->self);
 }
 
 typedef struct {
-  ID(Value) ret;
-  ID(Error) err;
-} ID(ValueAndErr);
-
-typedef struct {
   void *self;
   void (*Free)(void *);
-  ID(Error) (*Put)(void *, ID(Key), ID(Value));
-  ID(ValueAndErr) (*Get)(void *, ID(Key));
+  void (*Put)(void *, ID(Key), ID(Value));
+  ID(Value) (*Get)(void *, ID(Key));
   ID(Batch) * (*NewBatch)(void *);
 } ID(Database);
 
 inline void ID(Database_Free)(ID(Database) * self) { self->Free(self->self); }
 
-inline ID(Error) ID(Database_Put)(ID(Database) * self, ID(Key) key, ID(Value) value) {
-  return self->Put(self->self, key, value);
-}
-
-inline ID(ValueAndErr) ID(Database_Get)(ID(Database) * self, ID(Key) key) {
+inline ID(Value) ID(Database_Get)(ID(Database) * self, ID(Key) key) {
   return self->Get(self->self, key);
 }
 

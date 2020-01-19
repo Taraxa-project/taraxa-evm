@@ -16,6 +16,7 @@
 
 package ethdb
 
+// FIXME: configurable
 // Code using batches should try to add this much data to the batch.
 // The value was determined empirically.
 const IdealBatchSize = 100 * 1024
@@ -32,7 +33,8 @@ type Getter interface {
 // Database wraps all database operations. All methods are safe for concurrent use.
 type Database interface {
 	Getter
-	Transactional
+	NewBatch() Batch
+	Close()
 }
 
 // Batch is a write-only database that commits changes to its host database
@@ -43,19 +45,4 @@ type Batch interface {
 	Write() error
 	// Reset resets the batch for reuse
 	Reset()
-}
-
-type Transactional interface {
-	NewBatch() Batch
-}
-
-type MutableDatabase interface {
-	Getter
-	Putter
-}
-
-type MutableTransactionalDatabase interface {
-	MutableDatabase
-	Transactional
-	Close()
 }

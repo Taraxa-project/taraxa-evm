@@ -29,7 +29,7 @@ type Factory struct {
 	//TODO CacheIndexAndFilterBlocks *bool   `json:"cacheIndexAndFilterBlocks"`
 }
 
-func (this *Factory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
+func (this *Factory) NewInstance() (ethdb.Database, error) {
 	opts := gorocksdb.NewDefaultOptions()
 	if this.MergeOperartor != nil {
 		opts.SetMergeOperator(this.MergeOperartor)

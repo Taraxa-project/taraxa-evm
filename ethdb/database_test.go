@@ -30,6 +30,12 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 )
 
+type Database interface {
+	ethdb.Getter
+	ethdb.Putter
+	Delete(key []byte) error
+}
+
 func newTestLDB() (*ethdb.LDBDatabase, func()) {
 	dirname, err := ioutil.TempDir(os.TempDir(), "ethdb_test_")
 	if err != nil {
@@ -58,7 +64,7 @@ func TestMemoryDB_PutGet(t *testing.T) {
 	testPutGet(ethdb.NewMemDatabase(), t)
 }
 
-func testPutGet(db ethdb.MutableDatabase, t *testing.T) {
+func testPutGet(db Database, t *testing.T) {
 	t.Parallel()
 
 	for _, k := range test_values {
@@ -157,7 +163,7 @@ func TestMemoryDB_ParallelPutGet(t *testing.T) {
 	testParallelPutGet(ethdb.NewMemDatabase(), t)
 }
 
-func testParallelPutGet(db ethdb.MutableDatabase, t *testing.T) {
+func testParallelPutGet(db Database, t *testing.T) {
 	const n = 8
 	var pending sync.WaitGroup
 

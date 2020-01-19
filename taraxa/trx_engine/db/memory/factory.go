@@ -6,6 +6,6 @@ type Factory struct {
 	InitialCapacity int `json:"initialCapacity"`
 }
 
-func (this *Factory) NewInstance() (ethdb.MutableTransactionalDatabase, error) {
+func (this *Factory) NewInstance() (ethdb.Database, error) {
 	return ethdb.NewMemDatabaseWithCap(this.InitialCapacity), nil
 }
