@@ -38,7 +38,6 @@ inline void ID(Batch_Write)(ID(Batch) * self) {
 typedef struct {
   void *self;
   void (*Free)(void *);
-  void (*Put)(void *, ID(Slice), ID(Slice));
   ID(Slice) (*Get)(void *, ID(Slice));
   ID(Batch) * (*NewBatch)(void *);
 } ID(Database);
