@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/memory"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/rocksdb"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
@@ -49,7 +49,7 @@ func (this *EthTxEngineIntegrationTest) Run(t *testing.T) {
 
 }
 
-func TestEthTrxEngineIntegration(t *testing.T) {
+func Test_integration(t *testing.T) {
 	block_db, err := (&rocksdb.Factory{
 		File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/blockchain",
 		ReadOnly:               true,
