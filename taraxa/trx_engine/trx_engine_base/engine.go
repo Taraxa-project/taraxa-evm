@@ -26,7 +26,7 @@ func (this *BaseTrxEngine) ApplyGenesis() error {
 }
 
 func (this *BaseTrxEngine) CommitToDisk(root common.Hash) error {
-	return this.ReadDB.TrieDB().Commit(root, false, this.WriteDiskDB)
+	return this.ReadDB.TrieDB().Commit(root, this.WriteDiskDB)
 }
 
 type TransactionRequest = struct {

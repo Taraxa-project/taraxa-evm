@@ -25,14 +25,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/log"
-	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-)
-
-var (
-	memcacheCommitTimeTimer  = metrics.NewRegisteredResettingTimer("trie/memcache/commit/time", nil)
-	memcacheCommitNodesMeter = metrics.NewRegisteredMeter("trie/memcache/commit/nodes", nil)
-	memcacheCommitSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/commit/size", nil)
 )
 
 // secureKeyPrefix is the database key prefix used to store trie node preimages.
@@ -60,7 +53,6 @@ type Database struct {
 	flushnodes uint64             // Nodes flushed since last commit
 	flushsize  common.StorageSize // Data storage flushed since last commit
 
-	dirtiesSize   common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
 	preimagesSize common.StorageSize // Storage size of the preimages cache
 
 	lock       sync.RWMutex
@@ -113,10 +105,8 @@ func (n rawShortNode) fstring(ind string) string     { panic("this should never 
 // cachedNode is all the information we know about a single cached node in the
 // memory database write layer.
 type cachedNode struct {
-	node node   // Cached collapsed trie node, or raw rlp data
-	size uint16 // Byte size of the useful cached data
+	node node // Cached collapsed trie node, or raw rlp data
 
-	parents  uint32                 // Number of live nodes referencing this one
 	children map[common.Hash]uint16 // External children referenced by this node
 
 	flushPrev common.Hash // Previous node in the flush-list
@@ -267,7 +257,7 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
-	db.insert(hash, blob, rawNode(blob))
+	db.insert(hash, rawNode(blob))
 }
 
 func (this *Database) claimSecureKeyBuffer() ([]byte, func()) {
@@ -281,7 +271,7 @@ func (this *Database) claimSecureKeyBuffer() ([]byte, func()) {
 // a more generic version of InsertBlob, supporting both raw blob insertions as
 // well ex trie node insertions. The blob must always be specified to allow proper
 // size tracking.
-func (db *Database) insert(hash common.Hash, blob []byte, node node) {
+func (db *Database) insert(hash common.Hash, node node) {
 	// If the node's already cached, skip
 	if _, ok := db.dirties[hash]; ok {
 		return
@@ -289,13 +279,7 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 	// Create the cached entry for this node
 	entry := &cachedNode{
 		node:      simplifyNode(node),
-		size:      uint16(len(blob)),
 		flushPrev: db.newest,
-	}
-	for _, child := range entry.childs() {
-		if c := db.dirties[child]; c != nil {
-			c.parents++
-		}
 	}
 	db.dirties[hash] = entry
 
@@ -305,7 +289,6 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 	} else {
 		db.dirties[db.newest].flushNext, db.newest = hash, hash
 	}
-	db.dirtiesSize += common.StorageSize(common.HashLength + entry.size)
 }
 
 // insertPreimage writes a new trie node pre-image to the memory database if it's
@@ -389,7 +372,7 @@ func (db *Database) Reference(child common.Hash, parent common.Hash) {
 // reference is the private locked version of Reference.
 func (db *Database) reference(child common.Hash, parent common.Hash) {
 	// If the node does not exist, it's a node pulled from disk, skip
-	node, ok := db.dirties[child]
+	_, ok := db.dirties[child]
 	if !ok {
 		return
 	}
@@ -399,7 +382,6 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 	} else if _, ok = db.dirties[parent].children[child]; ok && parent != (common.Hash{}) {
 		return
 	}
-	node.parents++
 	db.dirties[parent].children[child]++
 }
 
@@ -407,7 +389,7 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 // to disk, forcefully tearing down all references in both directions.
 //
 // As a side effect, all pre-images accumulated up to this point are also written.
-func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database) error {
+func (db *Database) Commit(node common.Hash, target ethdb.Database) error {
 	// Create a database batch to flush persistent data out. It is important that
 	// outside code doesn't see an inconsistent state (referenced data removed from
 	// memory cache during commit but not yet in persistent storage). This is ensured
@@ -417,7 +399,6 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 	}
 	db.lock.RLock()
 
-	start := time.Now()
 	batch := target.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
@@ -432,7 +413,6 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 	}
 	returnKeyBuffer()
 	// Move the trie itself into the batch, flushing if enough data is accumulated
-	nodes, storage := len(db.dirties), db.dirtiesSize
 	if err := db.commit(node, batch); err != nil {
 		log.Error("Failed to commit trie from trie database", "err", err)
 		db.lock.RUnlock()
@@ -454,17 +434,6 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 	db.preimagesSize = 0
 
 	db.uncache(node)
-
-	memcacheCommitTimeTimer.Update(time.Since(start))
-	memcacheCommitSizeMeter.Mark(int64(storage - db.dirtiesSize))
-	memcacheCommitNodesMeter.Mark(int64(nodes - len(db.dirties)))
-
-	logger := log.Info
-	if !report {
-		logger = log.Debug
-	}
-	logger("Persisted trie from memory database", "nodes", nodes-len(db.dirties)+int(db.flushnodes), "size", storage-db.dirtiesSize+db.flushsize, "time", time.Since(start)+db.flushtime,
-		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.dirties), "livesize", db.dirtiesSize)
 
 	// Reset the garbage collection statistics
 	db.gcnodes, db.gcsize, db.gctime = 0, 0, 0
@@ -518,5 +487,4 @@ func (db *Database) uncache(hash common.Hash) {
 		db.uncache(child)
 	}
 	delete(db.dirties, hash)
-	db.dirtiesSize -= common.StorageSize(common.HashLength + int(node.size))
 }
