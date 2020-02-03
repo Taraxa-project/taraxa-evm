@@ -66,7 +66,7 @@ func PanicIfNotNil(value interface{}) {
 
 func Assert(condition bool, msg ...string) {
 	if !condition {
-		panic(errors.New(strings.Join(msg, "")))
+		panic(errors.New(strings.Join(msg, ", ")))
 	}
 }
 

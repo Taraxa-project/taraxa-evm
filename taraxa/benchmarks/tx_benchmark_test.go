@@ -41,7 +41,7 @@ func BenchmarkRoot(b *testing.B) {
 			state_db.CreateAccount(receiver)
 			base_root, err2 := state_db.Commit(false)
 			util.PanicIfNotNil(err2)
-			err3 := db.TrieDB().Commit(base_root, false, nil)
+			err3 := db.TrieDB().Commit(base_root, nil)
 			util.PanicIfNotNil(err3)
 			return base_root
 		}()
