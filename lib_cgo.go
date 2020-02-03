@@ -34,8 +34,6 @@ var env = managed_memory.ManagedMemory{Functions: managed_memory.Functions{
 			return
 		}
 		// TODO maybe always use concurrent access?
-		val.ReadDB.TrieDB().EnableConcurrentAccess()
-		val.WriteDB.TrieDB().EnableConcurrentAccess()
 		addr, err = env.Alloc(val, cleanup)
 		return
 	},

@@ -42,14 +42,9 @@ var (
 )
 
 // secureKeyPrefix is the database key prefix used to store trie node preimages.
-var secureKeyPrefix = []byte("secure-key-")
-
-// secureKeyLength is the length of the above prefix + 32byte hash.
-const secureKeyLength = 11 + 32
-
-type secureKeyBuffer = [secureKeyLength]byte
-
-var seckeyBuf secureKeyBuffer
+const secureKeyPrefix = "s_k_"
+const secureKeyPrefixLength = len(secureKeyPrefix)
+const secureKeyLength = secureKeyPrefixLength + common.HashLength
 
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
@@ -72,11 +67,11 @@ type Database struct {
 	flushnodes uint64             // Nodes flushed since last commit
 	flushsize  common.StorageSize // Data storage flushed since last commit
 
-	dirtiesSize               common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
-	preimagesSize             common.StorageSize // Storage size of the preimages cache
-	concurrent_access_enabled bool
+	dirtiesSize   common.StorageSize // Storage size of the dirty node cache (exc. flushlist)
+	preimagesSize common.StorageSize // Storage size of the preimages cache
 
-	lock sync.RWMutex
+	lock       sync.RWMutex
+	secKeyPool sync.Pool
 }
 
 // rawNode is a simple binary blob used to differentiate between collapsed trie
@@ -282,6 +277,11 @@ func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
 		cleans:    cleans,
 		dirties:   map[common.Hash]*cachedNode{{}: {}},
 		preimages: make(map[common.Hash][]byte),
+		secKeyPool: sync.Pool{
+			New: func() interface{} {
+				return append(make([]byte, 0, secureKeyLength), secureKeyPrefix...)
+			},
+		},
 	}
 }
 
@@ -296,15 +296,10 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.insert(hash, blob, rawNode(blob))
 }
 
-func (this *Database) EnableConcurrentAccess() {
-	this.concurrent_access_enabled = true
-}
-
-func (this *Database) getKeyBufferForReuse() *secureKeyBuffer {
-	if this.concurrent_access_enabled {
-		return new(secureKeyBuffer)
-	} else {
-		return &seckeyBuf
+func (this *Database) claimSecureKeyBuffer() ([]byte, func()) {
+	buf := this.secKeyPool.Get()
+	return buf.([]byte), func() {
+		this.secKeyPool.Put(buf)
 	}
 }
 
@@ -426,16 +421,16 @@ func (db *Database) preimage(hash common.Hash) ([]byte, error) {
 		return preimage, nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(db.secureKey(hash[:], db.getKeyBufferForReuse()))
+	buf, returnBuf := db.claimSecureKeyBuffer()
+	defer returnBuf()
+	return db.diskdb.Get(secureKey(hash[:], buf))
 }
 
 // secureKey returns the database key for the preimage of key, as an ephemeral
 // buffer. The caller must not hold onto the return value because it will become
 // invalid on the next call.
-func (db *Database) secureKey(key []byte, reuseBuf *secureKeyBuffer) []byte {
-	buf := append(reuseBuf[:0], secureKeyPrefix...)
-	buf = append(buf, key...)
-	return buf
+func secureKey(key, buf []byte) []byte {
+	return append(buf, key...)
 }
 
 // Reference adds a new reference from a parent node to a child node.
@@ -481,21 +476,15 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 	batch := target.NewBatch()
 
 	// Move all of the accumulated preimages into a write batch
-	keyBuffer := db.getKeyBufferForReuse()
+	keyBuffer, returnKeyBuffer := db.claimSecureKeyBuffer()
 	for hash, preimage := range db.preimages {
-		if err := batch.Put(db.secureKey(hash[:], keyBuffer), preimage); err != nil {
+		if err := batch.Put(secureKey(hash[:], keyBuffer), preimage); err != nil {
 			log.Error("Failed to commit preimage from trie database", "err", err)
 			db.lock.RUnlock()
 			return err
 		}
-		if batch.ValueSize() > ethdb.IdealBatchSize {
-			if err := batch.Write(); err != nil {
-				db.lock.RUnlock()
-				return err
-			}
-			batch.Reset()
-		}
 	}
+	returnKeyBuffer()
 	// Move the trie itself into the batch, flushing if enough data is accumulated
 	nodes, storage := len(db.dirties), db.dirtiesSize
 	if err := db.commit(node, batch); err != nil {
@@ -552,13 +541,6 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 	}
 	if err := batch.Put(hash[:], node.rlp()); err != nil {
 		return err
-	}
-	// If we've reached an optimal batch size, commit and start over
-	if batch.ValueSize() >= ethdb.IdealBatchSize {
-		if err := batch.Write(); err != nil {
-			return err
-		}
-		batch.Reset()
 	}
 	return nil
 }

@@ -22,10 +22,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/log"
 )
 
-type hashKeyBuffer = [common.HashLength]byte
-
-var globalHashKeyBuf hashKeyBuffer
-
 // SecureTrie wraps a trie with key hashing. In a secure trie, all
 // access operations hash the key using keccak256. This prevents
 // calling code from creating long chains of nodes that
@@ -38,7 +34,7 @@ var globalHashKeyBuf hashKeyBuffer
 // SecureTrie is not safe for concurrent use.
 type SecureTrie struct {
 	trie        Trie
-	hashKeyBuf  *hashKeyBuffer
+	hashKeyBuf  []byte
 	secKeyCache map[string][]byte
 }
 
@@ -62,7 +58,10 @@ func NewSecure(root common.Hash, db *Database, cachelimit uint16) (*SecureTrie, 
 		return nil, err
 	}
 	trie.SetCacheLimit(cachelimit)
-	return &SecureTrie{trie: *trie}, nil
+	return &SecureTrie{
+		trie:       *trie,
+		hashKeyBuf: make([]byte, 0, common.HashLength),
+	}, nil
 }
 
 // TryGet returns the value for key stored in the trie.
@@ -168,18 +167,8 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 	h := newHasher(0, 0, nil)
 	h.sha.Reset()
 	h.sha.Write(key)
-	var reuseBuf []byte
-	if t.trie.db.concurrent_access_enabled {
-		if t.hashKeyBuf == nil {
-			t.hashKeyBuf = new(hashKeyBuffer)
-		}
-		reuseBuf = t.hashKeyBuf[:0]
-	} else {
-		reuseBuf = globalHashKeyBuf[:0]
-	}
-	buf := h.sha.Sum(reuseBuf)
-	returnHasherToPool(h)
-	return buf
+	defer returnHasherToPool(h)
+	return h.sha.Sum(t.hashKeyBuf)
 }
 
 // getSecKeyCache returns the current secure key cache, creating a new one if
