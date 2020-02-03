@@ -14,7 +14,6 @@ type BaseVMConfig = struct {
 
 type StateDBConfig = struct {
 	DBFactory DBFactory `json:"db"`
-	CacheSize int       `json:"cacheSize"`
 }
 
 type BlockHashSourceFactory interface {
@@ -55,7 +54,7 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), er
 	readDiskDB, e1 := this.ReadDBConfig.DBFactory.NewInstance()
 	localErr.SetOrPanicIfPresent(e1)
 	cleanup = util.Chain(cleanup, readDiskDB.Close)
-	ret.ReadDB = state.NewDatabaseWithCache(readDiskDB, this.ReadDBConfig.CacheSize)
+	ret.ReadDB = state.NewDatabase(readDiskDB)
 	ret.WriteDiskDB = readDiskDB
 	ret.WriteDB = ret.ReadDB
 	if this.WriteDBConfig != nil {
@@ -63,7 +62,7 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), er
 		localErr.SetOrPanicIfPresent(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = writeDiskDB
-		ret.WriteDB = state.NewDatabaseWithCache(readDiskDB, this.WriteDBConfig.CacheSize)
+		ret.WriteDB = state.NewDatabase(readDiskDB)
 	}
 	getBlockHash, err11 := this.BlockHashSourceFactory.NewInstance()
 	localErr.SetOrPanicIfPresent(err11)

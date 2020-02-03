@@ -29,7 +29,6 @@ func BenchmarkRoot(b *testing.B) {
 		b.StopTimer()
 		raw_db, err0 := (&rocksdb.Factory{
 			File:           db_path,
-			UseDirectReads: true,
 		}).NewInstance()
 		util.PanicIfNotNil(err0)
 		defer util.PanicIfNotNil(os.RemoveAll(db_path))
@@ -46,7 +45,7 @@ func BenchmarkRoot(b *testing.B) {
 			util.PanicIfNotNil(err3)
 			return base_root
 		}()
-		db := state.NewDatabaseWithCache(raw_db, 1024)
+		db := state.NewDatabase(raw_db)
 		state_db, err := state.New(base_root, db)
 		util.PanicIfNotNil(err)
 		gas_pool := new(core.GasPool).AddGas(gas_limit)
@@ -84,12 +83,11 @@ func BenchmarkRoot(b *testing.B) {
 		b.StopTimer()
 		raw_db, err0 := (&rocksdb.Factory{
 			File:           db_path,
-			UseDirectReads: true,
 		}).NewInstance()
 		util.PanicIfNotNil(err0)
 		defer util.PanicIfNotNil(os.RemoveAll(db_path))
 		defer raw_db.Close()
-		db := state.NewDatabaseWithCache(raw_db, 1024)
+		db := state.NewDatabase(raw_db)
 		state_db, err := state.New(common.Hash{}, db)
 		util.PanicIfNotNil(err)
 		state_db.SetBalance(sender, test_amount)

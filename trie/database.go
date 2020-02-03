@@ -27,15 +27,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/allegro/bigcache"
 )
 
 var (
-	memcacheCleanHitMeter   = metrics.NewRegisteredMeter("trie/memcache/clean/hit", nil)
-	memcacheCleanMissMeter  = metrics.NewRegisteredMeter("trie/memcache/clean/miss", nil)
-	memcacheCleanReadMeter  = metrics.NewRegisteredMeter("trie/memcache/clean/read", nil)
-	memcacheCleanWriteMeter = metrics.NewRegisteredMeter("trie/memcache/clean/write", nil)
-
 	memcacheCommitTimeTimer  = metrics.NewRegisteredResettingTimer("trie/memcache/commit/time", nil)
 	memcacheCommitNodesMeter = metrics.NewRegisteredMeter("trie/memcache/commit/nodes", nil)
 	memcacheCommitSizeMeter  = metrics.NewRegisteredMeter("trie/memcache/commit/size", nil)
@@ -52,7 +46,6 @@ const secureKeyLength = secureKeyPrefixLength + common.HashLength
 type Database struct {
 	diskdb ethdb.Database // Persistent storage for matured trie nodes
 
-	cleans  *bigcache.BigCache          // GC friendly memory cache of clean node RLPs
 	dirties map[common.Hash]*cachedNode // Data and references relationships of dirty nodes
 	oldest  common.Hash                 // Oldest tracked node, flush-list head
 	newest  common.Hash                 // Newest tracked node, flush-list tail
@@ -254,27 +247,8 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 // its written out to disk or garbage collected. No read cache is created, so all
 // data retrievals will hit the underlying disk database.
 func NewDatabase(diskdb ethdb.Database) *Database {
-	return NewDatabaseWithCache(diskdb, 0)
-}
-
-// NewDatabaseWithCache creates a new trie database to store ephemeral trie content
-// before its written out to disk or garbage collected. It also acts as a read cache
-// for nodes loaded from disk.
-func NewDatabaseWithCache(diskdb ethdb.Database, cache int) *Database {
-	var cleans *bigcache.BigCache
-	if cache > 0 {
-		cleans, _ = bigcache.NewBigCache(bigcache.Config{
-			// TODO tweak
-			Shards:             1024,
-			LifeWindow:         time.Hour,
-			MaxEntriesInWindow: cache * 1024,
-			MaxEntrySize:       512,
-			HardMaxCacheSize:   cache,
-		})
-	}
 	return &Database{
 		diskdb:    diskdb,
-		cleans:    cleans,
 		dirties:   map[common.Hash]*cachedNode{{}: {}},
 		preimages: make(map[common.Hash][]byte),
 		secKeyPool: sync.Pool{
@@ -349,14 +323,6 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 // node retrieves a cached trie node from memory, or returns nil if none can be
 // found in the memory cache.
 func (db *Database) node(hash common.Hash, cachegen uint16) node {
-	// Retrieve the node from the clean cache if available
-	if db.cleans != nil {
-		if enc, err := db.cleans.Get(string(hash[:])); err == nil && enc != nil {
-			memcacheCleanHitMeter.Mark(1)
-			memcacheCleanReadMeter.Mark(int64(len(enc)))
-			return mustDecodeNode(hash[:], enc, cachegen)
-		}
-	}
 	// Retrieve the node from the dirty cache if available
 	db.lock.RLock()
 	dirty := db.dirties[hash]
@@ -370,25 +336,12 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 	if err != nil || enc == nil {
 		return nil
 	}
-	if db.cleans != nil {
-		db.cleans.Set(string(hash[:]), enc)
-		memcacheCleanMissMeter.Mark(1)
-		memcacheCleanWriteMeter.Mark(int64(len(enc)))
-	}
 	return mustDecodeNode(hash[:], enc, cachegen)
 }
 
 // Node retrieves an encoded cached trie node from memory. If it cannot be found
 // cached, the method queries the persistent database for the content.
 func (db *Database) Node(hash common.Hash) ([]byte, error) {
-	// Retrieve the node from the clean cache if available
-	if db.cleans != nil {
-		if enc, err := db.cleans.Get(string(hash[:])); err == nil && enc != nil {
-			memcacheCleanHitMeter.Mark(1)
-			memcacheCleanReadMeter.Mark(int64(len(enc)))
-			return enc, nil
-		}
-	}
 	// Retrieve the node from the dirty cache if available
 	db.lock.RLock()
 	dirty := db.dirties[hash]
@@ -398,15 +351,7 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		return dirty.rlp(), nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	enc, err := db.diskdb.Get(hash[:])
-	if err == nil && enc != nil {
-		if db.cleans != nil {
-			db.cleans.Set(string(hash[:]), enc)
-			memcacheCleanMissMeter.Mark(1)
-			memcacheCleanWriteMeter.Mark(int64(len(enc)))
-		}
-	}
-	return enc, err
+	return db.diskdb.Get(hash[:])
 }
 
 // preimage retrieves a cached trie node pre-image from memory. If it cannot be
