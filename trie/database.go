@@ -18,14 +18,12 @@ package trie
 
 import (
 	"fmt"
-	"io"
-	"sync"
-	"time"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"io"
+	"sync"
 )
 
 // secureKeyPrefix is the database key prefix used to store trie node preimages.
@@ -33,28 +31,15 @@ const secureKeyPrefix = "s_k_"
 const secureKeyPrefixLength = len(secureKeyPrefix)
 const secureKeyLength = secureKeyPrefixLength + common.HashLength
 
+type Dirties = map[common.Hash]*cachedNode
+
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
 type Database struct {
 	diskdb ethdb.Database // Persistent storage for matured trie nodes
-
-	dirties map[common.Hash]*cachedNode // Data and references relationships of dirty nodes
-	oldest  common.Hash                 // Oldest tracked node, flush-list head
-	newest  common.Hash                 // Newest tracked node, flush-list tail
-
+	dirties Dirties // Data and references relationships of dirty nodes
 	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
-
-	gctime  time.Duration      // Time spent on garbage collection since last commit
-	gcnodes uint64             // Nodes garbage collected since last commit
-	gcsize  common.StorageSize // Data storage garbage collected since last commit
-
-	flushtime  time.Duration      // Time spent on data flushing since last commit
-	flushnodes uint64             // Nodes flushed since last commit
-	flushsize  common.StorageSize // Data storage flushed since last commit
-
-	preimagesSize common.StorageSize // Storage size of the preimages cache
-
 	lock       sync.RWMutex
 	secKeyPool sync.Pool
 }
@@ -105,12 +90,8 @@ func (n rawShortNode) fstring(ind string) string     { panic("this should never 
 // cachedNode is all the information we know about a single cached node in the
 // memory database write layer.
 type cachedNode struct {
-	node node // Cached collapsed trie node, or raw rlp data
-
+	node     node                   // Cached collapsed trie node, or raw rlp data
 	children map[common.Hash]uint16 // External children referenced by this node
-
-	flushPrev common.Hash // Previous node in the flush-list
-	flushNext common.Hash // Next node in the flush-list
 }
 
 // rlp returns the raw rlp encoded blob of the cached node, either directly from
@@ -239,7 +220,7 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 func NewDatabase(diskdb ethdb.Database) *Database {
 	return &Database{
 		diskdb:    diskdb,
-		dirties:   map[common.Hash]*cachedNode{{}: {}},
+		dirties:   Dirties{{}: {}},
 		preimages: make(map[common.Hash][]byte),
 		secKeyPool: sync.Pool{
 			New: func() interface{} {
@@ -278,17 +259,9 @@ func (db *Database) insert(hash common.Hash, node node) {
 	}
 	// Create the cached entry for this node
 	entry := &cachedNode{
-		node:      simplifyNode(node),
-		flushPrev: db.newest,
+		node: simplifyNode(node),
 	}
 	db.dirties[hash] = entry
-
-	// Update the flush-list endpoints
-	if db.oldest == (common.Hash{}) {
-		db.oldest, db.newest = hash, hash
-	} else {
-		db.dirties[db.newest].flushNext, db.newest = hash, hash
-	}
 }
 
 // insertPreimage writes a new trie node pre-image to the memory database if it's
@@ -300,7 +273,6 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 		return
 	}
 	db.preimages[hash] = common.CopyBytes(preimage)
-	db.preimagesSize += common.StorageSize(common.HashLength + len(preimage))
 }
 
 // node retrieves a cached trie node from memory, or returns nil if none can be
@@ -365,12 +337,6 @@ func secureKey(key, buf []byte) []byte {
 func (db *Database) Reference(child common.Hash, parent common.Hash) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
-
-	db.reference(child, parent)
-}
-
-// reference is the private locked version of Reference.
-func (db *Database) reference(child common.Hash, parent common.Hash) {
 	// If the node does not exist, it's a node pulled from disk, skip
 	_, ok := db.dirties[child]
 	if !ok {
@@ -398,9 +364,7 @@ func (db *Database) Commit(node common.Hash, target ethdb.Database) error {
 		target = db.diskdb
 	}
 	db.lock.RLock()
-
 	batch := target.NewBatch()
-
 	// Move all of the accumulated preimages into a write batch
 	keyBuffer, returnKeyBuffer := db.claimSecureKeyBuffer()
 	for hash, preimage := range db.preimages {
@@ -425,20 +389,11 @@ func (db *Database) Commit(node common.Hash, target ethdb.Database) error {
 		return err
 	}
 	db.lock.RUnlock()
-
 	// Write successful, clear out the flushed data
 	db.lock.Lock()
 	defer db.lock.Unlock()
-
 	db.preimages = make(map[common.Hash][]byte)
-	db.preimagesSize = 0
-
-	db.uncache(node)
-
-	// Reset the garbage collection statistics
-	db.gcnodes, db.gcsize, db.gctime = 0, 0, 0
-	db.flushnodes, db.flushsize, db.flushtime = 0, 0, 0
-
+	db.dirties = Dirties{{}: {}}
 	return nil
 }
 
@@ -458,33 +413,4 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
 		return err
 	}
 	return nil
-}
-
-// uncache is the post-processing step of a commit operation where the already
-// persisted trie is removed from the cache. The reason behind the two-phase
-// commit is to ensure consistent data availability while moving from memory
-// to disk.
-func (db *Database) uncache(hash common.Hash) {
-	// If the node does not exist, we're done on this path
-	node, ok := db.dirties[hash]
-	if !ok {
-		return
-	}
-	// Node still exists, remove it from the flush-list
-	switch hash {
-	case db.oldest:
-		db.oldest = node.flushNext
-		db.dirties[node.flushNext].flushPrev = common.Hash{}
-	case db.newest:
-		db.newest = node.flushPrev
-		db.dirties[node.flushPrev].flushNext = common.Hash{}
-	default:
-		db.dirties[node.flushPrev].flushNext = node.flushNext
-		db.dirties[node.flushNext].flushPrev = node.flushPrev
-	}
-	// Uncache the node's subtries and remove the node itself too
-	for _, child := range node.childs() {
-		db.uncache(child)
-	}
-	delete(db.dirties, hash)
 }
