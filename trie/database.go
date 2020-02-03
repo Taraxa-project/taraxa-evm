@@ -426,6 +426,7 @@ func (db *Database) Commit(node common.Hash, report bool, target ethdb.Database)
 		if err := batch.Put(secureKey(hash[:], keyBuffer), preimage); err != nil {
 			log.Error("Failed to commit preimage from trie database", "err", err)
 			db.lock.RUnlock()
+			returnKeyBuffer()
 			return err
 		}
 	}
