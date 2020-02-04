@@ -1,7 +1,6 @@
 package trx_engine_base
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -25,8 +24,8 @@ func (this *BaseTrxEngine) ApplyGenesis() error {
 	return err
 }
 
-func (this *BaseTrxEngine) CommitToDisk(root common.Hash) error {
-	return this.ReadDB.TrieDB().Commit(root, this.WriteDiskDB)
+func (this *BaseTrxEngine) CommitToDisk() error {
+	return this.ReadDB.TrieDB().Commit()
 }
 
 type TransactionRequest = struct {

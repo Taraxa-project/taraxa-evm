@@ -30,7 +30,6 @@ type hasher struct {
 	sha        keccakState
 	cachegen   uint16
 	cachelimit uint16
-	onleaf     LeafCallback
 }
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
@@ -62,9 +61,9 @@ var hasherPool = sync.Pool{
 	},
 }
 
-func newHasher(cachegen, cachelimit uint16, onleaf LeafCallback) *hasher {
+func newHasher(cachegen, cachelimit uint16) *hasher {
 	h := hasherPool.Get().(*hasher)
-	h.cachegen, h.cachelimit, h.onleaf = cachegen, cachelimit, onleaf
+	h.cachegen, h.cachelimit = cachegen, cachelimit
 	return h
 }
 
@@ -185,26 +184,7 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	if db != nil {
 		// We are pooling the trie nodes into an intermediate memory cache
 		hash := common.BytesToHash(hash)
-
-		db.lock.Lock()
 		db.insert(hash, n)
-		db.lock.Unlock()
-
-		// Track external references from account->storage trie
-		if h.onleaf != nil {
-			switch n := n.(type) {
-			case *shortNode:
-				if child, ok := n.Val.(valueNode); ok {
-					h.onleaf(child, hash)
-				}
-			case *fullNode:
-				for i := 0; i < 16; i++ {
-					if child, ok := n.Children[i].(valueNode); ok {
-						h.onleaf(child, hash)
-					}
-				}
-			}
-		}
 	}
 	return hash, nil
 }

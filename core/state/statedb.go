@@ -221,7 +221,7 @@ func (self *StateDB) GetCodeSize(addr common.Address) int {
 	if stateObject.code != nil {
 		return len(stateObject.code)
 	}
-	size, err := self.db.ContractCodeSize(stateObject.addrHash, common.BytesToHash(stateObject.CodeHash()))
+	size, err := self.db.ContractCodeSize(common.BytesToHash(stateObject.CodeHash()))
 	if err != nil {
 		self.setError(err)
 	}
@@ -540,20 +540,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		delete(s.stateObjectsDirty, addr)
 	}
 	// Write trie changes.
-	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
-		var account Account
-		if err := rlp.DecodeBytes(leaf, &account); err != nil {
-			return nil
-		}
-		if account.Root != emptyState {
-			s.db.TrieDB().Reference(account.Root, parent)
-		}
-		code := common.BytesToHash(account.CodeHash)
-		if code != emptyCode {
-			s.db.TrieDB().Reference(code, parent)
-		}
-		return nil
-	})
+	root, err = s.trie.Commit()
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
 }

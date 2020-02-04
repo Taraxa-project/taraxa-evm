@@ -41,7 +41,7 @@ func Test_concurrent_fuzz(t *testing.T) {
 		}
 		root, err_2 := state_db.Commit(true)
 		util.PanicIfNotNil(err_2)
-		state_db.Database().TrieDB().Commit(root, engine.WriteDiskDB)
+		state_db.Database().TrieDB().Commit()
 		if base_root == nil {
 			base_root = &root
 		} else {

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/memory"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
+	"os"
 	"testing"
 )
 
@@ -40,10 +40,9 @@ func (this *EthTxEngineIntegrationTest) Run(t *testing.T) {
 		if prevBlock != nil {
 			stateTransitionRequest.BaseStateRoot = prevBlock.StateRoot
 		}
-		result, err := ethereumVM.TransitionState(stateTransitionRequest)
+		result, err := ethereumVM.TransitionStateAndCommit(stateTransitionRequest)
 		util.PanicIfNotNil(err)
-		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), block.StateRoot.Hex())
-		util.PanicIfNotNil(ethereumVM.CommitToDisk(result.StateRoot))
+		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), " != ", block.StateRoot.Hex())
 		prevBlock = block
 	}
 
@@ -68,23 +67,34 @@ func Test_integration(t *testing.T) {
 		return ret
 	}
 	factory := new(EthTrxEngineFactory)
-	factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
-		DBFactory: &rocksdb.Factory{
-			File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/state",
-			ReadOnly:               true,
-			Parallelism:            concurrent.CPU_COUNT,
-			MaxFileOpeningThreads:  concurrent.CPU_COUNT,
-			OptimizeForPointLookup: 1 * 1024,
-			UseDirectReads:         true,
-		},
-	}
-	factory.WriteDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
+	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
+	//	DBFactory: &rocksdb.Factory{
+	//		File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/state",
+	//		ReadOnly:               true,
+	//		Parallelism:            concurrent.CPU_COUNT,
+	//		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
+	//		OptimizeForPointLookup: 1 * 1024,
+	//		UseDirectReads:         true,
+	//	},
+	//}
+	//factory.WriteDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
+	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
+	factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: &rocksdb.Factory{
+		//File:                   os.TempDir() + string(os.PathSeparator) + "ololololo",
+		File:                   os.TempDir() + string(os.PathSeparator) + "ololololo1",
+		Parallelism:            concurrent.CPU_COUNT,
+		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
+		OptimizeForPointLookup: 3 * 1024,
+		MaxOpenFiles:           8192,
+	}}
 	factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(blockNumber uint64) common.Hash {
 		return getBlockByNumber(blockNumber).Hash
 	})
 	test := EthTxEngineIntegrationTest{
-		StartBlock:       4000000,
-		EndBlock:         4050000,
+		//StartBlock:       4000000,
+		//EndBlock:         4050000,
+		StartBlock:       1712613,
+		EndBlock:         4000000,
 		GetBlockByNumber: getBlockByNumber,
 		VMFactory:        factory,
 	}

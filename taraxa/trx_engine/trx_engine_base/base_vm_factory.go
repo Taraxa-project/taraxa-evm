@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
+	"github.com/Taraxa-project/taraxa-evm/trie"
 )
 
 type BaseVMConfig = struct {
@@ -62,7 +63,9 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), er
 		localErr.SetOrPanicIfPresent(e3)
 		cleanup = util.Chain(cleanup, writeDiskDB.Close)
 		ret.WriteDiskDB = writeDiskDB
-		ret.WriteDB = state.NewDatabase(readDiskDB)
+		ret.WriteDB = state.NewDatabaseFromTrieDB(trie.NewDatabaseSeparateRW(readDiskDB, writeDiskDB))
+		// TODO revert his
+		ret.ReadDB = ret.WriteDB
 	}
 	getBlockHash, err11 := this.BlockHashSourceFactory.NewInstance()
 	localErr.SetOrPanicIfPresent(err11)

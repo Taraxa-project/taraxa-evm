@@ -20,16 +20,10 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
-	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"io"
 	"sync"
 )
-
-// secureKeyPrefix is the database key prefix used to store trie node preimages.
-const secureKeyPrefix = "s_k_"
-const secureKeyPrefixLength = len(secureKeyPrefix)
-const secureKeyLength = secureKeyPrefixLength + common.HashLength
 
 type Dirties = map[common.Hash]*cachedNode
 
@@ -37,11 +31,12 @@ type Dirties = map[common.Hash]*cachedNode
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
 type Database struct {
-	diskdb ethdb.Database // Persistent storage for matured trie nodes
-	dirties Dirties // Data and references relationships of dirty nodes
-	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
-	lock       sync.RWMutex
-	secKeyPool sync.Pool
+	diskdb_r      ethdb.Database
+	diskdb_w      ethdb.Database
+	dirties       Dirties // Data and references relationships of dirty nodes
+	batch         ethdb.Batch
+	batch_put_err error
+	lock          sync.RWMutex
 }
 
 // rawNode is a simple binary blob used to differentiate between collapsed trie
@@ -89,9 +84,9 @@ func (n rawShortNode) fstring(ind string) string     { panic("this should never 
 
 // cachedNode is all the information we know about a single cached node in the
 // memory database write layer.
+// TODO remove
 type cachedNode struct {
-	node     node                   // Cached collapsed trie node, or raw rlp data
-	children map[common.Hash]uint16 // External children referenced by this node
+	node // Cached collapsed trie node, or raw rlp data
 }
 
 // rlp returns the raw rlp encoded blob of the cached node, either directly from
@@ -114,40 +109,6 @@ func (n *cachedNode) obj(hash common.Hash, cachegen uint16) node {
 		return mustDecodeNode(hash[:], node, cachegen)
 	}
 	return expandNode(hash[:], n.node, cachegen)
-}
-
-// childs returns all the tracked children of this node, both the implicit ones
-// from inside the node as well as the explicit ones from outside the node.
-func (n *cachedNode) childs() []common.Hash {
-	children := make([]common.Hash, 0, 16)
-	for child := range n.children {
-		children = append(children, child)
-	}
-	if _, ok := n.node.(rawNode); !ok {
-		gatherChildren(n.node, &children)
-	}
-	return children
-}
-
-// gatherChildren traverses the node hierarchy of a collapsed storage node and
-// retrieves all the hashnode children.
-func gatherChildren(n node, children *[]common.Hash) {
-	switch n := n.(type) {
-	case *rawShortNode:
-		gatherChildren(n.Val, children)
-
-	case rawFullNode:
-		for i := 0; i < 16; i++ {
-			gatherChildren(n[i], children)
-		}
-	case hashNode:
-		*children = append(*children, common.BytesToHash(n))
-
-	case valueNode, nil:
-
-	default:
-		panic(fmt.Sprintf("unknown node type: %T", n))
-	}
 }
 
 // simplifyNode traverses the hierarchy of an expanded memory node and discards
@@ -214,20 +175,19 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 	}
 }
 
+func NewDatabaseSeparateRW(diskdb_r, diskdb_w ethdb.Database) *Database {
+	return &Database{
+		diskdb_r: diskdb_r,
+		diskdb_w: diskdb_w,
+		dirties:  make(Dirties),
+	}
+}
+
 // NewDatabase creates a new trie database to store ephemeral trie content before
 // its written out to disk or garbage collected. No read cache is created, so all
 // data retrievals will hit the underlying disk database.
 func NewDatabase(diskdb ethdb.Database) *Database {
-	return &Database{
-		diskdb:    diskdb,
-		dirties:   Dirties{{}: {}},
-		preimages: make(map[common.Hash][]byte),
-		secKeyPool: sync.Pool{
-			New: func() interface{} {
-				return append(make([]byte, 0, secureKeyLength), secureKeyPrefix...)
-			},
-		},
-	}
+	return NewDatabaseSeparateRW(diskdb, diskdb)
 }
 
 // InsertBlob writes a new reference tracked blob to the memory database if it's
@@ -235,17 +195,7 @@ func NewDatabase(diskdb ethdb.Database) *Database {
 // reference counting, since trie nodes are garbage collected directly through
 // their embedded children.
 func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
-	db.lock.Lock()
-	defer db.lock.Unlock()
-
 	db.insert(hash, rawNode(blob))
-}
-
-func (this *Database) claimSecureKeyBuffer() ([]byte, func()) {
-	buf := this.secKeyPool.Get()
-	return buf.([]byte), func() {
-		this.secKeyPool.Put(buf)
-	}
 }
 
 // insert inserts a collapsed trie node into the memory database. This method is
@@ -253,26 +203,26 @@ func (this *Database) claimSecureKeyBuffer() ([]byte, func()) {
 // well ex trie node insertions. The blob must always be specified to allow proper
 // size tracking.
 func (db *Database) insert(hash common.Hash, node node) {
-	// If the node's already cached, skip
-	if _, ok := db.dirties[hash]; ok {
+	db.lock.RLock()
+	_, has_been_inserted := db.dirties[hash]
+	db.lock.RUnlock()
+	if has_been_inserted {
 		return
 	}
-	// Create the cached entry for this node
-	entry := &cachedNode{
-		node: simplifyNode(node),
-	}
-	db.dirties[hash] = entry
-}
-
-// insertPreimage writes a new trie node pre-image to the memory database if it's
-// yet unknown. The method will make a copy of the slice.
-//
-// Note, this method assumes that the database's lock is held!
-func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
-	if _, ok := db.preimages[hash]; ok {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+	if _, has_been_inserted = db.dirties[hash]; has_been_inserted {
 		return
 	}
-	db.preimages[hash] = common.CopyBytes(preimage)
+	cached_node := &cachedNode{simplifyNode(node)}
+	db.dirties[hash] = cached_node
+	if db.batch == nil {
+		db.batch = db.diskdb_w.NewBatch()
+	}
+	if db.batch_put_err != nil {
+		return
+	}
+	db.batch_put_err = db.batch.Put(hash[:], cached_node.rlp())
 }
 
 // node retrieves a cached trie node from memory, or returns nil if none can be
@@ -287,7 +237,7 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 		return dirty.obj(hash, cachegen)
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	enc, err := db.diskdb.Get(hash[:])
+	enc, err := db.diskdb_r.Get(hash[:])
 	if err != nil || enc == nil {
 		return nil
 	}
@@ -306,111 +256,23 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		return dirty.rlp(), nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(hash[:])
-}
-
-// preimage retrieves a cached trie node pre-image from memory. If it cannot be
-// found cached, the method queries the persistent database for the content.
-func (db *Database) preimage(hash common.Hash) ([]byte, error) {
-	// Retrieve the node from cache if available
-	db.lock.RLock()
-	preimage := db.preimages[hash]
-	db.lock.RUnlock()
-
-	if preimage != nil {
-		return preimage, nil
-	}
-	// Content unavailable in memory, attempt to retrieve from disk
-	buf, returnBuf := db.claimSecureKeyBuffer()
-	defer returnBuf()
-	return db.diskdb.Get(secureKey(hash[:], buf))
-}
-
-// secureKey returns the database key for the preimage of key, as an ephemeral
-// buffer. The caller must not hold onto the return value because it will become
-// invalid on the next call.
-func secureKey(key, buf []byte) []byte {
-	return append(buf, key...)
-}
-
-// Reference adds a new reference from a parent node to a child node.
-func (db *Database) Reference(child common.Hash, parent common.Hash) {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-	// If the node does not exist, it's a node pulled from disk, skip
-	_, ok := db.dirties[child]
-	if !ok {
-		return
-	}
-	// If the reference already exists, only duplicate for roots
-	if db.dirties[parent].children == nil {
-		db.dirties[parent].children = make(map[common.Hash]uint16)
-	} else if _, ok = db.dirties[parent].children[child]; ok && parent != (common.Hash{}) {
-		return
-	}
-	db.dirties[parent].children[child]++
+	return db.diskdb_r.Get(hash[:])
 }
 
 // Commit iterates over all the children of a particular node, writes them out
 // to disk, forcefully tearing down all references in both directions.
 //
 // As a side effect, all pre-images accumulated up to this point are also written.
-func (db *Database) Commit(node common.Hash, target ethdb.Database) error {
-	// Create a database batch to flush persistent data out. It is important that
-	// outside code doesn't see an inconsistent state (referenced data removed from
-	// memory cache during commit but not yet in persistent storage). This is ensured
-	// by only uncaching existing data when the database write finalizes.
-	if target == nil {
-		target = db.diskdb
-	}
-	db.lock.RLock()
-	batch := target.NewBatch()
-	// Move all of the accumulated preimages into a write batch
-	keyBuffer, returnKeyBuffer := db.claimSecureKeyBuffer()
-	for hash, preimage := range db.preimages {
-		if err := batch.Put(secureKey(hash[:], keyBuffer), preimage); err != nil {
-			log.Error("Failed to commit preimage from trie database", "err", err)
-			db.lock.RUnlock()
-			returnKeyBuffer()
-			return err
-		}
-	}
-	returnKeyBuffer()
-	// Move the trie itself into the batch, flushing if enough data is accumulated
-	if err := db.commit(node, batch); err != nil {
-		log.Error("Failed to commit trie from trie database", "err", err)
-		db.lock.RUnlock()
-		return err
-	}
-	// Write batch ready, unlock for readers during persistence
-	if err := batch.Write(); err != nil {
-		log.Error("Failed to write trie to disk", "err", err)
-		db.lock.RUnlock()
-		return err
-	}
-	db.lock.RUnlock()
-	// Write successful, clear out the flushed data
+func (db *Database) Commit() (err error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
-	db.preimages = make(map[common.Hash][]byte)
-	db.dirties = Dirties{{}: {}}
-	return nil
-}
-
-// commit is the private locked version of Commit.
-func (db *Database) commit(hash common.Hash, batch ethdb.Batch) error {
-	// If the node does not exist, it's a previously committed node
-	node, ok := db.dirties[hash]
-	if !ok {
-		return nil
+	defer func() {
+		db.batch = nil
+		db.batch_put_err = nil
+		db.dirties = make(Dirties)
+	}()
+	if err = db.batch_put_err; err == nil && db.batch != nil {
+		err = db.batch.Write()
 	}
-	for _, child := range node.childs() {
-		if err := db.commit(child, batch); err != nil {
-			return err
-		}
-	}
-	if err := batch.Put(hash[:], node.rlp()); err != nil {
-		return err
-	}
-	return nil
+	return
 }

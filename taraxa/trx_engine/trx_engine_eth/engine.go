@@ -100,7 +100,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 func (this *EthTrxEngine) TransitionStateAndCommit(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
 	ret, err = this.TransitionState(req)
 	if err == nil {
-		err = this.CommitToDisk(ret.StateRoot)
+		err = this.CommitToDisk()
 	}
 	return
 }
