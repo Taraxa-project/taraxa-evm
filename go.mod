@@ -13,7 +13,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/syndtr/goleveldb v1.0.1-0.20190923125748-758128399b1d
-	github.com/tecbot/gorocksdb v0.0.0-20190705090504-162552197222
+	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c
 	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472
 	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7
 )

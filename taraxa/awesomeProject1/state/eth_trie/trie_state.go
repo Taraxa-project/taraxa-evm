@@ -77,7 +77,7 @@ func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordina
 	block_num_bytes := util.ENC_b_endian_compact_64(self.block_count)
 	self.db.BatchPutCol(batch, COL_default, last_block_num_key, block_num_bytes)
 	self.db.BatchPutCol(batch, COL_block_num_to_root, block_num_bytes, checksum)
-	if err = self.db.Write(rocksdb_ext.Default_opts_w, batch); err != nil {
+	if err = self.db.Commit(batch); err != nil {
 		return
 	}
 	checksum = root.Bytes()

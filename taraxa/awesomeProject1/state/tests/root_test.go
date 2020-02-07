@@ -28,7 +28,7 @@ func TestRoot(t *testing.T) {
 		}
 	}
 
-	TARGET_DISABLED("trie_state", func(t *testing.T) state.State {
+	TARGET("trie_state", func(t *testing.T) state.State {
 		path := os.TempDir() + strings.ReplaceAll(t.Name(), "/", "_")
 		util.PanicIfNotNil(os.RemoveAll(path))
 		target, err := eth_trie.NewTrieState(&eth_trie.TrieStateConfig{
@@ -51,7 +51,7 @@ func TestRoot(t *testing.T) {
 		return target
 	})
 
-	test_entry_cnt := 10000
+	test_entry_cnt := 200000
 	keys := make([][]byte, test_entry_cnt)
 	for i := range keys {
 		keys[i] = random_bytes("key", i)
@@ -83,7 +83,7 @@ func TestRoot(t *testing.T) {
 		util.Assert(bytes.Compare(v_proven, values[1]) == 0)
 	})
 	TEST("test_2", func(t *testing.T, s state.State) {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 5; i++ {
 			fmt.Println(i)
 			key_perm := rand.Perm(test_entry_cnt)
 			state_change := make(state.StateChange, 0, len(key_perm))
@@ -97,22 +97,27 @@ func TestRoot(t *testing.T) {
 			}
 			block_ordinal, digest, err_0 := s.CommitBlock(state_change)
 			util.PanicIfNotNil(err_0)
-			for _, entry := range state_change {
-				v, err_1 := s.Get(block_ordinal, entry.K)
-				util.PanicIfNotNil(err_1)
-				util.Assert(bytes.Compare(v, entry.V) == 0)
-				proof, err_2 := s.GetWithProof(block_ordinal, entry.K)
-				util.PanicIfNotNil(err_2)
-				v_proven, err_3 := proof.Verify(digest, entry.K)
-				util.PanicIfNotNil(err_3)
-				util.Assert(bytes.Compare(v_proven, entry.V) == 0)
-			}
+			NOOP(block_ordinal, digest)
+			//for _, entry := range state_change {
+			//	v, err_1 := s.Get(block_ordinal, entry.K)
+			//	util.PanicIfNotNil(err_1)
+			//	util.Assert(bytes.Compare(v, entry.V) == 0)
+			//	proof, err_2 := s.GetWithProof(block_ordinal, entry.K)
+			//	util.PanicIfNotNil(err_2)
+			//	v_proven, err_3 := proof.Verify(digest, entry.K)
+			//	util.PanicIfNotNil(err_3)
+			//	util.Assert(bytes.Compare(v_proven, entry.V) == 0)
+			//}
 		}
 	})
 }
 
-func random_bytes(tag string, id int) []byte {
-	return crypto.Keccak256(util.ENC_b_endian_64(rand.Uint64()))
+func random_bytes(tag string, id int) (ret []byte) {
+	ret = append(ret, crypto.Keccak256(util.ENC_b_endian_64(rand.Uint64()))...)
+	ret = append(ret, crypto.Keccak256(util.ENC_b_endian_64(rand.Uint64()))...)
+	ret = append(ret, crypto.Keccak256(util.ENC_b_endian_64(rand.Uint64()))...)
+	ret = append(ret, crypto.Keccak256(util.ENC_b_endian_64(rand.Uint64()))...)
+	return
 }
 
 func NOOP(...interface{}) {

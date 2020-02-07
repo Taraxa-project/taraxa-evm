@@ -24,17 +24,24 @@ var compact_table_64 = func() (ret [8]uint64) {
 	return
 }()
 
-func ENC_b_endian_compact_64(n uint64) []byte {
+func ENC_b_endian_compact_64_w_alloc(n uint64, alloc func(int) []byte) []byte {
 	for i := 0; i < 8; i++ {
 		if n <= compact_table_64[i] {
-			ret := make([]byte, i+1)
-			for j := 0; j < len(ret); j++ {
-				ret[j] = byte(n >> (8 * (i - j)))
+			size := i + 1
+			ret := alloc(size)
+			for j := 0; j < size; j++ {
+				ret = append(ret, byte(n>>(8*(i-j))))
 			}
 			return ret
 		}
 	}
 	panic("")
+}
+
+func ENC_b_endian_compact_64(n uint64) []byte {
+	return ENC_b_endian_compact_64_w_alloc(n, func(size int) []byte {
+		return make([]byte, 0, size)
+	})
 }
 
 func DEC_b_endian_compact_64(enc []byte) (ret uint64) {
