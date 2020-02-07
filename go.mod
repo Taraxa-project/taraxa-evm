@@ -1,6 +1,6 @@
 module github.com/Taraxa-project/taraxa-evm
 
-go 1.12
+go 1.13
 
 require (
 	github.com/allegro/bigcache v1.2.1
@@ -12,8 +12,8 @@ require (
 	github.com/go-stack/stack v1.8.0
 	github.com/google/uuid v1.1.1
 	github.com/hashicorp/golang-lru v0.5.3
-	github.com/syndtr/goleveldb v1.0.0
+	github.com/syndtr/goleveldb v1.0.1-0.20190923125748-758128399b1d
 	github.com/tecbot/gorocksdb v0.0.0-20190705090504-162552197222
 	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472
-	golang.org/x/sys v0.0.0-20190412213103-97732733099d
+	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7
 )

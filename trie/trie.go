@@ -271,23 +271,10 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 	}
 }
 
-// Delete removes any existing value for key from the trie.
-func (t *Trie) Delete(key []byte) {
-	if err := t.TryDelete(key); err != nil {
-		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
-	}
-}
-
 // TryDelete removes any existing value for key from the trie.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryDelete(key []byte) error {
-	k := keybytesToHex(key)
-	_, n, err := t.delete(t.root, nil, k)
-	if err != nil {
-		return err
-	}
-	t.root = n
-	return nil
+	return t.TryUpdate(key, nil)
 }
 
 // delete returns the new root of the trie with key deleted.

@@ -271,8 +271,8 @@ func (db *Database) Commit() (err error) {
 		db.batch_put_err = nil
 		db.dirties = make(Dirties)
 	}()
-	if err = db.batch_put_err; err == nil && db.batch != nil {
-		err = db.batch.Write()
-	}
+	//if err = db.batch_put_err; err == nil && db.batch != nil {
+	//	err = db.batch.Write()
+	//}
 	return
 }
