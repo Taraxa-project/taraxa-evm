@@ -10,12 +10,13 @@ import (
 	"github.com/tecbot/gorocksdb"
 )
 
+// TODO eliminate caching
 type TrieState struct {
 	db            *rocksdb_ext.RocksDBExt
 	block_count   state.BlockOrdinal
 	ethdb_adapter ethdb_adapter
 	trie_db       *trie.Database
-	current_trie  *trie.Trie
+	current_root  common.Hash
 }
 type TrieStateConfig = struct {
 	rocksdb_ext.RocksDBExtDBConfig
@@ -45,27 +46,28 @@ func NewTrieState(cfg *TrieStateConfig) (self *TrieState, err error) {
 	if err = err_0; err_0 != nil {
 		return
 	}
-	var root common.Hash
 	if block_num_bytes != nil {
 		self.block_count = util.DEC_b_endian_compact_64(block_num_bytes)
 		root_bytes, err_1 := self.db.GetCol(COL_block_num_to_root, block_num_bytes)
 		if err = err_1; err_1 != nil {
 			return
 		}
-		root = common.BytesToHash(root_bytes)
+		self.current_root = common.BytesToHash(root_bytes)
 	}
-	self.current_trie, err = trie.New(root, self.trie_db)
 	return
 }
 
 func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordinal state.BlockOrdinal, checksum []byte, err error) {
+	trie, err_0 := trie.New(self.current_root, self.trie_db)
+	if err = err_0; err != nil {
+		return
+	}
 	batch := gorocksdb.NewWriteBatch()
 	self.ethdb_adapter.batch = batch
 	for _, e := range state_change {
-		self.current_trie.TryUpdate(e.K, e.V)
+		trie.TryUpdate(e.K, e.V)
 	}
-	root, trie_commit_err := self.current_trie.Commit()
-	if err = trie_commit_err; trie_commit_err != nil {
+	if self.current_root, err = trie.Commit(); err != nil {
 		return
 	}
 	defer func() {
@@ -74,13 +76,13 @@ func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordina
 	if err = self.trie_db.Commit(); err != nil {
 		return
 	}
+	checksum = self.current_root.Bytes()
 	block_num_bytes := util.ENC_b_endian_compact_64(self.block_count)
 	self.db.BatchPutCol(batch, COL_default, last_block_num_key, block_num_bytes)
 	self.db.BatchPutCol(batch, COL_block_num_to_root, block_num_bytes, checksum)
 	if err = self.db.Commit(batch); err != nil {
 		return
 	}
-	checksum = root.Bytes()
 	block_ordinal = self.block_count
 	self.block_count++
 	return
@@ -88,7 +90,7 @@ func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordina
 
 func (self *TrieState) getTrie(block_ordinal state.BlockOrdinal) (*trie.Trie, error) {
 	if block_ordinal == self.block_count-1 {
-		return self.current_trie, nil
+		return  trie.New(self.current_root, self.trie_db)
 	}
 	root, err := self.db.GetCol(COL_block_num_to_root, util.ENC_b_endian_compact_64(block_ordinal))
 	if err != nil {

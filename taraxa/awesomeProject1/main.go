@@ -1,11 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
 func main() {
-	fmt.Println(bytes.Compare([]byte{1, 2}, []byte{0, 2}))
-	fmt.Println([]byte(nil)[:8])
+	fmt.Println(crypto.Keccak256(nil))
 }

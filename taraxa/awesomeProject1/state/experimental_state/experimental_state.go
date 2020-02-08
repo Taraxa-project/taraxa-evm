@@ -86,6 +86,9 @@ func NewExperimentalState(cfg *ExperimentalStateConfig) (self *ExperimentalState
 
 // TODO reuse buffers more
 // TODO parallelism
+
+// TODO GetForUpdate
+// TODO configurable arity
 func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (block_ord state.BlockOrdinal, digest []byte, err error) {
 	block_ord = self.block_cnt
 	block_ord_enc_compact := util.ENC_b_endian_compact_64(block_ord)
@@ -106,7 +109,10 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 	merkle_lvl := make(MerkleLevel, len(state_change))
 	batch := gorocksdb.NewWriteBatch()
 	for _, entry := range state_change {
+		//fmt.Println("entry:", util.BytesToStrPadded(entry.K), "||", util.BytesToStrPadded(entry.V))
+		self.db.ToggleProfiling()
 		found_v, err_0 := self.db.GetCol(COL_entries, entry.K)
+		self.db.ToggleProfiling()
 		if err = err_0; err_0 != nil {
 			return
 		}
@@ -126,6 +132,10 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 		entry_hash := crypto.Keccak256(entry.K, entry_v)
 		self.db.BatchPutCol(batch, COL_merkle, merkle_key(merkle_lvl_ord, entry_ord), entry_hash)
 		//self.db.BatchPutCol(batch, COL_merkle_historical, merkle_key_historical(merkle_lvl_ord, entry_ord_b_endian, block_ord_b_endian), entry_hash)
+
+		//fmt.Printf("New node pos: %s, key: [ %s ], hash: [ %s ]\n",
+		//	strconv.Itoa(int(entry_ord)), util.BytesToStrPadded(entry.K), util.BytesToStrPadded(entry_hash))
+
 		merkle_lvl[entry_ord] = entry_hash
 	}
 	sibling_hashes_buf := make([][]byte, Arity)
@@ -149,21 +159,33 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 					return
 				}
 				util.Assert(sibling_hash != nil)
-			} else if sibling_hash, err = self.absent_node_hash(merkle_lvl_ord, sibling_ord, block_ord); err != nil {
-				return
-				// TODO don't put empty vals
-				//self.db.BatchPutCol(batch, COL_merkle, sibling_db_key, sibling_hash)
-				//self.db.BatchPutCol(batch, COL_merkle_historical, merkle_key_historical(merkle_lvl_ord, util.ENC_b_endian_64(sibling_ord), block_ord_b_endian), sibling_hash)
+			} else {
+				if sibling_hash, err = self.absent_node_hash(merkle_lvl_ord, sibling_ord, block_ord); err != nil {
+					// TODO don't store empty hash
+					//self.db.BatchPutCol(batch, COL_merkle, sibling_db_key, sibling_hash)
+					//self.db.BatchPutCol(batch, COL_merkle_historical, merkle_key_historical(merkle_lvl_ord, util.ENC_b_endian_64(sibling_ord), block_ord_b_endian), sibling_hash)
+					return
+				}
 			}
 			sibling_hashes_buf[entry_local_pos] = hash
 			sibling_hashes_buf[sibling_local_pos] = sibling_hash
 			parent_hash := crypto.Keccak256(sibling_hashes_buf...)
 			parent_ordnal := entry_ord / Arity
 			self.db.BatchPutCol(batch, COL_merkle, merkle_key(next_lvl_ord, parent_ordnal), parent_hash)
+			//fmt.Printf(
+			//	"Hashed nodes at lvl %s:\n"+
+			//		"  pos: %s, value: [ %s ]\n"+
+			//		"  pos: %s, value: [ %s ]\n"+
+			//		"  -> pos: %s, value: [ %s ]\n",
+			//	strconv.Itoa(int(merkle_lvl_ord)),
+			//	strconv.Itoa(int(entry_ord)), util.BytesToStrPadded(hash),
+			//	strconv.Itoa(int(sibling_ord)), util.BytesToStrPadded(sibling_hash),
+			//	strconv.Itoa(int(parent_ordnal)), util.BytesToStrPadded(parent_hash),
+			//)
 			//self.db.BatchPutCol(batch, COL_merkle_historical, merkle_key_historical(next_lvl_ord, util.ENC_b_endian_64(parent_ordnal), block_ord_b_endian), parent_hash)
 			next_lvl[parent_ordnal] = parent_hash
-			curr_lvl_entry_cnt = EntryOrdinal(math.Ceil(float64(curr_lvl_entry_cnt) / Arity))
 		}
+		curr_lvl_entry_cnt = EntryOrdinal(math.Ceil(float64(curr_lvl_entry_cnt) / Arity))
 		merkle_lvl = next_lvl
 	}
 	digest = merkle_lvl[0]
@@ -174,6 +196,7 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 	}
 	self.entry_cnt = entry_cnt
 	self.block_cnt++
+	//self.db.Dump()
 	return
 }
 
@@ -204,6 +227,7 @@ func (self *ExperimentalState) GetWithProof(block_ord state.BlockOrdinal, k []by
 	proof_bytes[0] = append(k, v...)
 	entry_ord := binary.BigEndian.Uint64(v[:EntryOrdinalSize])
 	curr_lvl_entry_cnt := entry_cnt
+	//fmt.Println("Proving for: [", util.BytesToStrPadded(k), "] ordinal:", entry_ord)
 	for lvl_ord := MerkleLevelOrdinal(0); lvl_ord < merkle_root_lvl_ord; lvl_ord++ {
 		entry_local_pos := entry_ord % Arity
 		sibling_local_pos := 1 - entry_local_pos
@@ -229,6 +253,7 @@ func (self *ExperimentalState) GetWithProof(block_ord state.BlockOrdinal, k []by
 			)
 			return
 		}
+		//fmt.Println("proof node at lvl", lvl_ord, "pos:", sibling_ord, "value:", util.BytesToStrPadded(sibling_v))
 		proof_bytes[lvl_ord+1] = sibling_v
 		entry_ord /= Arity
 		curr_lvl_entry_cnt = EntryOrdinal(math.Ceil(float64(curr_lvl_entry_cnt) / Arity))
