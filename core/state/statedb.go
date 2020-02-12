@@ -18,6 +18,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"math/big"
@@ -514,7 +515,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	s.TouchedExternallyOwnedAccountBalances = make(BalanceTable)
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
-		if stateObject.code == nil && stateObject.balanceTouched {
+		if bytes.Equal(stateObject.CodeHash(), emptyCodeHash) && stateObject.balanceTouched {
 			s.TouchedExternallyOwnedAccountBalances[addr] = (*hexutil.Big)(new(big.Int).Set(stateObject.Balance()))
 		}
 		stateObject.balanceTouched = false

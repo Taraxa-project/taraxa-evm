@@ -22,7 +22,7 @@ var env = managed_memory.ManagedMemory{Functions: managed_memory.Functions{
 		factory.Genesis = trx_engine.TaraxaGenesisConfig
 		factory.DisableMinerReward = true
 		factory.DisableNonceCheck = true
-		factory.FreeGas = true
+		factory.DisableGasFee = true
 		factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
 			DBFactory: &cgo.Factory{Pointer: db_ptr},
 		}
