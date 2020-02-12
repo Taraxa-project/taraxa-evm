@@ -185,6 +185,22 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 		// We are pooling the trie nodes into an intermediate memory cache
 		hash := common.BytesToHash(hash)
 		db.insert(hash, n)
+		// TODO put values here
+		//// Track external references from account->storage trie
+		//if h.onleaf != nil {
+		//	switch n := n.(type) {
+		//	case *shortNode:
+		//		if child, ok := n.Val.(valueNode); ok {
+		//			h.onleaf(child, hash)
+		//		}
+		//	case *fullNode:
+		//		for i := 0; i < 16; i++ {
+		//			if child, ok := n.Children[i].(valueNode); ok {
+		//				h.onleaf(child, hash)
+		//			}
+		//		}
+		//	}
+		//}
 	}
 	return hash, nil
 }

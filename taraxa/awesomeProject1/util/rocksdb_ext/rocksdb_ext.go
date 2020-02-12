@@ -18,11 +18,10 @@ type RocksDBExt struct {
 	cf      []*gorocksdb.ColumnFamilyHandle
 	cf_opts []RocksDBExtColumnOpts
 
-	cache          map[int]map[string][]byte
-	writes         uint64
-	reads          uint64
-	pending_writes int64
-	dont_profile   bool
+	cache        map[int]map[string][]byte
+	writes       uint64
+	reads        uint64
+	dont_profile bool
 }
 type RocksDBExtCFRWOpts = struct {
 	CF_r_opts []*gorocksdb.ReadOptions
@@ -50,6 +49,9 @@ func NewRocksDBExt(cfg *RocksDBExtConfig) (self *RocksDBExt, err error) {
 	}
 	cfg.Opts.SetCreateIfMissing(true)
 	cfg.Opts.SetCreateIfMissingColumnFamilies(true)
+	if len(cfg.ColumnOpts) == 0 {
+		cfg.ColumnOpts = append(cfg.ColumnOpts, RocksDBExtColumnOpts{})
+	}
 	col_names := make([]string, len(cfg.ColumnOpts))
 	col_names[0] = "default"
 	for i := 1; i < len(col_names); i++ {
@@ -81,37 +83,23 @@ func NewRocksDBExt(cfg *RocksDBExtConfig) (self *RocksDBExt, err error) {
 	for col := range cfg.ColumnOpts {
 		self.cache[col] = make(map[string][]byte)
 	}
-	self.ToggleProfiling()
 	return
 }
 
 func (self *RocksDBExt) PutCol(col int, k, v []byte) error {
-	self.cache[col][string(k)] = v
 	if !self.dont_profile {
 		self.writes++
 	}
-	//fmt.Println(self.writes)
+	self.cache[col][string(k)] = v
 	return nil
 	//return self.PutCF(self.cf_opts[col].Opts_w, self.cf[col], k, v)
 }
 
 func (self *RocksDBExt) BatchPutCol(batch *gorocksdb.WriteBatch, col int, k, v []byte) {
-	self.cache[col][string(k)] = v
 	if !self.dont_profile {
 		self.writes++
 	}
-	//fmt.Println(self.writes)
-	//util.PanicIfNotNil(self.PutCol(col, k, v))
-
-	//go func() {
-	//	for atomic.LoadInt64(&self.pending_writes) > 12 {
-	//		runtime.Gosched()
-	//	}
-	//	atomic.AddInt64(&self.pending_writes, 1)
-	//	defer atomic.AddInt64(&self.pending_writes, -1)
-	//	self.PutCF(self.cf_opts[col].Opts_w, self.cf[col], k, v)
-	//}()
-
+	self.cache[col][string(k)] = v
 	//batch.PutCF(self.cf[col], k, v)
 }
 
@@ -123,33 +111,46 @@ func (self *RocksDBExt) GetCol(col int, k []byte) ([]byte, error) {
 	if !self.dont_profile {
 		self.reads++
 	}
-	//fmt.Println(self.reads)
-	return self.cache[col][string(k)], nil
-	//slice, err := self.GetCF(self.cf_opts[col].Opts_r, self.cf[col], k)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//defer slice.Free()
-	//return common.CopyBytes(slice.Data()), nil
+	k_str := string(k)
+	ret, ok := self.cache[col][k_str]
+	if !ok {
+		//slice, err := self.GetCF(self.cf_opts[col].Opts_r, self.cf[col], k)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//defer slice.Free()
+		//ret = common.CopyBytes(slice.Data())
+		//self.cache[col][k_str] = ret
+	}
+	return ret, nil
 }
 
 func (self *RocksDBExt) Commit(batch *gorocksdb.WriteBatch) error {
-	if !self.dont_profile {
-		fmt.Println("reads:", self.reads)
-		fmt.Println("writes:", self.writes)
-	}
+	//if !self.dont_profile {
+	//	fmt.Println("reads:", self.reads)
+	//	fmt.Println("writes:", self.writes)
+	//}
 	self.reads = 0
 	self.writes = 0
-	//for atomic.LoadInt64(&self.pending_writes) != 0 {
-	//	runtime.Gosched()
+	//for col := range self.cache {
+	//	self.cache[col] = make(map[string][]byte)
 	//}
 	return nil
+	//start := time.Now()
+	//defer func() {
+	//	fmt.Println("commit took (sec)", float64(time.Now().Sub(start))/float64(time.Second))
+	//}()
 	//return self.Write(Default_opts_w, batch)
 }
 
 func (self *RocksDBExt) Find(col int, key []byte, floor bool) (k, v []byte, err error) {
-	panic("foo")
+	//panic("foo")
+	r_opts := gorocksdb.NewDefaultReadOptions()
+	//r_opts.SetIterateUpperBound(key)
+	r_opts.SetTailing(true)
+	r_opts.SetReadaheadSize((1 << (2 * 9)) * 2)
 	i := self.NewIteratorCF(self.cf_opts[col].Opts_r, self.cf[col])
+	//i := self.NewIteratorCF(self.cf_opts[col].Opts_r, self.cf[col])
 	defer i.Close()
 	if err = i.Err(); err != nil {
 		return

@@ -1,21 +1,14 @@
 package benchmarking
 
 import (
-	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"testing"
 )
-
-const MaxBenchNameLength = 60
 
 type Benchmark = func(b *testing.B, i int)
 
 func AddBenchmark(b *testing.B, name string, benchmark Benchmark) {
-	util.Assert(len(name) <= MaxBenchNameLength)
-	name += strings.Repeat(" ", MaxBenchNameLength-len(name))
 	b.Run(name, func(b *testing.B) {
 		b.StopTimer()
 		prev_gc_pct := debug.SetGCPercent(-1)
@@ -37,11 +30,4 @@ func AddBenchmark(b *testing.B, name string, benchmark Benchmark) {
 			b.StopTimer()
 		}
 	})
-}
-
-func VOID(i ...interface{}) (interface{}) {
-	if len(i) < 0 {
-		fmt.Println(i)
-	}
-	return nil
 }

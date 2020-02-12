@@ -110,9 +110,9 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 	batch := gorocksdb.NewWriteBatch()
 	for _, entry := range state_change {
 		//fmt.Println("entry:", util.BytesToStrPadded(entry.K), "||", util.BytesToStrPadded(entry.V))
-		self.db.ToggleProfiling()
+		//self.db.ToggleProfiling()
 		found_v, err_0 := self.db.GetCol(COL_entries, entry.K)
-		self.db.ToggleProfiling()
+		//self.db.ToggleProfiling()
 		if err = err_0; err_0 != nil {
 			return
 		}
@@ -127,10 +127,14 @@ func (self *ExperimentalState) CommitBlock(state_change state.StateChange) (bloc
 			entry_cnt++
 		}
 		entry_v := append(entry_ord_b_endian, entry.V...)
+		//self.db.ToggleProfiling()
 		self.db.BatchPutCol(batch, COL_entries, entry.K, entry_v)
+		//self.db.ToggleProfiling()
 		//self.db.BatchPutCol(batch, COL_entries_historical, append(entry.K, block_ord_b_endian...), entry_v)
 		entry_hash := crypto.Keccak256(entry.K, entry_v)
+		//self.db.ToggleProfiling()
 		self.db.BatchPutCol(batch, COL_merkle, merkle_key(merkle_lvl_ord, entry_ord), entry_hash)
+		//self.db.ToggleProfiling()
 		//self.db.BatchPutCol(batch, COL_merkle_historical, merkle_key_historical(merkle_lvl_ord, entry_ord_b_endian, block_ord_b_endian), entry_hash)
 
 		//fmt.Printf("New node pos: %s, key: [ %s ], hash: [ %s ]\n",
@@ -277,6 +281,10 @@ func (self *ExperimentalState) getRaw(block_ord state.BlockOrdinal, k []byte) (r
 		return self.db.GetCol(COL_entries, k)
 	}
 	return self.db.MaxForPrefix(COL_entries_historical, append(k, util.ENC_b_endian_64(block_ord)...), len(k))
+}
+
+func (self *ExperimentalState) Close() {
+	self.db.Close()
 }
 
 var last_block_ord_key = []byte("last_block")

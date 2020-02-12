@@ -207,6 +207,7 @@ func (db *Database) insert(hash common.Hash, node node) {
 	_, has_been_inserted := db.dirties[hash]
 	db.lock.RUnlock()
 	if has_been_inserted {
+		panic("NOOO")
 		return
 	}
 	db.lock.Lock()

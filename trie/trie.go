@@ -74,6 +74,10 @@ type Trie struct {
 	cachegen, cachelimit uint16
 }
 
+func (self *Trie) GetDB() *Database {
+	return self.db
+}
+
 // SetCacheLimit sets the number of 'cache generations' to keep.
 // A cache generation is created by a call to Commit.
 func (t *Trie) SetCacheLimit(l uint16) {
@@ -256,6 +260,7 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
+		panic("NOO")
 		rn, err := t.resolveHash(n, prefix)
 		if err != nil {
 			return false, nil, err
@@ -348,9 +353,11 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 				// shortNode{..., shortNode{...}}.  Since the entry
 				// might not be loaded yet, resolve it just for this
 				// check.
-				cnode, err := t.resolve(n.Children[pos], prefix)
-				if err != nil {
-					return false, nil, err
+				var cnode node
+				if n, ok := n.Children[pos].(hashNode); ok {
+					if cnode, err = t.resolveHash(n, prefix); err != nil {
+						return false, nil, err
+					}
 				}
 				if cnode, ok := cnode.(*shortNode); ok {
 					k := append([]byte{byte(pos)}, cnode.Key...)
@@ -394,13 +401,6 @@ func concat(s1 []byte, s2 ...byte) []byte {
 	copy(r, s1)
 	copy(r[len(s1):], s2)
 	return r
-}
-
-func (t *Trie) resolve(n node, prefix []byte) (node, error) {
-	if n, ok := n.(hashNode); ok {
-		return t.resolveHash(n, prefix)
-	}
-	return n, nil
 }
 
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {

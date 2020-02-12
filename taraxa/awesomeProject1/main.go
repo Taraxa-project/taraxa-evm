@@ -2,9 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
+type FN = func(int) string
+
 func main() {
-	fmt.Println(crypto.Keccak256(nil))
+	var foo interface{} = func(i int) string {
+		return "foo"
+	}
+	switch f := foo.(type) {
+	case FN:
+		fmt.Println(f(1))
+	}
 }

@@ -8,7 +8,6 @@ import (
 
 type ethdb_adapter struct {
 	db    *rocksdb_ext.RocksDBExt
-	col   int
 	batch *gorocksdb.WriteBatch
 }
 
@@ -17,7 +16,7 @@ func (self *ethdb_adapter) Write() error {
 }
 
 func (self *ethdb_adapter) Get(key []byte) ([]byte, error) {
-	return self.db.GetCol(self.col, key)
+	return self.db.GetCol(COL_state_entries, key)
 }
 
 func (self *ethdb_adapter) NewBatch() ethdb.Batch {
@@ -25,7 +24,7 @@ func (self *ethdb_adapter) NewBatch() ethdb.Batch {
 }
 
 func (self *ethdb_adapter) Put(key []byte, value []byte) error {
-	self.db.BatchPutCol(self.batch, self.col, key, value)
+	self.db.BatchPutCol(self.batch, COL_state_entries, key, value)
 	return nil
 }
 
