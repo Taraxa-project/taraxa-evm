@@ -54,6 +54,11 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			CheckNonce:         !this.DisableNonceCheck,
 			DisableMinerReward: this.DisableMinerReward,
 		})
+		txErr := txResult.ConsensusErr
+		if txErr == nil {
+			txErr = txResult.ContractErr
+		}
+		util.Stringify(&txErr)
 		var intermediateRoot []byte
 		if chainConfig.IsByzantium(block.Number) {
 			stateDB.Finalise(true)
@@ -61,7 +66,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			intermediateRoot = stateDB.IntermediateRoot(chainConfig.IsEIP158(block.Number)).Bytes()
 		}
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
-		ethReceipt := types.NewReceipt(intermediateRoot, txResult.ContractErr != nil, uint64(ret.UsedGas))
+		ethReceipt := types.NewReceipt(intermediateRoot, txErr != nil, uint64(ret.UsedGas))
 		if tx.To == nil {
 			ethReceipt.ContractAddress = crypto.CreateAddress(tx.From, uint64(tx.Nonce))
 		}
@@ -70,11 +75,6 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ethReceipt.Logs = stateDB.GetLogs(tx.Hash)
 		ethReceipt.Bloom = types.CreateBloom(types.Receipts{ethReceipt})
 		ret.Receipts = append(ret.Receipts, ethReceipt)
-		txErr := txResult.ConsensusErr
-		if txErr == nil {
-			txErr = txResult.ContractErr
-		}
-		util.Stringify(&txErr)
 		ret.TransactionOutputs = append(ret.TransactionOutputs, &trx_engine.TransactionOutput{
 			ReturnValue: txResult.EVMReturnValue,
 			Error:       txErr,
