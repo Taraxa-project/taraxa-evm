@@ -26,7 +26,9 @@ func (r Receipt) MarshalJSON() ([]byte, error) {
 	}
 	var enc Receipt
 	enc.PostState = r.PostState
-	enc.Status = hexutil.Uint64(r.Status)
+	if enc.PostState == nil {
+		enc.Status = hexutil.Uint64(r.Status)
+	}
 	enc.CumulativeGasUsed = hexutil.Uint64(r.CumulativeGasUsed)
 	enc.Bloom = r.Bloom
 	enc.Logs = r.Logs
