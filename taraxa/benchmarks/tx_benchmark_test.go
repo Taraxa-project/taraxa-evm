@@ -65,7 +65,7 @@ func BenchmarkRoot(b *testing.B) {
 		msg := types.NewMessage(
 			evm_ctx.Origin, &receiver, 0, test_amount,
 			evm_ctx.GasLimit, evm_ctx.GasPrice, nil, true)
-		state_transition := core.NewStateTransition(evm, msg, gas_pool)
+		state_transition := core.NewStateTransitionWithMinerReward(evm, msg, gas_pool)
 		state_db.Prepare(tx_hash, block_hash, 0)
 		_, usedGas, vmErr, consensusErr := state_transition.TransitionDb()
 		root, err43 := state_db.Commit(true)
@@ -109,7 +109,7 @@ func BenchmarkRoot(b *testing.B) {
 		msg := types.NewMessage(
 			evm_ctx.Origin, &receiver, 0, test_amount,
 			evm_ctx.GasLimit, evm_ctx.GasPrice, nil, true)
-		state_transition := core.NewStateTransition(evm, msg, gas_pool)
+		state_transition := core.NewStateTransitionWithMinerReward(evm, msg, gas_pool)
 		state_db.Prepare(tx_hash, block_hash, 0)
 		_, usedGas, vmErr, consensusErr := state_transition.TransitionDb()
 		root, err43 := state_db.Commit(true)

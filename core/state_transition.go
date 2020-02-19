@@ -48,15 +48,16 @@ The state transitioning model does all the necessary work to work out a valid ne
 6) Derive new state root
 */
 type StateTransition struct {
-	gp         *GasPool
-	msg        Message
-	gas        uint64
-	gasPrice   *big.Int
-	initialGas uint64
-	value      *big.Int
-	data       []byte
-	state      vm.StateDB
-	evm        *vm.EVM
+	gp                   *GasPool
+	msg                  Message
+	gas                  uint64
+	gasPrice             *big.Int
+	initialGas           uint64
+	value                *big.Int
+	data                 []byte
+	state                vm.StateDB
+	evm                  *vm.EVM
+	disable_miner_reward bool
 }
 
 // Message represents a message sent to a contract.
@@ -108,16 +109,21 @@ func IntrinsicGas(data []byte, contractCreation, homestead bool) (uint64, error)
 }
 
 // NewStateTransition initialises and returns a new state transition object.
-func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
+func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool, disable_miner_reward bool) *StateTransition {
 	return &StateTransition{
-		gp:       gp,
-		evm:      evm,
-		msg:      msg,
-		gasPrice: msg.GasPrice(),
-		value:    msg.Value(),
-		data:     msg.Data(),
-		state:    evm.StateDB,
+		gp:                   gp,
+		evm:                  evm,
+		msg:                  msg,
+		gasPrice:             msg.GasPrice(),
+		value:                msg.Value(),
+		data:                 msg.Data(),
+		state:                evm.StateDB,
+		disable_miner_reward: disable_miner_reward,
 	}
+}
+
+func NewStateTransitionWithMinerReward(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
+	return NewStateTransition(evm, msg, gp, false)
 }
 
 // ApplyMessage computes the new state by applying the given message
@@ -210,7 +216,9 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 		}
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	if !st.disable_miner_reward {
+		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	}
 	return ret, st.gasUsed(), vmerr, nil
 }
 
