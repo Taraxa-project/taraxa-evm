@@ -15,18 +15,21 @@ var _ = (*receiptMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (r Receipt) MarshalJSON() ([]byte, error) {
 	type Receipt struct {
-		PostState         hexutil.Bytes  `json:"root"`
-		Status            hexutil.Uint64 `json:"status"`
-		CumulativeGasUsed hexutil.Uint64 `json:"cumulativeGasUsed" gencodec:"required"`
-		Bloom             Bloom          `json:"logsBloom"         gencodec:"required"`
-		Logs              []*Log         `json:"logs"              gencodec:"required"`
-		TxHash            common.Hash    `json:"transactionHash" gencodec:"required"`
-		ContractAddress   common.Address `json:"contractAddress"`
-		GasUsed           hexutil.Uint64 `json:"gasUsed" gencodec:"required"`
+		PostState         *hexutil.Bytes  `json:"root"`
+		Status            *hexutil.Uint64 `json:"status"`
+		CumulativeGasUsed hexutil.Uint64  `json:"cumulativeGasUsed" gencodec:"required"`
+		Bloom             Bloom           `json:"logsBloom"         gencodec:"required"`
+		Logs              []*Log          `json:"logs"              gencodec:"required"`
+		TxHash            common.Hash     `json:"transactionHash" gencodec:"required"`
+		ContractAddress   common.Address  `json:"contractAddress"`
+		GasUsed           hexutil.Uint64  `json:"gasUsed" gencodec:"required"`
 	}
 	var enc Receipt
-	enc.PostState = r.PostState
-	enc.Status = hexutil.Uint64(r.Status)
+	if r.PostState != nil {
+		enc.PostState = (*hexutil.Bytes)(&r.PostState)
+	} else {
+		enc.Status = (*hexutil.Uint64)(&r.Status)
+	}
 	enc.CumulativeGasUsed = hexutil.Uint64(r.CumulativeGasUsed)
 	enc.Bloom = r.Bloom
 	enc.Logs = r.Logs
