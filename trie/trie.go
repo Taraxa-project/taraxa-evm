@@ -350,11 +350,9 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 				// shortNode{..., shortNode{...}}.  Since the entry
 				// might not be loaded yet, resolve it just for this
 				// check.
-				var cnode node
-				if n, ok := n.Children[pos].(hashNode); ok {
-					if cnode, err = t.resolveHash(n, prefix); err != nil {
-						return false, nil, err
-					}
+				cnode, err := t.resolve(n.Children[pos], prefix)
+				if err != nil {
+					return false, nil, err
 				}
 				if cnode, ok := cnode.(*shortNode); ok {
 					k := append([]byte{byte(pos)}, cnode.Key...)
@@ -391,6 +389,20 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v (%v)", n, n, key))
 	}
+}
+
+func concat(s1 []byte, s2 ...byte) []byte {
+	r := make([]byte, len(s1)+len(s2))
+	copy(r, s1)
+	copy(r[len(s1):], s2)
+	return r
+}
+
+func (t *Trie) resolve(n node, prefix []byte) (node, error) {
+	if n, ok := n.(hashNode); ok {
+		return t.resolveHash(n, prefix)
+	}
+	return n, nil
 }
 
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
@@ -434,11 +446,4 @@ func (t *Trie) hashRoot(db *Database) (node, node, error) {
 	h.dot_g = t.Dot_g
 	defer returnHasherToPool(h)
 	return h.hash(t.root, db, true)
-}
-
-func concat(s1 []byte, s2 ...byte) []byte {
-	r := make([]byte, len(s1)+len(s2))
-	copy(r, s1)
-	copy(r[len(s1):], s2)
-	return r
 }

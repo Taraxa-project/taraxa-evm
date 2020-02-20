@@ -204,9 +204,6 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 // size tracking.
 func (db *Database) insert(hash common.Hash, node node) {
 	db.lock.RLock()
-	if db.batch_put_err != nil {
-		return
-	}
 	_, has_been_inserted := db.dirties[hash]
 	db.lock.RUnlock()
 	if has_been_inserted {
@@ -221,6 +218,9 @@ func (db *Database) insert(hash common.Hash, node node) {
 	db.dirties[hash] = cached_node
 	if db.batch == nil {
 		db.batch = db.diskdb_w.NewBatch()
+	}
+	if db.batch_put_err != nil {
+		return
 	}
 	db.batch_put_err = db.batch.Put(hash[:], cached_node.rlp())
 }

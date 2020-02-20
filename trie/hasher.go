@@ -189,17 +189,24 @@ func (h *hasher) hash_and_maybe_store(n node, db *Database, force bool) (node, e
 	// Larger nodes are replaced by their hash and stored in the database.
 	hash, _ := n.cached_hash()
 	if hash == nil {
-		hash = make(hashNode, h.sha.Size())
-		h.sha.Reset()
-		h.sha.Write(h.tmp)
-		h.sha.Read(hash)
+		hash = h.makeHashNode(h.tmp)
 	}
+
 	if db != nil {
 		// We are pooling the trie nodes into an intermediate memory cache
 		db.insert(common.BytesToHash(hash), n)
 	}
 	return hash, nil
 }
+
+func (h *hasher) makeHashNode(data []byte) hashNode {
+	n := make(hashNode, h.sha.Size())
+	h.sha.Reset()
+	h.sha.Write(data)
+	h.sha.Read(n)
+	return n
+}
+
 
 func (self *hasher) dot_node(n node) (ret dot.Node) {
 	switch n := n.(type) {
