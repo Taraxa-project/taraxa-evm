@@ -24,11 +24,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
-	"reflect"
-	"runtime"
-	"sync/atomic"
+	"github.com/emicklei/dot"
 )
 
 var (
@@ -72,6 +68,7 @@ type Trie struct {
 	// new nodes are tagged with the current generation and unloaded
 	// when their generation is older than than cachegen-cachelimit.
 	cachegen, cachelimit uint16
+	Dot_g                *dot.Graph
 }
 
 func (self *Trie) GetDB() *Database {
@@ -396,13 +393,6 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 	}
 }
 
-func concat(s1 []byte, s2 ...byte) []byte {
-	r := make([]byte, len(s1)+len(s2))
-	copy(r, s1)
-	copy(r[len(s1):], s2)
-	return r
-}
-
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
 	cacheMissCounter.Inc(1)
 
@@ -441,61 +431,14 @@ func (t *Trie) hashRoot(db *Database) (node, node, error) {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	h := newHasher(t.cachegen, t.cachelimit)
+	h.dot_g = t.Dot_g
 	defer returnHasherToPool(h)
 	return h.hash(t.root, db, true)
 }
 
-type LeafVisitor = func(key, value []byte, parent_hash common.Hash) error
-
-type visitContext struct {
-	visitor               LeafVisitor
-	maxParallelBranches   int32
-	numConcurrentBranches int32
-	err                   concurrent.AtomicError
-}
-
-func (this *Trie) VisitLeavesParallel(visitor LeafVisitor) error {
-	ctx := visitContext{visitor: visitor, maxParallelBranches: int32(40)}
-	this.visitLeaves(nil, nil, this.root, &ctx)
-	for !atomic.CompareAndSwapInt32(&ctx.numConcurrentBranches, 0, 0) {
-		runtime.Gosched()
-	}
-	return ctx.err.Get()
-}
-
-func (this *Trie) visitLeaves(path []byte, n_parent, n node, ctx *visitContext) {
-	if ctx.err.IsPresent() {
-		return
-	}
-	switch n := n.(type) {
-	case *shortNode:
-		this.visitLeaves(append(path[:], n.Key...), n, n.Val, ctx)
-	case *fullNode:
-		for pos, child := range n.Children {
-			if child == nil {
-				continue
-			}
-			this.visitLeaves(append(path[:], byte(pos)), n, child, ctx)
-		}
-	case hashNode:
-		action := func() {
-			child, err := this.resolveHash(n, path)
-			ctx.err.SetIfAbsent(err)
-			this.visitLeaves(path, n, child, ctx)
-		}
-		if atomic.LoadInt32(&ctx.numConcurrentBranches) < atomic.LoadInt32(&ctx.maxParallelBranches) {
-			atomic.AddInt32(&ctx.numConcurrentBranches, 1)
-			go util.Chain(action, func() {
-				atomic.AddInt32(&ctx.numConcurrentBranches, -1)
-			})()
-		} else {
-			action()
-		}
-	case valueNode:
-		ctx.err.SetIfAbsent(ctx.visitor(path[:], n[:], common.Hash{}))
-	default:
-		if n != nil {
-			panic(fmt.Sprintf("Unsupported node type: %s; node: %s", reflect.TypeOf(n), n))
-		}
-	}
+func concat(s1 []byte, s2 ...byte) []byte {
+	r := make([]byte, len(s1)+len(s2))
+	copy(r, s1)
+	copy(r[len(s1):], s2)
+	return r
 }

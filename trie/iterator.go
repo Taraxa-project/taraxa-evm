@@ -188,7 +188,7 @@ func (it *nodeIterator) LeafProof() [][]byte {
 			for i, item := range it.stack[:len(it.stack)-1] {
 				// Gather nodes that end up as hash nodes (or the root)
 				node, _, _ := hasher.hashChildren(item.node, nil)
-				hashed, _ := hasher.store(node, nil, false)
+				hashed, _ := hasher.hash_and_maybe_store(node, nil, false)
 				if _, ok := hashed.(hashNode); ok || i == 0 {
 					enc, _ := rlp.EncodeToBytes(node)
 					proofs = append(proofs, enc)
@@ -311,7 +311,7 @@ func (it *nodeIterator) nextChild(parent *nodeIteratorState, ancestor common.Has
 		for i := parent.index + 1; i < len(node.Children); i++ {
 			child := node.Children[i]
 			if child != nil {
-				hash, _ := child.cache()
+				hash, _ := child.cached_hash()
 				state := &nodeIteratorState{
 					hash:    common.BytesToHash(hash),
 					node:    child,
@@ -327,7 +327,7 @@ func (it *nodeIterator) nextChild(parent *nodeIteratorState, ancestor common.Has
 	case *shortNode:
 		// Short node, return the pointer singleton child
 		if parent.index < 0 {
-			hash, _ := node.Val.cache()
+			hash, _ := node.Val.cached_hash()
 			state := &nodeIteratorState{
 				hash:    common.BytesToHash(hash),
 				node:    node.Val,

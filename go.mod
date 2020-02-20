@@ -8,6 +8,7 @@ require (
 	github.com/btcsuite/btcd v0.0.0-20190824003749-130ea5bddde3
 	github.com/cornelk/hashmap v1.0.0
 	github.com/dchest/siphash v1.2.1
+	github.com/emicklei/dot v0.10.2
 	github.com/emirpasic/gods v1.12.0
 	github.com/go-stack/stack v1.8.0
 	github.com/google/uuid v1.1.1

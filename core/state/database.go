@@ -66,7 +66,6 @@ type Trie interface {
 	TryDelete(key []byte) error
 	Commit() (common.Hash, error)
 	Hash() common.Hash
-	VisitLeavesParallel(visitor trie.LeafVisitor) error
 }
 
 func NewDatabaseFromTrieDB(db *trie.Database) Database {

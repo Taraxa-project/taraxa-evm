@@ -9,9 +9,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/awesomeProject1/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/awesomeProject1/util/rocksdb_ext"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/test_util"
+	"github.com/emicklei/dot"
 	"github.com/tecbot/gorocksdb"
 	"math/rand"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -49,7 +51,7 @@ func Root(ctx *test_util.TestContext) {
 		}
 		return ret
 	}
-	test_entry_cnt := 1000
+	test_entry_cnt := 100000
 	test_state_change := rand_state_change(test_entry_cnt)
 
 	new_trie_state := func(ctx testing.TB) state.State {
@@ -77,7 +79,7 @@ func Root(ctx *test_util.TestContext) {
 	ctx.TARGET_TEST("trie_state", new_trie_state)
 	ctx.TARGET_TEST("experimental_state", new_experimental_state)
 	ctx.TEST("rand_test", func(ctx *testing.T, s state.State) {
-		//ctx.Skip()
+		ctx.Skip()
 		state_change := test_state_change
 		for i := 0; i < 5; i++ {
 			fmt.Println(i)
@@ -98,16 +100,18 @@ func Root(ctx *test_util.TestContext) {
 			state_change = rand_state_change_sortition(test_state_change, 0.001)
 		}
 	})
-	ctx.TEST("trie_state_rand_prepop", func(ctx *testing.T, sut state.State) {
-		ctx.Skip()
-		//defer sut.Close()
-		state_change := rand_state_change(5000000)
-		fmt.Println("base entry count", len(state_change))
-		_, _, err_0 := sut.CommitBlock(state_change)
+	ctx.TEST("foo", func(t *testing.T) {
+		s := new_trie_state(t).(*eth_trie.TrieState)
+		_, _, err_0 := s.CommitBlock(test_state_change)
 		util.PanicIfNotNil(err_0)
-		sc := rand_state_change_sortition(state_change, 0.01)
-		fmt.Println("upd entry count", len(sc))
-		sut.CommitBlock(sc)
+		//s.Dot_g = dot.NewGraph()
+		//s.Dot_g.Attr("ratio", "0.5")
+		for i := 0; i < 10; i++ {
+			fmt.Println(i)
+			_, _, err_1 := s.CommitBlock(rand_state_change_sortition(test_state_change, 0.001))
+			util.PanicIfNotNil(err_1)
+		}
+		//view(s.Dot_g)
 	})
 	ctx.BENCH("trie_state_rand_prepop", func(ctx *testing.B) {
 		ctx.Skip()
@@ -205,4 +209,16 @@ func NOOP(...interface{}) {
 
 func copy_bytes(src []byte) []byte {
 	return append(make([]byte, 0, len(src)), src...)
+}
+
+func view(g *dot.Graph) {
+	dot_f_path := "/tmp/tmp.dot"
+	pdf_f_path := "/tmp/tmp.pdf"
+	os.Remove(dot_f_path)
+	os.Remove(pdf_f_path)
+	dot_f, err_0 := os.Create(dot_f_path)
+	util.PanicIfNotNil(err_0)
+	g.Write(dot_f)
+	util.PanicIfNotNil(exec.Command("dot", "-Tpdf", dot_f_path, "-o", pdf_f_path).Run())
+	util.PanicIfNotNil(exec.Command("open", pdf_f_path).Run())
 }

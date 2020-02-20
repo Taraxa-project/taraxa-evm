@@ -45,7 +45,7 @@ type Database struct {
 type rawNode []byte
 
 func (n rawNode) canUnload(uint16, uint16) bool { panic("this should never end up in a live trie") }
-func (n rawNode) cache() (hashNode, bool)       { panic("this should never end up in a live trie") }
+func (n rawNode) cached_hash() (hashNode, bool) { panic("this should never end up in a live trie") }
 func (n rawNode) fstring(ind string) string     { panic("this should never end up in a live trie") }
 
 // rawFullNode represents only the useful data content of a full node, with the
@@ -54,7 +54,7 @@ func (n rawNode) fstring(ind string) string     { panic("this should never end u
 type rawFullNode [17]node
 
 func (n rawFullNode) canUnload(uint16, uint16) bool { panic("this should never end up in a live trie") }
-func (n rawFullNode) cache() (hashNode, bool)       { panic("this should never end up in a live trie") }
+func (n rawFullNode) cached_hash() (hashNode, bool) { panic("this should never end up in a live trie") }
 func (n rawFullNode) fstring(ind string) string     { panic("this should never end up in a live trie") }
 
 func (n rawFullNode) EncodeRLP(w io.Writer) error {
@@ -79,7 +79,7 @@ type rawShortNode struct {
 }
 
 func (n rawShortNode) canUnload(uint16, uint16) bool { panic("this should never end up in a live trie") }
-func (n rawShortNode) cache() (hashNode, bool)       { panic("this should never end up in a live trie") }
+func (n rawShortNode) cached_hash() (hashNode, bool) { panic("this should never end up in a live trie") }
 func (n rawShortNode) fstring(ind string) string     { panic("this should never end up in a live trie") }
 
 // cachedNode is all the information we know about a single cached node in the
@@ -204,10 +204,12 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 // size tracking.
 func (db *Database) insert(hash common.Hash, node node) {
 	db.lock.RLock()
+	if db.batch_put_err != nil {
+		return
+	}
 	_, has_been_inserted := db.dirties[hash]
 	db.lock.RUnlock()
 	if has_been_inserted {
-		panic("NOOO")
 		return
 	}
 	db.lock.Lock()
@@ -219,9 +221,6 @@ func (db *Database) insert(hash common.Hash, node node) {
 	db.dirties[hash] = cached_node
 	if db.batch == nil {
 		db.batch = db.diskdb_w.NewBatch()
-	}
-	if db.batch_put_err != nil {
-		return
 	}
 	db.batch_put_err = db.batch.Put(hash[:], cached_node.rlp())
 }
@@ -272,8 +271,8 @@ func (db *Database) Commit() (err error) {
 		db.batch_put_err = nil
 		db.dirties = make(Dirties)
 	}()
-	//if err = db.batch_put_err; err == nil && db.batch != nil {
-	//	err = db.batch.Write()
-	//}
+	if err = db.batch_put_err; err == nil && db.batch != nil {
+		err = db.batch.Write()
+	}
 	return
 }

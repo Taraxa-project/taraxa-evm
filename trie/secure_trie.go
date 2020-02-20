@@ -126,10 +126,6 @@ func (t *SecureTrie) Copy() *SecureTrie {
 	}
 }
 
-func (this *SecureTrie) VisitLeavesParallel(visitor LeafVisitor) error {
-	return this.trie.VisitLeavesParallel(visitor)
-}
-
 // NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
 // starts at the key after the given start key.
 func (t *SecureTrie) NodeIterator(start []byte) NodeIterator {

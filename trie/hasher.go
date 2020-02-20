@@ -17,7 +17,12 @@
 package trie
 
 import (
+	"fmt"
+	"github.com/emicklei/dot"
 	"hash"
+	"math/rand"
+	"reflect"
+	"strconv"
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -30,6 +35,7 @@ type hasher struct {
 	sha        keccakState
 	cachegen   uint16
 	cachelimit uint16
+	dot_g      *dot.Graph
 }
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
@@ -68,6 +74,7 @@ func newHasher(cachegen, cachelimit uint16) *hasher {
 }
 
 func returnHasherToPool(h *hasher) {
+	h.dot_g = nil
 	hasherPool.Put(h)
 }
 
@@ -75,7 +82,7 @@ func returnHasherToPool(h *hasher) {
 // original node initialized with the computed hash to replace the original one.
 func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// If we're not storing the node, just hashing, use available cached data
-	if hash, dirty := n.cache(); hash != nil {
+	if hash, dirty := n.cached_hash(); hash != nil {
 		if db == nil {
 			return hash, n, nil
 		}
@@ -94,7 +101,7 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	if err != nil {
 		return hashNode{}, n, err
 	}
-	hashed, err := h.store(collapsed, db, force)
+	hashed, err := h.hash_and_maybe_store(collapsed, db, force)
 	if err != nil {
 		return hashNode{}, n, err
 	}
@@ -125,6 +132,7 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 
 	switch n := original.(type) {
 	case *shortNode:
+		h.dot_edge(n, n.Val)
 		// Hash the short node's child, caching the newly hashed subtree
 		collapsed, cached := n.copy(), n.copy()
 		collapsed.Key = hexToCompact(n.Key)
@@ -139,6 +147,9 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 		return collapsed, cached, nil
 
 	case *fullNode:
+		for _, c := range n.Children {
+			h.dot_edge(n, c)
+		}
 		// Hash the full node's children, caching the newly hashed subtrees
 		collapsed, cached := n.copy(), n.copy()
 
@@ -152,17 +163,17 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 		}
 		cached.Children[16] = n.Children[16]
 		return collapsed, cached, nil
-
-	default:
-		// Value and hash nodes don't have children so they're left as were
+	case hashNode:
 		return n, original, nil
+	default:
+		panic("impossible")
 	}
 }
 
-// store hashes the node n and if we have a storage layer specified, it writes
+// hash_and_maybe_store hashes the node n and if we have a storage layer specified, it writes
 // the key/value pair to it and tracks any node->child references as well as any
 // node->external trie references.
-func (h *hasher) store(n node, db *Database, force bool) (node, error) {
+func (h *hasher) hash_and_maybe_store(n node, db *Database, force bool) (node, error) {
 	// Don't store hashes or empty nodes.
 	if _, isHash := n.(hashNode); n == nil || isHash {
 		return n, nil
@@ -176,39 +187,43 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 		return n, nil // Nodes smaller than 32 bytes are stored inside their parent
 	}
 	// Larger nodes are replaced by their hash and stored in the database.
-	hash, _ := n.cache()
+	hash, _ := n.cached_hash()
 	if hash == nil {
-		hash = h.makeHashNode(h.tmp)
+		hash = make(hashNode, h.sha.Size())
+		h.sha.Reset()
+		h.sha.Write(h.tmp)
+		h.sha.Read(hash)
 	}
-
 	if db != nil {
 		// We are pooling the trie nodes into an intermediate memory cache
-		hash := common.BytesToHash(hash)
-		db.insert(hash, n)
-		// TODO put values here
-		//// Track external references from account->storage trie
-		//if h.onleaf != nil {
-		//	switch n := n.(type) {
-		//	case *shortNode:
-		//		if child, ok := n.Val.(valueNode); ok {
-		//			h.onleaf(child, hash)
-		//		}
-		//	case *fullNode:
-		//		for i := 0; i < 16; i++ {
-		//			if child, ok := n.Children[i].(valueNode); ok {
-		//				h.onleaf(child, hash)
-		//			}
-		//		}
-		//	}
-		//}
+		db.insert(common.BytesToHash(hash), n)
 	}
 	return hash, nil
 }
 
-func (h *hasher) makeHashNode(data []byte) hashNode {
-	n := make(hashNode, h.sha.Size())
-	h.sha.Reset()
-	h.sha.Write(data)
-	h.sha.Read(n)
-	return n
+func (self *hasher) dot_node(n node) (ret dot.Node) {
+	switch n := n.(type) {
+	case *shortNode, *fullNode:
+		reflect_n := reflect.ValueOf(n)
+		ret = self.dot_g.Node(fmt.Sprint(reflect_n.Pointer()))
+		ret.Label(reflect_n.Type().String())
+	default:
+		ret = self.dot_g.Node(strconv.FormatUint(rand.Uint64(), 10))
+		if n == nil {
+			ret.Label("NULL")
+		} else {
+			ret.Label(reflect.ValueOf(n).Type().String())
+			if _, ok := n.(valueNode); ok {
+				self.dot_g.AddToSameRank("leaves", ret)
+			}
+		}
+	}
+	return
+}
+
+func (self *hasher) dot_edge(from, to node) {
+	if self.dot_g == nil {
+		return
+	}
+	self.dot_g.Edge(self.dot_node(from), self.dot_node(to))
 }

@@ -29,7 +29,7 @@ var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b
 
 type node interface {
 	fstring(string) string
-	cache() (hashNode, bool)
+	cached_hash() (hashNode, bool)
 	canUnload(cachegen, cachelimit uint16) bool
 }
 
@@ -85,10 +85,10 @@ func (n *shortNode) canUnload(gen, limit uint16) bool { return n.flags.canUnload
 func (n hashNode) canUnload(uint16, uint16) bool      { return false }
 func (n valueNode) canUnload(uint16, uint16) bool     { return false }
 
-func (n *fullNode) cache() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
-func (n *shortNode) cache() (hashNode, bool) { return n.flags.hash, n.flags.dirty }
-func (n hashNode) cache() (hashNode, bool)   { return nil, true }
-func (n valueNode) cache() (hashNode, bool)  { return nil, true }
+func (n *fullNode) cached_hash() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
+func (n *shortNode) cached_hash() (hashNode, bool) { return n.flags.hash, n.flags.dirty }
+func (n hashNode) cached_hash() (hashNode, bool)   { return nil, true }
+func (n valueNode) cached_hash() (hashNode, bool)  { return nil, true }
 
 // Pretty printing.
 func (n *fullNode) String() string  { return n.fstring("") }

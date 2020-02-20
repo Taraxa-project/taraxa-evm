@@ -7,6 +7,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/awesomeProject1/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/awesomeProject1/util/rocksdb_ext"
 	"github.com/Taraxa-project/taraxa-evm/trie"
+	"github.com/emicklei/dot"
 	"github.com/tecbot/gorocksdb"
 )
 
@@ -15,6 +16,7 @@ type TrieState struct {
 	ethdb_adapter
 	block_count  state.BlockOrdinal
 	current_root common.Hash
+	Dot_g        *dot.Graph
 }
 type TrieStateConfig = struct {
 	rocksdb_ext.RocksDBExtDBConfig
@@ -82,20 +84,25 @@ func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordina
 	if err = self.db.Commit(self.batch); err != nil {
 		return
 	}
-	//fmt.Println("trie_state approx size:", self.db.GetApproximateSizesCF())
 	block_ordinal = self.block_count
 	self.block_count++
 	return
 }
 
-func (self *TrieState) getTrie(block_ordinal state.BlockOrdinal) (*trie.Trie, error) {
+func (self *TrieState) getTrie(block_ordinal state.BlockOrdinal) (ret *trie.Trie, err error) {
+	defer func() {
+		if ret != nil {
+			ret.Dot_g = self.Dot_g
+		}
+	}()
 	trie_db := trie.NewDatabase(&self.ethdb_adapter)
 	if self.block_count == 0 || block_ordinal == self.block_count-1 {
 		return trie.New(self.current_root, trie_db)
 	}
-	root, err := self.db.GetCol(COL_block_num_to_root, util.ENC_b_endian_compact_64(block_ordinal))
+	var root []byte
+	root, err = self.db.GetCol(COL_block_num_to_root, util.ENC_b_endian_compact_64(block_ordinal))
 	if err != nil {
-		return nil, err
+		return
 	}
 	return trie.New(common.BytesToHash(root), trie_db)
 }
