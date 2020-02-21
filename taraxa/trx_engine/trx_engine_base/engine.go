@@ -5,27 +5,18 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 )
 
 type BaseTrxEngine struct {
-	BaseVMConfig
-	GenesisBlock *types.Block
+	BaseEngineConfig
 	EvmConfig    *vm.Config
 	GetBlockHash vm.GetHashFunc
-	ReadDB       state.Database
-	WriteDB      state.Database
-	WriteDiskDB  ethdb.Database
+	DB           *state.Database
 }
 
-func (this *BaseTrxEngine) ApplyGenesis() error {
-	_, _, err := core.SetupGenesisBlock(this.WriteDiskDB, this.Genesis)
-	return err
-}
-
-func (this *BaseTrxEngine) CommitToDisk() error {
-	return this.ReadDB.TrieDB().Commit()
+func (self *BaseTrxEngine) CommitToDisk() error {
+	return self.DB.Commit()
 }
 
 type TransactionRequest = struct {
@@ -45,13 +36,13 @@ type TransactionResult = struct {
 	ConsensusErr   error
 }
 
-func (this *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
+func (self *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
 	msg := types.NewMessage(
 		req.Transaction.From, req.Transaction.To, uint64(req.Transaction.Nonce),
 		req.Transaction.Value.ToInt(), uint64(req.Transaction.Gas),
 		req.Transaction.GasPrice.ToInt(), req.Transaction.Input, req.CheckNonce)
 	evmContext := vm.Context{
-		GetHash:     this.GetBlockHash,
+		GetHash:     self.GetBlockHash,
 		Origin:      msg.From(),
 		Coinbase:    req.BlockHeader.Miner,
 		BlockNumber: req.BlockHeader.Number,
@@ -61,9 +52,9 @@ func (this *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *Transact
 		GasPrice:    msg.GasPrice(),
 	}
 	evm := vm.NewEVMWithInterpreter(
-		evmContext, req.DB, this.Genesis.Config, this.EvmConfig,
+		evmContext, req.DB, self.Genesis.Config, self.EvmConfig,
 		func(evm *vm.EVM) vm.Interpreter {
-			return vm.NewEVMInterpreterWithExecutionController(evm, this.EvmConfig, req.OnEvmInstruction)
+			return vm.NewEVMInterpreterWithExecutionController(evm, self.EvmConfig, req.OnEvmInstruction)
 		},
 	)
 	ret, usedGas, vmErr, consensusErr := core.

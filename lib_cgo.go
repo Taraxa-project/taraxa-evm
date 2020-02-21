@@ -23,7 +23,7 @@ var env = managed_memory.ManagedMemory{Functions: managed_memory.Functions{
 		factory.DisableMinerReward = true
 		factory.DisableNonceCheck = true
 		factory.DisableGasFee = true
-		factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
+		factory.DBConfig = &trx_engine_base.StateDBConfig{
 			DBFactory: &cgo.Factory{Pointer: db_ptr},
 		}
 		factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(uint64) (ret common.Hash) {

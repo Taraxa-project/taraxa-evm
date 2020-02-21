@@ -188,7 +188,7 @@ func (it *nodeIterator) LeafProof() [][]byte {
 			for i, item := range it.stack[:len(it.stack)-1] {
 				// Gather nodes that end up as hash nodes (or the root)
 				node, _, _ := hasher.hashChildren(item.node, nil)
-				hashed, _ := hasher.hash_and_maybe_store(node, nil, false)
+				hashed, _ := hasher.hash_and_maybe_store(node, false, nil)
 				if _, ok := hashed.(hashNode); ok || i == 0 {
 					enc, _ := rlp.EncodeToBytes(node)
 					proofs = append(proofs, enc)
@@ -294,7 +294,7 @@ func (it *nodeIterator) peek(descend bool) (*nodeIteratorState, *int, []byte, er
 
 func (st *nodeIteratorState) resolve(tr *Trie, path []byte) error {
 	if hash, ok := st.node.(hashNode); ok {
-		resolved, err := tr.resolveHash(hash, path)
+		resolved, err := tr.resolve(hash, path)
 		if err != nil {
 			return err
 		}

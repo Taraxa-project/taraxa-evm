@@ -25,8 +25,8 @@ func Test_concurrent_fuzz(t *testing.T) {
 		factory.Genesis = trx_engine.TaraxaGenesisConfig
 		factory.DisableMinerReward = true
 		factory.DisableNonceCheck = true
-		factory.FreeGas = true
-		factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
+		factory.DisableGasFee = true
+		factory.DBConfig = &trx_engine_base.StateDBConfig{
 			DBFactory: &memory.Factory{},
 		}
 		factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(uint64) (ret common.Hash) {
@@ -34,14 +34,14 @@ func Test_concurrent_fuzz(t *testing.T) {
 		})
 		engine, _, err_0 := factory.NewInstance()
 		util.PanicIfNotNil(err_0)
-		state_db, err_1 := state.New(common.Hash{}, engine.ReadDB)
+		state_db, err_1 := state.New(common.Hash{}, engine.DB)
 		util.PanicIfNotNil(err_1)
 		for i := 0; i < len(addrs); i++ {
 			state_db.SetBalance(addrs[i], big.NewInt(1000))
 		}
 		root, err_2 := state_db.Commit(true)
 		util.PanicIfNotNil(err_2)
-		state_db.Database().TrieDB().Commit()
+		state_db.Database().Commit()
 		if base_root == nil {
 			base_root = &root
 		} else {

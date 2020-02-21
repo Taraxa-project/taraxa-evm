@@ -18,6 +18,7 @@ package types
 
 import (
 	"bytes"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -35,7 +36,7 @@ func DeriveSha(list DerivableList) common.Hash {
 	for i := 0; i < list.Len(); i++ {
 		keybuf.Reset()
 		rlp.Encode(keybuf, uint(i))
-		trie.Update(keybuf.Bytes(), list.GetRlp(i))
+		util.PanicIfNotNil(trie.Insert(keybuf.Bytes(), list.GetRlp(i)))
 	}
 	return trie.Hash()
 }

@@ -23,9 +23,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
-/*
- * This is a test memory database. Do not use for any production it does not get persisted
- */
 type MemDatabase struct {
 	db   map[string][]byte
 	lock sync.RWMutex
@@ -51,14 +48,6 @@ func (db *MemDatabase) Put(key []byte, value []byte) error {
 	return nil
 }
 
-func (db *MemDatabase) Has(key []byte) (bool, error) {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-
-	_, ok := db.db[string(key)]
-	return ok, nil
-}
-
 func (db *MemDatabase) Get(key []byte) ([]byte, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
@@ -67,17 +56,6 @@ func (db *MemDatabase) Get(key []byte) ([]byte, error) {
 		return common.CopyBytes(entry), nil
 	}
 	return nil, errors.New("not found")
-}
-
-func (db *MemDatabase) Keys() [][]byte {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-
-	keys := [][]byte{}
-	for key := range db.db {
-		keys = append(keys, []byte(key))
-	}
-	return keys
 }
 
 func (db *MemDatabase) Delete(key []byte) error {
@@ -93,8 +71,6 @@ func (db *MemDatabase) Close() {}
 func (db *MemDatabase) NewBatch() Batch {
 	return &memBatch{db: db}
 }
-
-func (db *MemDatabase) Len() int { return len(db.db) }
 
 type kv struct {
 	k, v []byte
@@ -113,12 +89,6 @@ func (b *memBatch) Put(key, value []byte) error {
 	return nil
 }
 
-func (b *memBatch) Delete(key []byte) error {
-	b.writes = append(b.writes, kv{common.CopyBytes(key), nil, true})
-	b.size += 1
-	return nil
-}
-
 func (b *memBatch) Write() error {
 	b.db.lock.Lock()
 	defer b.db.lock.Unlock()
@@ -131,13 +101,4 @@ func (b *memBatch) Write() error {
 		b.db.db[string(kv.k)] = kv.v
 	}
 	return nil
-}
-
-func (b *memBatch) ValueSize() int {
-	return b.size
-}
-
-func (b *memBatch) Reset() {
-	b.writes = b.writes[:0]
-	b.size = 0
 }

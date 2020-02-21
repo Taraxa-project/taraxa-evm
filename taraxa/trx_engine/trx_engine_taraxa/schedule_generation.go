@@ -51,7 +51,7 @@ func (this *scheduleGeneration) run() (ret *trx_engine.ConcurrentSchedule, err e
 			if this.err.IsPresent() {
 				return true
 			}
-			stateDB, stateDBCreateErr := state.New(this.BaseStateRoot, this.ReadDB)
+			stateDB, stateDBCreateErr := state.New(this.BaseStateRoot, this.DB)
 			if this.err.SetIfAbsent(stateDBCreateErr) {
 				return true
 			}

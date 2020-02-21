@@ -16,24 +16,20 @@
 
 package ethdb
 
-// Putter wraps the database write operation supported by both batches and regular databases.
 type Putter interface {
-	Put(key []byte, value []byte) error
+	Put(key, value []byte) error
 }
 
 type Getter interface {
 	Get(key []byte) ([]byte, error)
 }
 
-// Database wraps all database operations. All methods are safe for concurrent use.
 type Database interface {
 	Getter
 	NewBatch() Batch
 	Close()
 }
 
-// Batch is a write-only database that commits changes to its host database
-// when Write is called. Batch cannot be used concurrently.
 type Batch interface {
 	Putter
 	Write() error

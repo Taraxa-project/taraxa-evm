@@ -1,6 +1,8 @@
 package trx_engine_eth
 
 import (
+	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -9,9 +11,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/local"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"math/big"
 )
 
 type EthTrxEngine struct {
@@ -19,40 +23,40 @@ type EthTrxEngine struct {
 	EthTrxEngineConfig
 }
 
-func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
+func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
 	defer util.Stringify(&err)
 	ret = new(trx_engine.StateTransitionResult)
 	block := req.Block
 	if block.Number.Sign() == 0 {
-		this.ApplyGenesis()
-		ret.StateRoot = this.GenesisBlock.Root()
+		ret.StateRoot = self.Genesis.ToBlock(self.DB).Root()
 		return
 	}
 	var stateDB *state.StateDB
-	if stateDB, err = state.New(req.BaseStateRoot, this.ReadDB); err != nil {
+	if stateDB, err = state.New(req.BaseStateRoot, self.DB); err != nil {
 		return
 	}
-	chainConfig := this.Genesis.Config
+	chainConfig := self.Genesis.Config
 	if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number) == 0 {
 		misc.ApplyDAOHardFork(stateDB)
 	}
 	gasPool := new(core.GasPool).AddGas(uint64(block.GasLimit))
 	for i, tx := range block.Transactions {
-		if this.DisableGasFee {
+		local.Debugging = i == 2 && req.Block.Number.Cmp(big.NewInt(50222)) == 0
+		if self.DisableGasFee {
 			tx_cpy := *tx
 			tx_cpy.GasPrice = new(hexutil.Big)
 			tx_cpy.Gas = ^hexutil.Uint64(0) / 100000
 			tx = &tx_cpy
 		}
 		stateDB.Prepare(tx.Hash, block.Hash, i)
-		txResult := this.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
+		txResult := self.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 			Transaction:        tx,
 			BlockHeader:        &block.BlockHeader,
 			DB:                 stateDB,
 			OnEvmInstruction:   vm.NoopExecutionController,
 			GasPool:            gasPool,
-			CheckNonce:         !this.DisableNonceCheck,
-			DisableMinerReward: this.DisableMinerReward,
+			CheckNonce:         !self.DisableNonceCheck,
+			DisableMinerReward: self.DisableMinerReward,
 		})
 		txErr := txResult.ConsensusErr
 		if txErr == nil {
@@ -64,6 +68,9 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			stateDB.Finalise(true)
 		} else {
 			intermediateRoot = stateDB.IntermediateRoot(chainConfig.IsEIP158(block.Number)).Bytes()
+			if local.Debugging {
+				fmt.Println("trx", i, common.Bytes2Hex(intermediateRoot))
+			}
 		}
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(intermediateRoot, txErr != nil, uint64(ret.UsedGas))
@@ -80,7 +87,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			Error:       txErr,
 		})
 	}
-	if !this.DisableMinerReward {
+	if !self.DisableMinerReward {
 		var unclesMapped []*types.Header
 		for _, uncle := range block.UncleBlocks {
 			unclesMapped = append(unclesMapped, &types.Header{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner})
@@ -98,10 +105,10 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	return
 }
 
-func (this *EthTrxEngine) TransitionStateAndCommit(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
-	ret, err = this.TransitionState(req)
+func (self *EthTrxEngine) TransitionStateAndCommit(req *trx_engine.StateTransitionRequest) (ret *trx_engine.StateTransitionResult, err error) {
+	ret, err = self.TransitionState(req)
 	if err == nil {
-		err = this.CommitToDisk()
+		err = self.CommitToDisk()
 	}
 	return
 }

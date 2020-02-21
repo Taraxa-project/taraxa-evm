@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"math/rand"
 	"reflect"
+	"unsafe"
 )
 
 type Predicate func(interface{}) bool
@@ -89,4 +90,14 @@ func RandomBytes(N int) (ret []byte) {
 		ret = append(ret, buf.SetUint64(rand.Uint64()).Bytes()...)
 	}
 	return ret[:N]
+}
+
+func StringView(bytes []byte) string {
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
+	return *(*string)(unsafe.Pointer(&reflect.StringHeader{h.Data, h.Len}))
+}
+
+func BytesView(str string) []byte {
+	h := (*reflect.StringHeader)(unsafe.Pointer(&str))
+	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{h.Data, h.Len, h.Len}))
 }

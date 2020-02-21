@@ -17,159 +17,83 @@
 package state
 
 import (
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	lru "github.com/hashicorp/golang-lru"
-	"sync"
 )
 
-// Trie cache generation limit after which to evict trie nodes from memory.
-var MaxTrieCacheGen = uint16(120)
+const MaxTrieCacheGen = uint16(500)
+const codeSizeCacheSize = 100000
 
-const (
-	// Number of past tries to keep. This value is chosen such that
-	// reasonable chain reorg depths will hit an existing trie.
-	maxPastTries = 12
-
-	// Number of codehash->size associations to keep.
-	codeSizeCacheSize = 100000
-)
-
-// Database wraps access to tries and contract code.
-type Database interface {
-	// OpenTrie opens the main account trie.
-	OpenTrie(root common.Hash) (Trie, error)
-
-	// OpenStorageTrie opens the storage trie of an account.
-	OpenStorageTrie(root common.Hash) (Trie, error)
-
-	// CopyTrie returns an independent copy of the given trie.
-	CopyTrie(Trie) Trie
-
-	// ContractCode retrieves a particular contract's code.
-	ContractCode(codeHash common.Hash) ([]byte, error)
-
-	// ContractCodeSize retrieves a particular contracts code's size.
-	ContractCodeSize(codeHash common.Hash) (int, error)
-
-	// TrieDB retrieves the low level trie database used for data storage.
-	TrieDB() *trie.Database
-}
-
-// Trie is a Ethereum Merkle Trie.
-type Trie interface {
-	TryGet(key []byte) ([]byte, error)
-	TryUpdate(key, value []byte) error
-	TryDelete(key []byte) error
-	Commit() (common.Hash, error)
-	Hash() common.Hash
-}
-
-func NewDatabaseFromTrieDB(db *trie.Database) Database {
+func NewDatabase(db ethdb.Database) *Database {
 	csc, err := lru.New(codeSizeCacheSize)
 	util.PanicIfNotNil(err)
-	return &cachingDB{
+	return &Database{
 		db:            db,
 		codeSizeCache: csc,
 	}
 }
 
-// NewDatabase creates a backing store for state. The returned database is safe for
-// concurrent use and retains a few recent expanded trie nodes in memory. To keep
-// more historical state in memory, use the NewDatabaseWithCache constructor.
-func NewDatabase(db ethdb.Database) Database {
-	return NewDatabaseFromTrieDB(trie.NewDatabase(db))
-}
-
-type cachingDB struct {
-	db            *trie.Database
-	mu            sync.Mutex
-	pastTries     []*trie.SecureTrie
+type Database struct {
+	db            ethdb.Database
 	codeSizeCache *lru.Cache
+	batch         ethdb.Batch
 }
 
-// OpenTrie opens the main account trie.
-func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	for i := len(db.pastTries) - 1; i >= 0; i-- {
-		if db.pastTries[i].Hash() == root {
-			return cachedTrie{db.pastTries[i].Copy(), db}, nil
-		}
-	}
-	tr, err := trie.NewSecure(root, db.db, MaxTrieCacheGen)
-	if err != nil {
-		return nil, err
-	}
-	return cachedTrie{tr, db}, nil
+func (self *Database) RawDB() ethdb.Database {
+	return self.db
 }
 
-func (db *cachingDB) pushTrie(t *trie.SecureTrie) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	if len(db.pastTries) >= maxPastTries {
-		copy(db.pastTries, db.pastTries[1:])
-		db.pastTries[len(db.pastTries)-1] = t
-	} else {
-		db.pastTries = append(db.pastTries, t)
-	}
+func (self *Database) OpenTrie(root common.Hash) (*trie.Trie, error) {
+	return trie.NewSecure(root, trie_db{self}, MaxTrieCacheGen)
 }
 
-// OpenStorageTrie opens the storage trie of an account.
-func (db *cachingDB) OpenStorageTrie(root common.Hash) (Trie, error) {
-	return trie.NewSecure(root, db.db, 0)
-}
-
-// CopyTrie returns an independent copy of the given trie.
-func (db *cachingDB) CopyTrie(t Trie) Trie {
-	switch t := t.(type) {
-	case cachedTrie:
-		return cachedTrie{t.SecureTrie.Copy(), db}
-	case *trie.SecureTrie:
-		return t.Copy()
-	default:
-		panic(fmt.Errorf("unknown trie type %T", t))
-	}
-}
-
-// ContractCode retrieves a particular contract's code.
-func (db *cachingDB) ContractCode(codeHash common.Hash) ([]byte, error) {
-	code, err := db.db.Node(codeHash)
+func (self *Database) ContractCode(hash []byte) ([]byte, error) {
+	code, err := self.db.Get(hash)
 	if err == nil {
-		db.codeSizeCache.Add(codeHash, len(code))
+		self.codeSizeCache.Add(string(hash), len(code))
 	}
 	return code, err
 }
 
-// ContractCodeSize retrieves a particular contracts code's size.
-func (db *cachingDB) ContractCodeSize(codeHash common.Hash) (int, error) {
-	if cached, ok := db.codeSizeCache.Get(codeHash); ok {
+func (self *Database) CodeSize(hash []byte) (int, error) {
+	if cached, ok := self.codeSizeCache.Get(util.StringView(hash)); ok {
 		return cached.(int), nil
 	}
-	code, err := db.ContractCode(codeHash)
+	code, err := self.ContractCode(hash)
 	return len(code), err
 }
 
-// TrieDB retrieves any intermediate trie-node caching layer.
-func (db *cachingDB) TrieDB() *trie.Database {
-	return db.db
+func (self *Database) PutCode(hash, code []byte) error {
+	return self.put(hash, code)
 }
 
-// cachedTrie inserts its trie into a cachingDB on commit.
-type cachedTrie struct {
-	*trie.SecureTrie
-	db *cachingDB
-}
-
-func (m cachedTrie) Commit() (common.Hash, error) {
-	root, err := m.SecureTrie.Commit()
-	if err == nil {
-		m.db.pushTrie(m.SecureTrie)
+func (self *Database) Commit() error {
+	if self.batch == nil {
+		return nil
 	}
-	return root, err
+	err := self.batch.Write()
+	self.batch = nil
+	return err
+}
+
+func (self *Database) put(k, v []byte) error {
+	if self.batch == nil {
+		self.batch = self.db.NewBatch()
+	}
+	return self.batch.Put(k, v)
+}
+
+type trie_db struct {
+	db *Database
+}
+
+func (self trie_db) Put(key []byte, value []byte) error {
+	return self.db.put(key, value)
+}
+
+func (self trie_db) Get(key []byte) ([]byte, error) {
+	return self.db.db.Get(key)
 }

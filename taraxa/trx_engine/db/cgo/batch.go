@@ -38,13 +38,3 @@ func (this *batch) Write() error {
 	_, err := C.taraxa_cgo_ethdb_Batch_Write(this.c_self)
 	return err
 }
-
-func (this *batch) ValueSize() int {
-	return this.valueSize
-}
-
-func (this *batch) Reset() {
-	this.c_Free()
-	this.c_self = this.db.c_NewBatch()
-	this.valueSize = 0
-}

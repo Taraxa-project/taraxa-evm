@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/cgo"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/leveldb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/memory"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -17,9 +16,6 @@ type DBFactory interface {
 }
 
 var FactoryRegistry = map[string]func() DBFactory{
-	"leveldb": func() DBFactory {
-		return new(leveldb.Factory)
-	},
 	"rocksdb": func() DBFactory {
 		return new(rocksdb.Factory)
 	},

@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
+	"github.com/Taraxa-project/taraxa-evm/local"
 	"math/big"
 	"sort"
 
@@ -37,22 +38,14 @@ type revision struct {
 	journalIndex int
 }
 
-var (
-	// emptyState is the known hash of an empty state trie entry.
-	emptyState = crypto.Keccak256Hash(nil)
-
-	// emptyCode is the known hash of the empty EVM bytecode.
-	emptyCode = crypto.Keccak256Hash(nil)
-)
-
 // StateDBs within the ethereum protocol are used to store anything
 // within the merkle trie. StateDBs take care of caching and storing
 // nested states. It's the general query interface to retrieve:
 // * Contracts
 // * Accounts
 type StateDB struct {
-	db   Database
-	trie Trie
+	db   *Database
+	trie *trie.Trie
 
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects      map[common.Address]*stateObject
@@ -87,7 +80,7 @@ type StateDB struct {
 type BalanceTable = map[common.Address]*hexutil.Big
 
 // Create a new state from a given trie.
-func New(root common.Hash, db Database) (*StateDB, error) {
+func New(root common.Hash, db *Database) (*StateDB, error) {
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
@@ -222,7 +215,7 @@ func (self *StateDB) GetCodeSize(addr common.Address) int {
 	if stateObject.code != nil {
 		return len(stateObject.code)
 	}
-	size, err := self.db.ContractCodeSize(common.BytesToHash(stateObject.CodeHash()))
+	size, err := self.db.CodeSize(stateObject.CodeHash())
 	if err != nil {
 		self.setError(err)
 	}
@@ -238,10 +231,15 @@ func (self *StateDB) GetCodeHash(addr common.Address) common.Hash {
 }
 
 // GetState retrieves a value from the given account's storage trie.
-func (self *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
+func (self *StateDB) GetState(addr common.Address, hash common.Hash) (ret common.Hash) {
+	defer func() {
+		if local.Debugging {
+			fmt.Println("GetState", addr.Hex(), hash.Hex(), ret.Hex())
+		}
+	}()
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetState(self.db, hash)
+		return stateObject.GetState(hash)
 	}
 	return common.Hash{}
 }
@@ -250,13 +248,13 @@ func (self *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash
 func (self *StateDB) GetCommittedState(addr common.Address, hash common.Hash) common.Hash {
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetCommittedState(self.db, hash)
+		return stateObject.GetCommittedState(hash)
 	}
 	return common.Hash{}
 }
 
 // Database retrieves the low level database supporting the lower level trie ops.
-func (self *StateDB) Database() Database {
+func (self *StateDB) Database() *Database {
 	return self.db
 }
 
@@ -309,8 +307,11 @@ func (self *StateDB) SetCode(addr common.Address, code []byte) {
 }
 
 func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
+	if local.Debugging {
+		fmt.Println("SetState", addr.Hex(), key.Hex(), value.Hex())
+	}
 	stateObject := self.GetOrNewStateObject(addr)
-	stateObject.SetState(self.db, key, value)
+	stateObject.SetState(key, value)
 }
 
 // Suicide marks the given account as suicided.
@@ -345,14 +346,14 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 	if err != nil {
 		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
 	}
-	self.setError(self.trie.TryUpdate(addr[:], data))
+	self.setError(self.trie.Insert(addr[:], data))
 }
 
 // deleteStateObject removes the given object from the state trie.
 func (self *StateDB) deleteStateObject(stateObject *stateObject) {
 	stateObject.deleted = true
 	addr := stateObject.Address()
-	self.setError(self.trie.TryDelete(addr[:]))
+	self.setError(self.trie.Delete(addr[:]))
 }
 
 // Retrieve a state object given by the address. Returns nil if not found.
@@ -366,7 +367,7 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 	}
 
 	// Load the object from the database.
-	enc, err := self.trie.TryGet(addr[:])
+	enc, err := self.trie.Get(addr[:])
 	if len(enc) == 0 {
 		self.setError(err)
 		return nil
@@ -474,7 +475,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
 			s.deleteStateObject(stateObject)
 		} else {
-			stateObject.updateRoot(s.db)
+			stateObject.updateRoot()
 			s.updateStateObject(stateObject)
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
@@ -528,11 +529,13 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		case isDirty:
 			// Write any contract code associated with the state object
 			if stateObject.code != nil && stateObject.dirtyCode {
-				s.db.TrieDB().InsertBlob(common.BytesToHash(stateObject.CodeHash()), stateObject.code)
+				if err = s.db.PutCode(stateObject.CodeHash(), stateObject.code); err != nil {
+					return
+				}
 				stateObject.dirtyCode = false
 			}
 			// Write any storage changes in the state object to its storage trie.
-			if err := stateObject.CommitTrie(s.db); err != nil {
+			if err := stateObject.CommitTrie(); err != nil {
 				return common.Hash{}, err
 			}
 			// Update the object in the main account trie.

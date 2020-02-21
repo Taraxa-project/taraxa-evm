@@ -6,10 +6,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
-	"github.com/Taraxa-project/taraxa-evm/trie"
 )
 
-type BaseVMConfig = struct {
+type BaseEngineConfig = struct {
 	Genesis *core.Genesis `json:"genesis"`
 }
 
@@ -21,15 +20,14 @@ type BlockHashSourceFactory interface {
 	NewInstance() (vm.GetHashFunc, error)
 }
 
-type BaseVMFactory struct {
-	BaseVMConfig
+type BaseEngineFactory struct {
+	BaseEngineConfig
 	EvmStaticConfig        *vm.StaticConfig `json:"evm"`
-	ReadDBConfig           *StateDBConfig   `json:"readDB"`
-	WriteDBConfig          *StateDBConfig   `json:"writeDB"`
+	DBConfig               *StateDBConfig   `json:"db"`
 	BlockHashSourceFactory `json:"blockHashSource"`
 }
 
-func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), err error) {
+func (this *BaseEngineFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), err error) {
 	cleanup = util.DoNothing
 	localErr := new(concurrent.AtomicError)
 	defer util.Recover(
@@ -45,30 +43,18 @@ func (this *BaseVMFactory) NewInstance() (ret *BaseTrxEngine, cleanup func(), er
 		evmStaticConfig = new(vm.StaticConfig)
 	}
 	ret = &BaseTrxEngine{
-		BaseVMConfig: this.BaseVMConfig,
-		EvmConfig:    &vm.Config{StaticConfig: evmStaticConfig},
+		BaseEngineConfig: this.BaseEngineConfig,
+		EvmConfig:        &vm.Config{StaticConfig: evmStaticConfig},
 	}
 	if ret.Genesis == nil {
 		ret.Genesis = core.DefaultGenesisBlock()
 	}
-	ret.GenesisBlock = ret.Genesis.ToBlock(nil)
-	readDiskDB, e1 := this.ReadDBConfig.DBFactory.NewInstance()
-	localErr.SetOrPanicIfPresent(e1)
-	cleanup = util.Chain(cleanup, readDiskDB.Close)
-	ret.ReadDB = state.NewDatabase(readDiskDB)
-	ret.WriteDiskDB = readDiskDB
-	ret.WriteDB = ret.ReadDB
-	if this.WriteDBConfig != nil {
-		writeDiskDB, e3 := this.WriteDBConfig.DBFactory.NewInstance()
-		localErr.SetOrPanicIfPresent(e3)
-		cleanup = util.Chain(cleanup, writeDiskDB.Close)
-		ret.WriteDiskDB = writeDiskDB
-		ret.WriteDB = state.NewDatabaseFromTrieDB(trie.NewDatabaseSeparateRW(readDiskDB, writeDiskDB))
-		// TODO revert his
-		ret.ReadDB = ret.WriteDB
-	}
-	getBlockHash, err11 := this.BlockHashSourceFactory.NewInstance()
-	localErr.SetOrPanicIfPresent(err11)
+	db, err_1 := this.DBConfig.DBFactory.NewInstance()
+	localErr.SetOrPanicIfPresent(err_1)
+	cleanup = util.Chain(cleanup, db.Close)
+	ret.DB = state.NewDatabase(db)
+	getBlockHash, err_2 := this.BlockHashSourceFactory.NewInstance()
+	localErr.SetOrPanicIfPresent(err_2)
 	ret.GetBlockHash = getBlockHash
 	return
 }
@@ -78,3 +64,5 @@ type SimpleBlockHashSourceFactory vm.GetHashFunc
 func (this SimpleBlockHashSourceFactory) NewInstance() (vm.GetHashFunc, error) {
 	return vm.GetHashFunc(this), nil
 }
+
+//0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544

@@ -64,10 +64,7 @@ func (self *TrieState) CommitBlock(state_change state.StateChange) (block_ordina
 		self.batch = nil
 	}()
 	for _, e := range state_change {
-		if _, err = trie.TryGet(e.K); err != nil {
-			return
-		}
-		if err = trie.TryUpdate(e.K, e.V); err != nil {
+		if err = trie.Insert(e.K, e.V); err != nil {
 			return
 		}
 	}
@@ -112,7 +109,7 @@ func (self *TrieState) Get(block_ordinal state.BlockOrdinal, k []byte) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	return t.TryGet(k)
+	return t.Get(k)
 }
 
 func (self *TrieState) GetWithProof(block_ordinal state.BlockOrdinal, k []byte) (state.ValueProof, error) {

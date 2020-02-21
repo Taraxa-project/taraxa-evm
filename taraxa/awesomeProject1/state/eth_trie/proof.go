@@ -11,6 +11,6 @@ type Proof struct {
 }
 
 func (self *Proof) Verify(digest, key []byte) (value []byte, err error) {
-	value, _, err = trie.VerifyProof(common.BytesToHash(digest), key, self)
+	value, _, err = trie.MustVerifyProof(common.BytesToHash(digest), key, self)
 	return
 }

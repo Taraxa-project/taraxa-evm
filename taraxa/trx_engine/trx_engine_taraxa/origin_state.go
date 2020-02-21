@@ -21,7 +21,7 @@ type OriginState struct {
 	accountCache  Cache
 	codeCache     Cache
 	codeSizeCache Cache
-	accountTrie   *trie.SecureTrie
+	accountTrie   *trie.KeyHashingStorageStrategy
 }
 
 type MakeOriginStateOptions = struct {
@@ -53,7 +53,7 @@ func MakeOriginState(root common.Hash, db *trie.Database, makeCache MakeCache, o
 }
 
 func (copy OriginState) Copy() *OriginState {
-	copy.accountTrie = copy.accountTrie.Copy()
+	copy.accountTrie = copy.accountTrie.copy()
 	return &copy
 }
 
@@ -156,7 +156,7 @@ func (this *OriginAccount) HasStorage() bool {
 }
 
 type ReadOnlyStorage struct {
-	LocalTrie     *trie.SecureTrie
+	LocalTrie     *trie.KeyHashingStorageStrategy
 	SharedStorage *SharedStorage
 }
 
@@ -196,11 +196,11 @@ func (this *ReadOnlyStorage) Get(state *OriginState, key common.Hash) (ret *comm
 type SharedStorage struct {
 	Root  common.Hash
 	Init  sync.Once
-	Trie  *trie.SecureTrie
+	Trie  *trie.KeyHashingStorageStrategy
 	Cache Cache
 }
 
-func (this *SharedStorage) LoadAndCopyTrie(state *OriginState) (ret *trie.SecureTrie, err error) {
+func (this *SharedStorage) LoadAndCopyTrie(state *OriginState) (ret *trie.KeyHashingStorageStrategy, err error) {
 	this.Init.Do(func() {
 		if this.Trie, err = trie.NewSecure(this.Root, state.trieDB, state.opts.StorageTrieCacheLimit); err != nil {
 			return
@@ -210,5 +210,5 @@ func (this *SharedStorage) LoadAndCopyTrie(state *OriginState) (ret *trie.Secure
 	if err != nil {
 		return
 	}
-	return this.Trie.Copy(), nil
+	return this.Trie.copy(), nil
 }

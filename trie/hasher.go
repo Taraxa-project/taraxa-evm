@@ -18,6 +18,7 @@ package trie
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/emicklei/dot"
 	"hash"
 	"math/rand"
@@ -37,6 +38,7 @@ type hasher struct {
 	cachelimit uint16
 	dot_g      *dot.Graph
 }
+type hasher_store_strategy = func(hash hashNode, n node, hash_preimage []byte) error
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
 // Read to get a variable amount of data from the hash state. Read is faster than Sum
@@ -80,10 +82,10 @@ func returnHasherToPool(h *hasher) {
 
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
-func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
+func (h *hasher) hash(n node, force bool, store hasher_store_strategy) (node, node, error) {
 	// If we're not storing the node, just hashing, use available cached data
 	if hash, dirty := n.cached_hash(); hash != nil {
-		if db == nil {
+		if store == nil {
 			return hash, n, nil
 		}
 		if n.canUnload(h.cachegen, h.cachelimit) {
@@ -97,11 +99,11 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 		}
 	}
 	// Trie not processed yet or needs storage, walk the children
-	collapsed, cached, err := h.hashChildren(n, db)
+	collapsed, cached, err := h.hashChildren(n, store)
 	if err != nil {
 		return hashNode{}, n, err
 	}
-	hashed, err := h.hash_and_maybe_store(collapsed, db, force)
+	hashed, err := h.hash_and_maybe_store(collapsed, force, store)
 	if err != nil {
 		return hashNode{}, n, err
 	}
@@ -112,12 +114,12 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	switch cn := cached.(type) {
 	case *shortNode:
 		cn.flags.hash = cachedHash
-		if db != nil {
+		if store != nil {
 			cn.flags.dirty = false
 		}
 	case *fullNode:
 		cn.flags.hash = cachedHash
-		if db != nil {
+		if store != nil {
 			cn.flags.dirty = false
 		}
 	}
@@ -127,9 +129,8 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 // hashChildren replaces the children of a node with their hashes if the encoded
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
-func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
+func (h *hasher) hashChildren(original node, store hasher_store_strategy) (node, node, error) {
 	var err error
-
 	switch n := original.(type) {
 	case *shortNode:
 		h.dot_edge(n, n.Val)
@@ -137,31 +138,31 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 		collapsed, cached := n.copy(), n.copy()
 		collapsed.Key = hexToCompact(n.Key)
 		cached.Key = common.CopyBytes(n.Key)
-
 		if _, ok := n.Val.(valueNode); !ok {
-			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false)
+			collapsed.Val, cached.Val, err = h.hash(n.Val, false, store)
 			if err != nil {
 				return original, original, err
 			}
 		}
 		return collapsed, cached, nil
-
 	case *fullNode:
 		for _, c := range n.Children {
 			h.dot_edge(n, c)
 		}
 		// Hash the full node's children, caching the newly hashed subtrees
 		collapsed, cached := n.copy(), n.copy()
-
 		for i := 0; i < 16; i++ {
 			if n.Children[i] != nil {
-				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false)
+				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], false, store)
 				if err != nil {
 					return original, original, err
 				}
 			}
 		}
 		cached.Children[16] = n.Children[16]
+		if nn := n.Children[16]; nn != nil {
+			_ = nn.(valueNode)
+		}
 		return collapsed, cached, nil
 	case hashNode:
 		return n, original, nil
@@ -170,12 +171,13 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 	}
 }
 
-// hash_and_maybe_store hashes the node n and if we have a storage layer specified, it writes
-// the key/value pair to it and tracks any node->child references as well as any
-// node->external trie references.
-func (h *hasher) hash_and_maybe_store(n node, db *Database, force bool) (node, error) {
+func (h *hasher) hash_and_maybe_store(n node, force bool, store hasher_store_strategy) (node, error) {
 	// Don't store hashes or empty nodes.
-	if _, isHash := n.(hashNode); n == nil || isHash {
+	util.Assert(n != nil, "impossible")
+	if _, ok := n.(valueNode); ok {
+		panic("impossible")
+	}
+	if _, isHash := n.(hashNode); isHash {
 		return n, nil
 	}
 	// Generate the RLP encoding of the node
@@ -191,10 +193,10 @@ func (h *hasher) hash_and_maybe_store(n node, db *Database, force bool) (node, e
 	if hash == nil {
 		hash = h.makeHashNode(h.tmp)
 	}
-
-	if db != nil {
-		// We are pooling the trie nodes into an intermediate memory cache
-		db.insert(common.BytesToHash(hash), n)
+	if store != nil {
+		if err := store(hash, n, h.tmp); err != nil {
+			return nil, err
+		}
 	}
 	return hash, nil
 }
@@ -206,7 +208,6 @@ func (h *hasher) makeHashNode(data []byte) hashNode {
 	h.sha.Read(n)
 	return n
 }
-
 
 func (self *hasher) dot_node(n node) (ret dot.Node) {
 	switch n := n.(type) {

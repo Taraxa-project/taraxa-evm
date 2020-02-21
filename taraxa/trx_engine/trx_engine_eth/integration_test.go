@@ -25,7 +25,7 @@ type EthTxEngineIntegrationTest struct {
 	VMFactory        *EthTrxEngineFactory
 }
 
-func (this *EthTxEngineIntegrationTest) Run(t *testing.T) {
+func (this *EthTxEngineIntegrationTest) Run() {
 	ethereumVM, cleanup, err := this.VMFactory.NewInstance()
 	util.PanicIfNotNil(err)
 	defer cleanup()
@@ -40,9 +40,10 @@ func (this *EthTxEngineIntegrationTest) Run(t *testing.T) {
 		if prevBlock != nil {
 			stateTransitionRequest.BaseStateRoot = prevBlock.StateRoot
 		}
-		result, err := ethereumVM.TransitionStateAndCommit(stateTransitionRequest)
+		result, err := ethereumVM.TransitionState(stateTransitionRequest)
 		util.PanicIfNotNil(err)
 		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), " != ", block.StateRoot.Hex())
+		ethereumVM.CommitToDisk()
 		prevBlock = block
 	}
 
@@ -91,12 +92,21 @@ func Test_integration(t *testing.T) {
 		return getBlockByNumber(blockNumber).Hash
 	})
 	test := EthTxEngineIntegrationTest{
-		//StartBlock:       4000000,
-		//EndBlock:         4050000,
-		StartBlock:       1712613,
-		EndBlock:         4000000,
+		//StartBlock: 50220,
+		StartBlock: 0,
+		//StartBlock: 50222,
+		//StartBlock:       477942,
+		//StartBlock:       626668,
+		EndBlock: 400050223,
+		//EndBlock:         4000000,
 		GetBlockByNumber: getBlockByNumber,
 		VMFactory:        factory,
 	}
-	test.Run(t)
+	test.Run()
 }
+
+//panic: 0x33a60cb9131ed0a5e21f4230ca05abda1617d03ef86c0f5595f9f12e35b0947c,  != , 0x371f0defb344a06fa8bf428ce5dac951969a2207ca9ed707642b693305955691 [recovered]
+//trx 0 9af6fab899ff4faffa451539faf3a7e26201284c0e40b5941f1c2673036c5441
+//trx 1 4683306f2dfb871642b16d89d8fe20ddfdb383ce96fa2c70ea8062a8b2ac1c40
+//trx 2 197d16e10543dc3bbf611a6d2892b3d5384629118c4d5f525a12eb34730ac854
+//trx 3 5368a59f878f08276235321e0d3d9196133d909ff8630985015d38d0b2cdc6d5

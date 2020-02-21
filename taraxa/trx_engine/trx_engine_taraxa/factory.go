@@ -7,13 +7,13 @@ import (
 )
 
 type TaraxaTrxEngineFactory struct {
-	trx_engine_base.BaseVMFactory
+	trx_engine_base.BaseEngineConfig
 	TaraxaTrxEngineConfig
 }
 
 func (this *TaraxaTrxEngineFactory) NewInstance() (ret *TaraxaTrxEngine, cleanup func(), err error) {
 	var baseVm *trx_engine_base.BaseTrxEngine
-	baseVm, cleanup, err = this.BaseVMFactory.NewInstance()
+	baseVm, cleanup, err = this.BaseEngineConfig.NewInstance()
 	if err != nil {
 		return
 	}
