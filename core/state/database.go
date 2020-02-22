@@ -115,10 +115,6 @@ func (main_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, er
 	return binary.Concat(binary.BytesView("main_tr_"), mpt_key...), nil
 }
 
-func (main_trie_storage_strat) UseFlat() bool {
-	return true
-}
-
 type acc_trie_storage_strat common.Address
 
 func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {
@@ -127,8 +123,4 @@ func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte
 
 func (self acc_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error) {
 	return binary.Concat(binary.Concat(binary.BytesView("storage_tr_"), self[:]...), mpt_key...), nil
-}
-
-func (acc_trie_storage_strat) UseFlat() bool {
-	return true
 }

@@ -91,10 +91,8 @@ func Test_integration(t *testing.T) {
 		return getBlockByNumber(blockNumber).Hash
 	})
 	test := EthTxEngineIntegrationTest{
-		//StartBlock: 2716742, // "/tmp/ololololo1"
-		StartBlock: 0,
+		StartBlock: 1628849,
 		EndBlock:   400050223,
-		//EndBlock:         4000000,
 		GetBlockByNumber: getBlockByNumber,
 		VMFactory:        factory,
 	}

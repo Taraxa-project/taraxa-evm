@@ -11,7 +11,3 @@ func (DefaultStorageStrategy) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err
 func (DefaultStorageStrategy) MPTKeyToFlat([]byte) (flat_key []byte, err error) {
 	return nil, nil
 }
-
-func (DefaultStorageStrategy) UseFlat() bool {
-	return false
-}

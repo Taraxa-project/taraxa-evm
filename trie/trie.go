@@ -1,21 +1,6 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
-// Package trie implements Merkle Patricia Tries.
 package trie
+
+// TODO cache rlp
 
 import (
 	"bytes"
@@ -56,7 +41,6 @@ type Trie struct {
 type StorageStrategy = interface {
 	OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error)
 	MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error)
-	UseFlat() bool
 }
 
 func New(root *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
@@ -86,24 +70,20 @@ func (self *Trie) NodeIterator(start []byte) NodeIterator {
 func (self *Trie) Get(key []byte) ([]byte, error) {
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
-	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-	util.PanicIfNotNil(err_1)
-	flat_v, err_2 := self.db.Get(flat_key)
-	util.PanicIfNotNil(err_2)
-	return flat_v, nil
-	//mpt_key_hex := keybytesToHex(mpt_key)
-	//value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
-	//if err_2 != nil {
-	//	return nil, err_2
-	//}
-	//if didResolve {
-	//	self.root = newroot
-	//}
-	//return value, nil
-}
-
-func (self *Trie) MarkForUpdate(key []byte) error {
-
+	//flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+	//util.PanicIfNotNil(err_1)
+	//flat_v, err_2 := self.db.Get(flat_key)
+	//util.PanicIfNotNil(err_2)
+	//return flat_v, nil
+	mpt_key_hex := keybytesToHex(mpt_key)
+	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
+	if err_2 != nil {
+		return nil, err_2
+	}
+	if didResolve {
+		self.root = newroot
+	}
+	return value, nil
 }
 
 func (self *Trie) Insert(key, value []byte) error {
@@ -195,7 +175,12 @@ func (self *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value 
 		// If the whole key matches, keep this short node as is
 		// and only update the value.
 		if matchlen == len(n.Key) {
-			dirty, nn, err := self.mpt_insert(n.Val, append(key_hex_prefix, key_hex_rest[:matchlen]...), key_hex_rest[matchlen:], value, )
+			dirty, nn, err := self.mpt_insert(
+				n.Val,
+				append(key_hex_prefix, key_hex_rest[:matchlen]...),
+				key_hex_rest[matchlen:],
+				value,
+			)
 			if !dirty || err != nil {
 				return false, n, err
 			}
@@ -204,11 +189,21 @@ func (self *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value 
 		// Otherwise branch out at the index where they differ.
 		branch := &fullNode{flags: self.newFlag()}
 		var err error
-		_, branch.Children[n.Key[matchlen]], err = self.mpt_insert(nil, append(key_hex_prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val, )
+		_, branch.Children[n.Key[matchlen]], err = self.mpt_insert(
+			nil,
+			append(key_hex_prefix, n.Key[:matchlen+1]...),
+			n.Key[matchlen+1:],
+			n.Val,
+		)
 		if err != nil {
 			return false, nil, err
 		}
-		_, branch.Children[key_hex_rest[matchlen]], err = self.mpt_insert(nil, append(key_hex_prefix, key_hex_rest[:matchlen+1]...), key_hex_rest[matchlen+1:], value, )
+		_, branch.Children[key_hex_rest[matchlen]], err = self.mpt_insert(
+			nil,
+			append(key_hex_prefix, key_hex_rest[:matchlen+1]...),
+			key_hex_rest[matchlen+1:],
+			value,
+		)
 		if err != nil {
 			return false, nil, err
 		}
@@ -219,7 +214,12 @@ func (self *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value 
 		// Otherwise, replace it with a short node leading up to the branch.
 		return true, &shortNode{key_hex_rest[:matchlen], branch, self.newFlag()}, nil
 	case *fullNode:
-		dirty, nn, err := self.mpt_insert(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:], value, )
+		dirty, nn, err := self.mpt_insert(
+			n.Children[key_hex_rest[0]],
+			append(key_hex_prefix, key_hex_rest[0]),
+			key_hex_rest[1:],
+			value,
+		)
 		if !dirty || err != nil {
 			return false, n, err
 		}
@@ -261,7 +261,11 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 		// from the subtrie. Child can never be nil here since the
 		// subtrie must contain at least two other values with keys
 		// longer than n.Key.
-		dirty, child, err := self.mpt_del(n.Val, append(key_hex_prefix, key_hex_rest[:len(n.Key)]...), key_hex_rest[len(n.Key):], )
+		dirty, child, err := self.mpt_del(
+			n.Val,
+			append(key_hex_prefix, key_hex_rest[:len(n.Key)]...),
+			key_hex_rest[len(n.Key):],
+		)
 		if !dirty || err != nil {
 			return false, n, err
 		}
@@ -278,7 +282,11 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 			return true, &shortNode{n.Key, child, self.newFlag()}, nil
 		}
 	case *fullNode:
-		dirty, nn, err := self.mpt_del(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:])
+		dirty, nn, err := self.mpt_del(
+			n.Children[key_hex_rest[0]],
+			append(key_hex_prefix, key_hex_rest[0]),
+			key_hex_rest[1:],
+		)
 		if !dirty || err != nil {
 			return false, n, err
 		}
@@ -375,25 +383,9 @@ func (self *Trie) enc_short(n *shortNode, w io.Writer) error {
 }
 
 func (self *Trie) store(hash hashNode, n node, n_enc []byte) error {
-	//if !self.storage_strat.UseFlat() {
-	//}
 	buf, err := rlp.EncodeToBytes(n, self)
 	util.PanicIfNotNil(err)
 	return self.db.Put(common.CopyBytes(hash), buf)
-	// TODO
-	//enc, err := rlp.EncodeToBytes(self.logicalToStorageRepr(n))
-	//if err != nil {
-	//	return err
-	//}
-	//has_val := false
-	//switch n.(type) {
-	//case *fullNode:
-	//
-	//case *shortNode:
-	//
-	//default:
-	//	panic("impossible")
-	//}
 }
 
 func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error) {
@@ -412,18 +404,6 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 		ret, err_1 := self.db.Get(flat_key)
 		util.PanicIfNotNil(err_1)
 		return ret
-		//if !self.storage_strat.UseFlat() {
-		//	return value
-		//}
-
-		//////util.Assert(len(value) == 1)
-		//committed, err_1 := self.db.GetCommitted(flat_key)
-		//util.PanicIfNotNil(err_1)
-		//flat_v, err_2 := self.db.Get(flat_key)
-		////// TODO track deletions
-		//util.PanicIfNotNil(err_2)
-		//util.Assert(bytes.Compare(value, committed) == 0 || bytes.Compare(value, flat_v) == 0)
-		//return value
 	})
 	return ret, nil
 }
