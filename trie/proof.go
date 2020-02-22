@@ -27,15 +27,15 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
-	mpt_key, _, err_0 := t.storage_strat.MapKey(key)
+func (self *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
+	mpt_key, _, err_0 := self.storage_strat.MapKey(key)
 	if err_0 != nil {
 		return err_0
 	}
 	// Collect all nodes on the path to key.
 	mpt_key_hex := keybytesToHex(mpt_key)
 	nodes := []node{}
-	tn := t.root
+	tn := self.root
 	for len(mpt_key_hex) > 0 && tn != nil {
 		switch n := tn.(type) {
 		case *shortNode:
@@ -53,7 +53,7 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 			nodes = append(nodes, n)
 		case hashNode:
 			var err error
-			tn, err = t.resolve(n, nil)
+			tn, err = self.resolve(n, nil)
 			if err != nil {
 				log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 				return err

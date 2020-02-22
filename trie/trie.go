@@ -77,70 +77,70 @@ func NewSecure(root common.Hash, db Database, cachelimit uint16) (*Trie, error) 
 	return New(root, db, cachelimit, KeyHashingStorageStrategy(0))
 }
 
-func (t *Trie) NodeIterator(start []byte) NodeIterator {
-	return newNodeIterator(t, start)
+func (self *Trie) NodeIterator(start []byte) NodeIterator {
+	return newNodeIterator(self, start)
 }
 
-func (t *Trie) Get(key []byte) ([]byte, error) {
-	mpt_key, _, err_0 := t.storage_strat.MapKey(key)
+func (self *Trie) Get(key []byte) ([]byte, error) {
+	mpt_key, _, err_0 := self.storage_strat.MapKey(key)
 	if err_0 != nil {
 		return nil, err_0
 	}
 	mpt_key_hex := keybytesToHex(mpt_key)
-	value, newroot, didResolve, err_1 := t.mpt_get(t.root, mpt_key_hex, 0)
+	value, newroot, didResolve, err_1 := self.mpt_get(self.root, mpt_key_hex, 0)
 	if err_1 == nil && didResolve {
-		t.root = newroot
+		self.root = newroot
 	}
 	//v, _ := t.db.Get(flat_key)
 	//util.Assert(bytes.Compare(v, value) == 0)
-	return value, nil
+	return value, err_1
 
 }
 
-func (t *Trie) Insert(key, value []byte) error {
-	mpt_key, _, err_1 := t.storage_strat.MapKey(key)
-	if err_1 != nil {
-		return err_1
+func (self *Trie) Insert(key, value []byte) error {
+	mpt_key, _, err := self.storage_strat.MapKey(key)
+	if err != nil {
+		return err
 	}
 	mpt_key_hex := keybytesToHex(mpt_key)
 	//t.db.GetTransaction().Put(flat_key, value)
 	if len(value) != 0 {
-		_, n, err := t.mpt_insert(t.root, nil, mpt_key_hex, valueNode(value))
+		_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
 		if err != nil {
 			return err
 		}
-		t.root = n
+		self.root = n
 	} else {
-		_, n, err := t.mpt_del(t.root, nil, mpt_key_hex)
+		_, n, err := self.mpt_del(self.root, nil, mpt_key_hex)
 		if err != nil {
 			return err
 		}
-		t.root = n
+		self.root = n
 	}
 	return nil
 }
 
-func (t *Trie) Delete(key []byte) error {
-	return t.Insert(key, nil)
+func (self *Trie) Delete(key []byte) error {
+	return self.Insert(key, nil)
 }
 
-func (t *Trie) Hash() common.Hash {
-	hash, cached, _ := t.hashRoot(nil)
-	t.root = cached
+func (self *Trie) Hash() common.Hash {
+	hash, cached, _ := self.hashRoot(nil)
+	self.root = cached
 	return common.BytesToHash(hash.(hashNode))
 }
 
-func (t *Trie) Commit() (root common.Hash, err error) {
-	hash, cached, err := t.hashRoot(t.store)
+func (self *Trie) Commit() (root common.Hash, err error) {
+	hash, cached, err := self.hashRoot(self.store)
 	if err != nil {
 		return common.Hash{}, err
 	}
-	t.root = cached
-	t.cachegen++
+	self.root = cached
+	self.cachegen++
 	return common.BytesToHash(hash.(hashNode)), nil
 }
 
-func (t *Trie) mpt_get(origNode node, key_hex []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
+func (self *Trie) mpt_get(origNode node, key_hex []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
 	switch n := (origNode).(type) {
 	case nil:
 		return nil, nil, false, nil
@@ -151,34 +151,34 @@ func (t *Trie) mpt_get(origNode node, key_hex []byte, pos int) (value []byte, ne
 			// key not found in trie
 			return nil, n, false, nil
 		}
-		value, newnode, didResolve, err = t.mpt_get(n.Val, key_hex, pos+len(n.Key))
+		value, newnode, didResolve, err = self.mpt_get(n.Val, key_hex, pos+len(n.Key))
 		if err == nil && didResolve {
 			n = n.copy()
 			n.Val = newnode
-			n.flags.gen = t.cachegen
+			n.flags.gen = self.cachegen
 		}
 		return value, n, didResolve, err
 	case *fullNode:
-		value, newnode, didResolve, err = t.mpt_get(n.Children[key_hex[pos]], key_hex, pos+1)
+		value, newnode, didResolve, err = self.mpt_get(n.Children[key_hex[pos]], key_hex, pos+1)
 		if err == nil && didResolve {
 			n = n.copy()
-			n.flags.gen = t.cachegen
+			n.flags.gen = self.cachegen
 			n.Children[key_hex[pos]] = newnode
 		}
 		return value, n, didResolve, err
 	case hashNode:
-		child, err := t.resolve(n, key_hex[:pos])
+		child, err := self.resolve(n, key_hex[:pos])
 		if err != nil {
 			return nil, n, true, err
 		}
-		value, newnode, _, err := t.mpt_get(child, key_hex, pos)
+		value, newnode, _, err := self.mpt_get(child, key_hex, pos)
 		return value, newnode, true, err
 	default:
 		panic(fmt.Sprintf("%T: invalid node: %v", origNode, origNode))
 	}
 }
 
-func (t *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value node) (bool, node, error) {
+func (self *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value node) (bool, node, error) {
 	if len(key_hex_rest) == 0 {
 		if v, ok := n.(valueNode); ok {
 			return !bytes.Equal(v, value.(valueNode)), value, nil
@@ -191,20 +191,20 @@ func (t *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value nod
 		// If the whole key matches, keep this short node as is
 		// and only update the value.
 		if matchlen == len(n.Key) {
-			dirty, nn, err := t.mpt_insert(n.Val, append(key_hex_prefix, key_hex_rest[:matchlen]...), key_hex_rest[matchlen:], value, )
+			dirty, nn, err := self.mpt_insert(n.Val, append(key_hex_prefix, key_hex_rest[:matchlen]...), key_hex_rest[matchlen:], value, )
 			if !dirty || err != nil {
 				return false, n, err
 			}
-			return true, &shortNode{n.Key, nn, t.newFlag()}, nil
+			return true, &shortNode{n.Key, nn, self.newFlag()}, nil
 		}
 		// Otherwise branch out at the index where they differ.
-		branch := &fullNode{flags: t.newFlag()}
+		branch := &fullNode{flags: self.newFlag()}
 		var err error
-		_, branch.Children[n.Key[matchlen]], err = t.mpt_insert(nil, append(key_hex_prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val, )
+		_, branch.Children[n.Key[matchlen]], err = self.mpt_insert(nil, append(key_hex_prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val, )
 		if err != nil {
 			return false, nil, err
 		}
-		_, branch.Children[key_hex_rest[matchlen]], err = t.mpt_insert(nil, append(key_hex_prefix, key_hex_rest[:matchlen+1]...), key_hex_rest[matchlen+1:], value, )
+		_, branch.Children[key_hex_rest[matchlen]], err = self.mpt_insert(nil, append(key_hex_prefix, key_hex_rest[:matchlen+1]...), key_hex_rest[matchlen+1:], value, )
 		if err != nil {
 			return false, nil, err
 		}
@@ -213,28 +213,28 @@ func (t *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value nod
 			return true, branch, nil
 		}
 		// Otherwise, replace it with a short node leading up to the branch.
-		return true, &shortNode{key_hex_rest[:matchlen], branch, t.newFlag()}, nil
+		return true, &shortNode{key_hex_rest[:matchlen], branch, self.newFlag()}, nil
 	case *fullNode:
-		dirty, nn, err := t.mpt_insert(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:], value, )
+		dirty, nn, err := self.mpt_insert(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:], value, )
 		if !dirty || err != nil {
 			return false, n, err
 		}
 		n = n.copy()
-		n.flags = t.newFlag()
+		n.flags = self.newFlag()
 		n.Children[key_hex_rest[0]] = nn
 		return true, n, nil
 	case nil:
-		return true, &shortNode{key_hex_rest, value, t.newFlag()}, nil
+		return true, &shortNode{key_hex_rest, value, self.newFlag()}, nil
 	case hashNode:
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
 		panic("Not yet")
-		rn, err := t.resolve(n, key_hex_prefix)
+		rn, err := self.resolve(n, key_hex_prefix)
 		if err != nil {
 			return false, nil, err
 		}
-		dirty, nn, err := t.mpt_insert(rn, key_hex_prefix, key_hex_rest, value)
+		dirty, nn, err := self.mpt_insert(rn, key_hex_prefix, key_hex_rest, value)
 		if !dirty || err != nil {
 			return false, rn, err
 		}
@@ -244,7 +244,7 @@ func (t *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value nod
 	}
 }
 
-func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node, error) {
+func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node, error) {
 	switch n := n.(type) {
 	case *shortNode:
 		matchlen := prefixLen(key_hex_rest, n.Key)
@@ -258,7 +258,7 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 		// from the subtrie. Child can never be nil here since the
 		// subtrie must contain at least two other values with keys
 		// longer than n.Key.
-		dirty, child, err := t.mpt_del(n.Val, append(key_hex_prefix, key_hex_rest[:len(n.Key)]...), key_hex_rest[len(n.Key):], )
+		dirty, child, err := self.mpt_del(n.Val, append(key_hex_prefix, key_hex_rest[:len(n.Key)]...), key_hex_rest[len(n.Key):], )
 		if !dirty || err != nil {
 			return false, n, err
 		}
@@ -270,17 +270,18 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 			// always creates a new slice) instead of append to
 			// avoid modifying n.Key since it might be shared with
 			// other nodes.
-			return true, &shortNode{concat(n.Key, child.Key...), child.Val, t.newFlag()}, nil
+			return true, &shortNode{concat(n.Key, child.Key...), child.Val, self.newFlag()}, nil
 		default:
-			return true, &shortNode{n.Key, child, t.newFlag()}, nil
+			return true, &shortNode{n.Key, child, self.newFlag()}, nil
 		}
 	case *fullNode:
-		dirty, nn, err := t.mpt_del(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:], )
+		key_hex_prefix = append(key_hex_prefix, key_hex_rest[0])
+		dirty, nn, err := self.mpt_del(n.Children[key_hex_rest[0]], key_hex_prefix, key_hex_rest[1:], )
 		if !dirty || err != nil {
 			return false, n, err
 		}
 		n = n.copy()
-		n.flags = t.newFlag()
+		n.flags = self.newFlag()
 		n.Children[key_hex_rest[0]] = nn
 		// Check how many non-nil entries are left after deleting and
 		// reduce the full node to a short node if only one entry is
@@ -312,7 +313,7 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 				// check.
 				n := n.Children[pos]
 				if hash_n, is := n.(hashNode); is {
-					if resolved_n, err := t.resolve(hash_n, key_hex_prefix); err != nil {
+					if resolved_n, err := self.resolve(hash_n, key_hex_prefix); err != nil {
 						return false, nil, err
 					} else {
 						n = resolved_n
@@ -320,12 +321,12 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 				}
 				if cnode, ok := n.(*shortNode); ok {
 					k := append([]byte{byte(pos)}, cnode.Key...)
-					return true, &shortNode{k, cnode.Val, t.newFlag()}, nil
+					return true, &shortNode{k, cnode.Val, self.newFlag()}, nil
 				}
 			}
 			// Otherwise, n is replaced by a one-nibble short node
 			// containing the child.
-			return true, &shortNode{[]byte{byte(pos)}, n.Children[pos], t.newFlag()}, nil
+			return true, &shortNode{[]byte{byte(pos)}, n.Children[pos], self.newFlag()}, nil
 		}
 		// n still contains at least two values and cannot be reduced.
 		return true, n, nil
@@ -337,11 +338,11 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and delete from it. This leaves all child nodes on
 		// the path to the value in the trie.
-		rn, err := t.resolve(n, key_hex_prefix)
+		rn, err := self.resolve(n, key_hex_prefix)
 		if err != nil {
 			return false, nil, err
 		}
-		dirty, nn, err := t.mpt_del(rn, key_hex_prefix, key_hex_rest)
+		dirty, nn, err := self.mpt_del(rn, key_hex_prefix, key_hex_rest)
 		if !dirty || err != nil {
 			return false, rn, err
 		}
@@ -351,13 +352,18 @@ func (t *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, node,
 	}
 }
 
-func (self *Trie) store(hash hashNode, n node, hash_preimage []byte) error {
+func (self *Trie) store(hash hashNode, n node, n_enc []byte) error {
 	// TODO
 	//enc, err := rlp.EncodeToBytes(self.logicalToStorageRepr(n))
 	//if err != nil {
 	//	return err
 	//}
-	return self.db.Put(common.CopyBytes(hash), common.CopyBytes(hash_preimage))
+	switch n.(type) {
+	case *fullNode, *shortNode:
+	default:
+		panic("impossible")
+	}
+	return self.db.Put(hash, n_enc)
 }
 
 func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error) {
@@ -370,6 +376,9 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 		return nil, err
 	}
 	ret := mustDecodeNode(hash, enc, self.cachegen, func(mpt_key_hex_rest, value []byte) valueNode {
+		mpt_key_hex := concat(mpt_key_hex_prefix, mpt_key_hex_rest...)
+		_ = hexToKeybytes(mpt_key_hex)
+
 		// TODO
 		//util.Assert(len(value) == 1)
 		//mpt_key := concat(mpt_key_hex_prefix, mpt_key_hex_rest...)
@@ -382,74 +391,18 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	return ret, nil
 }
 
-//func (self *Trie) logicalToStorageRepr(n node) node {
-//	switch n := n.(type) {
-//	case *shortNode:
-//		// Short nodes discard the flags and cascade
-//		return &rawShortNode{Key: n.Key, Val: self.logicalToStorageRepr(n.Val)}
-//	case *fullNode:
-//		// Full nodes discard the flags and cascade
-//		node := rawFullNode(n.copy().Children)
-//		for i := 0; i < len(node); i++ {
-//			if node[i] != nil {
-//				node[i] = self.logicalToStorageRepr(node[i])
-//			}
-//		}
-//		return node
-//	case valueNode:
-//		return rawValueNode(n)
-//	case hashNode:
-//		return n
-//	default:
-//		panic(fmt.Sprintf("unknown node type: %T", n))
-//	}
-//}
-//
-//func (self *Trie) storageToLogicalRepr(hash hashNode, n node) node {
-//	switch n := n.(type) {
-//	case *rawShortNode:
-//		return &shortNode{
-//			Key: compactToHex(n.Key),
-//			Val: self.storageToLogicalRepr(nil, n.Val, self.cachegen),
-//			flags: nodeFlag{
-//				hash: hash,
-//				gen:  self.cachegen,
-//			},
-//		}
-//	case rawFullNode:
-//		node := &fullNode{
-//			flags: nodeFlag{
-//				hash: hash,
-//				gen:  self.cachegen,
-//			},
-//		}
-//		for i := 0; i < len(node.Children); i++ {
-//			if n[i] != nil {
-//				node.Children[i] = self.storageToLogicalRepr(nil, n[i], self.cachegen)
-//			}
-//		}
-//		return node
-//	case hashNode:
-//		return n
-//	case rawValueNode:
-//		return valueNode(n)
-//	default:
-//		panic(fmt.Sprintf("unknown node type: %T", n))
-//	}
-//}
-
-func (t *Trie) hashRoot(store hasher_store_strategy) (node, node, error) {
-	if t.root == nil {
+func (self *Trie) hashRoot(store hasher_store_strategy) (node, node, error) {
+	if self.root == nil {
 		return hashNode(emptyRoot[:]), nil, nil
 	}
-	h := newHasher(t.cachegen, t.cachelimit)
-	h.dot_g = t.Dot_g
+	h := newHasher(self.cachegen, self.cachelimit)
+	h.dot_g = self.Dot_g
 	defer returnHasherToPool(h)
-	return h.hash(t.root, true, store)
+	return h.hash(self.root, true, store)
 }
 
-func (t *Trie) newFlag() nodeFlag {
-	return nodeFlag{dirty: true, gen: t.cachegen}
+func (self *Trie) newFlag() nodeFlag {
+	return nodeFlag{dirty: true, gen: self.cachegen}
 }
 
 func concat(s1 []byte, s2 ...byte) []byte {
