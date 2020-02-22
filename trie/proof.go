@@ -94,7 +94,7 @@ func MustVerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.Getter) (va
 		if buf == nil {
 			panic(fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash))
 		}
-		n := decodeNode(wantHash[:], buf, 0, func(_, value []byte) valueNode {
+		n := decodeNode(nil, wantHash[:], buf, 0, func(_, value []byte) valueNode {
 			return value
 		})
 		keyrest, cld := get(n, key)

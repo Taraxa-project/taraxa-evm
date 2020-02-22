@@ -106,13 +106,13 @@ func (n valueNode) cached_hash() (hashNode, bool) { return nil, true }
 func (n valueNode) String() string                { return n.fstring("") }
 func (n valueNode) fstring(string) string         { return fmt.Sprintf("%x ", []byte(n)) }
 
-type value_node_resolver = func(key_extension, value []byte) valueNode
+type value_node_resolver = func(key, value []byte) valueNode
 
-func mustDecodeNode(hash, buf []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
-	return decodeNode(hash, buf, cachegen, value_node_resolver)
+func mustDecodeNode(path, hash, buf []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
+	return decodeNode(path, hash, buf, cachegen, value_node_resolver)
 }
 
-func decodeNode(hash, buf []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
+func decodeNode(path, hash, buf []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
 	if len(buf) == 0 {
 		panic(io.ErrUnexpectedEOF)
 	}
@@ -120,46 +120,47 @@ func decodeNode(hash, buf []byte, cachegen uint16, value_node_resolver value_nod
 	util.PanicIfNotNil(err)
 	switch c, _ := rlp.CountValues(elems); c {
 	case 2:
-		return decodeShort(hash, elems, cachegen, value_node_resolver)
+		return decodeShort(path, hash, elems, cachegen, value_node_resolver)
 	case 17:
-		return decodeFull(hash, elems, cachegen, value_node_resolver)
+		return decodeFull(path, hash, elems, cachegen, value_node_resolver)
 	default:
 		panic(fmt.Errorf("invalid number of list elements: %v", c))
 	}
 }
 
-func decodeShort(hash, elems []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
+func decodeShort(path, hash, elems []byte, cachegen uint16, value_node_resolver value_node_resolver) node {
 	kbuf, rest, err := rlp.SplitString(elems)
 	util.PanicIfNotNil(err)
 	flag := nodeFlag{hash: hash, gen: cachegen}
 	key := compactToHex(kbuf)
+	path = append(path, key...)
 	if hasTerm(key) {
 		val, _, err := rlp.SplitString(rest)
 		util.PanicIfNotNil(err)
 		ret := &shortNode{Key: key, flags: flag}
 		if len(val) > 0 {
-			ret.Val = value_node_resolver(key, val)
+			ret.Val = value_node_resolver(path, val)
 		}
 		return ret
 	}
-	r, _ := decodeRef(rest, cachegen, value_node_resolver)
+	r, _ := decodeRef(path, rest, cachegen, value_node_resolver)
 	return &shortNode{key, r, flag}
 }
 
-func decodeFull(hash, elems []byte, cachegen uint16, value_node_resolver value_node_resolver) *fullNode {
+func decodeFull(path, hash, elems []byte, cachegen uint16, value_node_resolver value_node_resolver) *fullNode {
 	n := &fullNode{flags: nodeFlag{hash: hash, gen: cachegen}}
-	for i := 0; i < 16; i++ {
-		n.Children[i], elems = decodeRef(elems, cachegen, value_node_resolver)
+	for i := byte(0); i < 16; i++ {
+		n.Children[i], elems = decodeRef(append(path, i), elems, cachegen, value_node_resolver)
 	}
 	val, _, err := rlp.SplitString(elems)
 	util.PanicIfNotNil(err)
 	if len(val) > 0 {
-		n.Children[16] = value_node_resolver(nil, val)
+		n.Children[16] = value_node_resolver(path, val)
 	}
 	return n
 }
 
-func decodeRef(buf []byte, cachegen uint16, value_node_resolver value_node_resolver) (node, []byte) {
+func decodeRef(path, buf []byte, cachegen uint16, value_node_resolver value_node_resolver) (node, []byte) {
 	kind, val, rest, err := rlp.Split(buf)
 	util.PanicIfNotNil(err)
 	switch {
@@ -169,7 +170,7 @@ func decodeRef(buf []byte, cachegen uint16, value_node_resolver value_node_resol
 		if size := len(buf) - len(rest); size > common.HashLength {
 			panic(fmt.Errorf("oversized embedded node (size is %d bytes, want size < %d)", size, common.HashLength))
 		}
-		return decodeNode(nil, buf, cachegen, value_node_resolver), rest
+		return decodeNode(path, nil, buf, cachegen, value_node_resolver), rest
 	case kind == rlp.String && len(val) == 0:
 		// empty node
 		return nil, rest

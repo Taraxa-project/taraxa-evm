@@ -32,8 +32,6 @@ type StaticConfig struct {
 	// NoRecursion disabled Interpreter call, callcode,
 	// delegate call and create.
 	NoRecursion bool `json:"noRecursion"`
-	// Enable recording of SHA3/keccak preimages
-	EnablePreimageRecording bool `json:"enablePreimageRecording"`
 	// Type of the EWASM interpreter
 	EWASMInterpreter string `json:"eWASMInterpreter"`
 	// Type of the EVM interpreter

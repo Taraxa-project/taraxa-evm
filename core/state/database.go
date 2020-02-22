@@ -20,6 +20,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	lru "github.com/hashicorp/golang-lru"
 )
@@ -42,11 +43,11 @@ type Database struct {
 	batch         ethdb.Batch
 }
 
-func (self *Database) RawDB() ethdb.Database {
-	return self.db
+func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) (*trie.Trie, error) {
+	return trie.NewSecure(root, trie_db{self}, 0)
 }
 
-func (self *Database) OpenTrie(root common.Hash) (*trie.Trie, error) {
+func (self *Database) OpenTrie(root *common.Hash) (*trie.Trie, error) {
 	return trie.NewSecure(root, trie_db{self}, MaxTrieCacheGen)
 }
 
@@ -59,7 +60,7 @@ func (self *Database) ContractCode(hash []byte) ([]byte, error) {
 }
 
 func (self *Database) CodeSize(hash []byte) (int, error) {
-	if cached, ok := self.codeSizeCache.Get(util.StringView(hash)); ok {
+	if cached, ok := self.codeSizeCache.Get(binary.StringView(hash)); ok {
 		return cached.(int), nil
 	}
 	code, err := self.ContractCode(hash)
@@ -87,13 +88,13 @@ func (self *Database) put(k, v []byte) error {
 }
 
 type trie_db struct {
-	db *Database
+	*Database
 }
 
 func (self trie_db) Put(key []byte, value []byte) error {
-	return self.db.put(key, value)
+	return self.put(key, value)
 }
 
 func (self trie_db) Get(key []byte) ([]byte, error) {
-	return self.db.db.Get(key)
+	return self.db.Get(key)
 }

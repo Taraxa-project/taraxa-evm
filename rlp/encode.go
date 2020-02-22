@@ -18,6 +18,7 @@ package rlp
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"io"
 	"math/big"
 	"reflect"
@@ -25,7 +26,7 @@ import (
 )
 
 var (
-	EmptyList   = []byte{0xC0}
+	EmptyList = []byte{0xC0}
 )
 
 // Encoder is implemented by types that require custom
@@ -454,14 +455,7 @@ func writeByteArray(val reflect.Value, w *encbuf) error {
 }
 
 func writeString(val reflect.Value, w *encbuf) error {
-	s := val.String()
-	if len(s) == 1 && s[0] <= 0x7f {
-		// fits single byte, no string header
-		w.str = append(w.str, s[0])
-	} else {
-		w.encodeStringHeader(len(s))
-		w.str = append(w.str, s...)
-	}
+	w.encodeString(binary.BytesView(val.String()))
 	return nil
 }
 

@@ -66,8 +66,6 @@ type StateDB struct {
 	logs         map[common.Hash][]*types.Log
 	logSize      uint
 
-	preimages map[common.Hash][]byte
-
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
 	journal        *journal
@@ -81,7 +79,7 @@ type BalanceTable = map[common.Address]*hexutil.Big
 
 // Create a new state from a given trie.
 func New(root common.Hash, db *Database) (*StateDB, error) {
-	tr, err := db.OpenTrie(root)
+	tr, err := db.OpenTrie(&root)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +89,13 @@ func New(root common.Hash, db *Database) (*StateDB, error) {
 		stateObjects:      make(map[common.Address]*stateObject),
 		stateObjectsDirty: make(map[common.Address]struct{}),
 		logs:              make(map[common.Hash][]*types.Log),
-		preimages:         make(map[common.Hash][]byte),
 		journal:           newJournal(),
 	}, nil
 }
 
 // setError remembers the first non-nil error it is called with.
 func (self *StateDB) setError(err error) {
+	// TODO handle
 	if self.dbErr == nil {
 		self.dbErr = err
 	}
@@ -128,16 +126,6 @@ func (self *StateDB) Logs() []*types.Log {
 		logs = append(logs, lgs...)
 	}
 	return logs
-}
-
-// AddPreimage records a SHA3 preimage seen by the VM.
-func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
-	if _, ok := self.preimages[hash]; !ok {
-		self.journal.append(addPreimageChange{hash: hash})
-		pi := make([]byte, len(preimage))
-		copy(pi, preimage)
-		self.preimages[hash] = pi
-	}
 }
 
 // AddRefund adds gas to the refund counter
@@ -251,11 +239,6 @@ func (self *StateDB) GetCommittedState(addr common.Address, hash common.Hash) co
 		return stateObject.GetCommittedState(hash)
 	}
 	return common.Hash{}
-}
-
-// Database retrieves the low level database supporting the lower level trie ops.
-func (self *StateDB) Database() *Database {
-	return self.db
 }
 
 func (self *StateDB) HasSuicided(addr common.Address) bool {

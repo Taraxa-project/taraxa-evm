@@ -28,6 +28,7 @@ import (
 )
 
 var (
+	zeroHash           = make([]byte, common.HashLength)
 	emptyRoot          = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 	emptyState         = crypto.Keccak256Hash(nil)
 	cacheMissCounter   = metrics.NewRegisteredCounter("trie/cachemiss", nil)
@@ -53,7 +54,7 @@ type StorageStrategy = interface {
 	MapKey(key []byte) (mpt_key, flat_key []byte, err error)
 }
 
-func New(root common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
+func New(root *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
 	util.Assert(db != nil)
 	if storage_strat == nil {
 		storage_strat = DefaultStorageStrategy(0)
@@ -63,8 +64,8 @@ func New(root common.Hash, db Database, cachelimit uint16, storage_strat Storage
 		cachelimit:    cachelimit,
 		storage_strat: storage_strat,
 	}
-	if root != (common.Hash{}) && root != emptyRoot {
-		rootnode, err := trie.resolve(root[:], nil)
+	if root_b := root[:]; bytes.Compare(root_b, zeroHash) != 0 && bytes.Compare(root_b, emptyRoot[:]) != 0 {
+		rootnode, err := trie.resolve(root_b, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +74,7 @@ func New(root common.Hash, db Database, cachelimit uint16, storage_strat Storage
 	return trie, nil
 }
 
-func NewSecure(root common.Hash, db Database, cachelimit uint16) (*Trie, error) {
+func NewSecure(root *common.Hash, db Database, cachelimit uint16) (*Trie, error) {
 	return New(root, db, cachelimit, KeyHashingStorageStrategy(0))
 }
 
@@ -375,10 +376,8 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	if err != nil {
 		return nil, err
 	}
-	ret := mustDecodeNode(hash, enc, self.cachegen, func(mpt_key_hex_rest, value []byte) valueNode {
-		mpt_key_hex := concat(mpt_key_hex_prefix, mpt_key_hex_rest...)
-		_ = hexToKeybytes(mpt_key_hex)
-
+	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(key, value []byte) valueNode {
+		_ = hexToKeybytes(key)
 		// TODO
 		//util.Assert(len(value) == 1)
 		//mpt_key := concat(mpt_key_hex_prefix, mpt_key_hex_rest...)
@@ -403,11 +402,4 @@ func (self *Trie) hashRoot(store hasher_store_strategy) (node, node, error) {
 
 func (self *Trie) newFlag() nodeFlag {
 	return nodeFlag{dirty: true, gen: self.cachegen}
-}
-
-func concat(s1 []byte, s2 ...byte) []byte {
-	r := make([]byte, len(s1)+len(s2))
-	copy(r, s1)
-	copy(r[len(s1):], s2)
-	return r
 }

@@ -19,7 +19,7 @@ package state
 import (
 	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/local"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	"io"
 	"math/big"
@@ -45,15 +45,6 @@ func (self Storage) String() (str string) {
 	}
 
 	return
-}
-
-func (self Storage) Copy() Storage {
-	cpy := make(Storage)
-	for key, value := range self {
-		cpy[key] = value
-	}
-
-	return cpy
 }
 
 // stateObject represents an Ethereum account which is being modified.
@@ -151,11 +142,8 @@ func (c *stateObject) touch() {
 func (c *stateObject) getTrie() *trie.Trie {
 	if c.trie == nil {
 		var err error
-		c.trie, err = c.db.db.OpenTrie(c.data.Root)
-		if err != nil {
-			c.trie, _ = c.db.db.OpenTrie(common.Hash{})
-			c.setError(fmt.Errorf("can't create storage trie: %v", err))
-		}
+		c.trie, err = c.db.db.OpenStorageTrie(&c.data.Root, &c.address)
+		util.PanicIfNotNil(err)
 	}
 	return c.trie
 }
@@ -242,9 +230,6 @@ func (self *stateObject) updateTrie() *trie.Trie {
 func (self *stateObject) updateRoot() {
 	self.updateTrie()
 	self.data.Root = self.trie.Hash()
-	if local.Debugging {
-		fmt.Println("trie root for", self.address.Hex(), "->", self.data.Root.Hex())
-	}
 }
 
 // CommitTrie the storage trie of the object to db.
