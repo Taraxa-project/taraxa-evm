@@ -21,6 +21,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/emicklei/dot"
 	"hash"
+	"io"
 	"math/rand"
 	"reflect"
 	"strconv"
@@ -171,6 +172,24 @@ func (h *hasher) hashChildren(original node, store hasher_store_strategy) (node,
 	}
 }
 
+var nilValueNode = valueNode(nil)
+
+func (self *hasher) enc_full(n *fullNode, w io.Writer) error {
+	var nodes [17]node
+	for i, child := range &n.Children {
+		if child != nil {
+			nodes[i] = child
+		} else {
+			nodes[i] = nilValueNode
+		}
+	}
+	return rlp.Encode(w, nodes)
+}
+
+func (self *hasher) enc_short(n *shortNode, w io.Writer) error {
+	return rlp.Encode(w, []interface{}{n.Key, n.Val})
+}
+
 func (h *hasher) hash_and_maybe_store(n node, force bool, store hasher_store_strategy) (node, error) {
 	// Don't store hashes or empty nodes.
 	util.Assert(n != nil, "impossible")
@@ -182,7 +201,7 @@ func (h *hasher) hash_and_maybe_store(n node, force bool, store hasher_store_str
 	}
 	// Generate the RLP encoding of the node
 	h.tmp.Reset()
-	if err := rlp.Encode(&h.tmp, n); err != nil {
+	if err := rlp.Encode(&h.tmp, n, h); err != nil {
 		panic("encode error: " + err.Error())
 	}
 	if len(h.tmp) < 32 && !force {

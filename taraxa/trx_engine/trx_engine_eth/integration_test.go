@@ -95,7 +95,7 @@ func Test_integration(t *testing.T) {
 
 
 		//StartBlock: 50220,
-		StartBlock: 2691830,
+		StartBlock: 2705353,
 		//StartBlock: 51921,
 		//StartBlock: 50222,
 		//StartBlock:       477942,

@@ -382,21 +382,22 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	if err != nil {
 		return nil, err
 	}
-	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(key, value []byte) valueNode {
-		if !self.storage_strat.UseFlat() {
-			return value
-		}
-		mpt_key := hexToKeybytes(key)
-		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
-		util.PanicIfNotNil(err_0)
-		////util.Assert(len(value) == 1)
-		committed, err_1 := self.db.GetCommitted(flat_key)
-		util.PanicIfNotNil(err_1)
-		flat_v, err_2 := self.db.Get(flat_key)
-		//// TODO track deletions
-		util.PanicIfNotNil(err_2)
-		util.Assert(bytes.Compare(value, committed) == 0 || bytes.Compare(value, flat_v) == 0)
-		return value
+	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(key []byte) []byte {
+		return nil
+		//if !self.storage_strat.UseFlat() {
+		//	return value
+		//}
+		//mpt_key := hexToKeybytes(key)
+		//flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		//util.PanicIfNotNil(err_0)
+		//////util.Assert(len(value) == 1)
+		//committed, err_1 := self.db.GetCommitted(flat_key)
+		//util.PanicIfNotNil(err_1)
+		//flat_v, err_2 := self.db.Get(flat_key)
+		////// TODO track deletions
+		//util.PanicIfNotNil(err_2)
+		//util.Assert(bytes.Compare(value, committed) == 0 || bytes.Compare(value, flat_v) == 0)
+		//return value
 	})
 	return ret, nil
 }

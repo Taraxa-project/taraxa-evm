@@ -43,6 +43,10 @@ type Encoder interface {
 	EncodeRLP(io.Writer) error
 }
 
+type Parameterized interface {
+	Params() []interface{}
+}
+
 // Encode writes the RLP encoding of val to w. Note that Encode may
 // perform many small writes in some cases. Consider making w
 // buffered.
@@ -75,7 +79,7 @@ type Encoder interface {
 //
 // Boolean values are not supported, nor are signed integers, floating
 // point numbers, maps, channels and functions.
-func Encode(w io.Writer, val interface{}) error {
+func Encode(w io.Writer, val interface{}, params ...interface{}) error {
 	if outer, ok := w.(*encbuf); ok {
 		// Encode was called by some type's EncodeRLP.
 		// Avoid copying by writing to the outer encbuf directly.
@@ -83,7 +87,7 @@ func Encode(w io.Writer, val interface{}) error {
 	}
 	eb := encbufPool.Get().(*encbuf)
 	defer encbufPool.Put(eb)
-	eb.reset()
+	eb.reset(params)
 	if err := eb.encode(val); err != nil {
 		return err
 	}
@@ -92,10 +96,10 @@ func Encode(w io.Writer, val interface{}) error {
 
 // EncodeToBytes returns the RLP encoding of val.
 // Please see the documentation of Encode for the encoding rules.
-func EncodeToBytes(val interface{}) ([]byte, error) {
+func EncodeToBytes(val interface{}, params ...interface{}) ([]byte, error) {
 	eb := encbufPool.Get().(*encbuf)
 	defer encbufPool.Put(eb)
-	eb.reset()
+	eb.reset(params)
 	if err := eb.encode(val); err != nil {
 		return nil, err
 	}
@@ -107,9 +111,9 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 // data.
 //
 // Please see the documentation of Encode for the encoding rules.
-func EncodeToReader(val interface{}) (size int, r io.Reader, err error) {
+func EncodeToReader(val interface{}, params ...interface{}) (size int, r io.Reader, err error) {
 	eb := encbufPool.Get().(*encbuf)
-	eb.reset()
+	eb.reset(params)
 	if err := eb.encode(val); err != nil {
 		return 0, nil, err
 	}
@@ -121,6 +125,7 @@ type encbuf struct {
 	lheads  []*listhead // all list headers
 	lhsize  int         // sum of sizes of all encoded list headers
 	sizebuf []byte      // 9-byte auxiliary buffer for uint encoding
+	params  []interface{}
 }
 
 type listhead struct {
@@ -160,7 +165,7 @@ var encbufPool = sync.Pool{
 	New: func() interface{} { return &encbuf{sizebuf: make([]byte, 9)} },
 }
 
-func (w *encbuf) reset() {
+func (w *encbuf) reset(params []interface{}) {
 	w.lhsize = 0
 	if w.str != nil {
 		w.str = w.str[:0]
@@ -168,12 +173,17 @@ func (w *encbuf) reset() {
 	if w.lheads != nil {
 		w.lheads = w.lheads[:0]
 	}
+	w.params = params
 }
 
 // encbuf implements io.Writer so it can be passed it into EncodeRLP.
 func (w *encbuf) Write(b []byte) (int, error) {
 	w.str = append(w.str, b...)
 	return len(b), nil
+}
+
+func (self *encbuf) Params() []interface{} {
+	return self.params
 }
 
 func (w *encbuf) encode(val interface{}) error {
