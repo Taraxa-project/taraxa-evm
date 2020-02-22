@@ -24,6 +24,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/emicklei/dot"
 )
 
@@ -51,14 +52,16 @@ type Trie struct {
 	storage_strat        StorageStrategy
 }
 type StorageStrategy = interface {
-	MapKey(key []byte) (mpt_key, flat_key []byte, err error)
+	OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error)
+	MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error)
+	UseFlat() bool
 }
 
 func New(root *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
 	util.Assert(db != nil)
-	if storage_strat == nil {
-		storage_strat = DefaultStorageStrategy(0)
-	}
+	//if storage_strat == nil {
+	storage_strat = DefaultStorageStrategy(0)
+	//}
 	trie := &Trie{
 		db:            db,
 		cachelimit:    cachelimit,
@@ -74,36 +77,38 @@ func New(root *common.Hash, db Database, cachelimit uint16, storage_strat Storag
 	return trie, nil
 }
 
-func NewSecure(root *common.Hash, db Database, cachelimit uint16) (*Trie, error) {
-	return New(root, db, cachelimit, KeyHashingStorageStrategy(0))
-}
-
 func (self *Trie) NodeIterator(start []byte) NodeIterator {
 	return newNodeIterator(self, start)
 }
 
 func (self *Trie) Get(key []byte) ([]byte, error) {
-	mpt_key, _, err_0 := self.storage_strat.MapKey(key)
-	if err_0 != nil {
-		return nil, err_0
-	}
+	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
+	util.PanicIfNotNil(err_0)
 	mpt_key_hex := keybytesToHex(mpt_key)
-	value, newroot, didResolve, err_1 := self.mpt_get(self.root, mpt_key_hex, 0)
-	if err_1 == nil && didResolve {
-		self.root = newroot
+	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
+	if err_2 != nil || !didResolve {
+		return nil, err_2
 	}
-	//v, _ := t.db.Get(flat_key)
-	//util.Assert(bytes.Compare(v, value) == 0)
-	return value, err_1
+	self.root = newroot
+	if self.storage_strat.UseFlat() {
+		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		util.PanicIfNotNil(err_1)
+		flat_v, err_2 := self.db.Get(flat_key)
+		util.PanicIfNotNil(err_2)
+		util.Assert(bytes.Compare(flat_v, value) == 0)
+	}
+	return value, nil
 }
 
 func (self *Trie) Insert(key, value []byte) error {
-	mpt_key, _, err := self.storage_strat.MapKey(key)
-	if err != nil {
-		return err
+	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
+	util.PanicIfNotNil(err_0)
+	if self.storage_strat.UseFlat() {
+		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		util.PanicIfNotNil(err_1)
+		util.PanicIfNotNil(self.db.Put(flat_key, value))
 	}
 	mpt_key_hex := keybytesToHex(mpt_key)
-	//t.db.GetTransaction().Put(flat_key, value)
 	if len(value) != 0 {
 		_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
 		if err != nil {
@@ -265,7 +270,7 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 			// always creates a new slice) instead of append to
 			// avoid modifying n.Key since it might be shared with
 			// other nodes.
-			return true, &shortNode{concat(n.Key, child.Key...), child.Val, self.newFlag()}, nil
+			return true, &shortNode{binary.Concat(n.Key, child.Key...), child.Val, self.newFlag()}, nil
 		default:
 			return true, &shortNode{n.Key, child, self.newFlag()}, nil
 		}
@@ -348,17 +353,23 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 }
 
 func (self *Trie) store(hash hashNode, n node, n_enc []byte) error {
+	//if !self.storage_strat.UseFlat() {
+	//}
+	return self.db.Put(common.CopyBytes(hash), common.CopyBytes(n_enc))
 	// TODO
 	//enc, err := rlp.EncodeToBytes(self.logicalToStorageRepr(n))
 	//if err != nil {
 	//	return err
 	//}
-	switch n.(type) {
-	case *fullNode, *shortNode:
-	default:
-		panic("impossible")
-	}
-	return self.db.Put(hash, n_enc)
+	//has_val := false
+	//switch n.(type) {
+	//case *fullNode:
+	//
+	//case *shortNode:
+	//
+	//default:
+	//	panic("impossible")
+	//}
 }
 
 func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error) {
@@ -371,15 +382,17 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 		return nil, err
 	}
 	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(key, value []byte) valueNode {
-		_ = hexToKeybytes(key)
-		// TODO
+		if !self.storage_strat.UseFlat() {
+			return value
+		}
+		mpt_key := hexToKeybytes(key)
+		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		util.PanicIfNotNil(err_0)
 		//util.Assert(len(value) == 1)
-		//mpt_key := concat(mpt_key_hex_prefix, mpt_key_hex_rest...)
-		//ret, err := self.db.Get(mpt_key)
-		//util.PanicIfNotNil(err)
-		//util.Assert(len(ret) != 0)
-		//return ret
-		return value
+		ret, err_1 := self.db.Get(flat_key)
+		util.PanicIfNotNil(err_1)
+		util.Assert(bytes.Compare(value, ret) == 0)
+		return ret
 	})
 	return ret, nil
 }

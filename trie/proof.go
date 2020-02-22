@@ -28,7 +28,7 @@ import (
 )
 
 func (self *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
-	mpt_key, _, err_0 := self.storage_strat.MapKey(key)
+	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	if err_0 != nil {
 		return err_0
 	}

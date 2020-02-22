@@ -18,6 +18,7 @@ package state
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
@@ -44,11 +45,11 @@ type Database struct {
 }
 
 func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) (*trie.Trie, error) {
-	return trie.NewSecure(root, trie_db{self}, 0)
+	return trie.New(root, trie_db{self}, 0, acc_trie_storage_strat(*owner_addr))
 }
 
 func (self *Database) OpenTrie(root *common.Hash) (*trie.Trie, error) {
-	return trie.NewSecure(root, trie_db{self}, MaxTrieCacheGen)
+	return trie.New(root, trie_db{self}, MaxTrieCacheGen, main_trie_storage_strat(0))
 }
 
 func (self *Database) ContractCode(hash []byte) ([]byte, error) {
@@ -97,4 +98,32 @@ func (self trie_db) Put(key []byte, value []byte) error {
 
 func (self trie_db) Get(key []byte) ([]byte, error) {
 	return self.db.Get(key)
+}
+
+type main_trie_storage_strat byte
+
+func (main_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {
+	return crypto.Keccak256(key), nil
+}
+
+func (main_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error) {
+	return binary.Concat(binary.BytesView("main_tr_"), mpt_key...), nil
+}
+
+func (main_trie_storage_strat) UseFlat() bool {
+	return true
+}
+
+type acc_trie_storage_strat common.Address
+
+func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {
+	return crypto.Keccak256(key), nil
+}
+
+func (self acc_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error) {
+	return binary.Concat(binary.Concat(binary.BytesView("storage_tr_"), self[:]...), mpt_key...), nil
+}
+
+func (acc_trie_storage_strat) UseFlat() bool {
+	return true
 }

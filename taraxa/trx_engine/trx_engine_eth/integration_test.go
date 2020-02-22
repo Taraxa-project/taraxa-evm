@@ -93,7 +93,7 @@ func Test_integration(t *testing.T) {
 	})
 	test := EthTxEngineIntegrationTest{
 		//StartBlock: 50220,
-		StartBlock: 2319521,
+		StartBlock: 0,
 		//StartBlock: 50222,
 		//StartBlock:       477942,
 		//StartBlock:       626668,
