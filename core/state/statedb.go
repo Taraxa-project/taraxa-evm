@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/local"
 	"math/big"
 	"sort"
 
@@ -220,11 +219,6 @@ func (self *StateDB) GetCodeHash(addr common.Address) common.Hash {
 
 // GetState retrieves a value from the given account's storage trie.
 func (self *StateDB) GetState(addr common.Address, hash common.Hash) (ret common.Hash) {
-	defer func() {
-		if local.Debugging {
-			fmt.Println("GetState", addr.Hex(), hash.Hex(), ret.Hex())
-		}
-	}()
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
 		return stateObject.GetState(hash)
@@ -290,11 +284,7 @@ func (self *StateDB) SetCode(addr common.Address, code []byte) {
 }
 
 func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
-	if local.Debugging {
-		fmt.Println("SetState", addr.Hex(), key.Hex(), value.Hex())
-	}
-	stateObject := self.GetOrNewStateObject(addr)
-	stateObject.SetState(key, value)
+	self.GetOrNewStateObject(addr).SetState(key, value)
 }
 
 // Suicide marks the given account as suicided.

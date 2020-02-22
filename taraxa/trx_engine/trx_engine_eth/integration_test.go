@@ -46,7 +46,6 @@ func (this *EthTxEngineIntegrationTest) Run() {
 		ethereumVM.CommitToDisk()
 		prevBlock = block
 	}
-
 }
 
 func Test_integration(t *testing.T) {
@@ -92,8 +91,12 @@ func Test_integration(t *testing.T) {
 		return getBlockByNumber(blockNumber).Hash
 	})
 	test := EthTxEngineIntegrationTest{
+		//StartBlock: 1665936,
+
+
 		//StartBlock: 50220,
-		StartBlock: 0,
+		StartBlock: 2691830,
+		//StartBlock: 51921,
 		//StartBlock: 50222,
 		//StartBlock:       477942,
 		//StartBlock:       626668,

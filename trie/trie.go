@@ -59,9 +59,9 @@ type StorageStrategy = interface {
 
 func New(root *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
 	util.Assert(db != nil)
-	//if storage_strat == nil {
-	storage_strat = DefaultStorageStrategy(0)
-	//}
+	if storage_strat == nil {
+		storage_strat = DefaultStorageStrategy(0)
+	}
 	trie := &Trie{
 		db:            db,
 		cachelimit:    cachelimit,
@@ -84,18 +84,21 @@ func (self *Trie) NodeIterator(start []byte) NodeIterator {
 func (self *Trie) Get(key []byte) ([]byte, error) {
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
-	mpt_key_hex := keybytesToHex(mpt_key)
-	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
-	if err_2 != nil || !didResolve {
-		return nil, err_2
-	}
-	self.root = newroot
 	if self.storage_strat.UseFlat() {
 		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
 		util.PanicIfNotNil(err_1)
 		flat_v, err_2 := self.db.Get(flat_key)
 		util.PanicIfNotNil(err_2)
-		util.Assert(bytes.Compare(flat_v, value) == 0)
+		//util.Assert(bytes.Compare(flat_v, value) == 0)
+		return flat_v, nil
+	}
+	mpt_key_hex := keybytesToHex(mpt_key)
+	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
+	if err_2 != nil {
+		return nil, err_2
+	}
+	if didResolve {
+		self.root = newroot
 	}
 	return value, nil
 }
@@ -229,7 +232,6 @@ func (self *Trie) mpt_insert(n node, key_hex_prefix, key_hex_rest []byte, value 
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
-		panic("Not yet")
 		rn, err := self.resolve(n, key_hex_prefix)
 		if err != nil {
 			return false, nil, err
@@ -275,8 +277,7 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 			return true, &shortNode{n.Key, child, self.newFlag()}, nil
 		}
 	case *fullNode:
-		key_hex_prefix = append(key_hex_prefix, key_hex_rest[0])
-		dirty, nn, err := self.mpt_del(n.Children[key_hex_rest[0]], key_hex_prefix, key_hex_rest[1:], )
+		dirty, nn, err := self.mpt_del(n.Children[key_hex_rest[0]], append(key_hex_prefix, key_hex_rest[0]), key_hex_rest[1:])
 		if !dirty || err != nil {
 			return false, n, err
 		}
@@ -313,7 +314,7 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 				// check.
 				n := n.Children[pos]
 				if hash_n, is := n.(hashNode); is {
-					if resolved_n, err := self.resolve(hash_n, key_hex_prefix); err != nil {
+					if resolved_n, err := self.resolve(hash_n, append(key_hex_prefix, byte(pos))); err != nil {
 						return false, nil, err
 					} else {
 						n = resolved_n
@@ -388,11 +389,14 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 		mpt_key := hexToKeybytes(key)
 		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
 		util.PanicIfNotNil(err_0)
-		//util.Assert(len(value) == 1)
-		ret, err_1 := self.db.Get(flat_key)
+		////util.Assert(len(value) == 1)
+		committed, err_1 := self.db.GetCommitted(flat_key)
 		util.PanicIfNotNil(err_1)
-		util.Assert(bytes.Compare(value, ret) == 0)
-		return ret
+		flat_v, err_2 := self.db.Get(flat_key)
+		//// TODO track deletions
+		util.PanicIfNotNil(err_2)
+		util.Assert(bytes.Compare(value, committed) == 0 || bytes.Compare(value, flat_v) == 0)
+		return value
 	})
 	return ret, nil
 }

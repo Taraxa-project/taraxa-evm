@@ -45,11 +45,11 @@ type Database struct {
 }
 
 func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) (*trie.Trie, error) {
-	return trie.New(root, trie_db{self}, 0, acc_trie_storage_strat(*owner_addr))
+	return trie.New(root, trie_db{self, make(map[string][]byte)}, 0, acc_trie_storage_strat(*owner_addr))
 }
 
 func (self *Database) OpenTrie(root *common.Hash) (*trie.Trie, error) {
-	return trie.New(root, trie_db{self}, MaxTrieCacheGen, main_trie_storage_strat(0))
+	return trie.New(root, trie_db{self, make(map[string][]byte)}, MaxTrieCacheGen, main_trie_storage_strat(0))
 }
 
 func (self *Database) ContractCode(hash []byte) ([]byte, error) {
@@ -90,13 +90,22 @@ func (self *Database) put(k, v []byte) error {
 
 type trie_db struct {
 	*Database
+	cache map[string][]byte
 }
 
 func (self trie_db) Put(key []byte, value []byte) error {
+	self.cache[string(key)] = value
 	return self.put(key, value)
 }
 
 func (self trie_db) Get(key []byte) ([]byte, error) {
+	if v, ok := self.cache[binary.StringView(key)]; ok {
+		return v, nil
+	}
+	return self.db.Get(key)
+}
+
+func (self trie_db) GetCommitted(key []byte) ([]byte, error) {
 	return self.db.Get(key)
 }
 

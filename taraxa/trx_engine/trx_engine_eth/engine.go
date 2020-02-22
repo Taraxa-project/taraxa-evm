@@ -1,8 +1,6 @@
 package trx_engine_eth
 
 import (
-	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -11,11 +9,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/local"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"math/big"
 )
 
 type EthTrxEngine struct {
@@ -41,7 +37,6 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	}
 	gasPool := new(core.GasPool).AddGas(uint64(block.GasLimit))
 	for i, tx := range block.Transactions {
-		local.Debugging = i == 2 && req.Block.Number.Cmp(big.NewInt(50222)) == 0
 		if self.DisableGasFee {
 			tx_cpy := *tx
 			tx_cpy.GasPrice = new(hexutil.Big)
@@ -68,9 +63,6 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			stateDB.Finalise(true)
 		} else {
 			intermediateRoot = stateDB.IntermediateRoot(chainConfig.IsEIP158(block.Number)).Bytes()
-			if local.Debugging {
-				fmt.Println("trx", i, common.Bytes2Hex(intermediateRoot))
-			}
 		}
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(intermediateRoot, txErr != nil, uint64(ret.UsedGas))

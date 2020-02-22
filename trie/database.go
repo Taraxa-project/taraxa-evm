@@ -1,8 +1,7 @@
 package trie
 
-import "github.com/Taraxa-project/taraxa-evm/ethdb"
-
 type Database interface {
-	ethdb.Putter
-	ethdb.Getter
+	Put(key, value []byte) error
+	Get(key []byte) ([]byte, error)
+	GetCommitted(key []byte) ([]byte, error)
 }
