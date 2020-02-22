@@ -95,7 +95,6 @@ func (self *Trie) Get(key []byte) ([]byte, error) {
 	//v, _ := t.db.Get(flat_key)
 	//util.Assert(bytes.Compare(v, value) == 0)
 	return value, err_1
-
 }
 
 func (self *Trie) Insert(key, value []byte) error {
@@ -125,20 +124,15 @@ func (self *Trie) Delete(key []byte) error {
 	return self.Insert(key, nil)
 }
 
-func (self *Trie) Hash() common.Hash {
-	hash, cached, _ := self.hashRoot(nil)
-	self.root = cached
-	return common.BytesToHash(hash.(hashNode))
+func (self *Trie) Hash() (ret common.Hash) {
+	ret, self.root, _ = self.hashRoot(nil)
+	return
 }
 
-func (self *Trie) Commit() (root common.Hash, err error) {
-	hash, cached, err := self.hashRoot(self.store)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	self.root = cached
+func (self *Trie) Commit() (ret common.Hash, err error) {
+	ret, self.root, err = self.hashRoot(self.store)
 	self.cachegen++
-	return common.BytesToHash(hash.(hashNode)), nil
+	return
 }
 
 func (self *Trie) mpt_get(origNode node, key_hex []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
@@ -390,14 +384,15 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	return ret, nil
 }
 
-func (self *Trie) hashRoot(store hasher_store_strategy) (node, node, error) {
+func (self *Trie) hashRoot(store hasher_store_strategy) (common.Hash, node, error) {
 	if self.root == nil {
-		return hashNode(emptyRoot[:]), nil, nil
+		return emptyRoot, nil, nil
 	}
-	h := newHasher(self.cachegen, self.cachelimit)
-	h.dot_g = self.Dot_g
-	defer returnHasherToPool(h)
-	return h.hash(self.root, true, store)
+	hasher := newHasher(self.cachegen, self.cachelimit)
+	hasher.dot_g = self.Dot_g
+	defer returnHasherToPool(hasher)
+	root_hash, root, err := hasher.hash(self.root, true, store)
+	return common.BytesToHash(root_hash.(hashNode)), root, err
 }
 
 func (self *Trie) newFlag() nodeFlag {
