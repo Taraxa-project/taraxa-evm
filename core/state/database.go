@@ -105,10 +105,6 @@ func (self trie_db) Get(key []byte) ([]byte, error) {
 	return self.db.Get(key)
 }
 
-func (self trie_db) GetCommitted(key []byte) ([]byte, error) {
-	return self.db.Get(key)
-}
-
 type main_trie_storage_strat byte
 
 func (main_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {

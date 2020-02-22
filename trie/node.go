@@ -109,13 +109,15 @@ func (n valueNode) cached_hash() (hashNode, bool) { return nil, true }
 func (n valueNode) String() string                { return n.fstring("") }
 func (n valueNode) fstring(string) string         { return fmt.Sprintf("%x ", []byte(n)) }
 
-type blank_value_mapper = func(key []byte) []byte
+type value_resolver = func(mpt_key_hex []byte) valueNode
 
-func mustDecodeNode(path, hash, buf []byte, cachegen uint16, blank_value_mapper blank_value_mapper) node {
-	return decodeNode(path, hash, buf, cachegen, blank_value_mapper)
+var nilValueNode = valueNode(nil)
+
+func mustDecodeNode(path, hash, buf []byte, cachegen uint16, value_resolver value_resolver) node {
+	return decodeNode(path, hash, buf, cachegen, value_resolver)
 }
 
-func decodeNode(path, hash, buf []byte, cachegen uint16, blank_value_mapper blank_value_mapper) node {
+func decodeNode(path, hash, buf []byte, cachegen uint16, value_resolver value_resolver) node {
 	if len(buf) == 0 {
 		panic(io.ErrUnexpectedEOF)
 	}
@@ -123,57 +125,39 @@ func decodeNode(path, hash, buf []byte, cachegen uint16, blank_value_mapper blan
 	util.PanicIfNotNil(err)
 	switch c, _ := rlp.CountValues(elems); c {
 	case 1, 2:
-		return decodeShort(path, hash, elems, cachegen, blank_value_mapper)
-	case 16, 17:
-		return decodeFull(path, hash, elems, cachegen, blank_value_mapper)
+		return decodeShort(path, hash, elems, cachegen, value_resolver)
+	case 16:
+		return decodeFull(path, hash, elems, cachegen, value_resolver)
 	default:
 		panic(fmt.Errorf("invalid number of list elements: %v", c))
 	}
 }
 
-func decodeShort(path, hash, elems []byte, cachegen uint16, blank_value_mapper blank_value_mapper) node {
+func decodeShort(path, hash, elems []byte, cachegen uint16, value_resolver value_resolver) node {
 	kbuf, rest, err := rlp.SplitString(elems)
 	util.PanicIfNotNil(err)
 	flag := nodeFlag{hash: hash, gen: cachegen}
 	key := compactToHex(kbuf)
 	path = append(path, key...)
 	if hasTerm(key) {
-		ret := &shortNode{Key: key, flags: flag}
-		if len(rest) > 0 {
-			val, _, err := rlp.SplitString(rest)
-			util.PanicIfNotNil(err)
-			if len(val) == 0 {
-				val = blank_value_mapper(path)
-			}
-			if len(val) > 0 {
-				ret.Val = valueNode(val)
-			}
-		}
-		return ret
+		return &shortNode{key, value_resolver(path), flag}
 	}
-	r, _ := decodeRef(path, rest, cachegen, blank_value_mapper)
-	return &shortNode{key, r, flag}
+	forward_hash, _ := decodeRef(path, rest, cachegen, value_resolver)
+	return &shortNode{key, forward_hash, flag}
 }
 
-func decodeFull(path, hash, elems []byte, cachegen uint16, blank_value_mapper blank_value_mapper) *fullNode {
+func decodeFull(path, hash, elems []byte, cachegen uint16, value_resolver value_resolver) *fullNode {
 	n := &fullNode{flags: nodeFlag{hash: hash, gen: cachegen}}
 	for i := byte(0); i < 16; i++ {
-		n.Children[i], elems = decodeRef(append(path, i), elems, cachegen, blank_value_mapper)
+		n.Children[i], elems = decodeRef(append(path, i), elems, cachegen, value_resolver)
 	}
-	if len(elems) > 0 {
-		val, _, err := rlp.SplitString(elems)
-		util.PanicIfNotNil(err)
-		if len(val) == 0 {
-			val = blank_value_mapper(path)
-		}
-		if len(val) > 0 {
-			n.Children[16] = valueNode(val)
-		}
+	if hasTerm(path) {
+		n.Children[16] = value_resolver(path)
 	}
 	return n
 }
 
-func decodeRef(path, buf []byte, cachegen uint16, blank_value_mapper blank_value_mapper) (node, []byte) {
+func decodeRef(path, buf []byte, cachegen uint16, value_resolver value_resolver) (node, []byte) {
 	kind, val, rest, err := rlp.Split(buf)
 	util.PanicIfNotNil(err)
 	switch {
@@ -183,7 +167,7 @@ func decodeRef(path, buf []byte, cachegen uint16, blank_value_mapper blank_value
 		if size := len(buf) - len(rest); size > common.HashLength {
 			panic(fmt.Errorf("oversized embedded node (size is %d bytes, want size < %d)", size, common.HashLength))
 		}
-		return decodeNode(path, nil, buf, cachegen, blank_value_mapper), rest
+		return decodeNode(path, nil, buf, cachegen, value_resolver), rest
 	case kind == rlp.String && len(val) == 0:
 		// empty node
 		return nil, rest

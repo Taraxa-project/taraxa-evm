@@ -23,9 +23,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/metrics"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/emicklei/dot"
+	"io"
 )
 
 var (
@@ -84,33 +86,29 @@ func (self *Trie) NodeIterator(start []byte) NodeIterator {
 func (self *Trie) Get(key []byte) ([]byte, error) {
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
-	if self.storage_strat.UseFlat() {
-		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-		util.PanicIfNotNil(err_1)
-		flat_v, err_2 := self.db.Get(flat_key)
-		util.PanicIfNotNil(err_2)
-		//util.Assert(bytes.Compare(flat_v, value) == 0)
-		return flat_v, nil
-	}
-	mpt_key_hex := keybytesToHex(mpt_key)
-	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
-	if err_2 != nil {
-		return nil, err_2
-	}
-	if didResolve {
-		self.root = newroot
-	}
-	return value, nil
+	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+	util.PanicIfNotNil(err_1)
+	flat_v, err_2 := self.db.Get(flat_key)
+	util.PanicIfNotNil(err_2)
+	return flat_v, nil
+	//mpt_key_hex := keybytesToHex(mpt_key)
+	//value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
+	//if err_2 != nil {
+	//	return nil, err_2
+	//}
+	//if didResolve {
+	//	self.root = newroot
+	//}
+	//return value, nil
+}
+
+func (self *Trie) MarkForUpdate(key []byte) error {
+
 }
 
 func (self *Trie) Insert(key, value []byte) error {
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
-	if self.storage_strat.UseFlat() {
-		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-		util.PanicIfNotNil(err_1)
-		util.PanicIfNotNil(self.db.Put(flat_key, value))
-	}
 	mpt_key_hex := keybytesToHex(mpt_key)
 	if len(value) != 0 {
 		_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
@@ -125,6 +123,9 @@ func (self *Trie) Insert(key, value []byte) error {
 		}
 		self.root = n
 	}
+	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+	util.PanicIfNotNil(err_1)
+	util.PanicIfNotNil(self.db.Put(flat_key, value))
 	return nil
 }
 
@@ -353,10 +354,32 @@ func (self *Trie) mpt_del(n node, key_hex_prefix, key_hex_rest []byte) (bool, no
 	}
 }
 
+func (self *Trie) enc_full(n *fullNode, w io.Writer) error {
+	var nodes [16]node
+	for i := range nodes {
+		if child := n.Children[i]; child != nil {
+			nodes[i] = child
+		} else {
+			nodes[i] = nilValueNode
+		}
+	}
+	return rlp.Encode(w, nodes)
+}
+
+func (self *Trie) enc_short(n *shortNode, w io.Writer) error {
+	if _, is := n.Val.(valueNode); is {
+		rlp.Encode(w, []interface{}{n.Key})
+	}
+	util.Assert(n.Val != nil)
+	return rlp.Encode(w, []interface{}{n.Key, n.Val})
+}
+
 func (self *Trie) store(hash hashNode, n node, n_enc []byte) error {
 	//if !self.storage_strat.UseFlat() {
 	//}
-	return self.db.Put(common.CopyBytes(hash), common.CopyBytes(n_enc))
+	buf, err := rlp.EncodeToBytes(n, self)
+	util.PanicIfNotNil(err)
+	return self.db.Put(common.CopyBytes(hash), buf)
 	// TODO
 	//enc, err := rlp.EncodeToBytes(self.logicalToStorageRepr(n))
 	//if err != nil {
@@ -382,14 +405,17 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	if err != nil {
 		return nil, err
 	}
-	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(key []byte) []byte {
-		return nil
+	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(mpt_key_hex []byte) valueNode {
+		mpt_key := hexToKeybytes(mpt_key_hex)
+		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		util.PanicIfNotNil(err_0)
+		ret, err_1 := self.db.Get(flat_key)
+		util.PanicIfNotNil(err_1)
+		return ret
 		//if !self.storage_strat.UseFlat() {
 		//	return value
 		//}
-		//mpt_key := hexToKeybytes(key)
-		//flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
-		//util.PanicIfNotNil(err_0)
+
 		//////util.Assert(len(value) == 1)
 		//committed, err_1 := self.db.GetCommitted(flat_key)
 		//util.PanicIfNotNil(err_1)

@@ -172,12 +172,10 @@ func (h *hasher) hashChildren(original node, store hasher_store_strategy) (node,
 	}
 }
 
-var nilValueNode = valueNode(nil)
-
 func (self *hasher) enc_full(n *fullNode, w io.Writer) error {
 	var nodes [17]node
-	for i, child := range &n.Children {
-		if child != nil {
+	for i := range nodes {
+		if child := n.Children[i]; child != nil {
 			nodes[i] = child
 		} else {
 			nodes[i] = nilValueNode
