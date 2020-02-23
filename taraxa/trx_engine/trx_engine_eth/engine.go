@@ -85,6 +85,7 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			&types.Header{Number: block.Number, Coinbase: block.Miner},
 			unclesMapped)
 	}
+	stateDB.Finalise(chainConfig.IsEIP158(block.Number))
 	if ret.StateRoot, err = stateDB.Commit(chainConfig.IsEIP158(block.Number)); err != nil {
 		return
 	}

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"container/heap"
 	"errors"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -133,7 +134,7 @@ func (e seekError) Error() string {
 }
 
 func newNodeIterator(trie *Trie, start []byte) NodeIterator {
-	if trie.Hash() == emptyState {
+	if trie.Hash() == crypto.EmptyBytesKeccak256 {
 		return new(nodeIterator)
 	}
 	it := &nodeIterator{trie: trie}
@@ -261,7 +262,7 @@ func (it *nodeIterator) peek(descend bool) (*nodeIteratorState, *int, []byte, er
 		// Initialize the iterator if we've just started.
 		root := it.trie.Hash()
 		state := &nodeIteratorState{node: it.trie.root, index: -1}
-		if root != emptyRoot {
+		if root != EmptyRLPListHash {
 			state.hash = root
 		}
 		err := state.resolve(it.trie, nil)

@@ -15,22 +15,6 @@ import (
 	"io"
 )
 
-var (
-	zeroHash           = make([]byte, common.HashLength)
-	emptyRoot          = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-	emptyState         = crypto.Keccak256Hash(nil)
-	cacheMissCounter   = metrics.NewRegisteredCounter("trie/cachemiss", nil)
-	cacheUnloadCounter = metrics.NewRegisteredCounter("trie/cacheunload", nil)
-)
-
-func CacheMisses() int64 {
-	return cacheMissCounter.Count()
-}
-
-func CacheUnloads() int64 {
-	return cacheUnloadCounter.Count()
-}
-
 type Trie struct {
 	db                   Database
 	root                 node
@@ -43,7 +27,7 @@ type StorageStrategy = interface {
 	MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error)
 }
 
-func New(root *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
+func New(root_hash *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
 	util.Assert(db != nil)
 	if storage_strat == nil {
 		storage_strat = DefaultStorageStrategy(0)
@@ -53,8 +37,8 @@ func New(root *common.Hash, db Database, cachelimit uint16, storage_strat Storag
 		cachelimit:    cachelimit,
 		storage_strat: storage_strat,
 	}
-	if root_b := root[:]; bytes.Compare(root_b, zeroHash) != 0 && bytes.Compare(root_b, emptyRoot[:]) != 0 {
-		rootnode, err := trie.resolve(root_b, nil)
+	if root_hash := *root_hash; root_hash != common.ZeroHash && root_hash != EmptyRLPListHash {
+		rootnode, err := trie.resolve(root_hash[:], nil)
 		if err != nil {
 			return nil, err
 		}
@@ -68,6 +52,9 @@ func (self *Trie) NodeIterator(start []byte) NodeIterator {
 }
 
 func (self *Trie) Get(key []byte) ([]byte, error) {
+	if self.root == nil {
+		return nil, nil
+	}
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
 	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
@@ -410,7 +397,7 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 
 func (self *Trie) hashRoot(store hasher_store_strategy) (common.Hash, node, error) {
 	if self.root == nil {
-		return emptyRoot, nil, nil
+		return EmptyRLPListHash, nil, nil
 	}
 	hasher := newHasher(self.cachegen, self.cachelimit)
 	hasher.dot_g = self.Dot_g
@@ -421,4 +408,21 @@ func (self *Trie) hashRoot(store hasher_store_strategy) (common.Hash, node, erro
 
 func (self *Trie) newFlag() nodeFlag {
 	return nodeFlag{dirty: true, gen: self.cachegen}
+}
+
+var EmptyRLPListHash = func() common.Hash {
+	b, err := rlp.EncodeToBytes([]byte(nil))
+	util.PanicIfNotNil(err)
+	return crypto.Keccak256Hash(b)
+}()
+
+var cacheMissCounter = metrics.NewRegisteredCounter("trie/cachemiss", nil)
+var cacheUnloadCounter = metrics.NewRegisteredCounter("trie/cacheunload", nil)
+
+func CacheMisses() int64 {
+	return cacheMissCounter.Count()
+}
+
+func CacheUnloads() int64 {
+	return cacheUnloadCounter.Count()
 }

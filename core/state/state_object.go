@@ -29,8 +29,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-var emptyCodeHash = crypto.Keccak256(nil)
-
 type Code []byte
 
 func (self Code) String() string {
@@ -83,7 +81,7 @@ type stateObject struct {
 
 // empty returns whether the account is considered empty.
 func (s *stateObject) empty() bool {
-	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
+	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, crypto.EmptyBytesKeccak256[:])
 }
 
 // Account is the Ethereum consensus representation of accounts.
@@ -101,7 +99,7 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 		data.Balance = new(big.Int)
 	}
 	if data.CodeHash == nil {
-		data.CodeHash = emptyCodeHash
+		data.CodeHash = crypto.EmptyBytesKeccak256[:]
 	}
 	return &stateObject{
 		db:            db,
@@ -139,7 +137,7 @@ func (c *stateObject) touch() {
 	}
 }
 
-func (c *stateObject) getTrie() *trie.Trie {
+func (c *stateObject) getOrOpenTrie() *trie.Trie {
 	if c.trie == nil {
 		var err error
 		c.trie, err = c.db.db.OpenStorageTrie(&c.data.Root, &c.address)
@@ -160,27 +158,26 @@ func (self *stateObject) GetState(key common.Hash) common.Hash {
 }
 
 // GetCommittedState retrieves a value from the committed account storage trie.
-func (self *stateObject) GetCommittedState(key common.Hash) common.Hash {
+func (self *stateObject) GetCommittedState(key common.Hash) (ret common.Hash) {
 	// If we have the original value cached, return that
-	value, cached := self.originStorage[key]
-	if cached {
-		return value
+	if val, ok := self.originStorage[key]; ok {
+		return val
 	}
 	// Otherwise load the value from the database
-	enc, err := self.getTrie().Get(key[:])
+	enc, err := self.getOrOpenTrie().Get(key[:])
 	if err != nil {
 		self.setError(err)
-		return common.Hash{}
+		return
 	}
 	if len(enc) > 0 {
 		_, content, _, err := rlp.Split(enc)
 		if err != nil {
 			self.setError(err)
 		}
-		value.SetBytes(content)
+		ret.SetBytes(content)
 	}
-	self.originStorage[key] = value
-	return value
+	self.originStorage[key] = ret
+	return
 }
 
 // SetState updates a value in account storage.
@@ -204,42 +201,31 @@ func (self *stateObject) setState(key, value common.Hash) {
 }
 
 // updateTrie writes cached storage modifications into the object's storage trie.
-func (self *stateObject) updateTrie() *trie.Trie {
-	tr := self.getTrie()
+func (self *stateObject) updateTrie() {
+	if len(self.dirtyStorage) == 0 {
+		return
+	}
+	tr := self.getOrOpenTrie()
 	for key, value := range self.dirtyStorage {
-		delete(self.dirtyStorage, key)
-
-		// Skip noop changes, persist actual changes
-		if value == self.originStorage[key] {
-			continue
-		}
 		self.originStorage[key] = value
-
-		if (value == common.Hash{}) {
+		if value == common.ZeroHash {
 			self.setError(tr.Delete(key[:]))
 			continue
 		}
-		// Encoding []byte cannot fail, ok to ignore the error.
-		v, _ := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
+		v, err := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
+		util.PanicIfNotNil(err)
 		self.setError(tr.Insert(key[:], v))
 	}
-	return tr
-}
-
-// UpdateRoot sets the trie root to the current root hash of
-func (self *stateObject) updateRoot() {
-	self.updateTrie()
-	self.data.Root = self.trie.Hash()
+	self.dirtyStorage = make(Storage)
 }
 
 // CommitTrie the storage trie of the object to db.
 // This updates the trie root.
 func (self *stateObject) CommitTrie() error {
-	self.updateTrie()
 	if self.dbErr != nil {
 		return self.dbErr
 	}
-	root, err := self.trie.Commit()
+	root, err := self.getOrOpenTrie().Commit()
 	if err == nil {
 		self.data.Root = root
 	}
@@ -299,7 +285,7 @@ func (self *stateObject) Code(db *Database) []byte {
 	if self.code != nil {
 		return self.code
 	}
-	if bytes.Equal(self.CodeHash(), emptyCodeHash) {
+	if bytes.Equal(self.CodeHash(), crypto.EmptyBytesKeccak256[:]) {
 		return nil
 	}
 	code, err := db.ContractCode(self.CodeHash())

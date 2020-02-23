@@ -47,7 +47,7 @@ type StateDB struct {
 	trie *trie.Trie
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects      map[common.Address]*stateObject
-	stateObjectsDirty map[common.Address]struct{}
+	stateObjectsDirty map[common.Address]bool
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
@@ -55,7 +55,7 @@ type StateDB struct {
 	// by StateDB.Commit.
 	dbErr error
 	// The refund counter, also used by state transitioning.
-	refund uint64
+	refund       uint64
 	thash, bhash common.Hash
 	txIndex      int
 	logs         map[common.Hash][]*types.Log
@@ -81,7 +81,7 @@ func New(root common.Hash, db *Database) (*StateDB, error) {
 		db:                db,
 		trie:              tr,
 		stateObjects:      make(map[common.Address]*stateObject),
-		stateObjectsDirty: make(map[common.Address]struct{}),
+		stateObjectsDirty: make(map[common.Address]bool),
 		logs:              make(map[common.Hash][]*types.Log),
 		journal:           newJournal(),
 	}, nil
@@ -428,6 +428,7 @@ func (self *StateDB) GetRefund() uint64 {
 // Finalise finalises the state by removing the self destructed objects
 // and clears the journal as well as the refunds.
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
+	defer s.clearJournalAndRefund()
 	for addr := range s.journal.dirties {
 		stateObject, exist := s.stateObjects[addr]
 		if !exist {
@@ -442,12 +443,11 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
 			s.deleteStateObject(stateObject)
 		} else {
+			stateObject.updateTrie()
 			s.updateStateObject(stateObject)
 		}
-		s.stateObjectsDirty[addr] = struct{}{}
+		s.stateObjectsDirty[addr] = true
 	}
-	// Invalidate journal because reverting across transactions is not allowed.
-	s.clearJournalAndRefund()
 }
 
 // Prepare sets the current transaction hash and index and block hash which is
@@ -466,19 +466,13 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
-	defer s.clearJournalAndRefund()
-
-	for addr := range s.journal.dirties {
-		s.stateObjectsDirty[addr] = struct{}{}
-	}
 	s.TouchedExternallyOwnedAccountBalances = make(BalanceTable)
-	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
-		if bytes.Equal(stateObject.CodeHash(), emptyCodeHash) && stateObject.balanceTouched {
+		if bytes.Equal(stateObject.CodeHash(), crypto.EmptyBytesKeccak256[:]) && stateObject.balanceTouched {
 			s.TouchedExternallyOwnedAccountBalances[addr] = (*hexutil.Big)(new(big.Int).Set(stateObject.Balance()))
 		}
 		stateObject.balanceTouched = false
-		_, isDirty := s.stateObjectsDirty[addr]
+		isDirty := s.stateObjectsDirty[addr]
 		switch {
 		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
 			// If the object has been removed, don't bother syncing it
@@ -499,10 +493,8 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 			// Update the object in the main account trie.
 			s.updateStateObject(stateObject)
 		}
-		delete(s.stateObjectsDirty, addr)
 	}
-	// Write trie changes.
-	root, err = s.trie.Commit()
-	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
-	return root, err
+	s.stateObjectsDirty = make(map[common.Address]bool)
+	defer log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
+	return s.trie.Commit()
 }
