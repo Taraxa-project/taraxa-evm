@@ -70,20 +70,20 @@ func (self *Trie) NodeIterator(start []byte) NodeIterator {
 func (self *Trie) Get(key []byte) ([]byte, error) {
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
-	//flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-	//util.PanicIfNotNil(err_1)
-	//flat_v, err_2 := self.db.Get(flat_key)
-	//util.PanicIfNotNil(err_2)
-	//return flat_v, nil
-	mpt_key_hex := keybytesToHex(mpt_key)
-	value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
-	if err_2 != nil {
-		return nil, err_2
-	}
-	if didResolve {
-		self.root = newroot
-	}
-	return value, nil
+	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+	util.PanicIfNotNil(err_1)
+	flat_v, err_2 := self.db.Get(flat_key)
+	util.PanicIfNotNil(err_2)
+	return flat_v, nil
+	//mpt_key_hex := keybytesToHex(mpt_key)
+	//value, newroot, didResolve, err_2 := self.mpt_get(self.root, mpt_key_hex, 0)
+	//if err_2 != nil {
+	//	return nil, err_2
+	//}
+	//if didResolve {
+	//	self.root = newroot
+	//}
+	//return value, nil
 }
 
 func (self *Trie) Insert(key, value []byte) error {
