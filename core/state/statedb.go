@@ -45,26 +45,21 @@ type revision struct {
 type StateDB struct {
 	db   *Database
 	trie *trie.Trie
-
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects      map[common.Address]*stateObject
 	stateObjectsDirty map[common.Address]struct{}
-
 	// DB error.
 	// State objects are used by the consensus core and VM which are
 	// unable to deal with database-level errors. Any error that occurs
 	// during a database read is memoized here and will eventually be returned
 	// by StateDB.Commit.
 	dbErr error
-
 	// The refund counter, also used by state transitioning.
 	refund uint64
-
 	thash, bhash common.Hash
 	txIndex      int
 	logs         map[common.Hash][]*types.Log
 	logSize      uint
-
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
 	journal        *journal
@@ -455,14 +450,6 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
 	s.clearJournalAndRefund()
-}
-
-// IntermediateRoot computes the current root hash of the state trie.
-// It is called in between transactions to get the root hash that
-// goes into transaction receipts.
-func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
-	s.Finalise(deleteEmptyObjects)
-	return s.trie.Hash()
 }
 
 // Prepare sets the current transaction hash and index and block hash which is

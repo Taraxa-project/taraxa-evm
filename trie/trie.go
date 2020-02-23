@@ -376,13 +376,13 @@ func (self *Trie) enc_full(n *fullNode, w io.Writer) error {
 
 func (self *Trie) enc_short(n *shortNode, w io.Writer) error {
 	if _, is := n.Val.(valueNode); is {
-		rlp.Encode(w, []interface{}{n.Key})
+		return rlp.Encode(w, []interface{}{n.Key})
 	}
 	util.Assert(n.Val != nil)
 	return rlp.Encode(w, []interface{}{n.Key, n.Val})
 }
 
-func (self *Trie) store(hash hashNode, n node, n_enc []byte) error {
+func (self *Trie) store(hash hashNode, n node, _ []byte) error {
 	buf, err := rlp.EncodeToBytes(n, self)
 	util.PanicIfNotNil(err)
 	return self.db.Put(common.CopyBytes(hash), buf)

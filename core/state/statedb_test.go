@@ -50,7 +50,7 @@ func TestUpdateLeaks(t *testing.T) {
 		if i%3 == 0 {
 			state.SetCode(addr, []byte{i, i, i, i, i})
 		}
-		state.IntermediateRoot(false)
+		state.Finalise(false)
 	}
 	// Ensure that no data was leaked into the database
 	for _, key := range db.Keys() {
@@ -85,7 +85,7 @@ func TestIntermediateLeaks(t *testing.T) {
 		modify(transState, common.Address{byte(i)}, i, 0)
 	}
 	// Write modifications to trie.
-	transState.IntermediateRoot(false)
+	transState.Finalise(false)
 
 	// Overwrite all the data with new values in the transient database.
 	for i := byte(0); i < 255; i++ {

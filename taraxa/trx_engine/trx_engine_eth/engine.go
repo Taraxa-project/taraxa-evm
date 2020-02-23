@@ -58,14 +58,9 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			txErr = txResult.ContractErr
 		}
 		util.Stringify(&txErr)
-		var intermediateRoot []byte
-		if chainConfig.IsByzantium(block.Number) {
-			stateDB.Finalise(true)
-		} else {
-			intermediateRoot = stateDB.IntermediateRoot(chainConfig.IsEIP158(block.Number)).Bytes()
-		}
+		stateDB.Finalise(chainConfig.IsEIP158(block.Number))
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
-		ethReceipt := types.NewReceipt(intermediateRoot, txErr != nil, uint64(ret.UsedGas))
+		ethReceipt := types.NewReceipt(nil, txErr != nil, uint64(ret.UsedGas))
 		if tx.To == nil {
 			ethReceipt.ContractAddress = crypto.CreateAddress(tx.From, uint64(tx.Nonce))
 		}

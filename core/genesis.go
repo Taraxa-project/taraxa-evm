@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
@@ -31,15 +30,12 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
 //go:generate gencodec -type GenesisAccount -field-override genesisAccountMarshaling -out gen_genesis_account.go
-
-var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
 // Genesis specifies the header fields, state of a genesis block. It also defines hard
 // fork switch-over blocks through the chain configuration.
@@ -152,9 +148,6 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 // ToBlock creates the genesis block and writes state of a genesis specification
 // to the given database (or discards it if nil).
 func (g *Genesis) ToBlock(db *state.Database) *types.Block {
-	if db == nil {
-		db = state.NewDatabase(ethdb.NewMemDatabase())
-	}
 	statedb, _ := state.New(common.Hash{}, db)
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
@@ -164,7 +157,8 @@ func (g *Genesis) ToBlock(db *state.Database) *types.Block {
 			statedb.SetState(addr, key, value)
 		}
 	}
-	root := statedb.IntermediateRoot(false)
+	root, err := statedb.Commit(false)
+	util.PanicIfNotNil(err)
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
 		Nonce:      types.EncodeNonce(g.Nonce),
@@ -184,8 +178,6 @@ func (g *Genesis) ToBlock(db *state.Database) *types.Block {
 	if g.Difficulty == nil {
 		head.Difficulty = params.GenesisDifficulty
 	}
-	_, err := statedb.Commit(false)
-	util.PanicIfNotNil(err)
 	return types.NewBlock(head, nil, nil, nil)
 }
 
