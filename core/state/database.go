@@ -22,8 +22,10 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	lru "github.com/hashicorp/golang-lru"
+	"sync"
 )
 
 const MaxTrieCacheGen = uint16(500)
@@ -42,6 +44,7 @@ type Database struct {
 	db            ethdb.Database
 	codeSizeCache *lru.Cache
 	batch         ethdb.Batch
+	lock          sync.RWMutex
 }
 
 func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) (*trie.Trie, error) {
@@ -82,6 +85,7 @@ func (self *Database) Commit() error {
 }
 
 func (self *Database) put(k, v []byte) error {
+	defer concurrent.LockUnlock(&self.lock)()
 	if self.batch == nil {
 		self.batch = self.db.NewBatch()
 	}
@@ -94,11 +98,15 @@ type trie_db struct {
 }
 
 func (self trie_db) Put(key []byte, value []byte) error {
-	self.cache[string(key)] = value
+	func() {
+		defer concurrent.LockUnlock(&self.lock)()
+		self.cache[string(key)] = value
+	}()
 	return self.put(key, value)
 }
 
 func (self trie_db) Get(key []byte) ([]byte, error) {
+	defer concurrent.LockUnlock(self.lock.RLocker())()
 	if v, ok := self.cache[binary.StringView(key)]; ok {
 		return v, nil
 	}

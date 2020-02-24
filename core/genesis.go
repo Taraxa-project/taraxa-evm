@@ -21,7 +21,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
 	"strings"
 
@@ -29,7 +28,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
@@ -145,9 +143,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	}
 }
 
-// ToBlock creates the genesis block and writes state of a genesis specification
-// to the given database (or discards it if nil).
-func (g *Genesis) ToBlock(db *state.Database) *types.Block {
+func (g *Genesis) Apply(db *state.Database) (common.Hash, error) {
 	statedb, _ := state.New(common.Hash{}, db)
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
@@ -157,28 +153,7 @@ func (g *Genesis) ToBlock(db *state.Database) *types.Block {
 			statedb.SetState(addr, key, value)
 		}
 	}
-	root, err := statedb.Commit(false)
-	util.PanicIfNotNil(err)
-	head := &types.Header{
-		Number:     new(big.Int).SetUint64(g.Number),
-		Nonce:      types.EncodeNonce(g.Nonce),
-		Time:       new(big.Int).SetUint64(g.Timestamp),
-		ParentHash: g.ParentHash,
-		Extra:      g.ExtraData,
-		GasLimit:   g.GasLimit,
-		GasUsed:    g.GasUsed,
-		Difficulty: g.Difficulty,
-		MixDigest:  g.Mixhash,
-		Coinbase:   g.Coinbase,
-		Root:       root,
-	}
-	if g.GasLimit == 0 {
-		head.GasLimit = params.GenesisGasLimit
-	}
-	if g.Difficulty == nil {
-		head.Difficulty = params.GenesisDifficulty
-	}
-	return types.NewBlock(head, nil, nil, nil)
+	return statedb.Commit(false)
 }
 
 // DefaultGenesisBlock returns the Ethereum main net genesis block.

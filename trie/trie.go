@@ -21,6 +21,7 @@ type Trie struct {
 	cachegen, cachelimit uint16
 	Dot_g                *dot.Graph
 	storage_strat        StorageStrategy
+	async_tasks          chan func()
 }
 type StorageStrategy = interface {
 	OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error)
@@ -32,29 +33,34 @@ func New(root_hash *common.Hash, db Database, cachelimit uint16, storage_strat S
 	if storage_strat == nil {
 		storage_strat = DefaultStorageStrategy(0)
 	}
-	trie := &Trie{
+	self := &Trie{
 		db:            db,
 		cachelimit:    cachelimit,
 		storage_strat: storage_strat,
+		async_tasks:   make(chan func(), 256),
 	}
 	if root_hash := *root_hash; root_hash != common.ZeroHash && root_hash != EmptyRLPListHash {
-		rootnode, err := trie.resolve(root_hash[:], nil)
-		if err != nil {
-			return nil, err
-		}
-		trie.root = rootnode
+		rootnode, err := self.resolve(root_hash[:], nil)
+		util.PanicIfNotNil(err)
+		self.root = rootnode
 	}
-	return trie, nil
+	go func() {
+		for {
+			t, ok := <-self.async_tasks
+			if !ok {
+				break
+			}
+			t()
+		}
+	}()
+	return self, nil
 }
 
-func (self *Trie) NodeIterator(start []byte) NodeIterator {
-	return newNodeIterator(self, start)
+func (self *Trie) Close() {
+	close(self.async_tasks)
 }
 
 func (self *Trie) Get(key []byte) ([]byte, error) {
-	if self.root == nil {
-		return nil, nil
-	}
 	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
 	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
@@ -73,31 +79,28 @@ func (self *Trie) Get(key []byte) ([]byte, error) {
 	//return value, nil
 }
 
-func (self *Trie) Insert(key, value []byte) error {
-	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
-	util.PanicIfNotNil(err_0)
-	mpt_key_hex := keybytesToHex(mpt_key)
-	if len(value) != 0 {
-		_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
-		if err != nil {
-			return err
+func (self *Trie) InsertAsync(key, value []byte) {
+	self.async_tasks <- func() {
+		mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
+		util.PanicIfNotNil(err_0)
+		mpt_key_hex := keybytesToHex(mpt_key)
+		if len(value) != 0 {
+			_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
+			util.PanicIfNotNil(err)
+			self.root = n
+		} else {
+			_, n, err := self.mpt_del(self.root, nil, mpt_key_hex)
+			util.PanicIfNotNil(err)
+			self.root = n
 		}
-		self.root = n
-	} else {
-		_, n, err := self.mpt_del(self.root, nil, mpt_key_hex)
-		if err != nil {
-			return err
-		}
-		self.root = n
+		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		util.PanicIfNotNil(err_1)
+		util.PanicIfNotNil(self.db.Put(flat_key, value))
 	}
-	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-	util.PanicIfNotNil(err_1)
-	util.PanicIfNotNil(self.db.Put(flat_key, value))
-	return nil
 }
 
-func (self *Trie) Delete(key []byte) error {
-	return self.Insert(key, nil)
+func (self *Trie) DeleteAsync(key []byte) {
+	self.InsertAsync(key, nil)
 }
 
 func (self *Trie) Hash() (ret common.Hash) {
@@ -395,15 +398,23 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	return ret, nil
 }
 
-func (self *Trie) hashRoot(store hasher_store_strategy) (common.Hash, node, error) {
-	if self.root == nil {
-		return EmptyRLPListHash, nil, nil
+func (self *Trie) hashRoot(store hasher_store_strategy) (ret common.Hash, n node, err error) {
+	done := make(chan byte, 1)
+	self.async_tasks <- func() {
+		defer close(done)
+		if self.root == nil {
+			ret = EmptyRLPListHash
+			return
+		}
+		hasher := newHasher(self.cachegen, self.cachelimit)
+		defer returnHasherToPool(hasher)
+		hasher.dot_g = self.Dot_g
+		var hash_node node
+		hash_node, n, err = hasher.hash(self.root, true, store)
+		ret = common.BytesToHash(hash_node.(hashNode))
 	}
-	hasher := newHasher(self.cachegen, self.cachelimit)
-	hasher.dot_g = self.Dot_g
-	defer returnHasherToPool(hasher)
-	root_hash, root, err := hasher.hash(self.root, true, store)
-	return common.BytesToHash(root_hash.(hashNode)), root, err
+	<-done
+	return
 }
 
 func (self *Trie) newFlag() nodeFlag {

@@ -73,10 +73,9 @@ type stateObject struct {
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode      bool // true if the code was updated
-	suicided       bool
-	deleted        bool
-	balanceTouched bool
+	dirtyCode bool // true if the code was updated
+	suicided  bool
+	deleted   bool
 }
 
 // empty returns whether the account is considered empty.
@@ -117,9 +116,10 @@ func (c *stateObject) EncodeRLP(w io.Writer) error {
 
 // setError remembers the first non-nil error it is called with.
 func (self *stateObject) setError(err error) {
-	if self.dbErr == nil {
-		self.dbErr = err
-	}
+	util.PanicIfNotNil(err)
+	//if self.dbErr == nil {
+	//	self.dbErr = err
+	//}
 }
 
 func (self *stateObject) markSuicided() {
@@ -200,45 +200,12 @@ func (self *stateObject) setState(key, value common.Hash) {
 	self.dirtyStorage[key] = value
 }
 
-// updateTrie writes cached storage modifications into the object's storage trie.
-func (self *stateObject) updateTrie() {
-	if len(self.dirtyStorage) == 0 {
-		return
-	}
-	tr := self.getOrOpenTrie()
-	for key, value := range self.dirtyStorage {
-		self.originStorage[key] = value
-		if value == common.ZeroHash {
-			self.setError(tr.Delete(key[:]))
-			continue
-		}
-		v, err := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
-		util.PanicIfNotNil(err)
-		self.setError(tr.Insert(key[:], v))
-	}
-	self.dirtyStorage = make(Storage)
-}
-
-// CommitTrie the storage trie of the object to db.
-// This updates the trie root.
-func (self *stateObject) CommitTrie() error {
-	if self.dbErr != nil {
-		return self.dbErr
-	}
-	root, err := self.getOrOpenTrie().Commit()
-	if err == nil {
-		self.data.Root = root
-	}
-	return err
-}
-
 // AddBalance removes amount from c's balance.
 // It is used to add funds to the destination account of a transfer.
 func (c *stateObject) AddBalance(amount *big.Int) {
 	// EIP158: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
-		c.balanceTouched = true
 		if c.empty() {
 			c.touch()
 		}
@@ -252,7 +219,6 @@ func (c *stateObject) AddBalance(amount *big.Int) {
 // It is used to remove funds from the origin account of a transfer.
 func (c *stateObject) SubBalance(amount *big.Int) {
 	if amount.Sign() == 0 {
-		c.balanceTouched = true
 		return
 	}
 	c.SetBalance(new(big.Int).Sub(c.Balance(), amount))
@@ -267,7 +233,6 @@ func (self *stateObject) SetBalance(amount *big.Int) {
 }
 
 func (self *stateObject) setBalance(amount *big.Int) {
-	self.balanceTouched = true
 	self.data.Balance = amount
 }
 

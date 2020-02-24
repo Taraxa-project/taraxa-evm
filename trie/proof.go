@@ -86,7 +86,7 @@ func (self *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error 
 	return nil
 }
 
-func MustVerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.Getter) (value []byte, nodes int) {
+func VerifyProof(rootHash common.Hash, key []byte, proofDb ethdb.Getter) (value []byte, nodes int) {
 	key = keybytesToHex(key)
 	wantHash := rootHash
 	for i := 0; ; i++ {

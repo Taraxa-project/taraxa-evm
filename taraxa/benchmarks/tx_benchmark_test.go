@@ -66,7 +66,7 @@ func BenchmarkRoot(b *testing.B) {
 			evm_ctx.Origin, &receiver, 0, test_amount,
 			evm_ctx.GasLimit, evm_ctx.GasPrice, nil, true)
 		state_transition := core.NewStateTransitionWithMinerReward(evm, msg, gas_pool)
-		state_db.Prepare(tx_hash, block_hash, 0)
+		state_db.SetTransactionMetadata(tx_hash, block_hash, 0)
 		_, usedGas, vmErr, consensusErr := state_transition.TransitionDb()
 		root, err43 := state_db.Commit(true)
 		receipt := types.NewReceipt(root.Bytes(), false, usedGas+1)
@@ -110,10 +110,10 @@ func BenchmarkRoot(b *testing.B) {
 			evm_ctx.Origin, &receiver, 0, test_amount,
 			evm_ctx.GasLimit, evm_ctx.GasPrice, nil, true)
 		state_transition := core.NewStateTransitionWithMinerReward(evm, msg, gas_pool)
-		state_db.Prepare(tx_hash, block_hash, 0)
+		state_db.SetTransactionMetadata(tx_hash, block_hash, 0)
 		_, usedGas, vmErr, consensusErr := state_transition.TransitionDb()
 		root, err43 := state_db.Commit(true)
-		state_db.Finalise(true)
+		state_db.Checkpoint(true)
 		receipt := types.NewReceipt(root[:], false, usedGas+1)
 		receipt.TxHash = tx_hash
 		receipt.Logs = state_db.GetLogs(tx_hash)

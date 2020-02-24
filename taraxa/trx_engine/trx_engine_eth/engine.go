@@ -24,7 +24,7 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 	ret = new(trx_engine.StateTransitionResult)
 	block := req.Block
 	if block.Number.Sign() == 0 {
-		ret.StateRoot = self.Genesis.ToBlock(self.DB).Root()
+		ret.StateRoot, err = self.Genesis.Apply(self.DB)
 		return
 	}
 	var stateDB *state.StateDB
@@ -43,7 +43,7 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			tx_cpy.Gas = ^hexutil.Uint64(0) / 100000
 			tx = &tx_cpy
 		}
-		stateDB.Prepare(tx.Hash, block.Hash, i)
+		stateDB.SetTransactionMetadata(tx.Hash, block.Hash, i)
 		txResult := self.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 			Transaction:        tx,
 			BlockHeader:        &block.BlockHeader,
@@ -58,7 +58,7 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 			txErr = txResult.ContractErr
 		}
 		util.Stringify(&txErr)
-		stateDB.Finalise(chainConfig.IsEIP158(block.Number))
+		stateDB.Checkpoint(chainConfig.IsEIP158(block.Number))
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(nil, txErr != nil, uint64(ret.UsedGas))
 		if tx.To == nil {
@@ -75,21 +75,20 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		})
 	}
 	if !self.DisableMinerReward {
-		var unclesMapped []*types.Header
+		var unclesMapped []*ethash.UncleHeader
 		for _, uncle := range block.UncleBlocks {
-			unclesMapped = append(unclesMapped, &types.Header{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner})
+			unclesMapped = append(unclesMapped, &ethash.UncleHeader{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner})
 		}
 		ethash.AccumulateRewards(
 			chainConfig,
 			stateDB,
-			&types.Header{Number: block.Number, Coinbase: block.Miner},
+			&ethash.UncleHeader{Number: block.Number, Coinbase: block.Miner},
 			unclesMapped)
 	}
-	stateDB.Finalise(chainConfig.IsEIP158(block.Number))
+	stateDB.Checkpoint(chainConfig.IsEIP158(block.Number))
 	if ret.StateRoot, err = stateDB.Commit(chainConfig.IsEIP158(block.Number)); err != nil {
 		return
 	}
-	ret.TouchedExternallyOwnedAccountBalances = stateDB.TouchedExternallyOwnedAccountBalances
 	return
 }
 
