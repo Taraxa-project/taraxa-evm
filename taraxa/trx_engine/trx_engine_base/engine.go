@@ -16,7 +16,8 @@ type BaseTrxEngine struct {
 }
 
 func (self *BaseTrxEngine) CommitToDisk() error {
-	return self.DB.Commit()
+	self.DB.CommitAsync()
+	return nil
 }
 
 type TransactionRequest = struct {

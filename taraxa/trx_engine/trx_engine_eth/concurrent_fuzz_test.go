@@ -34,14 +34,13 @@ func Test_concurrent_fuzz(t *testing.T) {
 		})
 		engine, _, err_0 := factory.NewInstance()
 		util.PanicIfNotNil(err_0)
-		state_db, err_1 := state.New(common.Hash{}, engine.DB)
-		util.PanicIfNotNil(err_1)
+		state_db := state.New(common.Hash{}, engine.DB)
 		for i := 0; i < len(addrs); i++ {
 			state_db.SetBalance(addrs[i], big.NewInt(1000))
 		}
 		root, err_2 := state_db.Commit(true)
 		util.PanicIfNotNil(err_2)
-		util.PanicIfNotNil(engine.DB.Commit())
+		engine.DB.CommitAsync()
 		if base_root == nil {
 			base_root = &root
 		} else {

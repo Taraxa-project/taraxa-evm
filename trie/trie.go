@@ -13,57 +13,47 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/emicklei/dot"
 	"io"
+	"sync"
 )
 
 type Trie struct {
 	db                   Database
+	init_root_hash       common.Hash
 	root                 node
 	cachegen, cachelimit uint16
 	Dot_g                *dot.Graph
 	storage_strat        StorageStrategy
-	async_tasks          chan func()
+	updates              updates
+	initiate_updating    sync.Once
 }
 type StorageStrategy = interface {
-	OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error)
+	OriginKeyToMPTKey(key []byte) (ret []byte, ret_release func(), err error)
 	MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error)
 }
+type updates = chan func() bool
 
-func New(root_hash *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) (*Trie, error) {
+func New(root_hash *common.Hash, db Database, cachelimit uint16, storage_strat StorageStrategy) *Trie {
 	util.Assert(db != nil)
-	if storage_strat == nil {
-		storage_strat = DefaultStorageStrategy(0)
+	util.Assert(storage_strat != nil)
+	ret := &Trie{
+		db:             db,
+		init_root_hash: EmptyRLPListHash,
+		cachelimit:     cachelimit,
+		storage_strat:  storage_strat,
 	}
-	self := &Trie{
-		db:            db,
-		cachelimit:    cachelimit,
-		storage_strat: storage_strat,
-		async_tasks:   make(chan func(), 256),
-	}
-	if root_hash := *root_hash; root_hash != common.ZeroHash && root_hash != EmptyRLPListHash {
-		rootnode, err := self.resolve(root_hash[:], nil)
-		util.PanicIfNotNil(err)
-		self.root = rootnode
-	}
-	go func() {
-		for {
-			t, ok := <-self.async_tasks
-			if !ok {
-				break
-			}
-			t()
+	if root_hash != nil {
+		if h := *root_hash; h != common.ZeroHash && h != EmptyRLPListHash {
+			ret.init_root_hash = h
 		}
-	}()
-	return self, nil
-}
-
-func (self *Trie) Close() {
-	close(self.async_tasks)
+	}
+	return ret
 }
 
 func (self *Trie) Get(key []byte) ([]byte, error) {
-	mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
+	mpt_key, mpt_key_release, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
 	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+	go mpt_key_release()
 	util.PanicIfNotNil(err_1)
 	flat_v, err_2 := self.db.Get(flat_key)
 	util.PanicIfNotNil(err_2)
@@ -80,10 +70,28 @@ func (self *Trie) Get(key []byte) ([]byte, error) {
 }
 
 func (self *Trie) InsertAsync(key, value []byte) {
-	self.async_tasks <- func() {
-		mpt_key, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
+	self.initiate_updating.Do(func() {
+		untouched := self.updates == nil
+		if untouched {
+			self.updates = make(updates, 64)
+		}
+		go func() {
+			if untouched && self.init_root_hash != EmptyRLPListHash {
+				rootnode, err := self.resolve(self.init_root_hash[:], nil)
+				util.PanicIfNotNil(err)
+				self.root = rootnode
+			}
+			for (<-self.updates)() {
+			}
+		}()
+	})
+	self.updates <- func() bool {
+		mpt_key, mpt_key_release, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 		util.PanicIfNotNil(err_0)
 		mpt_key_hex := keybytesToHex(mpt_key)
+		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
+		mpt_key_release()
+		util.PanicIfNotNil(err_1)
 		if len(value) != 0 {
 			_, n, err := self.mpt_insert(self.root, nil, mpt_key_hex, valueNode(value))
 			util.PanicIfNotNil(err)
@@ -93,9 +101,8 @@ func (self *Trie) InsertAsync(key, value []byte) {
 			util.PanicIfNotNil(err)
 			self.root = n
 		}
-		flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
-		util.PanicIfNotNil(err_1)
 		util.PanicIfNotNil(self.db.Put(flat_key, value))
+		return true
 	}
 }
 
@@ -399,21 +406,27 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 }
 
 func (self *Trie) hashRoot(store hasher_store_strategy) (ret common.Hash, n node, err error) {
-	done := make(chan byte, 1)
-	self.async_tasks <- func() {
-		defer close(done)
-		if self.root == nil {
-			ret = EmptyRLPListHash
-			return
-		}
-		hasher := newHasher(self.cachegen, self.cachelimit)
-		defer returnHasherToPool(hasher)
-		hasher.dot_g = self.Dot_g
-		var hash_node node
-		hash_node, n, err = hasher.hash(self.root, true, store)
-		ret = common.BytesToHash(hash_node.(hashNode))
+	if self.updates == nil {
+		ret = self.init_root_hash
+		return
 	}
-	<-done
+	q := make(chan byte)
+	self.updates <- func() bool {
+		close(q)
+		return false
+	}
+	<-q
+	self.initiate_updating = sync.Once{}
+	if self.root == nil {
+		ret = EmptyRLPListHash
+		return
+	}
+	hasher := newHasher(self.cachegen, self.cachelimit)
+	defer returnHasherToPool(hasher)
+	hasher.dot_g = self.Dot_g
+	var hash_node node
+	hash_node, n, err = hasher.hash(self.root, true, store)
+	ret = common.BytesToHash(hash_node.(hashNode))
 	return
 }
 

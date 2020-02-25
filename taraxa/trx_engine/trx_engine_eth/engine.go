@@ -27,10 +27,7 @@ func (self *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ret.StateRoot, err = self.Genesis.Apply(self.DB)
 		return
 	}
-	var stateDB *state.StateDB
-	if stateDB, err = state.New(req.BaseStateRoot, self.DB); err != nil {
-		return
-	}
+	stateDB := state.New(req.BaseStateRoot, self.DB)
 	chainConfig := self.Genesis.Config
 	if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number) == 0 {
 		misc.ApplyDAOHardFork(stateDB)

@@ -25,29 +25,6 @@ type EthTxEngineIntegrationTest struct {
 	VMFactory        *EthTrxEngineFactory
 }
 
-func (this *EthTxEngineIntegrationTest) Run() {
-	ethereumVM, cleanup, err := this.VMFactory.NewInstance()
-	util.PanicIfNotNil(err)
-	defer cleanup()
-	var prevBlock *BlockWithStateRoot
-	if this.StartBlock > 0 {
-		prevBlock = this.GetBlockByNumber(this.StartBlock - 1)
-	}
-	for blockNum := this.StartBlock; blockNum <= this.EndBlock; blockNum++ {
-		fmt.Println("block", blockNum)
-		block := this.GetBlockByNumber(blockNum)
-		stateTransitionRequest := &trx_engine.StateTransitionRequest{Block: block.Block}
-		if prevBlock != nil {
-			stateTransitionRequest.BaseStateRoot = prevBlock.StateRoot
-		}
-		result, err := ethereumVM.TransitionState(stateTransitionRequest)
-		util.PanicIfNotNil(err)
-		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), " != ", block.StateRoot.Hex())
-		ethereumVM.CommitToDisk()
-		prevBlock = block
-	}
-}
-
 func Test_integration(t *testing.T) {
 	block_db, err := (&rocksdb.Factory{
 		File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/blockchain",
@@ -90,12 +67,63 @@ func Test_integration(t *testing.T) {
 	factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(blockNumber uint64) common.Hash {
 		return getBlockByNumber(blockNumber).Hash
 	})
-	test := EthTxEngineIntegrationTest{
-		//StartBlock: 2682514, //"/tmp/ololololo4",
-		StartBlock: 1150752,
-		EndBlock:         400050223,
-		GetBlockByNumber: getBlockByNumber,
-		VMFactory:        factory,
+	go func() {
+		return
+		measure_interval := 10 * time.Microsecond
+		report_interval := 20 * time.Second
+		time.Sleep(measure_interval)
+		max := runtime.NumGoroutine()
+		min := max
+		sum := max
+		count := 1
+		last_report_time := time.Now()
+		for {
+			time.Sleep(measure_interval)
+			num := runtime.NumGoroutine()
+			if num < min {
+				min = num
+			} else if num > max {
+				max = num
+			}
+			sum += num
+			count++
+			if now := time.Now(); now.Sub(last_report_time) > report_interval {
+				fmt.Println("num goroutines: avg", float64(sum)/float64(count), "min", min, "max", max)
+				last_report_time = now
+			}
+		}
+	}()
+	engine, cleanup, err := factory.NewInstance()
+	util.PanicIfNotNil(err)
+	defer cleanup()
+	b, err := engine.DB.Get(binary.BytesView("last_block"))
+	util.PanicIfNotNil(err)
+	StartBlock := new(big.Int).SetBytes(b).Uint64()
+	EndBlock := StartBlock + 1000
+	var prevBlock *BlockWithStateRoot
+	if StartBlock > 0 {
+		prevBlock = getBlockByNumber(StartBlock - 1)
 	}
-	test.Run()
+	debug.SetGCPercent(-1)
+	var max_heap_size uint64
+	var mem_stats runtime.MemStats
+	for blockNum := StartBlock; blockNum <= EndBlock; blockNum++ {
+		block := getBlockByNumber(blockNum)
+		fmt.Println("block", blockNum, "tx_count", len(block.Transactions))
+		stateTransitionRequest := &trx_engine.StateTransitionRequest{Block: block.Block}
+		if prevBlock != nil {
+			stateTransitionRequest.BaseStateRoot = prevBlock.StateRoot
+		}
+		result, err := engine.TransitionState(stateTransitionRequest)
+		util.PanicIfNotNil(err)
+		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), "!=", block.StateRoot.Hex())
+		engine.DB.PutAsync(binary.BytesView("last_block"), new(big.Int).SetUint64(blockNum+1).Bytes())
+		engine.DB.CommitAsync()
+		prevBlock = block
+		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
+			fmt.Println("gc")
+			runtime.GC()
+			max_heap_size = mem_stats.HeapAlloc * 3
+		}
+	}
 }

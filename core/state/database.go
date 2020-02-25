@@ -18,45 +18,74 @@ package state
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	lru "github.com/hashicorp/golang-lru"
+	"golang.org/x/crypto/sha3"
+	"hash"
+	"runtime"
 	"sync"
 )
 
 const MaxTrieCacheGen = uint16(500)
 const codeSizeCacheSize = 100000
 
-func NewDatabase(db ethdb.Database) *Database {
-	csc, err := lru.New(codeSizeCacheSize)
-	util.PanicIfNotNil(err)
-	return &Database{
-		db:            db,
-		codeSizeCache: csc,
-	}
-}
-
 type Database struct {
 	db            ethdb.Database
 	codeSizeCache *lru.Cache
-	batch         ethdb.Batch
 	lock          sync.RWMutex
+	tasks         chan func()
+	batch         ethdb.Batch
+	batch_map     map[string]uint16
+	cache         sync.Map
+	last_tr       *trie.Trie
+	last_tr_init  sync.Once
 }
 
-func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) (*trie.Trie, error) {
-	return trie.New(root, trie_db{self, make(map[string][]byte)}, 0, acc_trie_storage_strat(*owner_addr))
+type versioned_value = struct {
+	ver uint16
+	val []byte
+	sync.RWMutex
 }
 
-func (self *Database) OpenTrie(root *common.Hash) (*trie.Trie, error) {
-	return trie.New(root, trie_db{self, make(map[string][]byte)}, MaxTrieCacheGen, main_trie_storage_strat(0))
+func NewDatabase(db ethdb.Database) *Database {
+	csc, err := lru.New(codeSizeCacheSize)
+	util.PanicIfNotNil(err)
+	self := &Database{
+		db:            db,
+		codeSizeCache: csc,
+		tasks:         make(chan func(), 4096*32),
+	}
+	runtime.SetFinalizer(self, func(self *Database) {
+		self.tasks <- nil
+	})
+	go func() {
+		for {
+			t := <-self.tasks
+			if t == nil {
+				return
+			}
+			t()
+		}
+	}()
+	return self
+}
+
+func (self *Database) OpenStorageTrie(root *common.Hash, owner_addr *common.Address) *trie.Trie {
+	return trie.New(root, trie_db{db: self}, 0, acc_trie_storage_strat(*owner_addr))
+}
+
+func (self *Database) OpenTrie(root *common.Hash) *trie.Trie {
+	self.last_tr_init.Do(func() {
+		self.last_tr = trie.New(root, trie_db{db: self}, MaxTrieCacheGen, main_trie_storage_strat(0))
+	})
+	return self.last_tr
 }
 
 func (self *Database) ContractCode(hash []byte) ([]byte, error) {
-	code, err := self.db.Get(hash)
+	code, err := self.Get(hash)
 	if err == nil {
 		self.codeSizeCache.Add(string(hash), len(code))
 	}
@@ -71,52 +100,114 @@ func (self *Database) CodeSize(hash []byte) (int, error) {
 	return len(code), err
 }
 
-func (self *Database) PutCode(hash, code []byte) error {
-	return self.put(hash, code)
+func (self *Database) PutAsync(k, v []byte) {
+	k_str := string(k)
+	bid := versioned_value{ver: 1, val: v}
+	bid.Lock()
+	ver := bid.ver
+	for {
+		actual, loaded := self.cache.LoadOrStore(k_str, &bid)
+		if !loaded {
+			bid.Unlock()
+		} else {
+			vv := actual.(*versioned_value)
+			vv.Lock()
+			if vv.ver == 0 {
+				vv.Unlock()
+				continue
+			}
+			vv.val = v
+			vv.ver++
+			ver = vv.ver
+			vv.Unlock()
+		}
+		break
+	}
+	self.tasks <- func() {
+		if self.batch == nil {
+			self.batch = self.db.NewBatch()
+			self.batch_map = make(map[string]uint16)
+		}
+		self.batch_map[k_str] = ver
+		util.PanicIfNotNil(self.batch.Put(k, v))
+	}
 }
 
-func (self *Database) Commit() error {
-	if self.batch == nil {
-		return nil
+func (self *Database) Get(k []byte) ([]byte, error) {
+	if v, ok := self.cache.Load(binary.StringView(k)); ok {
+		v := v.(*versioned_value)
+		v.RLock()
+		defer v.RUnlock()
+		return v.val, nil
 	}
-	err := self.batch.Write()
-	self.batch = nil
-	return err
+	return self.db.Get(k)
 }
 
-func (self *Database) put(k, v []byte) error {
-	defer concurrent.LockUnlock(&self.lock)()
-	if self.batch == nil {
-		self.batch = self.db.NewBatch()
+func (self *Database) CommitAsync() {
+	self.tasks <- func() {
+		if self.batch == nil {
+			return
+		}
+		util.PanicIfNotNil(self.batch.Write())
+		for k, batched_ver := range self.batch_map {
+			v, _ := self.cache.Load(k)
+			vv := v.(*versioned_value)
+			vv.Lock()
+			if vv.ver == batched_ver {
+				self.cache.Delete(k)
+				vv.ver = 0
+			}
+			vv.Unlock()
+		}
+		self.batch = nil
+		self.batch_map = nil
 	}
-	return self.batch.Put(k, v)
 }
 
 type trie_db struct {
-	*Database
-	cache map[string][]byte
+	db *Database
 }
 
 func (self trie_db) Put(key []byte, value []byte) error {
-	func() {
-		defer concurrent.LockUnlock(&self.lock)()
-		self.cache[string(key)] = value
-	}()
-	return self.put(key, value)
+	self.db.PutAsync(key, value)
+	return nil
 }
 
 func (self trie_db) Get(key []byte) ([]byte, error) {
-	defer concurrent.LockUnlock(self.lock.RLocker())()
-	if v, ok := self.cache[binary.StringView(key)]; ok {
-		return v, nil
-	}
 	return self.db.Get(key)
+}
+
+var hashers = func() chan *hasher {
+	ret := make(chan *hasher, 512)
+	for i := 0; i < cap(ret); i++ {
+		ret <- &hasher{h: sha3.NewLegacyKeccak256()}
+	}
+	return ret
+}()
+
+//var hasher_pool = sync.Pool{New: func() interface{} {
+//	return
+//}}
+
+type hasher = struct {
+	h   hash.Hash
+	buf common.Hash
+}
+
+func keccak256(b []byte) (ret []byte, ret_release func()) {
+	hasher := <-hashers
+	hasher.h.Write(b)
+	return hasher.h.Sum(hasher.buf[:0]), func() {
+		hasher.h.Reset()
+		hashers <- hasher
+	}
 }
 
 type main_trie_storage_strat byte
 
-func (main_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {
-	return crypto.Keccak256(key), nil
+func (main_trie_storage_strat) OriginKeyToMPTKey(key []byte) (ret []byte, ret_release func(), err error) {
+	ret, ret_release = keccak256(key)
+	return
 }
 
 func (main_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error) {
@@ -125,10 +216,11 @@ func (main_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, er
 
 type acc_trie_storage_strat common.Address
 
-func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (mpt_key []byte, err error) {
-	return crypto.Keccak256(key), nil
+func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (ret []byte, ret_release func(), err error) {
+	ret, ret_release = keccak256(key)
+	return
 }
 
-func (self acc_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, err error) {
+func (self acc_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (ret []byte, err error) {
 	return binary.Concat(binary.Concat(binary.BytesView("storage_tr_"), self[:]...), mpt_key...), nil
 }

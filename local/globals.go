@@ -2,6 +2,6 @@ package local
 
 var Debugging = false
 
-func NOOP() {
+func NOOP(...interface{}) {
 
 }

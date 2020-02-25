@@ -20,19 +20,18 @@ package state
 import (
 	"bytes"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"math/big"
-	"runtime"
-	"sort"
-	"sync/atomic"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/trie"
+	"math/big"
+	"runtime"
+	"sort"
+	"sync/atomic"
 )
 
 type revision struct {
@@ -74,19 +73,15 @@ type StateObjects = map[common.Address]*stateObject
 type BalanceTable = map[common.Address]*hexutil.Big
 
 // Create a new state from a given trie.
-func New(root common.Hash, db *Database) (*StateDB, error) {
-	tr, err := db.OpenTrie(&root)
-	if err != nil {
-		return nil, err
-	}
+func New(root common.Hash, db *Database) *StateDB {
 	return &StateDB{
 		db:                db,
-		trie:              tr,
+		trie:              db.OpenTrie(&root),
 		stateObjects:      make(StateObjects),
 		stateObjectsDirty: make(StateObjects),
 		logs:              make(map[common.Hash][]*types.Log),
 		journal:           newJournal(),
-	}, nil
+	}
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -433,14 +428,15 @@ func (s *StateDB) Checkpoint(deleteEmptyObjects bool) {
 		}
 		tr := stateObject.getOrOpenTrie()
 		for key, value := range stateObject.dirtyStorage {
+			key := key
 			stateObject.originStorage[key] = value
 			if value == common.ZeroHash {
-				tr.DeleteAsync(common.CopyBytes(key[:]))
+				tr.DeleteAsync(key[:])
 				continue
 			}
 			v, err := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
 			util.PanicIfNotNil(err)
-			tr.InsertAsync(common.CopyBytes(key[:]), v)
+			tr.InsertAsync(key[:], v)
 		}
 		stateObject.dirtyStorage = make(Storage)
 	}
@@ -456,41 +452,31 @@ func (self *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err erro
 	self.Checkpoint(deleteEmptyObjects)
 	child_tasks := int32(0)
 	for addr, stateObject := range self.stateObjectsDirty {
+		addr := addr
 		if stateObject.deleted {
-			self.trie.DeleteAsync(common.CopyBytes(addr[:]))
+			self.trie.DeleteAsync(addr[:])
 			continue
 		}
 		if stateObject.dirtyCode {
-			if err = self.db.PutCode(stateObject.CodeHash(), stateObject.code); err != nil {
-				return
-			}
+			self.db.PutAsync(stateObject.CodeHash(), stateObject.code)
 			stateObject.dirtyCode = false
 		}
 		atomic.AddInt32(&child_tasks, 1)
-		addr, stateObject := addr, stateObject
+		stateObject := stateObject
 		go func() {
+			defer atomic.AddInt32(&child_tasks, -1)
 			root, err := stateObject.getOrOpenTrie().Commit()
 			util.PanicIfNotNil(err)
 			stateObject.data.Root = root
 			enc, err := rlp.EncodeToBytes(stateObject)
 			util.PanicIfNotNil(err)
 			self.trie.InsertAsync(addr[:], enc)
-			atomic.AddInt32(&child_tasks, -1)
 		}()
 	}
 	self.stateObjectsDirty = make(StateObjects)
 	for atomic.LoadInt32(&child_tasks) != 0 {
 		runtime.Gosched()
 	}
-	root, err = self.trie.Commit()
-	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
-	go func() {
-		for _, obj := range self.stateObjects {
-			if obj.trie != nil {
-				obj.trie.Close()
-			}
-		}
-		self.trie.Close()
-	}()
-	return
+	defer log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
+	return self.trie.Commit()
 }

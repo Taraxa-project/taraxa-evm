@@ -139,9 +139,7 @@ func (c *stateObject) touch() {
 
 func (c *stateObject) getOrOpenTrie() *trie.Trie {
 	if c.trie == nil {
-		var err error
-		c.trie, err = c.db.db.OpenStorageTrie(&c.data.Root, &c.address)
-		util.PanicIfNotNil(err)
+		c.trie = c.db.db.OpenStorageTrie(&c.data.Root, &c.address)
 	}
 	return c.trie
 }

@@ -144,7 +144,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 }
 
 func (g *Genesis) Apply(db *state.Database) (common.Hash, error) {
-	statedb, _ := state.New(common.Hash{}, db)
+	statedb := state.New(common.Hash{}, db)
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
