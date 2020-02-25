@@ -20,6 +20,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
 	"sync/atomic"
 )
@@ -66,11 +67,9 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 type Context struct {
 	// GetHash returns the hash corresponding to n
 	GetHash GetHashFunc
-
 	// Message information
 	Origin   common.Address // Provides information for ORIGIN
 	GasPrice *big.Int       // Provides information for GASPRICE
-
 	// Block information
 	Coinbase    common.Address // Provides information for COINBASE
 	GasLimit    uint64         // Provides information for GASLIMIT
@@ -95,7 +94,6 @@ type EVM struct {
 	StateDB StateDB
 	// Depth is the current call stack
 	depth int
-
 	// chainConfig contains information about the current chain
 	chainConfig *params.ChainConfig
 	// chain rules contains the chain rules for the current epoch
@@ -119,7 +117,6 @@ type EVM struct {
 func NewEVMWithInterpreter(
 	ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig *Config,
 	createInterpreter func(*EVM) Interpreter) *EVM {
-
 	evm := &EVM{
 		Context:      ctx,
 		StateDB:      statedb,
@@ -128,7 +125,6 @@ func NewEVMWithInterpreter(
 		chainRules:   chainConfig.Rules(ctx.BlockNumber),
 		interpreters: make([]Interpreter, 0, 1),
 	}
-
 	if chainConfig.IsEWASM(ctx.BlockNumber) {
 		// to be implemented by EVM-C and Wagon PRs.
 		// if vmConfig.EWASMInterpreter != "" {
@@ -144,12 +140,10 @@ func NewEVMWithInterpreter(
 		// }
 		panic("No supported ewasm interpreter yet.")
 	}
-
 	// vmConfig.EVMInterpreter will be used by EVM-C, it won't be checked here
 	// as we always want to have the built-in EVM as the failover option.
 	evm.interpreters = append(evm.interpreters, createInterpreter(evm))
 	evm.interpreter = evm.interpreters[0]
-
 	return evm
 }
 
@@ -180,7 +174,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
-
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
@@ -189,11 +182,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if !evm.StateDB.AssertBalanceGTE(caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
 	}
-
-	var (
-		to       = AccountRef(addr)
-		snapshot = evm.StateDB.Snapshot()
-	)
+	to := AccountRef(addr)
+	snapshot := evm.StateDB.Snapshot()
 	if !evm.StateDB.Exist(addr) {
 		precompiles := PrecompiledContractsHomestead
 		if evm.ChainConfig().IsByzantium(evm.BlockNumber) {
@@ -209,9 +199,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, to, value, gas)
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
-
 	ret, err = run(evm, contract, input, false)
-
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
@@ -235,7 +223,6 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}
-
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
@@ -244,17 +231,13 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	if !evm.StateDB.AssertBalanceGTE(caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
 	}
-
-	var (
-		snapshot = evm.StateDB.Snapshot()
-		to       = AccountRef(caller.Address())
-	)
+	snapshot := evm.StateDB.Snapshot()
+	to := AccountRef(caller.Address())
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, to, value, gas)
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
-
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
 		evm.StateDB.RevertToSnapshot(snapshot)
@@ -278,16 +261,12 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
-
-	var (
-		snapshot = evm.StateDB.Snapshot()
-		to       = AccountRef(caller.Address())
-	)
-
+	snapshot := evm.StateDB.Snapshot()
+	to := AccountRef(caller.Address())
 	// Initialise a new contract and make initialise the delegate values
 	contract := NewContract(caller, to, nil, gas).AsDelegate()
+	// TODO db index on code, size, and the hash
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
-
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
 		evm.StateDB.RevertToSnapshot(snapshot)
@@ -310,23 +289,18 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
-
-	var (
-		to       = AccountRef(addr)
-		snapshot = evm.StateDB.Snapshot()
-	)
+	to := AccountRef(addr)
+	snapshot := evm.StateDB.Snapshot()
 	// Initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, to, new(big.Int), gas)
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
-
 	// We do an AddBalance of zero here, just in order to trigger a touch.
 	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
 	evm.StateDB.AddBalance(addr, bigZero)
-
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in Homestead this also counts for code storage gas errors.
@@ -342,12 +316,18 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 
 type codeAndHash struct {
 	code []byte
-	hash common.Hash
+	hash []byte
 }
 
-func (c *codeAndHash) Hash() common.Hash {
-	if c.hash == (common.Hash{}) {
-		c.hash = crypto.Keccak256Hash(c.code)
+func (c *codeAndHash) Hash() []byte {
+	if c.hash == nil {
+		if c.code == nil {
+			c.hash = emptyCodeHash[:]
+		} else {
+			hash, return_to_pool := util.Keccak256Pooled(c.code)
+			c.hash = common.CopyBytes(hash)
+			go return_to_pool()
+		}
 	}
 	return c.hash
 }
@@ -363,7 +343,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
 	evm.StateDB.IncrementNonce(caller.Address())
-
 	// Ensure there's no existing contract already at the designated address
 	contractHash := evm.StateDB.GetCodeHash(address)
 	if !evm.StateDB.NonceEQ(address, 0) || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
@@ -376,19 +355,16 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		evm.StateDB.IncrementNonce(address)
 	}
 	evm.StateDB.Transfer(caller.Address(), address, value)
-
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, AccountRef(address), value, gas)
 	contract.SetCodeOptionalHash(&address, codeAndHash)
-
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, address, gas, nil
 	}
 
 	ret, err := run(evm, contract, nil, false)
-
 	// check whether the max code size has been exceeded
 	maxCodeSizeExceeded := evm.ChainConfig().IsEIP158(evm.BlockNumber) && len(ret) > params.MaxCodeSize
 	// if the contract creation ran successfully and no errors were returned
@@ -403,7 +379,6 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 			err = ErrCodeStoreOutOfGas
 		}
 	}
-
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
@@ -433,7 +408,7 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.I
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
 func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *big.Int, salt *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	codeAndHash := &codeAndHash{code: code}
-	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), codeAndHash.Hash().Bytes())
+	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), codeAndHash.Hash())
 	return evm.create(caller, codeAndHash, gas, endowment, contractAddr)
 }
 

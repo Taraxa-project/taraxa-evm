@@ -23,8 +23,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/Taraxa-project/taraxa-evm/trie"
 	lru "github.com/hashicorp/golang-lru"
-	"golang.org/x/crypto/sha3"
-	"hash"
 	"runtime"
 	"sync"
 )
@@ -177,36 +175,10 @@ func (self trie_db) Get(key []byte) ([]byte, error) {
 	return self.db.Get(key)
 }
 
-var hashers = func() chan *hasher {
-	ret := make(chan *hasher, 512)
-	for i := 0; i < cap(ret); i++ {
-		ret <- &hasher{h: sha3.NewLegacyKeccak256()}
-	}
-	return ret
-}()
-
-//var hasher_pool = sync.Pool{New: func() interface{} {
-//	return
-//}}
-
-type hasher = struct {
-	h   hash.Hash
-	buf common.Hash
-}
-
-func keccak256(b []byte) (ret []byte, ret_release func()) {
-	hasher := <-hashers
-	hasher.h.Write(b)
-	return hasher.h.Sum(hasher.buf[:0]), func() {
-		hasher.h.Reset()
-		hashers <- hasher
-	}
-}
-
 type main_trie_storage_strat byte
 
 func (main_trie_storage_strat) OriginKeyToMPTKey(key []byte) (ret []byte, ret_release func(), err error) {
-	ret, ret_release = keccak256(key)
+	ret, ret_release = util.Keccak256Pooled(key)
 	return
 }
 
@@ -217,7 +189,7 @@ func (main_trie_storage_strat) MPTKeyToFlat(mpt_key []byte) (flat_key []byte, er
 type acc_trie_storage_strat common.Address
 
 func (self acc_trie_storage_strat) OriginKeyToMPTKey(key []byte) (ret []byte, ret_release func(), err error) {
-	ret, ret_release = keccak256(key)
+	ret, ret_release = util.Keccak256Pooled(key)
 	return
 }
 

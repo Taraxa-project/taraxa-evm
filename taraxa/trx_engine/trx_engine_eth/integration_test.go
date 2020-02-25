@@ -8,21 +8,18 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
-	"os"
+	"math/big"
+	"runtime"
+	"runtime/debug"
 	"testing"
+	"time"
 )
 
 type BlockWithStateRoot = struct {
 	*trx_engine.Block
 	StateRoot common.Hash `json:"stateRoot"`
-}
-
-type EthTxEngineIntegrationTest struct {
-	StartBlock       uint64
-	EndBlock         uint64
-	GetBlockByNumber func(uint64) *BlockWithStateRoot
-	VMFactory        *EthTrxEngineFactory
 }
 
 func Test_integration(t *testing.T) {
@@ -50,15 +47,14 @@ func Test_integration(t *testing.T) {
 	//		ReadOnly:               true,
 	//		Parallelism:            concurrent.CPU_COUNT,
 	//		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
-	//		OptimizeForPointLookup: 1 * 1024,
+	//		OptimizeForPointLookup: 2 * 1024,
 	//		UseDirectReads:         true,
 	//	},
 	//}
 	//factory.WriteDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
 	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
-	factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: &rocksdb.Factory{
-		//File:                   os.TempDir() + string(os.PathSeparator) + "ololololo",
-		File:                   os.TempDir() + string(os.PathSeparator) + "ololololo1",
+	factory.DBConfig = &trx_engine_base.StateDBConfig{DBFactory: &rocksdb.Factory{
+		File:                   "/tmp/ololololo3",
 		Parallelism:            concurrent.CPU_COUNT,
 		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
 		OptimizeForPointLookup: 3 * 1024,
@@ -99,7 +95,7 @@ func Test_integration(t *testing.T) {
 	b, err := engine.DB.Get(binary.BytesView("last_block"))
 	util.PanicIfNotNil(err)
 	StartBlock := new(big.Int).SetBytes(b).Uint64()
-	EndBlock := StartBlock + 1000
+	EndBlock := StartBlock + 10000
 	var prevBlock *BlockWithStateRoot
 	if StartBlock > 0 {
 		prevBlock = getBlockByNumber(StartBlock - 1)

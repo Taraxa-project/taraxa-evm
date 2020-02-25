@@ -23,7 +23,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -271,7 +270,9 @@ func (this *StateDB) IncrementNonce(addr common.Address) {
 
 func (self *StateDB) SetCode(addr common.Address, code []byte) {
 	stateObject := self.GetOrNewStateObject(addr)
-	stateObject.SetCode(crypto.Keccak256Hash(code), code)
+	hash, return_to_pool := util.Keccak256Pooled(code)
+	stateObject.SetCode(common.BytesToHash(hash), code)
+	go return_to_pool()
 }
 
 func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {

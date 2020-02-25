@@ -23,7 +23,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"golang.org/x/crypto/sha3"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
 )
 
@@ -384,17 +384,9 @@ func opSAR(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *
 func opSha3(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
 	data := memory.Get(offset.Int64(), size.Int64())
-
-	if interpreter.hasher == nil {
-		interpreter.hasher = sha3.NewLegacyKeccak256().(keccakState)
-	} else {
-		interpreter.hasher.Reset()
-	}
-	interpreter.hasher.Write(data)
-	interpreter.hasher.Read(interpreter.hasherBuf[:])
-
-	stack.push(interpreter.intPool.get().SetBytes(interpreter.hasherBuf[:]))
-
+	hash, return_to_pool := util.Keccak256Pooled(data)
+	stack.push(interpreter.intPool.get().SetBytes(hash))
+	go return_to_pool()
 	interpreter.intPool.put(offset, size)
 	return nil, nil
 }

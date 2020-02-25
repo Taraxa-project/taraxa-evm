@@ -19,9 +19,9 @@ package vm
 import (
 	"fmt"
 	"hash"
+	"sync"
 	"sync/atomic"
 
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
@@ -35,6 +35,8 @@ type StaticConfig struct {
 	// Type of the EVM interpreter
 	EVMInterpreter string `json:"eVMInterpreter"`
 }
+
+const InterpreterStackSize = 1024
 
 // Config are the configuration options for the Interpreter
 type Config struct {
@@ -81,17 +83,23 @@ var NoopExecutionController = func(programCounter uint64) (changedProgramCounter
 	return programCounter, true
 }
 
+var interpreterStackPool = sync.Pool{New: func() interface{} {
+	return newstack(InterpreterStackSize)
+}}
+
+func newInterpreterStack() (ret *Stack, release func()) {
+	return interpreterStackPool.Get().(*Stack), func() {
+		ret.data = ret.data[:0]
+		interpreterStackPool.Put(ret)
+	}
+}
+
 // EVMInterpreter represents an EVM interpreter
 type EVMInterpreter struct {
-	evm      *EVM
-	cfg      *Config
-	gasTable params.GasTable
-
-	intPool *intPool
-
-	hasher    keccakState // Keccak256 hasher instance shared across opcodes
-	hasherBuf common.Hash // Keccak256 hasher result array shared aross opcodes
-
+	evm                 *EVM
+	cfg                 *Config
+	gasTable            params.GasTable
+	intPool             *intPool
 	readOnly            bool   // Whether to throw on stateful modifications
 	returnData          []byte // Last CALL's return data for subsequent reuse
 	executionController ExecutionController
@@ -159,31 +167,25 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			in.intPool = nil
 		}()
 	}
-
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
-
 	// Make sure the readOnly is only set if we aren't in readOnly yet.
 	// This makes also sure that the readOnly flag isn't removed for child calls.
 	if readOnly && !in.readOnly {
 		in.readOnly = true
 		defer func() { in.readOnly = false }()
 	}
-
 	// Reset the previous call's return data. It's unimportant to preserve the old buffer
 	// as every returning call will return new data anyway.
 	in.returnData = nil
-
 	// Don't bother with the execution if there's no code.
 	if len(contract.Code) == 0 {
 		return nil, nil
 	}
-
 	var (
-		op    OpCode        // current opcode
-		mem   = NewMemory() // bound memory
-		stack = newstack()  // local stack
+		op  OpCode        // current opcode
+		mem = NewMemory() // bound memory
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
 		// to be uint256. Practically much less so feasible.
@@ -191,11 +193,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		cost uint64
 		res  []byte // result of the opcode execution function
 	)
+	stack, release_stack := newInterpreterStack()
+	defer release_stack()
 	contract.Input = input
-
 	// Reclaim the stack as an int pool when the execution stops
 	defer func() { in.intPool.put(stack.data...) }()
-
 	// The Interpreter main run loop (contextual). This loop runs until either an
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
@@ -220,7 +222,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		if err = in.enforceRestrictions(op, operation, stack); err != nil {
 			return nil, err
 		}
-
 		var memorySize uint64
 		// calculate the new memory size and expand the memory to fit
 		// the operation
@@ -246,17 +247,11 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 		}
 		// execute the operation
 		res, err = operation.execute(&pc, in, contract, mem, stack)
-		// verifyPool is a build flag. Pool verification makes sure the integrity
-		// of the integer pool by comparing values to a default value.
-		if verifyPool {
-			verifyIntegerPool(in.intPool)
-		}
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
 			in.returnData = res
 		}
-
 		switch {
 		case err != nil:
 			return nil, err

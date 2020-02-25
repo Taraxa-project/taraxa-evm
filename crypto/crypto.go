@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -65,13 +66,19 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 // CreateAddress creates an ethereum address given the bytes and the nonce
 func CreateAddress(b common.Address, nonce uint64) common.Address {
 	data, _ := rlp.EncodeToBytes([]interface{}{b, nonce})
-	return common.BytesToAddress(Keccak256(data)[12:])
+	hash, return_to_pool := util.Keccak256Pooled(data)
+	ret := common.BytesToAddress(hash[12:])
+	go return_to_pool()
+	return ret
 }
 
 // CreateAddress2 creates an ethereum address given the address bytes, initial
 // contract code hash and a salt.
 func CreateAddress2(b common.Address, salt [32]byte, inithash []byte) common.Address {
-	return common.BytesToAddress(Keccak256([]byte{0xff}, b.Bytes(), salt[:], inithash)[12:])
+	hash, return_to_pool := util.Keccak256Pooled([]byte{0xff}, b.Bytes(), salt[:], inithash)
+	ret := common.BytesToAddress(hash[12:])
+	go return_to_pool()
+	return ret
 }
 
 // ToECDSA creates a private key with the given D value.
@@ -182,11 +189,6 @@ func ValidateSignatureValues(v byte, r, s *big.Int, homestead bool) bool {
 	}
 	// Frontier: allow s to be in full N range
 	return r.Cmp(secp256k1N) < 0 && s.Cmp(secp256k1N) < 0 && (v == 0 || v == 1)
-}
-
-func PubkeyToAddress(p ecdsa.PublicKey) common.Address {
-	pubBytes := FromECDSAPub(&p)
-	return common.BytesToAddress(Keccak256(pubBytes[1:])[12:])
 }
 
 func zeroBytes(bytes []byte) {

@@ -179,6 +179,6 @@ func (c *Contract) SetCallCode(addr *common.Address, hash common.Hash, code []by
 // In case hash is not provided, the jumpdest analysis will not be saved to the parent context
 func (c *Contract) SetCodeOptionalHash(addr *common.Address, codeAndHash *codeAndHash) {
 	c.Code = codeAndHash.code
-	c.CodeHash = codeAndHash.hash
+	c.CodeHash.SetBytes(codeAndHash.hash)
 	c.CodeAddr = addr
 }

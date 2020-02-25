@@ -28,8 +28,8 @@ type Stack struct {
 	data []*big.Int
 }
 
-func newstack() *Stack {
-	return &Stack{data: make([]*big.Int, 0, 1024)}
+func newstack(size int) *Stack {
+	return &Stack{data: make([]*big.Int, 0, size)}
 }
 
 // Data returns the underlying big.Int array.

@@ -91,6 +91,12 @@ func RandomBytes(N int) (ret []byte) {
 	return ret[:N]
 }
 
-//func RLPListReplace(rlp_list []byte, index, replacement []byte) {
-//	rlp.Split(rlp_list)
+//func PooledFactory(new func() interface{}, reset func(interface{})) func() (ret interface{}, return_to_pool func()) {
+//	pool := sync.Pool{new}
+//	return func() (ret interface{}, return_to_pool func()) {
+//		return pool.Get(), func() {
+//			reset(ret)
+//			pool.Put(ret)
+//		}
+//	}
 //}

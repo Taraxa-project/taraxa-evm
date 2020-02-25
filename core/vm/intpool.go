@@ -21,9 +21,7 @@ import (
 	"sync"
 )
 
-var checkVal = big.NewInt(-42)
-
-const poolLimit = 256
+const bigint_pool_limit = 512
 
 // intPool is a pool of big integers that
 // can be reused for all big.Int operations.
@@ -32,7 +30,7 @@ type intPool struct {
 }
 
 func newIntPool() *intPool {
-	return &intPool{pool: newstack()}
+	return &intPool{pool: newstack(bigint_pool_limit)}
 }
 
 // get retrieves a big int from the pool, allocating one if the pool is empty.
@@ -56,14 +54,9 @@ func (p *intPool) getZero() *big.Int {
 // put returns an allocated big int to the pool to be later reused by get calls.
 // Note, the values as saved as is; neither put nor get zeroes the ints out!
 func (p *intPool) put(is ...*big.Int) {
-	if len(p.pool.data) > poolLimit {
-		return
-	}
 	for _, i := range is {
-		// verifyPool is a build flag. Pool verification makes sure the integrity
-		// of the integer pool by comparing values to a default value.
-		if verifyPool {
-			i.Set(checkVal)
+		if len(p.pool.data) == bigint_pool_limit {
+			return
 		}
 		p.pool.push(i)
 	}
