@@ -73,7 +73,7 @@ func (self *Trie) InsertAsync(key, value []byte) {
 	self.initiate_updating.Do(func() {
 		untouched := self.updates == nil
 		if untouched {
-			self.updates = make(updates, 64)
+			self.updates = make(updates, 256)
 		}
 		go func() {
 			if untouched && self.init_root_hash != EmptyRLPListHash {

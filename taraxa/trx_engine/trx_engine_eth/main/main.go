@@ -1,4 +1,4 @@
-package trx_engine_eth
+package main
 
 import (
 	"encoding/json"
@@ -7,13 +7,20 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/db/rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_eth"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"math/big"
+	"os"
+	"runtime/pprof"
+	"strconv"
+
+	//"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"runtime/debug"
-	"testing"
+	//"runtime/pprof"
 	"time"
 )
 
@@ -22,7 +29,10 @@ type BlockWithStateRoot = struct {
 	StateRoot common.Hash `json:"stateRoot"`
 }
 
-func Test_integration(t *testing.T) {
+func main() {
+	//go func() {
+	//	util.PanicIfNotNil(http.ListenAndServe("localhost:6060", nil))
+	//}()
 	block_db, err := (&rocksdb.Factory{
 		File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/blockchain",
 		ReadOnly:               true,
@@ -40,7 +50,7 @@ func Test_integration(t *testing.T) {
 		util.PanicIfNotNil(json.Unmarshal(block_json, ret))
 		return ret
 	}
-	factory := new(EthTrxEngineFactory)
+	factory := new(trx_engine_eth.EthTrxEngineFactory)
 	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{
 	//	DBFactory: &rocksdb.Factory{
 	//		File:                   "/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/state",
@@ -57,8 +67,8 @@ func Test_integration(t *testing.T) {
 		File:                   "/tmp/ololololo3",
 		Parallelism:            concurrent.CPU_COUNT,
 		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
-		OptimizeForPointLookup: 3 * 1024,
-		MaxOpenFiles:           8192,
+		OptimizeForPointLookup: 4 * 1024,
+		MaxOpenFiles:           7000,
 	}}
 	factory.BlockHashSourceFactory = trx_engine_base.SimpleBlockHashSourceFactory(func(blockNumber uint64) common.Hash {
 		return getBlockByNumber(blockNumber).Hash
@@ -95,31 +105,61 @@ func Test_integration(t *testing.T) {
 	b, err := engine.DB.Get(binary.BytesView("last_block"))
 	util.PanicIfNotNil(err)
 	StartBlock := new(big.Int).SetBytes(b).Uint64()
-	EndBlock := StartBlock + 10000
+	EndBlock := StartBlock + 30000000
 	var prevBlock *BlockWithStateRoot
 	if StartBlock > 0 {
 		prevBlock = getBlockByNumber(StartBlock - 1)
 	}
+
+	profile_period := 1 * time.Hour
+	profile_basedir := "/Users/compuktor/projects/taraxa.io/taraxa-evm/taraxa/trx_engine/trx_engine_eth/main/profiles/"
+	util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
+	new_prof_file := func(time time.Time, kind string) *os.File {
+		ret, err := os.Create(profile_basedir + strconv.FormatInt(time.Unix(), 10) + "_" + kind + ".prof")
+		util.PanicIfNotNil(err)
+		return ret
+	}
+	last_profile_snapshot_time := time.Now()
+	write_profiles := func(time time.Time) {
+		fmt.Println("writing profiles...")
+		pprof.StopCPUProfile()
+		for _, prof := range pprof.Profiles() {
+			prof.WriteTo(new_prof_file(time, prof.Name()), 1)
+		}
+		last_profile_snapshot_time = time
+		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
+	}
+	pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
+	defer func() {
+		write_profiles(time.Now())
+	}()
+
 	debug.SetGCPercent(-1)
 	var max_heap_size uint64
 	var mem_stats runtime.MemStats
+
 	for blockNum := StartBlock; blockNum <= EndBlock; blockNum++ {
 		block := getBlockByNumber(blockNum)
-		fmt.Println("block", blockNum, "tx_count", len(block.Transactions))
-		stateTransitionRequest := &trx_engine.StateTransitionRequest{Block: block.Block}
+		req := &trx_engine.StateTransitionRequest{Block: block.Block}
+		fmt.Println("block", blockNum, "tx_count", len(req.Block.Transactions))
 		if prevBlock != nil {
-			stateTransitionRequest.BaseStateRoot = prevBlock.StateRoot
+			req.BaseStateRoot = prevBlock.StateRoot
 		}
-		result, err := engine.TransitionState(stateTransitionRequest)
+		result, err := engine.TransitionState(req)
 		util.PanicIfNotNil(err)
 		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), "!=", block.StateRoot.Hex())
 		engine.DB.PutAsync(binary.BytesView("last_block"), new(big.Int).SetUint64(blockNum+1).Bytes())
 		engine.DB.CommitAsync()
 		prevBlock = block
+		if now := time.Now(); now.Sub(last_profile_snapshot_time) > profile_period {
+			write_profiles(now)
+		}
 		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
-			fmt.Println("gc")
+			fmt.Println("gc...")
 			runtime.GC()
+			runtime.ReadMemStats(&mem_stats)
 			max_heap_size = mem_stats.HeapAlloc * 3
 		}
 	}
+	engine.DB.Join()
 }

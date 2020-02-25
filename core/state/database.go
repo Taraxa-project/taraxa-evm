@@ -27,7 +27,7 @@ import (
 	"sync"
 )
 
-const MaxTrieCacheGen = uint16(500)
+const MaxTrieCacheGen = uint16(1000)
 const codeSizeCacheSize = 100000
 
 type Database struct {
@@ -54,7 +54,7 @@ func NewDatabase(db ethdb.Database) *Database {
 	self := &Database{
 		db:            db,
 		codeSizeCache: csc,
-		tasks:         make(chan func(), 4096*32),
+		tasks:         make(chan func(), 4096*64),
 	}
 	runtime.SetFinalizer(self, func(self *Database) {
 		self.tasks <- nil
@@ -83,17 +83,21 @@ func (self *Database) OpenTrie(root *common.Hash) *trie.Trie {
 }
 
 func (self *Database) ContractCode(hash []byte) ([]byte, error) {
+	if cached, ok := self.codeSizeCache.Get(binary.StringView(hash)); ok {
+		return cached.([]byte), nil
+	}
 	code, err := self.Get(hash)
 	if err == nil {
-		self.codeSizeCache.Add(string(hash), len(code))
+		self.codeSizeCache.Add(string(hash), code)
+		//self.codeSizeCache.Add(string(hash), len(code))
 	}
 	return code, err
 }
 
 func (self *Database) CodeSize(hash []byte) (int, error) {
-	if cached, ok := self.codeSizeCache.Get(binary.StringView(hash)); ok {
-		return cached.(int), nil
-	}
+	//if cached, ok := self.codeSizeCache.Get(binary.StringView(hash)); ok {
+	//	return cached.(int), nil
+	//}
 	code, err := self.ContractCode(hash)
 	return len(code), err
 }
@@ -160,6 +164,14 @@ func (self *Database) CommitAsync() {
 		self.batch = nil
 		self.batch_map = nil
 	}
+}
+
+func (self *Database) Join() {
+	ch := make(chan byte)
+	self.tasks <- func() {
+		close(ch)
+	}
+	<-ch
 }
 
 type trie_db struct {
