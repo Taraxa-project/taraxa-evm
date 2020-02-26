@@ -449,8 +449,7 @@ func (s *StateDB) clearJournalAndRefund() {
 	s.refund = 0
 }
 
-func (self *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
-	self.Checkpoint(deleteEmptyObjects)
+func (self *StateDB) Commit() (root common.Hash, err error) {
 	child_tasks := int32(0)
 	for addr, stateObject := range self.stateObjectsDirty {
 		addr := addr

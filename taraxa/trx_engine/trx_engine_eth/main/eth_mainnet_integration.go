@@ -104,14 +104,14 @@ func main() {
 	defer cleanup()
 	b, err := engine.DB.Get(binary.BytesView("last_block"))
 	util.PanicIfNotNil(err)
-	StartBlock := new(big.Int).SetBytes(b).Uint64()
+	StartBlock := new(big.Int).SetBytes(b).Uint64() + 1
+	//StartBlock = uint64(3809701)
 	EndBlock := StartBlock + 30000000
-	var prevBlock *BlockWithStateRoot
+	var last_block *BlockWithStateRoot
 	if StartBlock > 0 {
-		prevBlock = getBlockByNumber(StartBlock - 1)
+		last_block = getBlockByNumber(StartBlock - 1)
 	}
 
-	profile_period := 1 * time.Hour
 	profile_basedir := "/Users/compuktor/projects/taraxa.io/taraxa-evm/taraxa/trx_engine/trx_engine_eth/main/profiles/"
 	util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
 	new_prof_file := func(time time.Time, kind string) *os.File {
@@ -120,45 +120,47 @@ func main() {
 		return ret
 	}
 	last_profile_snapshot_time := time.Now()
-	write_profiles := func(time time.Time) {
+	write_reset_profiles := func(start_time time.Time) {
 		fmt.Println("writing profiles...")
 		pprof.StopCPUProfile()
 		for _, prof := range pprof.Profiles() {
-			prof.WriteTo(new_prof_file(time, prof.Name()), 1)
+			prof.WriteTo(new_prof_file(last_profile_snapshot_time, prof.Name()), 1)
 		}
-		last_profile_snapshot_time = time
+		last_profile_snapshot_time = start_time
 		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
 	}
 	pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
-	defer func() {
-		write_profiles(time.Now())
-	}()
 
 	debug.SetGCPercent(-1)
 	var max_heap_size uint64
 	var mem_stats runtime.MemStats
 
-	for blockNum := StartBlock; blockNum <= EndBlock; blockNum++ {
-		block := getBlockByNumber(blockNum)
-		req := &trx_engine.StateTransitionRequest{Block: block.Block}
-		fmt.Println("block", blockNum, "tx_count", len(req.Block.Transactions))
-		if prevBlock != nil {
-			req.BaseStateRoot = prevBlock.StateRoot
+	const min_tx_to_execute = 500
+	block_buf := make([]*trx_engine.Block, 0, 32)
+	for blockNum := StartBlock; blockNum <= EndBlock; {
+		var base_root common.Hash
+		if last_block != nil {
+			base_root = last_block.StateRoot
 		}
-		result, err := engine.TransitionState(req)
+		tx_count := 0
+		for ; tx_count < min_tx_to_execute; blockNum++ {
+			last_block = getBlockByNumber(blockNum)
+			tx_count += len(last_block.Transactions)
+			block_buf = append(block_buf, last_block.Block)
+		}
+		fmt.Println("blocks:", int(blockNum)-len(block_buf), "-", blockNum-1, "tx_count:", tx_count)
+		result, err := engine.TransitionState(base_root, block_buf...)
+		block_buf = block_buf[:0]
 		util.PanicIfNotNil(err)
-		util.Assert(result.StateRoot == block.StateRoot, result.StateRoot.Hex(), "!=", block.StateRoot.Hex())
-		engine.DB.PutAsync(binary.BytesView("last_block"), new(big.Int).SetUint64(blockNum+1).Bytes())
+		util.Assert(result.StateRoot == last_block.StateRoot, result.StateRoot.Hex(), "!=", last_block.StateRoot.Hex())
+		engine.DB.PutAsync(binary.BytesView("last_block"), last_block.Number.Bytes())
 		engine.DB.CommitAsync()
-		prevBlock = block
-		if now := time.Now(); now.Sub(last_profile_snapshot_time) > profile_period {
-			write_profiles(now)
-		}
 		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
+			write_reset_profiles(time.Now())
 			fmt.Println("gc...")
 			runtime.GC()
 			runtime.ReadMemStats(&mem_stats)
-			max_heap_size = mem_stats.HeapAlloc * 3
+			max_heap_size = mem_stats.HeapAlloc * 4
 		}
 	}
 	engine.DB.Join()

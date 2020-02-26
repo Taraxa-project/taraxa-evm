@@ -143,8 +143,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	}
 }
 
-func (g *Genesis) Apply(db *state.Database) (common.Hash, error) {
-	statedb := state.New(common.Hash{}, db)
+func (g *Genesis) Apply(statedb *state.StateDB) {
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
@@ -153,7 +152,6 @@ func (g *Genesis) Apply(db *state.Database) (common.Hash, error) {
 			statedb.SetState(addr, key, value)
 		}
 	}
-	return statedb.Commit(false)
 }
 
 // DefaultGenesisBlock returns the Ethereum main net genesis block.

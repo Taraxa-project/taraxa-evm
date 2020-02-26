@@ -15,11 +15,6 @@ type BaseTrxEngine struct {
 	DB           *state.Database
 }
 
-func (self *BaseTrxEngine) CommitToDisk() error {
-	self.DB.CommitAsync()
-	return nil
-}
-
 type TransactionRequest = struct {
 	Transaction        *trx_engine.Transaction
 	BlockHeader        *trx_engine.BlockHeader
