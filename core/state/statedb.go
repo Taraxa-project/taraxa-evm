@@ -170,12 +170,7 @@ func (self *StateDB) GetNonce(addr common.Address) uint64 {
 	if stateObject != nil {
 		return stateObject.Nonce()
 	}
-
 	return 0
-}
-
-func (this *StateDB) NonceEQ(addr common.Address, expected uint64) bool {
-	return this.GetNonce(addr) == expected
 }
 
 func (self *StateDB) GetCode(addr common.Address) []byte {
@@ -247,11 +242,6 @@ func (self *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
 	stateObject.SubBalance(amount)
-}
-
-func (self *StateDB) Transfer(from, to common.Address, amount *big.Int) {
-	self.SubBalance(from, amount)
-	self.AddBalance(to, amount)
 }
 
 func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {

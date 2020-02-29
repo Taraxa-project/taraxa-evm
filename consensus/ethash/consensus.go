@@ -35,7 +35,7 @@ var (
 	big32 = big.NewInt(32)
 )
 
-type UncleHeader = struct {
+type BlockNumAndCoinbase = struct {
 	Number   *big.Int
 	Coinbase common.Address
 }
@@ -43,7 +43,7 @@ type UncleHeader = struct {
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func AccumulateRewards(config *params.ChainConfig, state *state.StateDB, header *UncleHeader, uncles []*UncleHeader) {
+func AccumulateRewards(config *params.ChainConfig, state *state.StateDB, header *BlockNumAndCoinbase, uncles []*BlockNumAndCoinbase) {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if config.IsByzantium(header.Number) {

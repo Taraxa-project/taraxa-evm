@@ -101,33 +101,36 @@ func main() {
 	defer cleanup()
 	b, err := engine.DB.Get(binary.BytesView("last_block"))
 	util.PanicIfNotNil(err)
-	start_block_num := new(big.Int).SetBytes(b).Uint64() + 1
-	if b == nil {
-		start_block_num = 0
+	start_block_num := uint64(0)
+	if b != nil {
+		start_block_num = new(big.Int).SetBytes(b).Uint64() + 1
 	}
 	end_block_num := start_block_num + 30000000
 
 	blocks := make(chan *BlockWithStateRoot, 64)
-	block_load_requests := make(chan uint64, 32)
-	block_load_requests <- 10
+	block_load_requests := make(chan uint32, 32)
+	defer close(block_load_requests)
 	go func() {
-		next_to_load := start_block_num - 1
+		defer close(blocks)
+		if start_block_num == 0 {
+			blocks <- nil
+		} else {
+			blocks <- getBlockByNumber(start_block_num - 1)
+		}
+		next_to_load := start_block_num
 		for {
-			req, ok := <-block_load_requests
+			to_load_count, ok := <-block_load_requests
 			if !ok {
-				return
+				break
 			}
-			for i := uint64(0); i < req; i++ {
+			for i := uint32(0); i < to_load_count; i++ {
 				blocks <- getBlockByNumber(next_to_load)
 				next_to_load++
 			}
 		}
 	}()
-
-	var last_block *BlockWithStateRoot
-	if start_block_num > 0 {
-		last_block = <-blocks
-	}
+	block_load_requests <- 15
+	last_block := <-blocks
 
 	//profile_basedir := "/Users/compuktor/projects/taraxa.io/taraxa-evm/taraxa/trx_engine/trx_engine_eth/main/profiles/"
 	//util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
@@ -152,12 +155,13 @@ func main() {
 	var max_heap_size uint64
 	var mem_stats runtime.MemStats
 
-	const min_tx_to_execute = 1000
 	block_buf := make([]*trx_engine.Block, 0, 32)
 	tps_sum := 0.0
 	tps_cnt := 0
 	tps_min := math.MaxFloat64
 	tps_max := -1.0
+
+	const min_tx_to_execute = 5000
 	for blockNum := start_block_num; blockNum <= end_block_num; {
 		var base_root common.Hash
 		if last_block != nil {

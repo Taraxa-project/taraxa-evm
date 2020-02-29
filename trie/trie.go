@@ -394,7 +394,7 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 	if err != nil {
 		return nil, err
 	}
-	ret := mustDecodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(mpt_key_hex []byte) valueNode {
+	ret := decodeNode(common.CopyBytes(mpt_key_hex_prefix), hash, enc, self.cachegen, func(mpt_key_hex []byte) valueNode {
 		mpt_key := hexToKeybytes(mpt_key_hex)
 		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
 		util.PanicIfNotNil(err_0)
@@ -421,9 +421,8 @@ func (self *Trie) hashRoot(store hasher_store_strategy) (ret common.Hash, n node
 		ret = EmptyRLPListHash
 		return
 	}
-	hasher := newHasher(self.cachegen, self.cachelimit)
+	hasher := newHasher(self.cachegen, self.cachelimit, self.Dot_g)
 	defer returnHasherToPool(hasher)
-	hasher.dot_g = self.Dot_g
 	var hash_node node
 	hash_node, n, err = hasher.hash(self.root, true, store)
 	ret = common.BytesToHash(hash_node.(hashNode))

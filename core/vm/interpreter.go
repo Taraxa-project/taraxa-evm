@@ -18,12 +18,10 @@ package vm
 
 import (
 	"fmt"
-	"hash"
-	"sync"
-	"sync/atomic"
-
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"hash"
+	"sync"
 )
 
 type StaticConfig struct {
@@ -72,6 +70,7 @@ type Interpreter interface {
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
 // Read to get a variable amount of data from the hash state. Read is faster than Sum
 // because it doesn't copy the internal state, but also modifies the internal state.
+// TODO ???
 type keccakState interface {
 	hash.Hash
 	Read([]byte) (int, error)
@@ -202,7 +201,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
-	for atomic.LoadInt32(&in.evm.abort) == 0 {
+	for {
 		if pcChanged, shouldContinue := in.executionController(pc); shouldContinue {
 			pc = pcChanged
 		} else {

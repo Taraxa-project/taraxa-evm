@@ -26,34 +26,22 @@ import (
 // StateDB is an EVM database for full state querying.
 type StateDB interface {
 	CreateAccount(common.Address)
-
 	SubBalance(common.Address, *big.Int)
 	AddBalance(common.Address, *big.Int)
-	Transfer(common.Address, common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
 	BalanceEQ(common.Address, *big.Int) bool
 	AssertBalanceGTE(common.Address, *big.Int) bool
-
 	GetNonce(common.Address) uint64
-	NonceEQ(common.Address, uint64) bool
 	IncrementNonce(common.Address)
-
 	GetCodeHash(common.Address) common.Hash
 	GetCode(common.Address) []byte
 	SetCode(common.Address, []byte)
 	GetCodeSize(common.Address) int
-
-	AddRefund(uint64)
-	SubRefund(uint64)
-	GetRefund() uint64
-
 	GetCommittedState(common.Address, common.Hash) common.Hash
 	GetState(common.Address, common.Hash) common.Hash
 	SetState(common.Address, common.Hash, common.Hash)
-
 	Suicide(addr, newAddr common.Address)
 	HasSuicided(common.Address) bool
-
 	// Exist reports whether the given account exists in state.
 	// Notably this should also return true for suicided accounts.
 	Exist(common.Address) bool
@@ -61,8 +49,12 @@ type StateDB interface {
 	// is defined according to EIP161 (balance = nonce = code = 0).
 	Empty(common.Address) bool
 
+	AddLog(*types.Log)
+
+	AddRefund(uint64)
+	SubRefund(uint64)
+	GetRefund() uint64
+
 	RevertToSnapshot(int)
 	Snapshot() int
-
-	AddLog(*types.Log)
 }

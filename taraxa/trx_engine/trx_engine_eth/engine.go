@@ -26,8 +26,10 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 	stateDB := state.New(base_root, self.DB)
 	chainConfig := self.Genesis.Config
 	for _, block := range blocks {
+		eip158 := chainConfig.IsEIP158(block.Number)
 		if block.Number.Sign() == 0 {
 			self.Genesis.Apply(stateDB)
+			stateDB.Checkpoint(eip158)
 			continue
 		}
 		if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number) == 0 {
@@ -56,7 +58,7 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 				txErr = txResult.ContractErr
 			}
 			util.Stringify(&txErr)
-			stateDB.Checkpoint(chainConfig.IsEIP158(block.Number))
+			stateDB.Checkpoint(eip158)
 			ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 			ethReceipt := types.NewReceipt(nil, txErr != nil, uint64(ret.UsedGas))
 			if tx.To == nil {
@@ -73,16 +75,16 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 			})
 		}
 		if !self.DisableMinerReward {
-			var unclesMapped []*ethash.UncleHeader
-			for _, uncle := range block.UncleBlocks {
-				unclesMapped = append(unclesMapped, &ethash.UncleHeader{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner})
+			unclesMapped := make([]*ethash.BlockNumAndCoinbase, len(block.UncleBlocks))
+			for i, uncle := range block.UncleBlocks {
+				unclesMapped[i] = &ethash.BlockNumAndCoinbase{Number: uncle.Number.ToInt(), Coinbase: uncle.Miner}
 			}
 			ethash.AccumulateRewards(
 				chainConfig,
 				stateDB,
-				&ethash.UncleHeader{Number: block.Number, Coinbase: block.Miner},
+				&ethash.BlockNumAndCoinbase{Number: block.Number, Coinbase: block.Miner},
 				unclesMapped)
-			stateDB.Checkpoint(chainConfig.IsEIP158(block.Number))
+			stateDB.Checkpoint(eip158)
 		}
 	}
 	ret.StateRoot, err = stateDB.Commit()

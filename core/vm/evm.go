@@ -22,7 +22,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
-	"sync/atomic"
 )
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
@@ -105,9 +104,6 @@ type EVM struct {
 	// used throughout the execution of the tx.
 	interpreters []Interpreter
 	interpreter  Interpreter
-	// abort is used to abort the EVM calling operations
-	// NOTE: must be set atomically
-	abort int32
 	// callGasTemp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
@@ -126,18 +122,6 @@ func NewEVMWithInterpreter(
 		interpreters: make([]Interpreter, 0, 1),
 	}
 	if chainConfig.IsEWASM(ctx.BlockNumber) {
-		// to be implemented by EVM-C and Wagon PRs.
-		// if vmConfig.EWASMInterpreter != "" {
-		//  extIntOpts := strings.Split(vmConfig.EWASMInterpreter, ":")
-		//  path := extIntOpts[0]
-		//  options := []string{}
-		//  if len(extIntOpts) > 1 {
-		//    options = extIntOpts[1..]
-		//  }
-		//  evm.interpreters = append(evm.interpreters, NewEVMVCInterpreter(evm, vmConfig, options))
-		// } else {
-		// 	evm.interpreters = append(evm.interpreters, NewEWASMInterpreter(evm, vmConfig))
-		// }
 		panic("No supported ewasm interpreter yet.")
 	}
 	// vmConfig.EVMInterpreter will be used by EVM-C, it won't be checked here
@@ -153,12 +137,6 @@ func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmCon
 	return NewEVMWithInterpreter(ctx, statedb, chainConfig, vmConfig, func(evm *EVM) Interpreter {
 		return NewEVMInterpreter(evm, vmConfig)
 	})
-}
-
-// Cancel cancels any running EVM operation. This may be called concurrently and
-// it's safe to be called multiple times.
-func (evm *EVM) Cancel() {
-	atomic.StoreInt32(&evm.abort, 1)
 }
 
 // Interpreter returns the current interpreter
@@ -194,11 +172,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		}
 		evm.StateDB.CreateAccount(addr)
 	}
-	evm.StateDB.Transfer(caller.Address(), to.Address(), value)
+	evm.transfer(caller.Address(), to.Address(), value)
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, to, value, gas)
-	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
+	contract.SetCallCode(&addr, evm.StateDB.GetCode(addr))
 	ret, err = run(evm, contract, input, false)
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
@@ -237,7 +215,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, to, value, gas)
-	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
+	contract.SetCallCode(&addr, evm.StateDB.GetCode(addr))
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
 		evm.StateDB.RevertToSnapshot(snapshot)
@@ -266,7 +244,7 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 	// Initialise a new contract and make initialise the delegate values
 	contract := NewContract(caller, to, nil, gas).AsDelegate()
 	// TODO db index on code, size, and the hash
-	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
+	contract.SetCallCode(&addr, evm.StateDB.GetCode(addr))
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
 		evm.StateDB.RevertToSnapshot(snapshot)
@@ -295,7 +273,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, to, new(big.Int), gas)
-	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
+	contract.SetCallCode(&addr, evm.StateDB.GetCode(addr))
 	// We do an AddBalance of zero here, just in order to trigger a touch.
 	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
 	// but is the correct thing to do and matters on other networks, in tests, and potential
@@ -314,26 +292,8 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	return ret, contract.Gas, err
 }
 
-type codeAndHash struct {
-	code []byte
-	hash []byte
-}
-
-func (c *codeAndHash) Hash() []byte {
-	if c.hash == nil {
-		if c.code == nil {
-			c.hash = emptyCodeHash[:]
-		} else {
-			hash, return_to_pool := util.Keccak256Pooled(c.code)
-			c.hash = common.CopyBytes(hash)
-			go return_to_pool()
-		}
-	}
-	return c.hash
-}
-
 // create creates a new contract using code as deployment code.
-func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address) ([]byte, common.Address, uint64, error) {
+func (evm *EVM) create(caller ContractRef, code []byte, gas uint64, value *big.Int, address common.Address) ([]byte, common.Address, uint64, error) {
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
 	if evm.depth > int(params.CallCreateDepth) {
@@ -343,9 +303,8 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 		return nil, common.Address{}, gas, ErrInsufficientBalance
 	}
 	evm.StateDB.IncrementNonce(caller.Address())
-	// Ensure there's no existing contract already at the designated address
-	contractHash := evm.StateDB.GetCodeHash(address)
-	if !evm.StateDB.NonceEQ(address, 0) || (contractHash != (common.Hash{}) && contractHash != emptyCodeHash) {
+	if !evm.StateDB.Empty(address) {
+		panic("noo")
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}
 	// Create a new account on the state
@@ -354,12 +313,12 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	if evm.ChainConfig().IsEIP158(evm.BlockNumber) {
 		evm.StateDB.IncrementNonce(address)
 	}
-	evm.StateDB.Transfer(caller.Address(), address, value)
+	evm.transfer(caller.Address(), address, value)
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(caller, AccountRef(address), value, gas)
-	contract.SetCodeOptionalHash(&address, codeAndHash)
+	contract.SetCallCode(&address, code)
 	if evm.vmConfig.NoRecursion && evm.depth > 0 {
 		return nil, address, gas, nil
 	}
@@ -399,7 +358,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 // Create creates a new contract using code as deployment code.
 func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.StateDB.GetNonce(caller.Address()))
-	return evm.create(caller, &codeAndHash{code: code}, gas, value, contractAddr)
+	return evm.create(caller, code, gas, value, contractAddr)
 }
 
 // Create2 creates a new contract using code as deployment code.
@@ -407,10 +366,20 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.I
 // The different between Create2 with Create is Create2 uses sha3(0xff ++ msg.sender ++ salt ++ sha3(init_code))[12:]
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
 func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *big.Int, salt *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
-	codeAndHash := &codeAndHash{code: code}
-	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), codeAndHash.Hash())
-	return evm.create(caller, codeAndHash, gas, endowment, contractAddr)
+	hash := emptyCodeHash[:]
+	if len(code) != 0 {
+		tmp, return_to_pool := util.Keccak256Pooled(code)
+		hash = common.CopyBytes(tmp)
+		go return_to_pool()
+	}
+	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), hash)
+	return evm.create(caller, code, gas, endowment, contractAddr)
 }
 
 // ChainConfig returns the environment's chain configuration
 func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
+
+func (evm *EVM) transfer(from, to common.Address, amount *big.Int) {
+	evm.StateDB.SubBalance(from, amount)
+	evm.StateDB.AddBalance(to, amount)
+}

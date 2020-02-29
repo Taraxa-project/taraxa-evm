@@ -113,10 +113,6 @@ type value_resolver = func(mpt_key_hex []byte) valueNode
 
 var nilValueNode = valueNode(nil)
 
-func mustDecodeNode(path, hash, buf []byte, cachegen uint16, value_resolver value_resolver) node {
-	return decodeNode(path, hash, buf, cachegen, value_resolver)
-}
-
 func decodeNode(path, hash, buf []byte, cachegen uint16, value_resolver value_resolver) node {
 	if len(buf) == 0 {
 		panic(io.ErrUnexpectedEOF)

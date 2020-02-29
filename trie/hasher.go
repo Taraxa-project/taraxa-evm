@@ -70,9 +70,10 @@ var hasherPool = sync.Pool{
 	},
 }
 
-func newHasher(cachegen, cachelimit uint16) *hasher {
+func newHasher(cachegen, cachelimit uint16, dot_g *dot.Graph) *hasher {
 	h := hasherPool.Get().(*hasher)
 	h.cachegen, h.cachelimit = cachegen, cachelimit
+	h.dot_g = dot_g
 	return h
 }
 
