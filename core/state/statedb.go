@@ -1,3 +1,20 @@
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
+//
+// The go-ethereum library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-ethereum library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+
+// Package state provides a caching layer atop the Ethereum state trie.
 package state
 
 import (
@@ -165,7 +182,7 @@ func (self *StateDB) GetCodeSize(addr common.Address) int {
 	if stateObject.code != nil {
 		return len(stateObject.code)
 	}
-	size, err := self.db.CodeSize(stateObject.address[:], stateObject.CodeHash())
+	size, err := self.db.CodeSize(stateObject.CodeHash())
 	self.setError(err)
 	return size
 }
@@ -417,13 +434,13 @@ func (s *StateDB) clearJournalAndRefund() {
 func (self *StateDB) Commit() (root common.Hash, err error) {
 	child_tasks := int32(0)
 	for addr, stateObject := range self.stateObjectsDirty {
-		addr := addr[:]
+		addr := addr
 		if stateObject.deleted {
-			self.trie.DeleteAsync(addr)
+			self.trie.DeleteAsync(addr[:])
 			continue
 		}
 		if stateObject.dirtyCode {
-			self.db.PutCode(addr, stateObject.CodeHash(), stateObject.code)
+			self.db.PutAsync(stateObject.CodeHash(), stateObject.code)
 			stateObject.dirtyCode = false
 		}
 		atomic.AddInt32(&child_tasks, 1)
@@ -435,7 +452,7 @@ func (self *StateDB) Commit() (root common.Hash, err error) {
 			stateObject.data.Root = root
 			enc, err := rlp.EncodeToBytes(stateObject)
 			util.PanicIfNotNil(err)
-			self.trie.InsertAsync(addr, enc)
+			self.trie.InsertAsync(addr[:], enc)
 		}()
 	}
 	self.stateObjectsDirty = make(StateObjects)

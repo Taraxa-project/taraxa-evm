@@ -251,7 +251,7 @@ func (self *stateObject) Code(db *Database) []byte {
 	if bytes.Equal(self.CodeHash(), crypto.EmptyBytesKeccak256[:]) {
 		return nil
 	}
-	code, err := db.ContractCode(self.address[:], self.CodeHash())
+	code, err := db.ContractCode(self.CodeHash())
 	if err != nil {
 		self.setError(fmt.Errorf("can't load code hash %x: %v", self.CodeHash(), err))
 	}

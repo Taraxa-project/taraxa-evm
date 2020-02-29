@@ -82,24 +82,19 @@ func (self *Database) OpenTrie(root *common.Hash) *trie.Trie {
 	return self.last_tr
 }
 
-func (self *Database) ContractCode(contract_addr, code_hash []byte) ([]byte, error) {
-	if cached, ok := self.codeSizeCache.Get(binary.StringView(code_hash)); ok {
+func (self *Database) ContractCode(hash []byte) ([]byte, error) {
+	if cached, ok := self.codeSizeCache.Get(binary.StringView(hash)); ok {
 		return cached.([]byte), nil
 	}
-	code, err := self.Get(code_hash)
+	code, err := self.Get(hash)
 	if err == nil {
-		self.codeSizeCache.Add(string(code_hash), code)
-		//self.codeSizeCache.Add(string(hash), len(code))
+		self.codeSizeCache.Add(string(hash), code)
 	}
 	return code, err
 }
 
-func (self *Database) PutCode(contract_addr, code_hash, code []byte) {
-	self.PutAsync(code_hash, code)
-}
-
-func (self *Database) CodeSize(contract_addr, code_hash []byte) (int, error) {
-	code, err := self.ContractCode(contract_addr, code_hash)
+func (self *Database) CodeSize(hash []byte) (int, error) {
+	code, err := self.ContractCode(hash)
 	return len(code), err
 }
 
