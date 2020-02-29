@@ -45,38 +45,25 @@ type Contract struct {
 	// CallerAddress is the result of the caller which initialised this
 	// contract. However when the "call method" is delegated this value
 	// needs to be initialised to that of the caller's caller.
+	evm           *EVM
 	CallerAddress common.Address
 	caller        ContractRef
 	self          ContractRef
-
-	jumpdests map[common.Address]bitvec // Aggregated result of JUMPDEST analysis.
-
-	Code     []byte
-	CodeHash common.Hash
-	CodeAddr *common.Address
-	Input    []byte
-
-	Gas   uint64
-	value *big.Int
+	Code          []byte
+	CodeAddr      common.Address
+	Input         []byte
+	Gas           uint64
+	value         *big.Int
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
-func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
-	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object}
-
-	if parent, ok := caller.(*Contract); ok {
-		// Reuse JUMPDEST analysis from parent context if available.
-		c.jumpdests = parent.jumpdests
-	} else {
-		c.jumpdests = make(map[common.Address]bitvec)
-	}
-
+func NewContract(evm *EVM, caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
+	c := &Contract{evm: evm, CallerAddress: caller.Address(), caller: caller, self: object}
 	// Gas should be a pointer so it can safely be reduced through the run
 	// This pointer will be off the state transition
 	c.Gas = gas
 	// ensures a value is set
 	c.value = value
-
 	return c
 }
 
@@ -92,12 +79,12 @@ func (c *Contract) validJumpdest(dest *big.Int) bool {
 		return false
 	}
 	// Does parent context have the analysis?
-	analysis, exist := c.jumpdests[*c.CodeAddr]
+	analysis, exist := c.evm.jumpdest_analysis_cache[c.CodeAddr]
 	if !exist {
 		// Do the analysis and save in parent context
 		// We do not need to store it in c.analysis
 		analysis = codeBitmap(c.Code)
-		c.jumpdests[*c.CodeAddr] = analysis
+		c.evm.jumpdest_analysis_cache[c.CodeAddr] = analysis
 	}
 	return analysis.codeSegment(udest)
 }
@@ -159,5 +146,5 @@ func (c *Contract) Value() *big.Int {
 // object
 func (c *Contract) SetCallCode(addr *common.Address, code []byte) {
 	c.Code = code
-	c.CodeAddr = addr
+	c.CodeAddr = *addr
 }
