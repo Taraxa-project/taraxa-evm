@@ -161,7 +161,7 @@ func main() {
 	tps_min := math.MaxFloat64
 	tps_max := -1.0
 
-	const min_tx_to_execute = 5000
+	const min_tx_to_execute = 1000
 	for blockNum := start_block_num; blockNum <= end_block_num; {
 		var base_root common.Hash
 		if last_block != nil {

@@ -2,24 +2,12 @@ package util
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"hash/crc64"
 	"math/big"
 	"math/rand"
 	"reflect"
 )
 
 type Predicate func(interface{}) bool
-
-func Sum(x, y *big.Int) *big.Int {
-	if x == nil {
-		x = common.Big0
-	}
-	if y == nil {
-		y = common.Big0
-	}
-	return new(big.Int).Add(x, y)
-}
 
 func DoNothing() {}
 
@@ -69,18 +57,6 @@ func IsReallyNil(value interface{}) bool {
 		return reflectValue.IsNil()
 	}
 	return false
-}
-
-var CRC64_ISO_TABLE = crc64.MakeTable(crc64.ISO)
-
-func CRC64(b []byte) uint64 {
-	return crc64.Checksum(b, CRC64_ISO_TABLE)
-}
-
-func Times(N int, action func(int)) {
-	for i := 0; i < N; i++ {
-		action(i)
-	}
 }
 
 func RandomBytes(N int) (ret []byte) {
