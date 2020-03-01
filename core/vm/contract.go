@@ -45,25 +45,39 @@ type Contract struct {
 	// CallerAddress is the result of the caller which initialised this
 	// contract. However when the "call method" is delegated this value
 	// needs to be initialised to that of the caller's caller.
-	evm           *EVM
 	CallerAddress common.Address
 	caller        ContractRef
 	self          ContractRef
-	Code          []byte
-	CodeAddr      common.Address
-	Input         []byte
-	Gas           uint64
-	value         *big.Int
+
+	jumpdests map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
+	analysis  bitvec                 // Locally cached result of JUMPDEST analysis
+
+	Code     []byte
+	CodeHash common.Hash
+	CodeAddr *common.Address
+	Input    []byte
+
+	Gas   uint64
+	value *big.Int
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
-func NewContract(evm *EVM, caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
-	c := &Contract{evm: evm, CallerAddress: caller.Address(), caller: caller, self: object}
+func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
+	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object}
+
+	if parent, ok := caller.(*Contract); ok {
+		// Reuse JUMPDEST analysis from parent context if available.
+		c.jumpdests = parent.jumpdests
+	} else {
+		c.jumpdests = make(map[common.Hash]bitvec)
+	}
+
 	// Gas should be a pointer so it can safely be reduced through the run
 	// This pointer will be off the state transition
 	c.Gas = gas
 	// ensures a value is set
 	c.value = value
+
 	return c
 }
 
@@ -78,15 +92,26 @@ func (c *Contract) validJumpdest(dest *big.Int) bool {
 	if OpCode(c.Code[udest]) != JUMPDEST {
 		return false
 	}
-	// Does parent context have the analysis?
-	analysis, exist := c.evm.jumpdest_analysis_cache[c.CodeAddr]
-	if !exist {
-		// Do the analysis and save in parent context
-		// We do not need to store it in c.analysis
-		analysis = codeBitmap(c.Code)
-		c.evm.jumpdest_analysis_cache[c.CodeAddr] = analysis
+	// Do we have a contract hash already?
+	if c.CodeHash != (common.Hash{}) {
+		// Does parent context have the analysis?
+		analysis, exist := c.jumpdests[c.CodeHash]
+		if !exist {
+			// Do the analysis and save in parent context
+			// We do not need to store it in c.analysis
+			analysis = codeBitmap(c.Code)
+			c.jumpdests[c.CodeHash] = analysis
+		}
+		return analysis.codeSegment(udest)
 	}
-	return analysis.codeSegment(udest)
+	// We don't have the code hash, most likely a piece of initcode not already
+	// in state trie. In that case, we do an analysis, and save it locally, so
+	// we don't have to recalculate it for every JUMP instruction in the execution
+	// However, we don't save it within the parent context
+	if c.analysis == nil {
+		c.analysis = codeBitmap(c.Code)
+	}
+	return c.analysis.codeSegment(udest)
 }
 
 // AsDelegate sets the contract to be a delegate call and returns the current
@@ -144,7 +169,16 @@ func (c *Contract) Value() *big.Int {
 
 // SetCallCode sets the code of the contract and address of the backing data
 // object
-func (c *Contract) SetCallCode(addr *common.Address, code []byte) {
+func (c *Contract) SetCallCode(addr *common.Address, hash common.Hash, code []byte) {
 	c.Code = code
-	c.CodeAddr = *addr
+	c.CodeHash = hash
+	c.CodeAddr = addr
+}
+
+// SetCodeOptionalHash can be used to provide code, but it's optional to provide hash.
+// In case hash is not provided, the jumpdest analysis will not be saved to the parent context
+func (c *Contract) SetCodeOptionalHash(addr *common.Address, codeAndHash *codeAndHash) {
+	c.Code = codeAndHash.code
+	c.CodeHash.SetBytes(codeAndHash.hash)
+	c.CodeAddr = addr
 }
