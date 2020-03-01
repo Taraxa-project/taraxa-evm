@@ -13,6 +13,7 @@ import (
 	"testing"
 )
 
+// use -race go tool flag
 func Test_concurrent_fuzz(t *testing.T) {
 	var addrs [10]common.Address
 	for i := 0; i < len(addrs); i++ {
