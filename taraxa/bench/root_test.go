@@ -1,4 +1,4 @@
-package goroutine_bench
+package bench
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/local"
