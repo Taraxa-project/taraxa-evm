@@ -16,11 +16,7 @@
 
 package params
 
-import "math/big"
-
 const (
-	GenesisGasLimit uint64 = 4712388 // Gas limit of the Genesis block.
-
 	CallValueTransferGas  uint64 = 9000  // Paid for CALL when the value transfer is non-zero.
 	CallNewAccountGas     uint64 = 25000 // Paid for CALL when the destination address didn't exist prior.
 	TxGas                 uint64 = 21000 // Per transaction not creating a contract. NOTE: Not payable on data of calls between transactions.
@@ -77,8 +73,4 @@ const (
 	Bn256ScalarMulGas       uint64 = 40000  // Gas needed for an elliptic curve scalar multiplication
 	Bn256PairingBaseGas     uint64 = 100000 // Base price for an elliptic curve pairing check
 	Bn256PairingPerPointGas uint64 = 80000  // Per-point price for an elliptic curve pairing check
-)
-
-var (
-	GenesisDifficulty = big.NewInt(131072) // Difficulty of the Genesis block.
 )
