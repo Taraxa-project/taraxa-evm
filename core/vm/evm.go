@@ -259,7 +259,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	}
 	to := AccountRef(addr)
 	snapshot := evm.StateDB.Snapshot()
-w	// We do an AddBalance of zero here, just in order to trigger a touch.
+	// We do an AddBalance of zero here, just in order to trigger a touch.
 	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
