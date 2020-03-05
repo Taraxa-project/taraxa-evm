@@ -55,14 +55,6 @@ type stateObject struct {
 	address common.Address
 	data    Account
 	db      *StateDB
-
-	// DB error.
-	// State objects are used by the consensus core and VM which are
-	// unable to deal with database-level errors. Any error that occurs
-	// during a database read is memoized here and will eventually be returned
-	// by StateDB.Commit.
-	dbErr error
-
 	// Write caches.
 	trie *trie.Trie // storage trie, which becomes non-nil on first access
 	code Code       // contract bytecode, which gets set when code is loaded
@@ -73,7 +65,7 @@ type stateObject struct {
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
-	dirtyCode bool // true if the code was updated
+	dirtyCode bool
 	suicided  bool
 	deleted   bool
 }
@@ -112,14 +104,6 @@ func newObject(db *StateDB, address common.Address, data Account) *stateObject {
 // EncodeRLP implements rlp.Encoder.
 func (c *stateObject) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, c.data)
-}
-
-// setError remembers the first non-nil error it is called with.
-func (self *stateObject) setError(err error) {
-	util.PanicIfNotNil(err)
-	//if self.dbErr == nil {
-	//	self.dbErr = err
-	//}
 }
 
 func (self *stateObject) markSuicided() {
@@ -163,15 +147,10 @@ func (self *stateObject) GetCommittedState(key common.Hash) (ret common.Hash) {
 	}
 	// Otherwise load the value from the database
 	enc, err := self.getOrOpenTrie().Get(key[:])
-	if err != nil {
-		self.setError(err)
-		return
-	}
+	util.PanicIfNotNil(err)
 	if len(enc) > 0 {
 		_, content, _, err := rlp.Split(enc)
-		if err != nil {
-			self.setError(err)
-		}
+		util.PanicIfNotNil(err)
 		ret.SetBytes(content)
 	}
 	self.originStorage[key] = ret
@@ -252,9 +231,7 @@ func (self *stateObject) Code(db *Database) []byte {
 		return nil
 	}
 	code, err := db.ContractCode(self.CodeHash())
-	if err != nil {
-		self.setError(fmt.Errorf("can't load code hash %x: %v", self.CodeHash(), err))
-	}
+	util.PanicIfNotNil(err)
 	self.code = code
 	return code
 }

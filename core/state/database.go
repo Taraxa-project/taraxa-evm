@@ -131,6 +131,10 @@ func (self *Database) PutAsync(k, v []byte) {
 	}
 }
 
+func (self *Database) GetCommitted(k []byte) ([]byte, error) {
+	return self.db.Get(k)
+}
+
 func (self *Database) Get(k []byte) ([]byte, error) {
 	if v, ok := self.cache.Load(binary.StringView(k)); ok {
 		v := v.(*versioned_value)
@@ -138,7 +142,7 @@ func (self *Database) Get(k []byte) ([]byte, error) {
 		defer v.RUnlock()
 		return v.val, nil
 	}
-	return self.db.Get(k)
+	return self.GetCommitted(k)
 }
 
 func (self *Database) CommitAsync() {

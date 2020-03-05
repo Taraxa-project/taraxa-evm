@@ -22,12 +22,6 @@ type StateDB struct {
 	// This map holds 'live' objects, which will get modified while processing a state transition.
 	stateObjects      StateObjects
 	stateObjectsDirty StateObjects
-	// DB error.
-	// State objects are used by the consensus core and VM which are
-	// unable to deal with database-level errors. Any error that occurs
-	// during a database read is memoized here and will eventually be returned
-	// by StateDB.Commit.
-	dbErr error
 	// The refund counter, also used by state transitioning.
 	refund       uint64
 	thash, bhash common.Hash
@@ -57,19 +51,6 @@ func New(root common.Hash, db *Database) *StateDB {
 		logs:              make(map[common.Hash][]*types.Log),
 		journal:           newJournal(),
 	}
-}
-
-// setError remembers the first non-nil error it is called with.
-func (self *StateDB) setError(err error) {
-	util.PanicIfNotNil(err)
-	//TODO handle
-	//if self.dbErr == nil {
-	//	self.dbErr = err
-	//}
-}
-
-func (self *StateDB) Error() error {
-	return self.dbErr
 }
 
 func (self *StateDB) AddLog(log *types.Log) {
@@ -166,7 +147,7 @@ func (self *StateDB) GetCodeSize(addr common.Address) int {
 		return len(stateObject.code)
 	}
 	size, err := self.db.CodeSize(stateObject.CodeHash())
-	self.setError(err)
+	util.PanicIfNotNil(err)
 	return size
 }
 
@@ -278,8 +259,8 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 
 	// Load the object from the database.
 	enc, err := self.trie.Get(addr[:])
+	util.PanicIfNotNil(err)
 	if len(enc) == 0 {
-		self.setError(err)
 		return nil
 	}
 	var data Account
