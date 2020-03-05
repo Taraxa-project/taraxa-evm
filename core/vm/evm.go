@@ -118,11 +118,6 @@ func (evm *EVM) run(contract *Contract, input []byte, readOnly bool) ([]byte, er
 	return evm.interpreter.Run(contract, input, readOnly)
 }
 
-// Interpreter returns the current interpreter
-func (evm *EVM) Interpreter() Interpreter {
-	return evm.interpreter
-}
-
 // Call executes the contract associated with the addr with the given input as
 // parameters. It also handles any necessary value transfer required and takes
 // the necessary steps to create accounts and reverses the state in case of an
