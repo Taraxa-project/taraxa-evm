@@ -20,7 +20,6 @@ type TransactionRequest = struct {
 	BlockHeader        *trx_engine.BlockHeader
 	GasPool            *core.GasPool
 	DB                 vm.StateDB
-	OnEvmInstruction   vm.ExecutionController
 	CheckNonce         bool
 	DisableMinerReward bool
 }
@@ -47,12 +46,7 @@ func (self *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *Transact
 		GasLimit:    uint64(req.BlockHeader.GasLimit),
 		GasPrice:    msg.GasPrice(),
 	}
-	evm := vm.NewEVMWithInterpreter(
-		evmContext, req.DB, self.Genesis.Config, self.EvmConfig,
-		func(evm *vm.EVM) vm.Interpreter {
-			return vm.NewEVMInterpreterWithExecutionController(evm, self.EvmConfig, req.OnEvmInstruction)
-		},
-	)
+	evm := vm.NewEVM(evmContext, req.DB, self.Genesis.Config, self.EvmConfig)
 	ret, usedGas, vmErr, consensusErr := core.
 		NewStateTransition(evm, msg, req.GasPool, req.DisableMinerReward).
 		TransitionDb()

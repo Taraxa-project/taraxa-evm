@@ -8,7 +8,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
@@ -48,7 +47,6 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 				Transaction:        tx,
 				BlockHeader:        &block.BlockHeader,
 				DB:                 stateDB,
-				OnEvmInstruction:   vm.NoopExecutionController,
 				GasPool:            gasPool,
 				CheckNonce:         !self.DisableNonceCheck,
 				DisableMinerReward: self.DisableMinerReward,

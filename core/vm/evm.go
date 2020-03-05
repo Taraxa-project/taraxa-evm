@@ -46,11 +46,8 @@ type EVM struct {
 	chainRules params.Rules
 	// virtual machine configuration options used to initialise the
 	// evm.
-	vmConfig *Config
-	// global (to this context) ethereum virtual machine
-	// used throughout the execution of the tx.
-	interpreters []Interpreter
-	interpreter  Interpreter
+	vmConfig    *Config
+	interpreter Interpreter
 	// callGasTemp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
@@ -74,33 +71,37 @@ type Context struct {
 }
 type GetHashFunc func(uint64) common.Hash
 
-func NewEVMWithInterpreter(
-	ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig *Config,
-	createInterpreter func(*EVM) Interpreter) *EVM {
-	evm := &EVM{
-		Context:      ctx,
-		StateDB:      statedb,
-		vmConfig:     vmConfig,
-		chainConfig:  chainConfig,
-		chainRules:   chainConfig.Rules(ctx.BlockNumber),
-		interpreters: make([]Interpreter, 0, 1),
-	}
+// NewEVM returns a new EVM. The returned EVM is not thread safe and should
+// only ever be used *once*.
+func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, cfg *Config) *EVM {
 	if chainConfig.IsEWASM(ctx.BlockNumber) {
 		panic("No supported ewasm interpreter yet.")
 	}
-	// vmConfig.EVMInterpreter will be used by EVM-C, it won't be checked here
-	// as we always want to have the built-in EVM as the failover option.
-	evm.interpreters = append(evm.interpreters, createInterpreter(evm))
-	evm.interpreter = evm.interpreters[0]
-	return evm
-}
-
-// NewEVM returns a new EVM. The returned EVM is not thread safe and should
-// only ever be used *once*.
-func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig *Config) *EVM {
-	return NewEVMWithInterpreter(ctx, statedb, chainConfig, vmConfig, func(evm *EVM) Interpreter {
-		return NewEVMInterpreter(evm, vmConfig)
-	})
+	if !cfg.JumpTable[STOP].valid {
+		switch {
+		case chainConfig.IsConstantinople(ctx.BlockNumber):
+			cfg.JumpTable = constantinopleInstructionSet
+		case chainConfig.IsByzantium(ctx.BlockNumber):
+			cfg.JumpTable = byzantiumInstructionSet
+		case chainConfig.IsHomestead(ctx.BlockNumber):
+			cfg.JumpTable = homesteadInstructionSet
+		default:
+			cfg.JumpTable = frontierInstructionSet
+		}
+	}
+	ret := &EVM{
+		Context:     ctx,
+		StateDB:     statedb,
+		vmConfig:    cfg,
+		chainConfig: chainConfig,
+		chainRules:  chainConfig.Rules(ctx.BlockNumber),
+	}
+	ret.interpreter = &EVMInterpreter{
+		evm:      ret,
+		cfg:      cfg,
+		gasTable: chainConfig.GasTable(ctx.BlockNumber),
+	}
+	return ret
 }
 
 // run runs the given contract and takes care of running precompiles with a fallback to the byte code interpreter.
@@ -114,20 +115,7 @@ func (evm *EVM) run(contract *Contract, input []byte, readOnly bool) ([]byte, er
 			return RunPrecompiledContract(p, input, contract)
 		}
 	}
-	for _, interpreter := range evm.interpreters {
-		if interpreter.CanRun(contract.Code) {
-			if evm.interpreter != interpreter {
-				// Ensure that the interpreter pointer is set back
-				// to its current value upon return.
-				defer func(i Interpreter) {
-					evm.interpreter = i
-				}(evm.interpreter)
-				evm.interpreter = interpreter
-			}
-			return interpreter.Run(contract, input, readOnly)
-		}
-	}
-	return nil, ErrNoCompatibleInterpreter
+	return evm.interpreter.Run(contract, input, readOnly)
 }
 
 // Interpreter returns the current interpreter
@@ -314,6 +302,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// Ensure there's no existing contract already at the designated address
 	contractHash := evm.StateDB.GetCodeHash(address)
 	if evm.StateDB.GetNonce(address) != 0 || contractHash != common.ZeroHash && contractHash != crypto.EmptyBytesKeccak256 {
+		panic("foo")
 		return nil, common.Address{}, 0, ErrContractAddressCollision
 	}
 	// Create a new account on the state

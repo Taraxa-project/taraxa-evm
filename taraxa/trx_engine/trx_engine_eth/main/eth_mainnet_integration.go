@@ -13,6 +13,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/concurrent"
 	"math"
 	"math/big"
+	"os"
+	"os/exec"
+
 	//"net/http"
 	_ "net/http/pprof"
 	"runtime"
@@ -60,8 +63,12 @@ func main() {
 	//}
 	//factory.WriteDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
 	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
+	usr_dir, err := os.UserHomeDir()
+	util.PanicIfNotNil(err)
+	statedb_dir := usr_dir + "/taraxa_evm_data/ololololo3"
+	util.PanicIfNotNil(exec.Command("mkdir", "-p", statedb_dir).Run())
 	factory.DBConfig = &trx_engine_base.StateDBConfig{DBFactory: &rocksdb.Factory{
-		File:                   "/tmp/ololololo3",
+		File:                   usr_dir + "/taraxa_evm_data/ololololo3",
 		Parallelism:            concurrent.CPU_COUNT,
 		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
 		OptimizeForPointLookup: 4 * 1024,
@@ -190,6 +197,7 @@ func main() {
 		block_buf = block_buf[:0]
 		util.PanicIfNotNil(err)
 		util.Assert(result.StateRoot == last_block.StateRoot, result.StateRoot.Hex(), "!=", last_block.StateRoot.Hex())
+		//break
 		engine.DB.PutAsync(binary.BytesView("last_block"), last_block.Number.Bytes())
 		engine.DB.CommitAsync()
 		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
