@@ -33,13 +33,12 @@ const codeSizeCacheSize = 100000
 type Database struct {
 	db            ethdb.Database
 	codeSizeCache *lru.Cache
-	lock          sync.RWMutex
+	last_tr       *trie.Trie
+	last_tr_init  sync.Once
 	tasks         chan func()
 	batch         ethdb.Batch
 	batch_map     map[string]uint16
-	cache         sync.Map
-	last_tr       *trie.Trie
-	last_tr_init  sync.Once
+	uncommitted   sync.Map
 }
 
 type versioned_value = struct {
@@ -104,7 +103,7 @@ func (self *Database) PutAsync(k, v []byte) {
 	bid.Lock()
 	ver := bid.ver
 	for {
-		actual, loaded := self.cache.LoadOrStore(k_str, &bid)
+		actual, loaded := self.uncommitted.LoadOrStore(k_str, &bid)
 		if !loaded {
 			bid.Unlock()
 		} else {
@@ -136,7 +135,7 @@ func (self *Database) GetCommitted(k []byte) ([]byte, error) {
 }
 
 func (self *Database) Get(k []byte) ([]byte, error) {
-	if v, ok := self.cache.Load(binary.StringView(k)); ok {
+	if v, ok := self.uncommitted.Load(binary.StringView(k)); ok {
 		v := v.(*versioned_value)
 		v.RLock()
 		defer v.RUnlock()
@@ -152,11 +151,11 @@ func (self *Database) CommitAsync() {
 		}
 		util.PanicIfNotNil(self.batch.Write())
 		for k, batched_ver := range self.batch_map {
-			v, _ := self.cache.Load(k)
+			v, _ := self.uncommitted.Load(k)
 			vv := v.(*versioned_value)
 			vv.Lock()
 			if vv.ver == batched_ver {
-				self.cache.Delete(k)
+				self.uncommitted.Delete(k)
 				vv.ver = 0
 			}
 			vv.Unlock()
