@@ -25,7 +25,6 @@ import (
 )
 
 type node interface {
-	fstring(string) string
 	cached_hash() (hashNode, bool)
 	canUnload(cachegen, cachelimit uint16) bool
 }
@@ -53,21 +52,6 @@ type fullNode struct {
 func (n *fullNode) canUnload(gen, limit uint16) bool { return n.flags.canUnload(gen, limit) }
 func (n *fullNode) cached_hash() (hashNode, bool)    { return n.flags.hash, n.flags.dirty }
 func (n *fullNode) copy() *fullNode                  { copy := *n; return &copy }
-func (n *fullNode) String() string                   { return n.fstring("") }
-
-var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "[17]"}
-
-func (n *fullNode) fstring(ind string) string {
-	resp := fmt.Sprintf("[\n%s  ", ind)
-	for i, node := range &n.Children {
-		if node == nil {
-			resp += fmt.Sprintf("%s: <nil> ", indices[i])
-		} else {
-			resp += fmt.Sprintf("%s: %v", indices[i], node.fstring(ind+"  "))
-		}
-	}
-	return resp + fmt.Sprintf("\n%s] ", ind)
-}
 
 func (n *fullNode) EncodeRLP(w io.Writer) error {
 	return w.(rlp.Parameterized).
@@ -84,10 +68,6 @@ type shortNode struct {
 func (n *shortNode) copy() *shortNode                 { copy := *n; return &copy }
 func (n *shortNode) canUnload(gen, limit uint16) bool { return n.flags.canUnload(gen, limit) }
 func (n *shortNode) cached_hash() (hashNode, bool)    { return n.flags.hash, n.flags.dirty }
-func (n *shortNode) String() string                   { return n.fstring("") }
-func (n *shortNode) fstring(ind string) string {
-	return fmt.Sprintf("{%x: %v} ", n.Key, n.Val.fstring(ind+"  "))
-}
 
 func (n *shortNode) EncodeRLP(w io.Writer) error {
 	return w.(rlp.Parameterized).
@@ -99,15 +79,11 @@ type hashNode []byte
 
 func (n hashNode) canUnload(uint16, uint16) bool { return false }
 func (n hashNode) cached_hash() (hashNode, bool) { return nil, true }
-func (n hashNode) String() string                { return n.fstring("") }
-func (n hashNode) fstring(string) string         { return fmt.Sprintf("<%x> ", []byte(n)) }
 
 type valueNode []byte
 
 func (n valueNode) canUnload(uint16, uint16) bool { return false }
 func (n valueNode) cached_hash() (hashNode, bool) { return nil, true }
-func (n valueNode) String() string                { return n.fstring("") }
-func (n valueNode) fstring(string) string         { return fmt.Sprintf("%x ", []byte(n)) }
 
 type value_resolver = func(mpt_key_hex []byte) valueNode
 
