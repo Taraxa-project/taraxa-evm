@@ -1,6 +1,6 @@
 package trie
 
 type Database interface {
-	Put(key, value []byte) error
-	Get(key []byte) ([]byte, error)
+	PutAsync(key, value []byte)
+	GetCommitted(key []byte) ([]byte, error)
 }

@@ -146,7 +146,7 @@ func (self *stateObject) GetCommittedState(key common.Hash) (ret common.Hash) {
 		return val
 	}
 	// Otherwise load the value from the database
-	enc, err := self.getOrOpenTrie().Get(key[:])
+	enc, err := self.getOrOpenTrie().GetCommitted(key[:])
 	util.PanicIfNotNil(err)
 	if len(enc) > 0 {
 		_, content, _, err := rlp.Split(enc)

@@ -49,13 +49,13 @@ func New(root_hash *common.Hash, db Database, cachelimit uint16, storage_strat S
 	return ret
 }
 
-func (self *Trie) Get(key []byte) ([]byte, error) {
+func (self *Trie) GetCommitted(key []byte) ([]byte, error) {
 	mpt_key, mpt_key_release, err_0 := self.storage_strat.OriginKeyToMPTKey(key)
 	util.PanicIfNotNil(err_0)
 	flat_key, err_1 := self.storage_strat.MPTKeyToFlat(mpt_key)
 	go mpt_key_release()
 	util.PanicIfNotNil(err_1)
-	flat_v, err_2 := self.db.Get(flat_key)
+	flat_v, err_2 := self.db.GetCommitted(flat_key)
 	util.PanicIfNotNil(err_2)
 	return flat_v, nil
 	//mpt_key_hex := keybytesToHex(mpt_key)
@@ -69,7 +69,7 @@ func (self *Trie) Get(key []byte) ([]byte, error) {
 	//return value, nil
 }
 
-func (self *Trie) InsertAsync(key, value []byte) {
+func (self *Trie) PutAsync(key, value []byte) {
 	self.initiate_updating.Do(func() {
 		untouched := self.updates == nil
 		if untouched {
@@ -101,13 +101,13 @@ func (self *Trie) InsertAsync(key, value []byte) {
 			util.PanicIfNotNil(err)
 			self.root = n
 		}
-		util.PanicIfNotNil(self.db.Put(flat_key, value))
+		self.db.PutAsync(flat_key, value)
 		return true
 	}
 }
 
 func (self *Trie) DeleteAsync(key []byte) {
-	self.InsertAsync(key, nil)
+	self.PutAsync(key, nil)
 }
 
 func (self *Trie) Hash() (ret common.Hash) {
@@ -379,15 +379,15 @@ func (self *Trie) enc_short(n *shortNode, w io.Writer) error {
 	return rlp.Encode(w, []interface{}{n.Key, n.Val})
 }
 
-func (self *Trie) store(hash hashNode, n node, _ []byte) error {
+func (self *Trie) store(hash hashNode, n node, _ []byte) {
 	buf, err := rlp.EncodeToBytes(n, self)
 	util.PanicIfNotNil(err)
-	return self.db.Put(common.CopyBytes(hash), buf)
+	self.db.PutAsync(common.CopyBytes(hash), buf)
 }
 
 func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error) {
 	cacheMissCounter.Inc(1)
-	enc, err := self.db.Get(hash)
+	enc, err := self.db.GetCommitted(hash)
 	if enc == nil {
 		return nil, &MissingNodeError{NodeHash: hash, Path: mpt_key_hex_prefix}
 	}
@@ -398,7 +398,7 @@ func (self *Trie) resolve(hash hashNode, mpt_key_hex_prefix []byte) (node, error
 		mpt_key := hexToKeybytes(mpt_key_hex)
 		flat_key, err_0 := self.storage_strat.MPTKeyToFlat(mpt_key)
 		util.PanicIfNotNil(err_0)
-		ret, err_1 := self.db.Get(flat_key)
+		ret, err_1 := self.db.GetCommitted(flat_key)
 		util.PanicIfNotNil(err_1)
 		return ret
 	})

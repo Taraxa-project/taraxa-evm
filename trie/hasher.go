@@ -39,7 +39,7 @@ type hasher struct {
 	cachelimit uint16
 	dot_g      *dot.Graph
 }
-type hasher_store_strategy = func(hash hashNode, n node, n_enc []byte) error
+type hasher_store_strategy = func(hash hashNode, n node, n_enc []byte)
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
 // Read to get a variable amount of data from the hash state. Read is faster than Sum
@@ -212,9 +212,7 @@ func (h *hasher) hash_and_maybe_store(n node, force bool, store hasher_store_str
 		hash = h.makeHashNode(h.tmp)
 	}
 	if store != nil {
-		if err := store(hash, n, h.tmp); err != nil {
-			return nil, err
-		}
+		store(hash, n, h.tmp)
 	}
 	return hash, nil
 }

@@ -106,7 +106,7 @@ func main() {
 	engine, cleanup, err := factory.NewInstance()
 	util.PanicIfNotNil(err)
 	defer cleanup()
-	b, err := engine.DB.Get(binary.BytesView("last_block"))
+	b, err := engine.DB.GetCommitted(binary.BytesView("last_block"))
 	util.PanicIfNotNil(err)
 	start_block_num := uint64(0)
 	if b != nil {
@@ -168,7 +168,7 @@ func main() {
 	tps_min := math.MaxFloat64
 	tps_max := -1.0
 
-	const min_tx_to_execute = 1000
+	const min_tx_to_execute = 1
 	for blockNum := start_block_num; blockNum <= end_block_num; {
 		var base_root common.Hash
 		if last_block != nil {
@@ -199,7 +199,7 @@ func main() {
 		util.Assert(result.StateRoot == last_block.StateRoot, result.StateRoot.Hex(), "!=", last_block.StateRoot.Hex())
 		//break
 		engine.DB.PutAsync(binary.BytesView("last_block"), last_block.Number.Bytes())
-		engine.DB.CommitAsync()
+		engine.DB.Commit()
 		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
 			//write_reset_profiles(time.Now())
 			fmt.Println("gc...")
@@ -208,5 +208,4 @@ func main() {
 			max_heap_size = mem_stats.HeapAlloc * 4
 		}
 	}
-	engine.DB.Join()
 }

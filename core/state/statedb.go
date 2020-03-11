@@ -258,7 +258,7 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 	}
 
 	// Load the object from the database.
-	enc, err := self.trie.Get(addr[:])
+	enc, err := self.trie.GetCommitted(addr[:])
 	util.PanicIfNotNil(err)
 	if len(enc) == 0 {
 		return nil
@@ -383,7 +383,7 @@ func (s *StateDB) Checkpoint(deleteEmptyObjects bool) {
 			}
 			v, err := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
 			util.PanicIfNotNil(err)
-			tr.InsertAsync(key[:], v)
+			tr.PutAsync(key[:], v)
 		}
 		stateObject.dirtyStorage = make(Storage)
 	}
@@ -416,7 +416,7 @@ func (self *StateDB) Commit() (root common.Hash, err error) {
 			stateObject.data.Root = root
 			enc, err := rlp.EncodeToBytes(stateObject)
 			util.PanicIfNotNil(err)
-			self.trie.InsertAsync(addr[:], enc)
+			self.trie.PutAsync(addr[:], enc)
 		}()
 	}
 	self.stateObjectsDirty = make(StateObjects)

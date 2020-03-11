@@ -41,7 +41,7 @@ func BenchmarkRoot(b *testing.B) {
 			state_db.Checkpoint(true)
 			base_root, err2 := state_db.Commit()
 			util.PanicIfNotNil(err2)
-			db.CommitAsync()
+			db.Commit()
 			db.Join()
 			return base_root
 		}()
