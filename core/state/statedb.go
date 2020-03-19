@@ -12,6 +12,7 @@ import (
 	"sort"
 )
 
+// TODO reinstate async operations
 type StateDB struct {
 	db                *Database
 	trie              *trie.Trie
