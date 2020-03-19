@@ -238,7 +238,7 @@ func (self *Trie) shift(n *short_node, new_prefix []byte, pivot byte, new_suffix
 }
 
 func (self *Trie) resolve(hash node_hash, key_prefix []byte, key_prefix_rest ...byte) node {
-	cache_miss_cnt.Inc(1)
+	//cache_miss_cnt.Inc(1) TODO
 	enc := self.storage.GetCommitted(COL_hash_to_node, hash)
 	// TODO reuse
 	key_prefix_buf := append(append(make([]byte, 0, common.HashLength*2+1), key_prefix...), key_prefix_rest...)

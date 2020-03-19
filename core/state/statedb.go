@@ -5,7 +5,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/trie"
@@ -408,7 +407,6 @@ func (self *StateDB) Commit() common.Hash {
 		self.trie.Put(addr[:], enc_storage, enc_hash)
 	}
 	self.stateObjectsDirty = make(state_objects)
-	defer log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	if root := self.trie.CommitNodes(); len(root) != 0 {
 		return common.BytesToHash(root)
 	}

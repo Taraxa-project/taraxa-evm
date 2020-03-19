@@ -78,7 +78,8 @@ func CountValues(b []byte) (int, error) {
 }
 
 func ReadKind(buf []byte) (k Kind, tagsize byte, total_size uint64, err error) {
-	if len(buf) == 0 {
+	buflen := uint64(len(buf))
+	if buflen == 0 {
 		return 0, 0, 0, io.ErrUnexpectedEOF
 	}
 	b := buf[0]
@@ -93,7 +94,7 @@ func ReadKind(buf []byte) (k Kind, tagsize byte, total_size uint64, err error) {
 		tagsize = 1
 		contentsize = uint64(b - 0x80)
 		// Reject strings that should've been single bytes.
-		if contentsize == 1 && len(buf) > 1 && buf[1] < 128 {
+		if contentsize == 1 && buflen > 1 && buf[1] < 128 {
 			return 0, 0, 0, ErrCanonSize
 		}
 	case b < 0xC0:
@@ -114,7 +115,7 @@ func ReadKind(buf []byte) (k Kind, tagsize byte, total_size uint64, err error) {
 	}
 	total_size = uint64(tagsize) + contentsize
 	// Reject values larger than the input slice.
-	if total_size > uint64(len(buf)) {
+	if contentsize > buflen-uint64(tagsize) {
 		return 0, 0, 0, ErrValueTooLarge
 	}
 	return

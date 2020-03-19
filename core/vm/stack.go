@@ -28,7 +28,11 @@ type Stack struct {
 	data []*big.Int
 }
 
-func newstack(size int) *Stack {
+func newstack() *Stack {
+	return newstack_w_size(InterpreterStackSize)
+}
+
+func newstack_w_size(size int) *Stack {
 	return &Stack{data: make([]*big.Int, 0, size)}
 }
 

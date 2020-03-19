@@ -20,9 +20,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"io/ioutil"
 	"math/big"
-	"os"
 	"reflect"
 	"testing"
 
@@ -85,36 +83,6 @@ func TestUnmarshalPubkey(t *testing.T) {
 	}
 }
 
-func TestSign(t *testing.T) {
-	key, _ := HexToECDSA(testPrivHex)
-	addr := common.HexToAddress(testAddrHex)
-
-	msg := Keccak256([]byte("foo"))
-	sig, err := Sign(msg, key)
-	if err != nil {
-		t.Errorf("Sign error: %s", err)
-	}
-	recoveredPub, err := Ecrecover(msg, sig)
-	if err != nil {
-		t.Errorf("ECRecover error: %s", err)
-	}
-	pubKey, _ := UnmarshalPubkey(recoveredPub)
-	recoveredAddr := PubkeyToAddress(*pubKey)
-	if addr != recoveredAddr {
-		t.Errorf("Address mismatch: want: %x have: %x", addr, recoveredAddr)
-	}
-
-	// should be equal to SigToPub
-	recoveredPub2, err := SigToPub(msg, sig)
-	if err != nil {
-		t.Errorf("ECRecover error: %s", err)
-	}
-	recoveredAddr2 := PubkeyToAddress(*recoveredPub2)
-	if addr != recoveredAddr2 {
-		t.Errorf("Address mismatch: want: %x have: %x", addr, recoveredAddr2)
-	}
-}
-
 func TestInvalidSign(t *testing.T) {
 	if _, err := Sign(make([]byte, 1), nil); err == nil {
 		t.Errorf("expected sign with hash 1 byte to error")
@@ -122,56 +90,6 @@ func TestInvalidSign(t *testing.T) {
 	if _, err := Sign(make([]byte, 33), nil); err == nil {
 		t.Errorf("expected sign with hash 33 byte to error")
 	}
-}
-
-func TestNewContractAddress(t *testing.T) {
-	key, _ := HexToECDSA(testPrivHex)
-	addr := common.HexToAddress(testAddrHex)
-	genAddr := PubkeyToAddress(key.PublicKey)
-	// sanity check before using addr to create contract address
-	checkAddr(t, genAddr, addr)
-
-	caddr0 := CreateAddress(addr, 0)
-	caddr1 := CreateAddress(addr, 1)
-	caddr2 := CreateAddress(addr, 2)
-	checkAddr(t, common.HexToAddress("333c3310824b7c685133f2bedb2ca4b8b4df633d"), caddr0)
-	checkAddr(t, common.HexToAddress("8bda78331c916a08481428e4b07c96d3e916d165"), caddr1)
-	checkAddr(t, common.HexToAddress("c9ddedf451bc62ce88bf9292afb13df35b670699"), caddr2)
-}
-
-func TestLoadECDSAFile(t *testing.T) {
-	keyBytes := common.FromHex(testPrivHex)
-	fileName0 := "test_key0"
-	fileName1 := "test_key1"
-	checkKey := func(k *ecdsa.PrivateKey) {
-		checkAddr(t, PubkeyToAddress(k.PublicKey), common.HexToAddress(testAddrHex))
-		loadedKeyBytes := FromECDSA(k)
-		if !bytes.Equal(loadedKeyBytes, keyBytes) {
-			t.Fatalf("private key mismatch: want: %x have: %x", keyBytes, loadedKeyBytes)
-		}
-	}
-
-	ioutil.WriteFile(fileName0, []byte(testPrivHex), 0600)
-	defer os.Remove(fileName0)
-
-	key0, err := LoadECDSA(fileName0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkKey(key0)
-
-	// again, this time with SaveECDSA instead of manual save:
-	err = SaveECDSA(fileName1, key0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(fileName1)
-
-	key1, err := LoadECDSA(fileName1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkKey(key1)
 }
 
 func TestValidateSignatureValues(t *testing.T) {

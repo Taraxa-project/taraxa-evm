@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+// TODO get rid of this
+
 const addr_prefix = "__ptr__"
 
 type Address = string

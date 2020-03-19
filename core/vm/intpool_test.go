@@ -21,8 +21,6 @@ import (
 )
 
 func TestIntPoolPoolGet(t *testing.T) {
-	poolOfIntPools = newIntPoolPool()
-
 	nip := poolOfIntPools.get()
 	if nip == nil {
 		t.Fatalf("Invalid pool allocation")

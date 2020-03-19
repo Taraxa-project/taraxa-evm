@@ -120,28 +120,6 @@ func (h storageJSON) MarshalText() ([]byte, error) {
 	return hexutil.Bytes(h[:]).MarshalText()
 }
 
-// GenesisMismatchError is raised when trying to overwrite an existing
-// genesis block with an incompatible one.
-type GenesisMismatchError struct {
-	Stored, New common.Hash
-}
-
-func (e *GenesisMismatchError) Error() string {
-	return fmt.Sprintf("database already contains an incompatible genesis block (have %x, new %x)", e.Stored[:8], e.New[:8])
-}
-
-func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
-	switch {
-	case g != nil:
-		return g.Config
-	case ghash == params.MainnetGenesisHash:
-		return params.MainnetChainConfig
-	case ghash == params.TestnetGenesisHash:
-		return params.TestnetChainConfig
-	default:
-		return params.AllEthashProtocolChanges
-	}
-}
 
 func (g *Genesis) Apply(statedb *state.StateDB) {
 	for addr, account := range g.Alloc {

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"hash"
 	"sync"
 )
 
@@ -28,17 +27,13 @@ type StaticConfig struct {
 	// NoRecursion disabled Interpreter call, callcode,
 	// delegate call and create.
 	NoRecursion bool `json:"noRecursion"`
-	// Type of the EWASM interpreter
-	EWASMInterpreter string `json:"eWASMInterpreter"`
-	// Type of the EVM interpreter
-	EVMInterpreter string `json:"eVMInterpreter"`
 }
 
 const InterpreterStackSize = 1024
 
 // Config are the configuration options for the Interpreter
 type Config struct {
-	*StaticConfig
+	StaticConfig
 	// JumpTable contains the EVM instruction table. This
 	// may be left uninitialised and will be set to the default
 	// table.
@@ -55,17 +50,8 @@ type Interpreter interface {
 	Run(contract *Contract, input []byte, static bool) ([]byte, error)
 }
 
-// keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
-// Read to get a variable amount of data from the hash state. Read is faster than Sum
-// because it doesn't copy the internal state, but also modifies the internal state.
-// TODO ???
-type keccakState interface {
-	hash.Hash
-	Read([]byte) (int, error)
-}
-
 var interpreterStackPool = sync.Pool{New: func() interface{} {
-	return newstack(InterpreterStackSize)
+	return newstack_w_size(InterpreterStackSize)
 }}
 
 func newInterpreterStack() (ret *Stack, release func()) {

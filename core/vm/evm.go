@@ -47,7 +47,7 @@ type EVM struct {
 	// virtual machine configuration options used to initialise the
 	// evm.
 	vmConfig    *Config
-	interpreter Interpreter
+	interpreter *EVMInterpreter
 	// callGasTemp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.

@@ -37,7 +37,7 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
 		pc             = uint64(0)
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 
 	env.interpreter = evmInterpreter
@@ -77,7 +77,7 @@ func TestByteOp(t *testing.T) {
 	var (
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 
 	env.interpreter = evmInterpreter
@@ -212,7 +212,7 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVMInterpret
 	var (
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 
 	env.interpreter = evmInterpreter
@@ -448,7 +448,7 @@ func TestOpMstore(t *testing.T) {
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
 		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 
 	env.interpreter = evmInterpreter
@@ -474,7 +474,7 @@ func BenchmarkOpMstore(bench *testing.B) {
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
 		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 
 	env.interpreter = evmInterpreter
@@ -497,7 +497,7 @@ func BenchmarkOpSHA3(bench *testing.B) {
 		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
 		stack          = newstack()
 		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evmInterpreter = env.interpreter
 	)
 	env.interpreter = evmInterpreter
 	evmInterpreter.intPool = poolOfIntPools.get()

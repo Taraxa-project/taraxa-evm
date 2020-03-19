@@ -20,7 +20,6 @@ import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/log"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"math"
 	"math/big"
@@ -206,14 +205,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 		st.state.IncrementNonce(sender.Address())
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
-	if vmerr != nil {
-		log.Debug("VM returned with error", "err", vmerr)
-		// The only possible consensus-error would be if there wasn't
-		// sufficient balance to make the transfer happen. The first
-		// balance transfer may never fail.
-		if vmerr == vm.ErrInsufficientBalance {
-			return nil, 0, nil, vmerr
-		}
+	// The only possible consensus-error would be if there wasn't
+	// sufficient balance to make the transfer happen. The first
+	// balance transfer may never fail.
+	if vmerr == vm.ErrInsufficientBalance {
+		return nil, 0, nil, vmerr
 	}
 	st.refundGas()
 	if !st.disable_miner_reward {

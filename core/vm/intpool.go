@@ -30,7 +30,7 @@ type intPool struct {
 }
 
 func newIntPool() *intPool {
-	return &intPool{pool: newstack(bigint_pool_limit)}
+	return &intPool{pool: newstack_w_size(bigint_pool_limit)}
 }
 
 // get retrieves a big int from the pool, allocating one if the pool is empty.

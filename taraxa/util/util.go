@@ -1,42 +1,23 @@
 package util
 
 import (
-	"fmt"
-	"math/big"
-	"math/rand"
+	"errors"
 	"reflect"
+	"strings"
 )
 
-type Predicate func(interface{}) bool
+type Any = interface{}
 
-func DoNothing() {}
-
-func Chain(f, g func()) func() {
-	return func() {
-		defer g()
-		f()
+func IsReallyNil(value interface{}) bool {
+	if value == nil {
+		return true
 	}
-}
-
-type Remapper func(key, oldValue interface{}, wasPresent bool) (newValue interface{})
-
-func ForEach(indexableWithLength interface{}, cb func(i int, val interface{})) {
-	val := reflect.ValueOf(indexableWithLength)
-	length := val.Len()
-	for i := 0; i < length; i++ {
-		cb(i, val.Index(i).Interface())
+	switch reflectValue := reflect.ValueOf(value); reflectValue.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
+		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return reflectValue.IsNil()
 	}
-}
-
-func Join(separator string, indexableWithLength interface{}) (result string) {
-	length := reflect.ValueOf(indexableWithLength).Len()
-	ForEach(indexableWithLength, func(i int, val interface{}) {
-		result += fmt.Sprint(val)
-		if i < length-1 {
-			result += separator
-		}
-	})
-	return
+	return false
 }
 
 func Max(x, y int) int {
@@ -46,33 +27,33 @@ func Max(x, y int) int {
 	return y
 }
 
-func IsReallyNil(value interface{}) bool {
-	if value == nil {
-		return true
-	}
-	reflectValue := reflect.ValueOf(value)
-	switch reflectValue.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
-		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
-		return reflectValue.IsNil()
-	}
-	return false
+type ErrorString string
+
+func (this ErrorString) Error() string {
+	return string(this)
 }
 
-func RandomBytes(N int) (ret []byte) {
-	buf := new(big.Int)
-	for len(ret) < N {
-		ret = append(ret, buf.SetUint64(rand.Uint64()).Bytes()...)
+func Stringify(err_ptr *error) {
+	if err := *err_ptr; err != nil {
+		*err_ptr = ErrorString(err.Error())
 	}
-	return ret[:N]
 }
 
-//func PooledFactory(new func() interface{}, reset func(interface{})) func() (ret interface{}, return_to_pool func()) {
-//	pool := sync.Pool{new}
-//	return func() (ret interface{}, return_to_pool func()) {
-//		return pool.Get(), func() {
-//			reset(ret)
-//			pool.Put(ret)
-//		}
-//	}
-//}
+func PanicIfNotNil(value interface{}) {
+	if !IsReallyNil(value) {
+		panic(value)
+	}
+}
+
+func Assert(condition bool, msg ...string) bool {
+	if !condition {
+		panic(errors.New(strings.Join(msg, " ")))
+	}
+	return true
+}
+
+func Recover(handler func(issue Any)) {
+	if r := recover(); r != nil {
+		handler(r)
+	}
+}
