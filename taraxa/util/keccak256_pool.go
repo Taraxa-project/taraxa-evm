@@ -6,26 +6,51 @@ import (
 	"hash"
 )
 
-type hasher = struct {
-	h   hash.Hash
-	buf common.Hash
+type Hasher struct {
+	state hash_state
+	out   []byte
+}
+type hash_state interface {
+	hash.Hash
+	Read([]byte) (int, error)
 }
 
-var hashers = func() chan *hasher {
-	ret := make(chan *hasher, 512)
+func NewHasher() *Hasher {
+	return &Hasher{sha3.NewLegacyKeccak256().(hash_state), make([]byte, common.HashLength)}
+}
+
+func (self *Hasher) Write(b ...byte) {
+	self.state.Write(b)
+}
+
+func (self *Hasher) Hash() []byte {
+	self.state.Read(self.out)
+	return self.out
+}
+
+func (self *Hasher) Reset() {
+	self.state.Reset()
+	self.out = make([]byte, common.HashLength)
+}
+
+var hashers = func() chan *Hasher {
+	ret := make(chan *Hasher, 512)
 	for i := 0; i < cap(ret); i++ {
-		ret <- &hasher{h: sha3.NewLegacyKeccak256()}
+		ret <- NewHasher()
 	}
 	return ret
 }()
 
-func Keccak256Pooled(bs ...[]byte) (ret []byte, ret_release func()) {
+func Keccak256Pooled(bs ...[]byte) (ret []byte) {
 	hasher := <-hashers
 	for _, b := range bs {
-		hasher.h.Write(b)
+		hasher.Write(b...)
 	}
-	return hasher.h.Sum(hasher.buf[:0]), func() {
-		hasher.h.Reset()
+	ret = hasher.Hash()
+	go func() {
+		// TODO maybe this an overkill
+		hasher.Reset()
 		hashers <- hasher
-	}
+	}()
+	return
 }

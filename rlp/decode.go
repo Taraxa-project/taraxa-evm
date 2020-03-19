@@ -603,7 +603,7 @@ type Stream struct {
 	kind    Kind   // kind of value ahead
 	size    uint64 // size of value ahead
 	byteval byte   // value of single byte in type tag
-	kinderr error  // error from last readKind
+	kinderr error  // error from last ReadKind
 	stack   []listpos
 }
 
@@ -681,16 +681,16 @@ func (s *Stream) Raw() ([]byte, error) {
 	// the original header has already been read and is no longer
 	// available. read content and put a new header in front of it.
 	start := headsize(size)
-	buf := make([]byte, uint64(start)+size)
-	if err := s.readFull(buf[start:]); err != nil {
+	buf := make([]byte, 0, uint64(start)+size)
+	if kind == String {
+		puthead(BytesAppender(&buf), 0x80, 0xB7, size)
+	} else {
+		puthead(BytesAppender(&buf), 0xC0, 0xF7, size)
+	}
+	if err := s.readFull(buf[len(buf):cap(buf)]); err != nil {
 		return nil, err
 	}
-	if kind == String {
-		puthead(buf, 0x80, 0xB7, size)
-	} else {
-		puthead(buf, 0xC0, 0xF7, size)
-	}
-	return buf, nil
+	return buf[:cap(buf)], nil
 }
 
 // Uint reads an RLP string of up to 8 bytes and returns its contents
@@ -895,7 +895,7 @@ func (s *Stream) Kind() (kind Kind, size uint64, err error) {
 		}
 	}
 	// Note: this might return a sticky error generated
-	// by an earlier call to readKind.
+	// by an earlier call to ReadKind.
 	return s.kind, s.size, s.kinderr
 }
 

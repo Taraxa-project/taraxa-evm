@@ -34,13 +34,13 @@ package trie
 // in the case of an odd number. All remaining nibbles (now an even number) fit properly
 // into the remaining bytes. Compact encoding is used for nodes stored on disk.
 
-func hexToCompact(hex []byte) []byte {
+func hex_to_compact_(hex []byte, buf []byte) []byte {
 	terminator := byte(0)
 	if hasTerm(hex) {
 		terminator = 1
 		hex = hex[:len(hex)-1]
 	}
-	buf := make([]byte, len(hex)/2+1)
+	buf = buf[:len(hex)/2+1]
 	buf[0] = terminator << 5 // the flag byte
 	if len(hex)&1 == 1 {
 		buf[0] |= 1 << 4 // odd flag
@@ -49,6 +49,10 @@ func hexToCompact(hex []byte) []byte {
 	}
 	decodeNibbles(hex, buf[1:])
 	return buf
+}
+
+func hexToCompact(hex []byte) []byte {
+	return hex_to_compact_(hex, make([]byte, len(hex)/2+1))
 }
 
 func compactToHex(compact []byte) []byte {

@@ -23,7 +23,7 @@ func BenchmarkRoot(b *testing.B) {
 	evm_cfg := &vm.Config{StaticConfig: new(vm.StaticConfig)}
 	gas_limit := uint64(math.MaxUint64)
 	coinbase := common.Address{}
-	tx_hash, block_hash := common.Hash{}, common.Hash{}
+	tx_hash := common.Hash{}
 	db_path := os.TempDir() + string(os.PathSeparator) + "tx_bench"
 	benchmarking.AddBenchmark(b, "single_coin_tx_no_cache", func(b *testing.B, i int) {
 		b.StopTimer()
@@ -39,7 +39,7 @@ func BenchmarkRoot(b *testing.B) {
 			state_db.SetBalance(sender, test_amount)
 			state_db.CreateAccount(receiver)
 			state_db.Checkpoint(true)
-			base_root, err2 := state_db.Commit()
+			base_root := state_db.Commit()
 			util.PanicIfNotNil(err2)
 			db.Commit()
 			db.Join()
@@ -64,12 +64,12 @@ func BenchmarkRoot(b *testing.B) {
 			evm_ctx.Origin, &receiver, 0, test_amount,
 			evm_ctx.GasLimit, evm_ctx.GasPrice, nil, true)
 		state_transition := core.NewStateTransitionWithMinerReward(evm, msg, gas_pool)
-		state_db.SetTransactionMetadata(tx_hash, block_hash, 0)
+		state_db.SetTransactionMetadata(tx_hash, 0)
 		b.StartTimer()
 		_, _, vmErr, consensusErr := state_transition.TransitionDb()
 		b.StopTimer()
 		state_db.Checkpoint(true)
-		_, err43 := state_db.Commit()
+		state_db.Commit()
 		util.PanicIfNotNil(err43)
 		util.PanicIfNotNil(vmErr)
 		util.PanicIfNotNil(consensusErr)

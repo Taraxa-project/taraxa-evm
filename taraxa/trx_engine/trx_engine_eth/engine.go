@@ -42,7 +42,7 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 				tx_cpy.Gas = ^hexutil.Uint64(0) / 100000
 				tx = &tx_cpy
 			}
-			stateDB.SetTransactionMetadata(tx.Hash, block.Hash, i)
+			stateDB.SetTransactionMetadata(tx.Hash, i)
 			txResult := self.BaseTrxEngine.ExecuteTransaction(&trx_engine_base.TransactionRequest{
 				Transaction:        tx,
 				BlockHeader:        &block.BlockHeader,
@@ -85,7 +85,7 @@ func (self *EthTrxEngine) TransitionState(base_root common.Hash, blocks ...*trx_
 			stateDB.Checkpoint(eip158)
 		}
 	}
-	ret.StateRoot, err = stateDB.Commit()
+	ret.StateRoot = stateDB.Commit()
 	return
 }
 

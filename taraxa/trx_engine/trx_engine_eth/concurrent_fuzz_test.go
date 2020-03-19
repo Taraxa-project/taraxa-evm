@@ -39,8 +39,8 @@ func Test_concurrent_fuzz(t *testing.T) {
 		for i := 0; i < len(addrs); i++ {
 			state_db.SetBalance(addrs[i], big.NewInt(1000))
 		}
-		root, err_2 := state_db.Commit(true)
-		util.PanicIfNotNil(err_2)
+		state_db.Checkpoint(true)
+		root := state_db.Commit()
 		engine.DB.Commit()
 		if base_root == nil {
 			base_root = &root

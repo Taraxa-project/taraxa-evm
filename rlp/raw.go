@@ -28,20 +28,14 @@ type RawValue []byte
 
 var rawValueType = reflect.TypeOf(RawValue{})
 
-// ListSize returns the encoded size of an RLP list with the given
-// content size.
-func ListSize(contentSize uint64) uint64 {
-	return uint64(headsize(contentSize)) + contentSize
-}
-
 // Split returns the content of first RLP value and any
 // bytes after the value as subslices of b.
 func Split(b []byte) (k Kind, content, rest []byte, err error) {
-	k, ts, cs, err := readKind(b)
+	k, tagsize, total_size, err := ReadKind(b)
 	if err != nil {
 		return 0, nil, b, err
 	}
-	return k, b[ts : ts+cs], b[ts+cs:], nil
+	return k, b[tagsize:total_size], b[total_size:], nil
 }
 
 // SplitString splits b into the content of an RLP string
@@ -74,20 +68,21 @@ func SplitList(b []byte) (content, rest []byte, err error) {
 func CountValues(b []byte) (int, error) {
 	i := 0
 	for ; len(b) > 0; i++ {
-		_, tagsize, size, err := readKind(b)
+		_, _, total_size, err := ReadKind(b)
 		if err != nil {
 			return 0, err
 		}
-		b = b[tagsize+size:]
+		b = b[total_size:]
 	}
 	return i, nil
 }
 
-func readKind(buf []byte) (k Kind, tagsize, contentsize uint64, err error) {
+func ReadKind(buf []byte) (k Kind, tagsize byte, total_size uint64, err error) {
 	if len(buf) == 0 {
 		return 0, 0, 0, io.ErrUnexpectedEOF
 	}
 	b := buf[0]
+	var contentsize uint64
 	switch {
 	case b < 0x80:
 		k = Byte
@@ -103,7 +98,7 @@ func readKind(buf []byte) (k Kind, tagsize, contentsize uint64, err error) {
 		}
 	case b < 0xC0:
 		k = String
-		tagsize = uint64(b-0xB7) + 1
+		tagsize = b - 0xB7 + 1
 		contentsize, err = readSize(buf[1:], b-0xB7)
 	case b < 0xF8:
 		k = List
@@ -111,17 +106,18 @@ func readKind(buf []byte) (k Kind, tagsize, contentsize uint64, err error) {
 		contentsize = uint64(b - 0xC0)
 	default:
 		k = List
-		tagsize = uint64(b-0xF7) + 1
+		tagsize = b - 0xF7 + 1
 		contentsize, err = readSize(buf[1:], b-0xF7)
 	}
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	total_size = uint64(tagsize) + contentsize
 	// Reject values larger than the input slice.
-	if contentsize > uint64(len(buf))-tagsize {
+	if total_size > uint64(len(buf)) {
 		return 0, 0, 0, ErrValueTooLarge
 	}
-	return k, tagsize, contentsize, err
+	return
 }
 
 func readSize(b []byte, slen byte) (uint64, error) {

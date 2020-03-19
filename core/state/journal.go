@@ -61,7 +61,6 @@ func (j *journal) revert(statedb *StateDB, snapshot int) {
 	for i := len(j.entries) - 1; i >= snapshot; i-- {
 		// Undo the changes made by the operation
 		j.entries[i].revert(statedb)
-
 		// Drop any dirty tracking induced by the change
 		if addr := j.entries[i].dirtied(); addr != nil {
 			if j.dirties[*addr]--; j.dirties[*addr] == 0 {
@@ -90,7 +89,7 @@ type (
 		account *common.Address
 	}
 	resetObjectChange struct {
-		prev *stateObject
+		prev *state_object
 	}
 	suicideChange struct {
 		account     *common.Address
@@ -112,8 +111,8 @@ type (
 		key, prevalue common.Hash
 	}
 	codeChange struct {
-		account            *common.Address
-		prevcode, prevhash []byte
+		account  *common.Address
+		prevcode code
 	}
 
 	// Changes to other state values.
@@ -124,9 +123,7 @@ type (
 		txhash common.Hash
 	}
 	touchChange struct {
-		account   *common.Address
-		prev      bool
-		prevDirty bool
+		account *state_object
 	}
 )
 
@@ -151,7 +148,7 @@ func (ch suicideChange) revert(s *StateDB) {
 	obj := s.getStateObject(*ch.account)
 	if obj != nil {
 		obj.suicided = ch.prev
-		obj.setBalance(ch.prevbalance)
+		obj.balance = ch.prevbalance
 	}
 }
 
@@ -159,17 +156,16 @@ func (ch suicideChange) dirtied() *common.Address {
 	return ch.account
 }
 
-var ripemd = common.HexToAddress("0000000000000000000000000000000000000003")
-
 func (ch touchChange) revert(s *StateDB) {
+	ch.account.times_touched--
 }
 
 func (ch touchChange) dirtied() *common.Address {
-	return ch.account
+	return &ch.account.address
 }
 
 func (ch balanceChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setBalance(ch.prev)
+	s.getStateObject(*ch.account).balance = ch.prev
 }
 
 func (ch balanceChange) dirtied() *common.Address {
@@ -177,7 +173,7 @@ func (ch balanceChange) dirtied() *common.Address {
 }
 
 func (ch nonceChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setNonce(ch.prev)
+	s.getStateObject(*ch.account).nonce = ch.prev
 }
 
 func (ch nonceChange) dirtied() *common.Address {
@@ -185,7 +181,7 @@ func (ch nonceChange) dirtied() *common.Address {
 }
 
 func (ch codeChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setCode(common.BytesToHash(ch.prevhash), ch.prevcode)
+	s.getStateObject(*ch.account).code = ch.prevcode
 }
 
 func (ch codeChange) dirtied() *common.Address {
@@ -193,7 +189,7 @@ func (ch codeChange) dirtied() *common.Address {
 }
 
 func (ch storageChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setState(ch.key, ch.prevalue)
+	s.getStateObject(*ch.account).dirtyStorage[ch.key] = ch.prevalue
 }
 
 func (ch storageChange) dirtied() *common.Address {

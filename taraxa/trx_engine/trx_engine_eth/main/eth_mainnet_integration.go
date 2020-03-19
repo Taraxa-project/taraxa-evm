@@ -65,10 +65,10 @@ func main() {
 	//factory.ReadDBConfig = &trx_engine_base.StateDBConfig{DBFactory: new(memory.Factory)}
 	usr_dir, err := os.UserHomeDir()
 	util.PanicIfNotNil(err)
-	statedb_dir := usr_dir + "/taraxa_evm_data/ololololo3"
+	statedb_dir := usr_dir + "/taraxa_evm_data/foo"
 	util.PanicIfNotNil(exec.Command("mkdir", "-p", statedb_dir).Run())
 	factory.DBConfig = &trx_engine_base.StateDBConfig{DBFactory: &rocksdb.Factory{
-		File:                   usr_dir + "/taraxa_evm_data/ololololo3",
+		File:                   statedb_dir,
 		Parallelism:            concurrent.CPU_COUNT,
 		MaxFileOpeningThreads:  concurrent.CPU_COUNT,
 		OptimizeForPointLookup: 4 * 1024,
@@ -106,8 +106,7 @@ func main() {
 	engine, cleanup, err := factory.NewInstance()
 	util.PanicIfNotNil(err)
 	defer cleanup()
-	b, err := engine.DB.GetCommitted(binary.BytesView("last_block"))
-	util.PanicIfNotNil(err)
+	b := engine.DB.GetCommitted(binary.BytesView("last_block"))
 	start_block_num := uint64(0)
 	if b != nil {
 		start_block_num = new(big.Int).SetBytes(b).Uint64() + 1
@@ -168,7 +167,7 @@ func main() {
 	tps_min := math.MaxFloat64
 	tps_max := -1.0
 
-	const min_tx_to_execute = 1
+	min_tx_to_execute := 1
 	for blockNum := start_block_num; blockNum <= end_block_num; {
 		var base_root common.Hash
 		if last_block != nil {
@@ -179,6 +178,9 @@ func main() {
 			block_load_requests <- 1
 			last_block = <-blocks
 			tx_count += len(last_block.Transactions)
+			if last_block.Number.Sign() == 0 {
+				tx_count = 1
+			}
 			block_buf = append(block_buf, last_block.Block)
 		}
 		fmt.Println("blocks:", int(blockNum)-len(block_buf), "-", blockNum-1, "tx_count:", tx_count)

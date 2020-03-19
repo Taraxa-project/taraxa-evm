@@ -66,18 +66,16 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 // CreateAddress creates an ethereum address given the bytes and the nonce
 func CreateAddress(b common.Address, nonce uint64) common.Address {
 	data, _ := rlp.EncodeToBytes([]interface{}{b, nonce})
-	hash, return_to_pool := util.Keccak256Pooled(data)
+	hash := util.Keccak256Pooled(data)
 	ret := common.BytesToAddress(hash[12:])
-	go return_to_pool()
 	return ret
 }
 
 // CreateAddress2 creates an ethereum address given the address bytes, initial
 // contract code hash and a salt.
 func CreateAddress2(b common.Address, salt [32]byte, inithash []byte) common.Address {
-	hash, return_to_pool := util.Keccak256Pooled([]byte{0xff}, b.Bytes(), salt[:], inithash)
+	hash := util.Keccak256Pooled([]byte{0xff}, b.Bytes(), salt[:], inithash)
 	ret := common.BytesToAddress(hash[12:])
-	go return_to_pool()
 	return ret
 }
 

@@ -79,7 +79,7 @@ type rlpStorageLog struct {
 	Index       uint
 }
 
-// EncodeRLP implements rlp.Encoder.
+// EncodeRLP implements rlp.RLPEncodable.
 func (l *Log) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, rlpLog{Address: l.Address, Topics: l.Topics, Data: l.Data})
 }
@@ -98,7 +98,7 @@ func (l *Log) DecodeRLP(s *rlp.Stream) error {
 // a log including non-consensus fields.
 type LogForStorage Log
 
-// EncodeRLP implements rlp.Encoder.
+// EncodeRLP implements rlp.RLPEncodable.
 func (l *LogForStorage) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, rlpStorageLog{
 		Address:     l.Address,

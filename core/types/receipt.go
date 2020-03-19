@@ -96,7 +96,7 @@ func NewReceipt(root []byte, failed bool, cumulativeGasUsed uint64) *Receipt {
 	return r
 }
 
-// EncodeRLP implements rlp.Encoder, and flattens the consensus fields of a receipt
+// EncodeRLP implements rlp.RLPEncodable, and flattens the consensus fields of a receipt
 // into an RLP stream. If no post state is present, byzantium fork is assumed.
 func (r *Receipt) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, &receiptRLP{r.statusEncoding(), r.CumulativeGasUsed, r.Bloom, r.Logs})
@@ -156,7 +156,7 @@ func (r *Receipt) Size() common.StorageSize {
 // entire content of a receipt, as opposed to only the consensus fields originally.
 type ReceiptForStorage Receipt
 
-// EncodeRLP implements rlp.Encoder, and flattens all content fields of a receipt
+// EncodeRLP implements rlp.RLPEncodable, and flattens all content fields of a receipt
 // into an RLP stream.
 func (r *ReceiptForStorage) EncodeRLP(w io.Writer) error {
 	enc := &receiptStorageRLP{

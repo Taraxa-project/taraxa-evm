@@ -64,10 +64,11 @@ func PanicIfNotNil(value interface{}) {
 	}
 }
 
-func Assert(condition bool, msg ...string) {
+func Assert(condition bool, msg ...string) bool {
 	if !condition {
 		panic(errors.New(strings.Join(msg, " ")))
 	}
+	return true
 }
 
 func Try(action func()) interface{} {

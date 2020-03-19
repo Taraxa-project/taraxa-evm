@@ -275,9 +275,7 @@ func (c *codeAndHash) Hash() []byte {
 		if c.code == nil {
 			c.hash = crypto.EmptyBytesKeccak256[:]
 		} else {
-			hash, return_to_pool := util.Keccak256Pooled(c.code)
-			c.hash = common.CopyBytes(hash)
-			go return_to_pool()
+			c.hash = util.Keccak256Pooled(c.code)
 		}
 	}
 	return c.hash

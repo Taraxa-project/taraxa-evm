@@ -3,7 +3,6 @@ package trx_engine
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"math/big"
 )
@@ -66,11 +65,8 @@ type TransactionOutput = struct {
 }
 
 type StateTransitionResult = struct {
-	StateRoot                             common.Hash          `json:"stateRoot"`
-	Receipts                              types.Receipts       `json:"receipts"`
-	TransactionOutputs                    []*TransactionOutput `json:"transactionOutputs"`
-	UsedGas                               hexutil.Uint64       `json:"usedGas"`
-	TouchedExternallyOwnedAccountBalances state.BalanceTable   `json:"touchedExternallyOwnedAccountBalances"`
-	// TODO:
-	Preimages map[common.Hash]hexutil.Bytes `json:"preimages"`
+	StateRoot          common.Hash          `json:"stateRoot"`
+	Receipts           types.Receipts       `json:"receipts"`
+	TransactionOutputs []*TransactionOutput `json:"transactionOutputs"`
+	UsedGas            hexutil.Uint64       `json:"usedGas"`
 }

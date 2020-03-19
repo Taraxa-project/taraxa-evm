@@ -29,8 +29,8 @@ var (
 )
 
 type typeinfo struct {
-	decoder
-	writer
+	decoder decoder
+	writer writer
 }
 
 // represents struct tags
@@ -54,7 +54,7 @@ type typekey struct {
 
 type decoder func(*Stream, reflect.Value) error
 
-type writer func(reflect.Value, *encbuf) error
+type writer func(reflect.Value, *Encoder) error
 
 func cachedTypeInfo(typ reflect.Type, tags tags) (*typeinfo, error) {
 	typeCacheMutex.RLock()

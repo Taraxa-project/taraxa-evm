@@ -384,9 +384,8 @@ func opSAR(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *
 func opSha3(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
 	data := memory.Get(offset.Int64(), size.Int64())
-	hash, return_to_pool := util.Keccak256Pooled(data)
+	hash := util.Keccak256Pooled(data)
 	stack.push(interpreter.intPool.get().SetBytes(hash))
-	go return_to_pool()
 	interpreter.intPool.put(offset, size)
 	return nil, nil
 }
@@ -464,7 +463,7 @@ func opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, contract *Contrac
 
 func opExtCodeSize(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	slot := stack.peek()
-	slot.SetUint64(uint64(interpreter.evm.StateDB.GetCodeSize(common.BigToAddress(slot))))
+	slot.SetUint64(interpreter.evm.StateDB.GetCodeSize(common.BigToAddress(slot)))
 
 	return nil, nil
 }

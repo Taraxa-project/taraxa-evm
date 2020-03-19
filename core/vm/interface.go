@@ -36,7 +36,7 @@ type StateDB interface {
 	GetCodeHash(common.Address) common.Hash
 	GetCode(common.Address) []byte
 	SetCode(common.Address, []byte)
-	GetCodeSize(common.Address) int
+	GetCodeSize(common.Address) uint64
 	GetCommittedState(common.Address, common.Hash) common.Hash
 	GetState(common.Address, common.Hash) common.Hash
 	SetState(common.Address, common.Hash, common.Hash)

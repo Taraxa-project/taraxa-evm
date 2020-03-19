@@ -21,9 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
-	"sync"
 	"testing"
 )
 
@@ -45,7 +43,7 @@ func (e *testEncoder) EncodeRLP(w io.Writer) error {
 type byteEncoder byte
 
 func (e byteEncoder) EncodeRLP(w io.Writer) error {
-	w.Write(EmptyList)
+	w.Write([]byte{0xC0})
 	return nil
 }
 
@@ -60,8 +58,8 @@ func (e *encodableReader) Read(b []byte) (int, error) {
 type namedByteType byte
 
 var (
-	_ = Encoder(&testEncoder{})
-	_ = Encoder(byteEncoder(0))
+	_ = RLPEncodable(&testEncoder{})
+	_ = RLPEncodable(byteEncoder(0))
 
 	reader io.Reader = &encodableReader{1, 2}
 )
@@ -235,7 +233,7 @@ var encTests = []encTest{
 	// interfaces
 	{val: []io.Reader{reader}, output: "C3C20102"}, // the contained value is a struct
 
-	// Encoder
+	// RLPEncodable
 	{val: (*testEncoder)(nil), output: "00000000"},
 	{val: &testEncoder{}, output: "00010001000100010001"},
 	{val: &testEncoder{errors.New("test error")}, error: "test error"},
@@ -243,7 +241,7 @@ var encTests = []encTest{
 	// addressable non-pointer values.
 	{val: &struct{ TE testEncoder }{testEncoder{}}, output: "CA00010001000100010001"},
 	{val: &struct{ TE testEncoder }{testEncoder{errors.New("test error")}}, error: "test error"},
-	// verify the error for non-addressable non-pointer Encoder
+	// verify the error for non-addressable non-pointer RLPEncodable
 	{val: testEncoder{}, error: "rlp: game over: unadressable value of type rlp.testEncoder, EncodeRLP is pointer method"},
 	// verify the special case for []byte
 	{val: []byteEncoder{0, 1, 2, 3, 4}, output: "C5C0C0C0C0C0"},
@@ -279,63 +277,4 @@ func TestEncode(t *testing.T) {
 
 func TestEncodeToBytes(t *testing.T) {
 	runEncTests(t, EncodeToBytes)
-}
-
-func TestEncodeToReader(t *testing.T) {
-	runEncTests(t, func(val interface{}) ([]byte, error) {
-		_, r, err := EncodeToReader(val)
-		if err != nil {
-			return nil, err
-		}
-		return ioutil.ReadAll(r)
-	})
-}
-
-func TestEncodeToReaderPiecewise(t *testing.T) {
-	runEncTests(t, func(val interface{}) ([]byte, error) {
-		size, r, err := EncodeToReader(val)
-		if err != nil {
-			return nil, err
-		}
-
-		// read output piecewise
-		output := make([]byte, size)
-		for start, end := 0, 0; start < size; start = end {
-			if remaining := size - start; remaining < 3 {
-				end += remaining
-			} else {
-				end = start + 3
-			}
-			n, err := r.Read(output[start:end])
-			end = start + n
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				return nil, err
-			}
-		}
-		return output, nil
-	})
-}
-
-// This is a regression test verifying that encReader
-// returns its encbuf to the pool only once.
-func TestEncodeToReaderReturnToPool(t *testing.T) {
-	buf := make([]byte, 50)
-	wg := new(sync.WaitGroup)
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			for i := 0; i < 1000; i++ {
-				_, r, _ := EncodeToReader("foo")
-				ioutil.ReadAll(r)
-				r.Read(buf)
-				r.Read(buf)
-				r.Read(buf)
-				r.Read(buf)
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
 }
