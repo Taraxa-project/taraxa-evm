@@ -2,7 +2,6 @@ package state
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -14,16 +13,21 @@ import (
 // TODO key versioning
 // TODO merge with statedb
 type Database struct {
-	db      ethdb.Database
-	last_tr *trie.Trie
-	tasks   chan func()
-	batch   ethdb.Batch
+	db          ethdb.Database
+	last_tr     *trie.Trie
+	tasks       chan func()
+	batch       ethdb.Batch
+	committed   map[string][]byte
+	uncommitted map[string][]byte
+	mem_only    bool
 }
 
 func NewDatabase(db ethdb.Database) *Database {
 	self := &Database{
-		db:    db,
-		tasks: make(chan func(), 4096*64),
+		db:          db,
+		tasks:       make(chan func(), 4096*64),
+		committed:   make(map[string][]byte),
+		uncommitted: make(map[string][]byte),
 	}
 	runtime.SetFinalizer(self, func(self *Database) {
 		self.tasks <- nil
@@ -40,6 +44,15 @@ func NewDatabase(db ethdb.Database) *Database {
 	return self
 }
 
+func (self *Database) GetAccTrie() *trie.Trie {
+	return self.last_tr
+}
+
+func (self *Database) ToggleMemOnly() {
+	util.Assert(!self.mem_only)
+	self.mem_only = !self.mem_only
+}
+
 func (self *Database) OpenStorageTrie(root []byte, owner_addr common.Address) *trie.Trie {
 	return trie.NewTrie(root, &acc_storage_trie_schema{owner_addr}, trie_db{self}, 0)
 }
@@ -52,6 +65,10 @@ func (self *Database) OpenTrie(root []byte) *trie.Trie {
 }
 
 func (self *Database) PutAsync(k, v []byte) {
+	if self.mem_only {
+		self.uncommitted[string(k)] = v
+		return
+	}
 	self.tasks <- func() {
 		if self.batch == nil {
 			self.batch = self.db.NewBatch()
@@ -61,12 +78,22 @@ func (self *Database) PutAsync(k, v []byte) {
 }
 
 func (self *Database) GetCommitted(k []byte) []byte {
+	if v, ok := self.committed[binary.StringView(k)]; ok {
+		return v
+	}
 	ret, err := self.db.Get(k)
 	util.PanicIfNotNil(err)
 	return ret
 }
 
 func (self *Database) Commit() {
+	if self.mem_only {
+		for k, v := range self.uncommitted {
+			self.committed[k] = v
+			delete(self.uncommitted, k)
+		}
+		return
+	}
 	ch := make(chan byte)
 	self.tasks <- func() {
 		defer close(ch)
@@ -103,33 +130,7 @@ func (self main_trie_schema) FlatKey(hashed_key []byte) []byte {
 }
 
 func (self main_trie_schema) StorageToHashEncoding(enc_storage []byte) (enc_hash []byte) {
-	rlp_list := self.encoder.ListStart()
-	next, curr, err := rlp.SplitList(enc_storage)
-	util.PanicIfNotNil(err)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	self.encoder.AppendString(curr)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	self.encoder.AppendString(curr)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	if len(curr) != 0 {
-		self.encoder.AppendString(curr)
-	} else {
-		self.encoder.AppendString(empty_rlp_list_hash[:])
-	}
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	if len(curr) != 0 {
-		self.encoder.AppendString(curr)
-	} else {
-		self.encoder.AppendString(crypto.EmptyBytesKeccak256[:])
-	}
-	self.encoder.ListEnd(rlp_list)
-	enc_hash = self.encoder.ToBytes(nil)
-	self.encoder.Reset()
-	return
+	return enc_storage_2_hash(self.encoder, enc_storage)
 }
 
 func (self main_trie_schema) MaxStorageEncSizeToStoreInTrie() int {

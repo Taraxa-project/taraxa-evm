@@ -18,6 +18,11 @@ type Transaction = struct {
 	GasPrice *hexutil.Big    `json:"gasPrice" gencodec:"required"`
 	Input    hexutil.Bytes   `json:"input" gencodec:"required"`
 	Hash     common.Hash     `json:"hash" gencodec:"required"`
+	// debug
+	Receipt  Receipt         `json:"receipt" gencodec:"required"`
+}
+type Receipt = struct {
+	Root common.Hash `json:"root" gencodec:"required"`
 }
 
 type Block = struct {

@@ -41,7 +41,7 @@ func new_object(db *StateDB, address common.Address) *state_object {
 }
 
 func (self *state_object) empty() bool {
-	return self.nonce == 0 && self.balance.Sign() == 0 && len(self.code.hash) == 0
+	return self.nonce == 0 && self.balance.Sign() == 0 && self.code.size == 0
 }
 
 var ripemd = common.HexToAddress("0000000000000000000000000000000000000003")
@@ -135,12 +135,16 @@ func (self *state_object) get_code() []byte {
 	return self.code.val
 }
 
-func (self *state_object) set_code(hash, val []byte) {
+func (self *state_object) set_code(val []byte) {
 	self.db.journal.append(codeChange{
 		account:  &self.address,
 		prevcode: self.code,
 	})
-	self.code = code{hash, uint64(len(val)), val, true}
+	if len(val) != 0 {
+		self.code = code{util.Keccak256Pooled(val), uint64(len(val)), val, true}
+	} else {
+		self.code = code{nil, 0, nil, true}
+	}
 }
 
 func (self *state_object) set_nonce(nonce uint64) {

@@ -97,6 +97,9 @@ func (self *StateDB) GetCodeSize(addr common.Address) uint64 {
 
 func (self *StateDB) GetCodeHash(addr common.Address) common.Hash {
 	if o := self.getStateObject(addr); o != nil {
+		if o.code.size == 0 {
+			return crypto.EmptyBytesKeccak256
+		}
 		return common.BytesToHash(o.code.hash)
 	}
 	return common.Hash{}
@@ -144,7 +147,7 @@ func (self *StateDB) IncrementNonce(addr common.Address) {
 }
 
 func (self *StateDB) SetCode(addr common.Address, code []byte) {
-	self.GetOrNewStateObject(addr).set_code(util.Keccak256Pooled(code), code)
+	self.GetOrNewStateObject(addr).set_code(code)
 }
 
 func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
@@ -173,8 +176,9 @@ func (self *StateDB) CreateAccount(addr common.Address) {
 	}
 }
 
-func (self *StateDB) setStateObject(object *state_object) {
-	self.stateObjects[object.address] = object
+func (self *StateDB) setStateObject(o *state_object) *state_object {
+	self.stateObjects[o.address] = o
+	return o
 }
 
 func (self *StateDB) GetOrNewStateObject(addr common.Address) *state_object {
@@ -281,13 +285,13 @@ func (self *StateDB) Checkpoint(deleteEmptyObjects bool) {
 		trie := stateObject.get_or_open_trie()
 		for key, value := range stateObject.dirtyStorage {
 			stateObject.originStorage[key] = value
-			if value == common.ZeroHash {
-				trie.Delete(key[:])
-				continue
-			}
 			var pos byte
 			for pos < common.HashLength && value[pos] == 0 {
 				pos++
+			}
+			if pos == common.HashLength {
+				trie.Delete(key[:])
+				continue
 			}
 			self.encoder.AppendString(value[pos:])
 			enc := self.encoder.ToBytes(nil)
@@ -345,26 +349,7 @@ func (self *StateDB) getStateObject(addr common.Address) *state_object {
 	if len(enc_storage) == 0 {
 		return nil
 	}
-	o := new_object(self, addr)
-	next, curr, err := rlp.SplitList(enc_storage)
-	util.PanicIfNotNil(err)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	o.nonce = dec_uint64(curr)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	o.balance = new(big.Int).SetBytes(curr)
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	o.storage_root_hash = curr
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	o.code.hash = curr
-	curr, next, err = rlp.SplitString(next)
-	util.PanicIfNotNil(err)
-	o.code.size = dec_uint64(curr)
-	self.setStateObject(o)
-	return o
+	return self.setStateObject(dec(new_object(self, addr), enc_storage))
 }
 
 func (self *StateDB) Commit() common.Hash {
@@ -381,31 +366,7 @@ func (self *StateDB) Commit() common.Hash {
 			o.storage_root_hash = o.trie.CommitNodes()
 		}
 		// TODO hide enc/dec behind an interface and use it to delay blocking on storage tries hashing
-		storage_rlp_list := self.encoder.ListStart()
-		self.encoder.AppendUint(o.nonce)
-		self.encoder.AppendBigInt(o.balance)
-		self.encoder.AppendString(o.storage_root_hash)
-		self.encoder.AppendString(o.code.hash)
-		self.encoder.AppendUint(o.code.size)
-		self.encoder.ListEnd(storage_rlp_list)
-		enc_storage := self.encoder.ToBytes(nil)
-		self.encoder.Reset()
-		hash_rlp_list := self.encoder.ListStart()
-		self.encoder.AppendUint(o.nonce)
-		self.encoder.AppendBigInt(o.balance)
-		if len(o.storage_root_hash) != 0 {
-			self.encoder.AppendString(o.storage_root_hash)
-		} else {
-			self.encoder.AppendString(empty_rlp_list_hash[:])
-		}
-		if len(o.code.hash) != 0 {
-			self.encoder.AppendString(o.code.hash)
-		} else {
-			self.encoder.AppendString(crypto.EmptyBytesKeccak256[:])
-		}
-		self.encoder.ListEnd(hash_rlp_list)
-		enc_hash := self.encoder.ToBytes(nil)
-		self.encoder.Reset()
+		enc_storage, enc_hash := enc(self.encoder, o)
 		self.trie.Put(addr[:], enc_storage, enc_hash)
 	}
 	self.stateObjectsDirty = make(state_objects)
