@@ -203,6 +203,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg bool
 }
 
+// TODO use
 // Rules ensures c's ChainID is not nil.
 func (c *ChainConfig) Rules(num *big.Int) Rules {
 	chainID := c.ChainID

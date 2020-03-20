@@ -121,10 +121,6 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool, disable_miner_rew
 	}
 }
 
-func NewStateTransitionWithMinerReward(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
-	return NewStateTransition(evm, msg, gp, false)
-}
-
 // ApplyMessage computes the new state by applying the given message
 // against the old state within the environment.
 //
@@ -160,7 +156,6 @@ func (st *StateTransition) buyGas() error {
 		return err
 	}
 	st.gas += st.msg.Gas()
-
 	st.initialGas = st.msg.Gas()
 	st.state.SubBalance(st.msg.From(), mgval)
 	return nil
