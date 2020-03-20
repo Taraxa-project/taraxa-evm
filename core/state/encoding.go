@@ -7,6 +7,8 @@ import (
 	"math/big"
 )
 
+// TODO hide enc/dec behind an interface and use it to delay blocking on storage tries hashing
+
 func dec(o *state_object, enc_storage []byte) *state_object {
 	next, curr, err := rlp.SplitList(enc_storage)
 	util.PanicIfNotNil(err)

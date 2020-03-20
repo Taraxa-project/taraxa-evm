@@ -365,7 +365,6 @@ func (self *StateDB) Commit() common.Hash {
 		if o.trie != nil {
 			o.storage_root_hash = o.trie.CommitNodes()
 		}
-		// TODO hide enc/dec behind an interface and use it to delay blocking on storage tries hashing
 		enc_storage, enc_hash := enc(self.encoder, o)
 		self.trie.Put(addr[:], enc_storage, enc_hash)
 	}
