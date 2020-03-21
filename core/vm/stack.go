@@ -36,11 +36,6 @@ func newstack_w_size(size int) *Stack {
 	return &Stack{data: make([]*big.Int, 0, size)}
 }
 
-// Data returns the underlying big.Int array.
-func (st *Stack) Data() []*big.Int {
-	return st.data
-}
-
 func (st *Stack) push(d *big.Int) {
 	// NOTE push limit (1024) is checked in baseCheck
 	//stackItem := new(big.Int).Set(d)
