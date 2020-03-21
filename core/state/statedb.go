@@ -13,6 +13,7 @@ import (
 )
 
 // TODO reinstate async operations
+// TODO use pointers for Address and Hash
 type StateDB struct {
 	db                *Database
 	trie              *trie.Trie
@@ -306,36 +307,6 @@ func (self *StateDB) clearJournalAndRefund() {
 	self.journal = newJournal()
 	self.validRevisions = self.validRevisions[:0]
 	self.refund = 0
-}
-
-// refactor account enc/dec
-
-func dec_uint64(b []byte) uint64 {
-	switch len(b) {
-	case 0:
-		return 0
-	case 1:
-		return uint64(b[0])
-	case 2:
-		return uint64(b[0])<<8 | uint64(b[1])
-	case 3:
-		return uint64(b[0])<<16 | uint64(b[1])<<8 | uint64(b[2])
-	case 4:
-		return uint64(b[0])<<24 | uint64(b[1])<<16 | uint64(b[2])<<8 | uint64(b[3])
-	case 5:
-		return uint64(b[0])<<32 | uint64(b[1])<<24 | uint64(b[2])<<16 | uint64(b[3])<<8 |
-			uint64(b[4])
-	case 6:
-		return uint64(b[0])<<40 | uint64(b[1])<<32 | uint64(b[2])<<24 | uint64(b[3])<<16 |
-			uint64(b[4])<<8 | uint64(b[5])
-	case 7:
-		return uint64(b[0])<<48 | uint64(b[1])<<40 | uint64(b[2])<<32 | uint64(b[3])<<24 |
-			uint64(b[4])<<16 | uint64(b[5])<<8 | uint64(b[6])
-	case 8:
-		return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
-			uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
-	}
-	panic("impossible")
 }
 
 func (self *StateDB) getStateObject(addr common.Address) *state_object {

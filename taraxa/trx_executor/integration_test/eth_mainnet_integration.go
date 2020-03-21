@@ -20,11 +20,6 @@ import (
 	"time"
 )
 
-func mkdirp(path string) string {
-	util.PanicIfNotNil(exec.Command("mkdir", "-p", path).Run())
-	return path
-}
-
 func main() {
 	usr_dir, err := os.UserHomeDir()
 	util.PanicIfNotNil(err)
@@ -105,14 +100,16 @@ func main() {
 		return ret
 	}
 
-	db := state.NewDatabase(rocksdb.New(&rocksdb.Config{
+	rocksdb := rocksdb.New(&rocksdb.Config{
 		File:                   mkdirp(dest_data_dir + "/foo"),
 		Parallelism:            runtime.NumCPU(),
 		MaxFileOpeningThreads:  runtime.NumCPU(),
 		OptimizeForPointLookup: 4 * 1024,
 		MaxOpenFiles:           7000,
-	}))
-	db.ToggleMemOnly()
+	})
+	defer rocksdb.Close()
+	db := state.NewDatabase(rocksdb)
+	//db.ToggleMemOnly()
 	engine := &trx_executor.TransactionExecutor{
 		DB: db,
 		GetBlockHash: func(blockNumber uint64) common.Hash {
@@ -121,10 +118,12 @@ func main() {
 		Genesis: core.DefaultGenesisBlock(),
 	}
 
-	blocks := make(chan *BlockInfo, 64)
+	min_tx_to_execute := 10000
+	blocks := make(chan *BlockInfo, min_tx_to_execute/10)
 	block_load_requests := make(chan interface{}, cap(blocks))
 	defer close(block_load_requests)
 	go func() {
+		defer block_db.Close()
 		defer close(blocks)
 		var next_to_load uint64
 		if last_block_num_b := db.GetCommitted(binary.BytesView("last_block")); last_block_num_b != nil {
@@ -150,7 +149,6 @@ func main() {
 
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
 
-	min_tx_to_execute := 1
 	block_buf := make([]*trx_executor.Block, 0, 1<<8)
 	last_block := <-blocks
 	for {
@@ -199,4 +197,9 @@ func main() {
 			max_heap_size = mem_stats.HeapAlloc * 4
 		}
 	}
+}
+
+func mkdirp(path string) string {
+	util.PanicIfNotNil(exec.Command("mkdir", "-p", path).Run())
+	return path
 }

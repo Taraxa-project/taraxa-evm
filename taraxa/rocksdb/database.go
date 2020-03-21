@@ -1,6 +1,7 @@
 package rocksdb
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/ethdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/tecbot/gorocksdb"
@@ -10,6 +11,7 @@ type Database struct {
 	writeOpts *gorocksdb.WriteOptions
 	readOpts  *gorocksdb.ReadOptions
 	db        *gorocksdb.DB
+	tasks     chan func()
 }
 type Config struct {
 	File                          string `json:"file"`
@@ -79,35 +81,58 @@ func New(cfg *Config) *Database {
 	ret, err := new(Database), error(nil)
 	ret.writeOpts = gorocksdb.NewDefaultWriteOptions()
 	ret.readOpts = gorocksdb.NewDefaultReadOptions()
+	ret.readOpts.SetVerifyChecksums(false)
 	if cfg.ReadOnly {
 		ret.db, err = gorocksdb.OpenDbForReadOnly(opts, cfg.File, cfg.ErrorIfExists)
 	} else {
 		ret.db, err = gorocksdb.OpenDb(opts, cfg.File)
 	}
 	util.PanicIfNotNil(err)
+	tasks := make(chan func(), 2048)
+	go func() {
+		for {
+			if t, ok := <-tasks; ok {
+				t()
+				continue
+			}
+			return
+		}
+	}()
+	ret.tasks = tasks
 	return ret
 }
 
-func (this *Database) Unwrap() *gorocksdb.DB {
-	return this.db
+func (self *Database) Unwrap() *gorocksdb.DB {
+	return self.db
 }
 
-func (this *Database) Put(key []byte, value []byte) error {
-	return this.db.Put(this.writeOpts, key, value)
+func (self *Database) Put(key []byte, value []byte) error {
+	return self.db.Put(self.writeOpts, key, value)
 }
 
-func (this *Database) Get(key []byte) ([]byte, error) {
-	return this.db.GetBytes(this.readOpts, key)
+func (self *Database) Get(key []byte) ([]byte, error) {
+	val_handle, err := self.db.GetPinned(self.readOpts, key)
+	if err != nil {
+		return nil, err
+	}
+	ret := common.CopyBytes(val_handle.Data())
+	self.tasks <- val_handle.Destroy
+	return ret, nil
 }
 
-func (this *Database) Close() {
-	this.db.Close()
-	this.db = nil
+func (self *Database) Close() {
+	self.tasks <- func() {
+		self.readOpts.Destroy()
+		self.writeOpts.Destroy()
+		self.db.Close()
+		close(self.tasks)
+	}
+	*self = Database{}
 }
 
-func (this *Database) NewBatch() ethdb.Batch {
+func (self *Database) NewBatch() ethdb.Batch {
 	return &batch{
-		db:    this,
+		db:    self,
 		batch: gorocksdb.NewWriteBatch(),
 	}
 }
