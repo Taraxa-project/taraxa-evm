@@ -17,7 +17,7 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm --name go-evm-${TEST_NAME} \
-                        -v $(pwd):/app \
+                        -v ${WORKSPACE}:/app \
                         -v ${ETH_TEST_DATA_DIR}:${ETH_TEST_DATA_DIR}:ro \
                         -v ${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME}:${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME} \
                         -e ETH_TEST_DATA_DIR=${ETH_TEST_DATA_DIR} \
