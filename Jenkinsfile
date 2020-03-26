@@ -5,7 +5,7 @@ pipeline {
         SLACK_TEAM_DOMAIN = 'phragmites'
         TEST_NAME = sh(script: 'echo ${BRANCH_NAME} | sed "s/[^A-Za-z0-9\\-]*//g" | tr "[:upper:]" "[:lower:]"', returnStdout: true).trim()
         ETH_TEST_DATA_DIR='/etherium-test-data/data'
-        ETH_TEST_RESULTS_DIR='/etherium-test-data/data'
+        ETH_TEST_RESULTS_BASE_DIR='/etherium-test-data/tests-results'
         DOCKER_GO_IMAGE='golang:1.12'
     }
     options {
@@ -19,7 +19,9 @@ pipeline {
                     docker run --rm --name go-evm-${TEST_NAME} \
                         -v $(pwd):/app \
                         -v ${ETH_TEST_DATA_DIR}:${ETH_TEST_DATA_DIR}:ro \
-                        -v ${ETH_TEST_RESULTS_DIR}:${ETH_TEST_RESULTS_DIR} \
+                        -v ${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME}:${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME} \
+                        -e ETH_TEST_DATA_DIR=${ETH_TEST_DATA_DIR} \
+                        -e ETH_TEST_RESULTS_DIR=${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME} \
                         -w /app \
                         ${DOCKER_GO_IMAGE} \
                         go test
