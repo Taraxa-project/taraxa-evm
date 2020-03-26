@@ -16,7 +16,7 @@ pipeline {
         stage('Go Tests') {
             steps {
                 sh '''
-                    docker run --rm --name go-evm-${TEST_NAME}
+                    docker run --rm --name go-evm-${TEST_NAME} \
                         -v $(pwd):/app \
                         -v ${ETH_TEST_DATA_DIR}:${ETH_TEST_DATA_DIR}:ro \
                         -v ${ETH_TEST_RESULTS_DIR}:${ETH_TEST_RESULTS_DIR} \
