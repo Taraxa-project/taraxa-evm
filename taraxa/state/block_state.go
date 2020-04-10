@@ -3,6 +3,7 @@ package state
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -73,7 +74,11 @@ func (self *BlockState) GetAccountEthEncoding(addr *common.Address) (ret []byte)
 
 func (self *BlockState) GetStorage(addr *common.Address, key *common.Hash) (ret []byte) {
 	key_hash := util.HashOnStack(key[:])
-	ret = self.db.GetAccountTrieValue(self.blk_num, addr, &key_hash)
+	if ret = self.db.GetAccountTrieValue(self.blk_num, addr, &key_hash); len(ret) == 0 {
+		return
+	}
+	_, ret, _, err := rlp.Split(ret)
+	util.PanicIfNotNil(err)
 	return
 }
 

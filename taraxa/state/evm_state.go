@@ -299,9 +299,9 @@ func (self *EVMState) get_origin_storage(addr common.Address, acc *local_account
 }
 
 func (self *EVMState) AddLog(log vm.LogRecord) {
-	lastpos := len(self.logs) - 1
+	pos := len(self.logs)
 	self.register_change_r_only(func() {
-		self.logs = self.logs[:lastpos]
+		self.logs = self.logs[:pos]
 	})
 	self.logs = append(self.logs, log)
 }

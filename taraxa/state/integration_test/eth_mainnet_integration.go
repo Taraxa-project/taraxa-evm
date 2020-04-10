@@ -133,10 +133,10 @@ func main() {
 	}
 	type BlockInfo = struct {
 		VmBlock
-		Hash         common.Hash   `json:"hash" gencodec:"required"`
-		StateRoot    common.Hash   `json:"stateRoot" gencodec:"required"`
 		UncleBlocks  []UncleBlock  `json:"uncleBlocks"  gencodec:"required"`
 		Transactions []Transaction `json:"transactions"  gencodec:"required"`
+		Hash         common.Hash   `json:"hash" gencodec:"required"`
+		StateRoot    common.Hash   `json:"stateRoot" gencodec:"required"`
 	}
 
 	getBlockByNumber := func(block_num types.BlockNum) *BlockInfo {
@@ -237,17 +237,18 @@ func main() {
 		}
 		batch := gorocksdb.NewWriteBatch()
 		state_db.BatchBegin(batch)
-		last_block := block_buf[len(block_buf)-1]
-		fmt.Println("blocks:", block_buf[0].Number, "-", last_block.Number, "tx_count:", tx_count)
-		now := time.Now()
-		var last_result state.StateTransitionResult
-		for _, b := range block_buf {
-			last_result = state_transition_service.TransitionState(state.StateTransitionParams{
+		requests := make([]state.StateTransitionParams, len(block_buf))
+		for i, b := range block_buf {
+			requests[i] = state.StateTransitionParams{
 				Block:        (*vm.Block)(unsafe.Pointer(&b.VmBlock)),
 				Uncles:       *(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)),
 				Transactions: *(*[]vm.Transaction)(unsafe.Pointer(&b.Transactions)),
-			})
+			}
 		}
+		last_block := block_buf[len(block_buf)-1]
+		fmt.Println("blocks:", block_buf[0].Number, "-", last_block.Number, "tx_count:", tx_count)
+		now := time.Now()
+		result := state_transition_service.TransitionState(tx_count, requests...)
 		tps := float64(tx_count) / time.Now().Sub(now).Seconds()
 		tps_sum += tps
 		tps_cnt++
@@ -259,7 +260,7 @@ func main() {
 		}
 		fmt.Println("TPS current:", tps, "avg:", tps_sum/float64(tps_cnt), "min:", tps_min, "max:", tps_max)
 		block_buf = block_buf[:0]
-		assert.EQ(last_result.StateRoot.Hex(), last_block.StateRoot.Hex())
+		assert.EQ(result.StateRoot.Hex(), last_block.StateRoot.Hex())
 		//break
 		state_db.BatchDone()
 		batch.Put(bin.BytesView("last_block"), bin.ENC_b_endian_64(last_block.Number))

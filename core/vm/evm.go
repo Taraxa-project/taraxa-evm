@@ -213,13 +213,18 @@ func (evm *EVM) call(caller ContractRef, callee common.Address, input []byte, ga
 }
 
 func call_header(cfg *EVMConfig, state State, caller ContractRef, callee common.Address, input []byte, gas uint64, value *big.Int) (contract *Contract, snapshot int) {
-	if !state.Exist(callee) && cfg.precompiles[callee] == nil && cfg.rules.IsEIP158 && value.Sign() == 0 {
-		return
-	}
-	if code := state.GetCode(callee); len(code) != 0 {
-		snapshot = state.Snapshot()
-		contract = NewContract(caller, AccountRef(callee), value, gas, input)
-		contract.SetCallCode(callee, state.GetCodeHash(callee), code)
+	if _, precompiled := cfg.precompiles[callee]; !precompiled {
+		if code_hash := state.GetCodeHash(callee); code_hash == common.ZeroHash {
+			if cfg.rules.IsEIP158 && value.Sign() == 0 {
+				return
+			}
+		} else {
+			contract, snapshot = NewContract(caller, AccountRef(callee), value, gas, input), state.Snapshot()
+			contract.SetCallCode(callee, code_hash, state.GetCode(callee))
+		}
+	} else {
+		contract, snapshot = NewContract(caller, AccountRef(callee), value, gas, input), state.Snapshot()
+		contract.CodeAddr = callee
 	}
 	transfer(state, caller.Address(), callee, value)
 	return
