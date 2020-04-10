@@ -106,11 +106,11 @@ func (self *StateTransitionService) TransitionState(param StateTransitionParams)
 						SetIO(&AccountTrieInput{self.last_blk, &addr}, &AccountTrieOutput{next_blk, &addr})
 				}
 				for k, v := range change.storage_dirty {
-					if v.Sign() == 0 {
-						pending_acc.trie_w.Delete(util.Hash(k[:]))
+					if h := util.HashOnStack(k[:]); v.Sign() == 0 {
+						pending_acc.trie_w.Delete(&h)
 					} else {
 						bs := v.Bytes()
-						pending_acc.trie_w.Put(util.Hash(k[:]), trie.RawValue{bs, bs})
+						pending_acc.trie_w.Put(&h, trie.RawValue{bs, bs})
 					}
 				}
 			})

@@ -160,7 +160,8 @@ func (self *EVMState) AddBalance(addr common.Address, amount *big.Int) {
 }
 
 func (self *EVMState) SubBalance(addr common.Address, amount *big.Int) {
-	if acc := self.get_or_create_account(addr); amount.Sign() != 0 {
+	acc := self.get_or_create_account(addr)
+	if amount.Sign() != 0 {
 		self.set_balance(addr, acc, new(big.Int).Sub(acc.balance, amount))
 	}
 }
@@ -286,7 +287,7 @@ func (self *EVMState) get_origin_storage(addr common.Address, acc *local_account
 	if ret, present := acc.storage_origin[key]; present {
 		return ret
 	}
-	if len(acc.storage_root_hash) == 0 {
+	if acc.storage_root_hash == nil {
 		return common.Big0
 	}
 	ret := self.in.GetAccountStorage(&addr, &key)
@@ -386,6 +387,13 @@ func (self *EVMState) Commit(delete_empty_accounts bool, sink EVMStateOutput) {
 			continue
 		}
 		sink.OnAccountChanged(addr, acc.AccountChange)
+		acc.code_dirty = false
+		if len(acc.storage_dirty) == 0 {
+			continue
+		}
+		if acc.storage_origin == nil {
+			acc.storage_origin = make(AccountStorage, util.CeilPow2(len(acc.storage_dirty)))
+		}
 		for k, v := range acc.storage_dirty {
 			acc.storage_origin[k] = v
 		}
