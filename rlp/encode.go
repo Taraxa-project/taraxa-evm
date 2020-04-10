@@ -19,7 +19,7 @@ package rlp
 import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/binary"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"io"
 	"math/big"
 	"reflect"
@@ -200,18 +200,35 @@ func (self *Encoder) AppendEmptyString() {
 	self.AppendRaw(EmptyString)
 }
 
+func ToRLPStringSimple(str []byte) []byte {
+	size := len(str)
+	ret := make([]byte, 0, size+bin.ActualSizeInBytes(uint64(size))+1)
+	ToRLPString(str, func(b ...byte) {
+		ret = append(ret, b...)
+	})
+	return ret
+}
+
+func ToRLPString(str []byte, appender func(...byte)) {
+	if size := len(str); size == 1 && str[0] <= 0x7F {
+		// fits single byte, no string header
+		appender(str[0])
+	} else {
+		if size < 56 {
+			appender(EmptyString + byte(size))
+		} else {
+			putint(appender, uint64(size), 0xB7)
+		}
+		appender(str...)
+	}
+}
+
 func (self *Encoder) AppendString(str []byte) {
 	if len(str) == 0 {
 		self.AppendEmptyString()
 		return
 	}
-	if len(str) == 1 && str[0] <= 0x7F {
-		// fits single byte, no string header
-		self.AppendRaw(str[0])
-	} else {
-		self.encodeStringHeader(len(str))
-		self.AppendRaw(str...)
-	}
+	ToRLPString(str, self.AppendRaw)
 }
 
 func (self *Encoder) AppendUint(i uint64) {
@@ -285,21 +302,13 @@ func (self *Encoder) ToBytes(since *ListHead) []byte {
 	return self.FlushToBytes(since, make([]byte, 0, capacity))
 }
 
-func (self *Encoder) encodeStringHeader(size int) {
-	if size < 56 {
-		self.AppendRaw(EmptyString + byte(size))
-	} else {
-		putint(self.AppendRaw, uint64(size), 0xB7)
-	}
-}
-
 // headsize returns the size of a list or string header
 // for a value of the given size.
 func headsize(size uint64) int {
 	if size < 56 {
 		return 1
 	}
-	return 1 + intsize(size)
+	return 1 + bin.ActualSizeInBytes(size)
 }
 
 // puthead writes a list or string header to buf.
@@ -332,28 +341,6 @@ func putint(appender func(...byte), i uint64, tag byte) {
 		appender(7+tag, byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	default:
 		appender(8+tag, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-	}
-}
-
-// intsize computes the minimum number of bytes required to store i.
-func intsize(i uint64) int {
-	switch {
-	case i < (1 << 8):
-		return 1
-	case i < (1 << 16):
-		return 2
-	case i < (1 << 24):
-		return 3
-	case i < (1 << 32):
-		return 4
-	case i < (1 << 40):
-		return 5
-	case i < (1 << 48):
-		return 6
-	case i < (1 << 56):
-		return 7
-	default:
-		return 8
 	}
 }
 
@@ -452,7 +439,7 @@ func writeByteArray(val reflect.Value, w *Encoder) error {
 
 func writeString(val reflect.Value, w *Encoder) error {
 	s := val.String()
-	w.AppendString(binary.BytesView(s))
+	w.AppendString(bin.BytesView(s))
 	return nil
 }
 

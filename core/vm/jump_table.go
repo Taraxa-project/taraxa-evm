@@ -19,15 +19,13 @@ package vm
 import (
 	"errors"
 	"math/big"
-
-	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 type (
-	executionFunc       func(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error)
-	gasFunc             func(params.GasTable, *EVM, *Contract, *Stack, *Memory, uint64) (uint64, error) // last parameter is the requested memory size as a uint64
-	stackValidationFunc func(*Stack) error
-	memorySizeFunc      func(*Stack) *big.Int
+	executionFunc       func(pc *uint64, interpreter *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error)
+	gasFunc             func(*EVM, *Contract, *stack, *Memory, uint64) (uint64, error) // last parameter is the requested memory size as a uint64
+	stackValidationFunc func(*stack) error
+	memorySizeFunc      func(*stack) *big.Int
 )
 
 var errGasUintOverflow = errors.New("gas uint64 overflow")
@@ -59,7 +57,7 @@ var (
 
 // NewConstantinopleInstructionSet returns the frontier, homestead
 // byzantium and contantinople instructions.
-func newConstantinopleInstructionSet() [256]operation {
+func newConstantinopleInstructionSet() InstructionSet {
 	// instructions that can be executed during the byzantium phase.
 	instructionSet := newByzantiumInstructionSet()
 	instructionSet[SHL] = operation{
@@ -100,7 +98,7 @@ func newConstantinopleInstructionSet() [256]operation {
 
 // NewByzantiumInstructionSet returns the frontier, homestead and
 // byzantium instructions.
-func newByzantiumInstructionSet() [256]operation {
+func newByzantiumInstructionSet() InstructionSet {
 	// instructions that can be executed during the homestead phase.
 	instructionSet := newHomesteadInstructionSet()
 	instructionSet[STATICCALL] = operation{
@@ -138,7 +136,7 @@ func newByzantiumInstructionSet() [256]operation {
 
 // NewHomesteadInstructionSet returns the frontier and homestead
 // instructions that can be executed during the homestead phase.
-func newHomesteadInstructionSet() [256]operation {
+func newHomesteadInstructionSet() InstructionSet {
 	instructionSet := newFrontierInstructionSet()
 	instructionSet[DELEGATECALL] = operation{
 		execute:       opDelegateCall,
@@ -153,7 +151,7 @@ func newHomesteadInstructionSet() [256]operation {
 
 // NewFrontierInstructionSet returns the frontier instructions
 // that can be executed during the frontier phase.
-func newFrontierInstructionSet() [256]operation {
+func newFrontierInstructionSet() InstructionSet {
 	return [256]operation{
 		STOP: {
 			execute:       opStop,
@@ -493,7 +491,7 @@ func newFrontierInstructionSet() [256]operation {
 		},
 		JUMPDEST: {
 			execute:       opJumpdest,
-			gasCost:       constGasFunc(params.JumpdestGas),
+			gasCost:       constGasFunc(JumpdestGas),
 			validateStack: makeStackFunc(0, 0),
 			valid:         true,
 		},

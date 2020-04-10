@@ -20,9 +20,12 @@ import "errors"
 
 // List execution errors
 var (
-	ErrOutOfGas                 = errors.New("out of gas")
-	ErrCodeStoreOutOfGas        = errors.New("contract creation code storage out of gas")
-	ErrDepth                    = errors.New("max call depth exceeded")
-	ErrInsufficientBalance      = errors.New("insufficient balance for transfer")
-	ErrContractAddressCollision = errors.New("contract address collision")
+	ErrOutOfGas                  = errors.New("out of gas")
+	ErrCodeStoreOutOfGas         = errors.New("contract creation code storage out of gas")
+	ErrDepth                     = errors.New("max call depth exceeded")
+	ErrInsufficientBalance       = errors.New("insufficient balance for transfer")
+	ErrContractAddressCollision  = errors.New("contract address collision")
+	ErrInsufficientBalanceForGas = errors.New("insufficient balance to pay for gas")
+	ErrNonceTooHigh              = errors.New("nonce too high")
+	ErrNonceTooLow               = errors.New("nonce too low")
 )

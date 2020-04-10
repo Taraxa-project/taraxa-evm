@@ -8,49 +8,71 @@ import (
 
 type Hasher struct {
 	state hash_state
-	out   []byte
+	out   *common.Hash
 }
 type hash_state interface {
 	hash.Hash
 	Read([]byte) (int, error)
 }
 
-func NewHasher() *Hasher {
-	return &Hasher{sha3.NewLegacyKeccak256().(hash_state), make([]byte, common.HashLength)}
-}
-
 func (self *Hasher) Write(b ...byte) {
 	self.state.Write(b)
 }
 
-func (self *Hasher) Hash() []byte {
-	self.state.Read(self.out)
+func (self *Hasher) Hash() *common.Hash {
+	self.state.Read(self.out[:])
 	return self.out
 }
 
 func (self *Hasher) Reset() {
 	self.state.Reset()
-	self.out = make([]byte, common.HashLength)
+	self.out = new(common.Hash)
 }
 
+var hashers_resetter SingleThreadExecutor
 var hashers = func() chan *Hasher {
-	ret := make(chan *Hasher, 512)
+	ret := make(chan *Hasher, 1024)
 	for i := 0; i < cap(ret); i++ {
-		ret <- NewHasher()
+		ret <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
 	}
 	return ret
 }()
 
-func Keccak256Pooled(bs ...[]byte) (ret []byte) {
-	hasher := <-hashers
+func GetHasherFromPool() (ret *Hasher) {
+	ret = <-hashers
+	return
+}
+
+func ReturnHasherToPool(hasher *Hasher) {
+	go func() { // TODO
+		hasher.Reset()
+		hashers <- hasher
+	}()
+	//hashers_resetter.Do(func() {
+	//	hasher.Reset()
+	//	hashers <- hasher
+	//})
+}
+
+func Hash(bs ...[]byte) (ret *common.Hash) {
+	hasher := GetHasherFromPool()
 	for _, b := range bs {
 		hasher.Write(b...)
 	}
 	ret = hasher.Hash()
-	go func() {
-		// TODO maybe this an overkill
-		hasher.Reset()
+	ReturnHasherToPool(hasher)
+	return
+}
+
+func HashOnStack(bs ...[]byte) (ret common.Hash) {
+	hasher := GetHasherFromPool()
+	for _, b := range bs {
+		hasher.Write(b...)
+	}
+	hasher.state.Read(ret[:])
+	hashers_resetter.Do(func() {
+		hasher.state.Reset()
 		hashers <- hasher
-	}()
+	})
 	return
 }

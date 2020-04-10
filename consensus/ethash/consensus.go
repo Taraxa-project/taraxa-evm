@@ -18,7 +18,7 @@ package ethash
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core/state"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"math/big"
 )
@@ -36,34 +36,38 @@ var (
 )
 
 type BlockNumAndCoinbase = struct {
-	Number   *big.Int
-	Coinbase common.Address
+	Number types.BlockNum
+	Author common.Address
 }
 
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func AccumulateRewards(config *params.ChainConfig, state *state.StateDB, header *BlockNumAndCoinbase, uncles []*BlockNumAndCoinbase) {
+func AccumulateRewards(
+	rules params.Rules,
+	header BlockNumAndCoinbase,
+	uncles []BlockNumAndCoinbase,
+	add_balance func(common.Address, *big.Int)) {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
-	if config.IsByzantium(header.Number) {
+	if rules.IsByzantium {
 		blockReward = ByzantiumBlockReward
 	}
-	if config.IsConstantinople(header.Number) {
+	if rules.IsConstantinople {
 		blockReward = ConstantinopleBlockReward
 	}
 	// Accumulate the rewards for the miner and any included uncles
+	header_num_big := new(big.Int).SetUint64(header.Number)
 	reward := new(big.Int).Set(blockReward)
 	r := new(big.Int)
 	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
+		r.SetUint64(uncle.Number + 8)
+		r.Sub(r, header_num_big)
 		r.Mul(r, blockReward)
 		r.Div(r, big8)
-		state.AddBalance(uncle.Coinbase, r)
-
+		add_balance(uncle.Author, r)
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
-	state.AddBalance(header.Coinbase, reward)
+	add_balance(header.Author, reward)
 }

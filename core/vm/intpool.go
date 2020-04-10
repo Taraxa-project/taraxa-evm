@@ -23,19 +23,34 @@ import (
 
 const bigint_pool_limit = 512
 
-// intPool is a pool of big integers that
-// can be reused for all big.Int operations.
-type intPool struct {
-	pool *Stack
+var poolOfIntPools = intPoolPool{sync.Pool{New: func() interface{} {
+	return &int_pool{pool: stack{data: make([]*big.Int, 0, bigint_pool_limit)}}
+}}}
+
+// intPoolPool manages a pool of intPools.
+type intPoolPool struct {
+	pool sync.Pool
 }
 
-func newIntPool() *intPool {
-	return &intPool{pool: newstack_w_size(bigint_pool_limit)}
+// get is looking for an available pool to return.
+func (this *intPoolPool) get() *int_pool {
+	return this.pool.Get().(*int_pool)
+}
+
+// put a pool that has been allocated with get.
+func (this *intPoolPool) put(ip *int_pool) {
+	this.pool.Put(ip)
+}
+
+// int_pool is a pool of big integers that
+// can be reused for all big.Int operations.
+type int_pool struct {
+	pool stack
 }
 
 // get retrieves a big int from the pool, allocating one if the pool is empty.
 // Note, the returned int's value is arbitrary and will not be zeroed!
-func (p *intPool) get() *big.Int {
+func (p *int_pool) get() *big.Int {
 	if p.pool.len() > 0 {
 		return p.pool.pop()
 	}
@@ -44,7 +59,7 @@ func (p *intPool) get() *big.Int {
 
 // getZero retrieves a big int from the pool, setting it to zero or allocating
 // a new one if the pool is empty.
-func (p *intPool) getZero() *big.Int {
+func (p *int_pool) getZero() *big.Int {
 	if p.pool.len() > 0 {
 		return p.pool.pop().SetUint64(0)
 	}
@@ -53,7 +68,7 @@ func (p *intPool) getZero() *big.Int {
 
 // put returns an allocated big int to the pool to be later reused by get calls.
 // Note, the values as saved as is; neither put nor get zeroes the ints out!
-func (p *intPool) put(is ...*big.Int) {
+func (p *int_pool) put(is ...*big.Int) {
 	for _, i := range is {
 		if len(p.pool.data) == bigint_pool_limit {
 			return
@@ -61,24 +76,3 @@ func (p *intPool) put(is ...*big.Int) {
 		p.pool.push(i)
 	}
 }
-
-// intPoolPool manages a pool of intPools.
-type intPoolPool struct {
-	pool *sync.Pool
-}
-
-// get is looking for an available pool to return.
-func (this *intPoolPool) get() *intPool {
-	return this.pool.Get().(*intPool)
-}
-
-// put a pool that has been allocated with get.
-func (this *intPoolPool) put(ip *intPool) {
-	this.pool.Put(ip)
-}
-
-var poolOfIntPools = &intPoolPool{&sync.Pool{
-	New: func() interface{} {
-		return newIntPool()
-	},
-}}
