@@ -8,13 +8,15 @@ import (
 )
 
 func StringView(bytes []byte) string {
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
-	return *(*string)(unsafe.Pointer(&reflect.StringHeader{h.Data, h.Len}))
+	return *(*string)(unsafe.Pointer(&reflect.StringHeader{
+		(*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data,
+		len(bytes),
+	}))
 }
 
-func BytesView(str string) []byte {
-	h := (*reflect.StringHeader)(unsafe.Pointer(&str))
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{h.Data, h.Len, h.Len}))
+func BytesView(str string) (ret []byte) {
+	ret = AnyBytes1((*reflect.StringHeader)(unsafe.Pointer(&str)).Data, len(str))
+	return
 }
 
 func HashView(bytes []byte) (ret *common.Hash) {
@@ -26,6 +28,16 @@ func HashView(bytes []byte) (ret *common.Hash) {
 
 func AddrView(bytes []byte) *common.Address {
 	return (*common.Address)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data))
+}
+
+func AnyBytes1(ptr uintptr, length int) (ret []byte) {
+	ret = *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{ptr, length, length}))
+	return
+}
+
+func AnyBytes2(ptr unsafe.Pointer, length int) (ret []byte) {
+	ret = AnyBytes1(uintptr(ptr), length)
+	return
 }
 
 func Concat(s1 []byte, s2 ...byte) []byte {
@@ -102,7 +114,7 @@ func DEC_b_endian_compact_64(b []byte) uint64 {
 	panic("impossible")
 }
 
-func ActualSizeInBytes(i uint64) int {
+func SizeInBytes(i uint64) byte {
 	switch {
 	case i < (1 << 8):
 		return 1

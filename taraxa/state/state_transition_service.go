@@ -1,12 +1,13 @@
 package state
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
 	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/dbg"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -15,48 +16,48 @@ import (
 )
 
 type StateTransitionService struct {
-	last_blk              BlockState
+	db                    PendingBlockDB
 	get_block_hash        vm.GetHashFunc
 	chain_cfg             params.ChainConfig
 	opts_exec             vm.ExecutionOptions
 	disable_block_rewards bool
 	main_tr_w             trie.TrieWriter
 	main_tr_w_executor    util.SingleThreadExecutor
-	util.InitFlag
 }
 
-func (self *StateTransitionService) I(
+func (self *StateTransitionService) Init(
 	db DB,
-	last_blk_num types.BlockNum,
-	get_block_hash vm.GetHashFunc,
-	chain_config params.ChainConfig,
-	opts_exec vm.ExecutionOptions,
-	disable_block_rewards bool,
 	last_root_hash *common.Hash,
 	main_trie_writer_opts trie.TrieWriterOpts,
+	opts_exec vm.ExecutionOptions,
+	disable_block_rewards bool,
+	get_block_hash vm.GetHashFunc,
+	chain_config params.ChainConfig,
 ) *StateTransitionService {
-	self.InitOnce()
-	self.last_blk = BlockState{db, last_blk_num}
+	self.db.db = db
+	self.main_tr_w.Init(MainTrieIOPending{PendingBlockDB: &self.db}, last_root_hash, main_trie_writer_opts)
 	self.get_block_hash = get_block_hash
 	self.chain_cfg = chain_config
 	self.disable_block_rewards = disable_block_rewards
 	self.opts_exec = opts_exec
-	self.main_tr_w.I(MainTrieSchema{}, main_trie_writer_opts, last_root_hash)
 	return self
 }
 
+func (self *StateTransitionService) HashFully() *common.Hash {
+	return self.main_tr_w.HashFully()
+}
+
 func (self *StateTransitionService) ApplyGenesis(accs core.GenesisAlloc) (ret common.Hash) {
-	self.main_tr_w.SetIO(nil, &MainTrieOutput{self.last_blk})
 	for addr, acc := range accs {
 		trie_acc := Account{nonce: acc.Nonce, balance: acc.Balance, code_size: uint64(len(acc.Code))}
 		if trie_acc.code_size != 0 {
 			code_hash := util.Hash(acc.Code)
 			trie_acc.code_hash = code_hash
-			self.last_blk.db.PutCode(code_hash, acc.Code)
+			self.db.db.PutCode(code_hash, acc.Code)
 		}
 		if len(acc.Storage) != 0 {
-			var acc_tr_w acc_tr_w
-			acc_tr_w.I(nil).SetIO(nil, &AccountTrieOutput{self.last_blk, &addr})
+			var acc_tr_w trie.TrieWriter
+			acc_tr_w.Init(AccountTrieIOPending{PendingBlockDB: &self.db, addr: &addr}, nil, trie.TrieWriterOpts{})
 			for k, v := range acc.Storage {
 				v := new(big.Int).SetBytes(v[:])
 				assert.Holds(v.Sign() != 0)
@@ -83,40 +84,40 @@ type StateTransitionResult = struct {
 
 func (self *StateTransitionService) TransitionState(tx_count int, params ...StateTransitionParams) (ret StateTransitionResult) {
 	//ret.ExecutionResults = make([]vm.ExecutionResult, len(param.Transactions))
-	next_blk := BlockState{self.last_blk.db, params[len(params)-1].Block.Number}
-	//next_blk := BlockState{self.last_blk.db, param.Block.Number}
-	self.main_tr_w.SetIO(&MainTrieInput{self.last_blk}, &MainTrieOutput{next_blk})
+	self.db.blk_num = params[len(params)-1].Block.Number
 	pending_accounts := make(map[common.Address]*pending_account, util.CeilPow2(tx_count*2))
 	//pending_accounts := make(map[common.Address]*pending_account, util.CeilPow2(len(param.Transactions)*2))
 	evm_state_sink := EVMStateOutput{
 		OnAccountChanged: func(addr common.Address, change AccountChange) {
-			pending_acc := pending_accounts[addr]
-			if pending_acc == nil {
-				pending_acc = new(pending_account)
-				pending_accounts[addr] = pending_acc
+			acc := pending_accounts[addr]
+			if acc == nil {
+				acc = new(pending_account)
+				pending_accounts[addr] = acc
+				self.main_tr_w_executor.Do(func() {
+					self.main_tr_w.Put(util.Hash(addr[:]), acc)
+				})
 			}
-			pending_acc.executor.Do(func() {
-				pending_acc.acc = change.Account
+			acc.executor.Do(func() {
+				acc.acc = change.Account
 				if change.code_dirty {
-					self.last_blk.db.PutCode(change.code_hash, change.code)
+					self.db.db.PutCode(change.code_hash, change.code)
 				}
 				if len(change.storage_dirty) == 0 {
 					return
 				}
-				if pending_acc.trie_w.IsZero() {
-					pending_acc.trie_w.I(pending_acc.acc.storage_root_hash).
-						SetIO(&AccountTrieInput{self.last_blk, &addr}, &AccountTrieOutput{next_blk, &addr})
+				if acc.trie_w == nil {
+					acc.trie_w = new(trie.TrieWriter).Init(
+						AccountTrieIOPending{PendingBlockDB: &self.db, addr: &addr},
+						acc.acc.storage_root_hash,
+						trie.TrieWriterOpts{AnticipatedDepth: 18})
 				}
 				for k, v := range change.storage_dirty {
 					if v.Sign() == 0 {
-						pending_acc.trie_w.Delete(util.Hash(k[:]))
+						acc.trie_w.Delete(util.Hash(k[:]))
 					} else {
-						pending_acc.trie_w.Put(util.Hash(k[:]), acc_trie_value(v))
+						acc.trie_w.Put(util.Hash(k[:]), acc_trie_value(v))
 					}
 				}
-			})
-			self.main_tr_w_executor.Do(func() {
-				self.main_tr_w.Put(util.Hash(addr[:]), pending_acc)
 			})
 		},
 		OnAccountDeleted: func(addr common.Address) {
@@ -126,7 +127,7 @@ func (self *StateTransitionService) TransitionState(tx_count int, params ...Stat
 			})
 		},
 	}
-	state := NewEVMState(&self.last_blk, EvmStateOpts{
+	state := NewEVMState(&self.db, EvmStateOpts{
 		AccountCacheSize:      len(pending_accounts) * 2,
 		DirtyAccountCacheSize: len(pending_accounts),
 	})
@@ -138,9 +139,23 @@ func (self *StateTransitionService) TransitionState(tx_count int, params ...Stat
 			state.Commit(rules.IsEIP158, evm_state_sink)
 		}
 		for i, cnt := TxIndex(0), TxIndex(len(param.Transactions)); i < cnt; i++ {
-			vm.Main(&evm_cfg, LoggingState{&state}, &param.Transactions[i])
+			if dbg.Debugging {
+				fmt.Println("TX", i)
+			}
+			vm.Main(&evm_cfg, &state, &param.Transactions[i])
 			//ret.ExecutionResults[i] = vm.Main(&evm_cfg, &state, &param.Transactions[i])
 			state.Commit(rules.IsEIP158, evm_state_sink)
+			//for addr, pending_acc := range pending_accounts {
+			//	delete(pending_accounts, addr)
+			//	if pending_acc == nil {
+			//		continue
+			//	}
+			//	if !pending_acc.trie_w.IsZero() {
+			//		pending_acc.acc.storage_root_hash = pending_acc.trie_w.Commit()
+			//	}
+			//	pending_acc.enc_storage, pending_acc.enc_hash = pending_acc.acc.EncodeForTrie()
+			//}
+			//fmt.Println(i, self.main_tr_w.Commit().Hex())
 		}
 		if !self.disable_block_rewards {
 			ethash.AccumulateRewards(
@@ -151,15 +166,16 @@ func (self *StateTransitionService) TransitionState(tx_count int, params ...Stat
 			state.Commit(rules.IsEIP158, evm_state_sink)
 		}
 	}
-	for _, pending_acc := range pending_accounts {
-		if pending_acc == nil {
+	for _, acc := range pending_accounts {
+		if acc == nil {
 			continue
 		}
-		pending_acc.executor.Do(func() {
-			if !pending_acc.trie_w.IsZero() {
-				pending_acc.acc.storage_root_hash = pending_acc.trie_w.Commit()
+		acc := acc
+		acc.executor.Do(func() {
+			if acc.trie_w != nil {
+				acc.acc.storage_root_hash = acc.trie_w.Commit()
 			}
-			pending_acc.enc_storage, pending_acc.enc_hash = pending_acc.acc.EncodeForTrie()
+			acc.enc_storage, acc.enc_hash = acc.acc.EncodeForTrie()
 		})
 	}
 	self.main_tr_w_executor.Do(func() {
@@ -169,28 +185,20 @@ func (self *StateTransitionService) TransitionState(tx_count int, params ...Stat
 			ret.StateRoot = empty_rlp_list_hash
 		}
 	})
-	self.main_tr_w_executor.Join()
-	self.last_blk = next_blk
+	self.main_tr_w_executor.Synchronize()
 	return
 }
 
 type pending_account struct {
 	acc         Account
-	trie_w      acc_tr_w
+	trie_w      *trie.TrieWriter
 	executor    util.SingleThreadExecutor
 	enc_storage []byte
 	enc_hash    []byte
 }
 
 func (self *pending_account) EncodeForTrie() (r0, r1 []byte) {
-	self.executor.Join()
+	self.executor.Synchronize()
 	r0, r1 = self.enc_storage, self.enc_hash
 	return
-}
-
-type acc_tr_w struct{ trie.TrieWriter }
-
-func (self *acc_tr_w) I(root_hash *common.Hash) *acc_tr_w {
-	self.TrieWriter.I(AccountTrieSchema{}, trie.TrieWriterOpts{}, root_hash)
-	return self
 }

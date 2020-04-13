@@ -1,57 +1,48 @@
 package trie
 
-import "github.com/Taraxa-project/taraxa-evm/common"
+import (
+	"github.com/Taraxa-project/taraxa-evm/common"
+)
 
-func (self *TrieWriter) HashFully(root_hash *common.Hash) *common.Hash {
-	if root_hash == nil {
+func (self *TrieWriter) HashFully() *common.Hash {
+	if self.root == nil {
 		return nil
 	}
-	return self.hash_fully((*node_hash)(root_hash), nil, make([]byte, 0, hex_key_len)).common_hash()
+	var kbuf hex_key
+	return self.hash_fully(self.root.get_hash(), &hash_encoder{}, kbuf[:0]).common_hash()
 }
 
-func (self *TrieWriter) hash_fully(n node, ctx *hashing_ctx, prefix []byte) *node_hash {
-	is_root := ctx == nil
-	if is_root {
-		ctx = ctx_pool.Get().(*hashing_ctx)
-		defer ctx_pool.Put(ctx)
-		defer ctx.reset()
-	}
+func (self *TrieWriter) hash_fully(n node, enc *hash_encoder, prefix []byte) (ret *node_hash) {
+	is_root := len(prefix) == 0
 	switch n := n.(type) {
 	case *node_hash:
-		return self.hash_fully(self.resolve(n, prefix), ctx, prefix)
+		return self.hash_fully(self.resolve(n, prefix), enc, prefix)
 	case *short_node:
-		hash_list := ctx.hash_list_start()
-		hashed_key_ext := hex_to_compact(n.key_part, &ctx.hex_key_compact_buf)
-		ctx.hash_append_string(hashed_key_ext)
-		val, has_val := n.val.(value_node)
-		if has_val {
-			if !ctx.disable_hashing {
-				if val.Value == nil {
-					val = self.get_val_node_by_hex_k(append(prefix, n.key_part...))
-				}
-				_, enc_hash := val.EncodeForTrie()
-				ctx.hash_append_string(enc_hash)
+		hash_list := enc.ListStart()
+		enc.AppendString(hex_to_compact(n.key_part, &hex_key_compact{}))
+		if val_n, has_val := n.val.(value_node); has_val {
+			if val_n == nil_val_node {
+				val_n = self.get_val_node_by_hex_k(append(prefix, n.key_part...))
 			}
+			_, enc_hash := val_n.val.EncodeForTrie()
+			enc.AppendString(enc_hash)
 		} else {
-			self.hash_fully(n.val, ctx, append(prefix, n.key_part...))
+			self.hash_fully(n.val, enc, append(prefix, n.key_part...))
 		}
-		var h *node_hash
-		ctx.hash_list_end(&h, hash_list, is_root)
-		return h
+		enc.ListEnd(hash_list, is_root, &ret)
+		return
 	case *full_node:
-		hash_list := ctx.hash_list_start()
-		for i := 0; i < 16; i++ {
+		hash_list := enc.ListStart()
+		for i := 0; i < full_node_child_cnt; i++ {
 			if c := n.children[i]; c != nil {
-				self.hash_fully(c, ctx, append(prefix, byte(i)))
+				self.hash_fully(c, enc, append(prefix, byte(i)))
 			} else {
-				ctx.hash_append_string(nil)
+				enc.AppendString(nil)
 			}
 		}
-		ctx.hash_append_string(nil)
-		var h *node_hash
-		ctx.hash_list_end(&h, hash_list, is_root)
-		return h
-	default:
-		panic("impossible")
+		enc.AppendString(nil)
+		enc.ListEnd(hash_list, is_root, &ret)
+		return
 	}
+	panic("impossible")
 }

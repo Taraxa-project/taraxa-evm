@@ -2,8 +2,6 @@ package util
 
 import "github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 
-var Initialized = InitFlag{true}
-
 type InitFlag struct {
 	initialized bool
 }

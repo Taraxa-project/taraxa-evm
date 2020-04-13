@@ -22,8 +22,6 @@ import (
 )
 
 type DaoForkTarget = interface {
-	Exist(common.Address) bool
-	CreateAccount(common.Address)
 	GetBalance(common.Address) *big.Int
 	AddBalance(common.Address, *big.Int)
 	SubBalance(common.Address, *big.Int)
@@ -33,10 +31,6 @@ type DaoForkTarget = interface {
 // rules, transferring all balances of a set of DAO accounts to a single refund
 // contract.
 func ApplyDAOHardFork(db DaoForkTarget) {
-	// Retrieve the contract to refund balances into
-	if !db.Exist(DAORefundContract) {
-		db.CreateAccount(DAORefundContract)
-	}
 	// Move every DAO account and extra-balance account funds into the refund contract
 	for _, addr := range DAODrainList() {
 		bal := db.GetBalance(addr)

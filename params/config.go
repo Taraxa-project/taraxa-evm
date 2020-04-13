@@ -23,21 +23,19 @@ var (
 		HomesteadBlock:      1150000,
 		DAOForkBlock:        1920000,
 		EIP150Block:         2463000,
-		EIP155Block:         2675000,
 		EIP158Block:         2675000,
 		ByzantiumBlock:      4370000,
 		ConstantinopleBlock: 7280000,
 		PetersburgBlock:     7280000,
 	}
-	TestChainConfig = &ChainConfig{0, types.BlockNumberNil, 0, 0, 0, 0, 0, 0}
+	TestChainConfig = &ChainConfig{DAOForkBlock: types.BlockNumberNil}
 )
 
 type ChainConfig struct {
 	HomesteadBlock types.BlockNum `json:"homesteadBlock,omitempty"` // Homestead switch block (nil = no fork, 0 = already homestead)
 	DAOForkBlock   types.BlockNum `json:"daoForkBlock,omitempty"`   // TheDAO hard-fork switch block (nil = no fork)
-	// EIP150 implements the Gas price changes (https://github.com/ethereum/EIPs/issues/150)
+	// EIP150 implements the Gas price changes (https://github.com/ethereum/EIPs/issues/150)dfwe
 	EIP150Block         types.BlockNum `json:"eip150Block,omitempty"`         // EIP150 HF block (nil = no fork)
-	EIP155Block         types.BlockNum `json:"eip155Block,omitempty"`         // EIP155 HF block
 	EIP158Block         types.BlockNum `json:"eip158Block,omitempty"`         // EIP158 HF block
 	ByzantiumBlock      types.BlockNum `json:"byzantiumBlock,omitempty"`      // Byzantium switch block (nil = no fork, 0 = already on byzantium)
 	ConstantinopleBlock types.BlockNum `json:"constantinopleBlock,omitempty"` // Constantinople switch block (nil = no fork, 0 = already activated)
@@ -52,14 +50,13 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 }
 
 type Rules struct {
-	IsHomestead, IsEIP150, IsEIP155, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg, IsDAOFork bool
+	IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg, IsDAOFork bool
 }
 
 func (c *ChainConfig) Rules(num types.BlockNum) Rules {
 	return Rules{
 		IsHomestead:      isForked(c.HomesteadBlock, num),
 		IsEIP150:         isForked(c.EIP150Block, num),
-		IsEIP155:         isForked(c.EIP155Block, num),
 		IsEIP158:         isForked(c.EIP158Block, num),
 		IsByzantium:      isForked(c.ByzantiumBlock, num),
 		IsConstantinople: isForked(c.ConstantinopleBlock, num),

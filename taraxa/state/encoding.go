@@ -10,13 +10,15 @@ import (
 )
 
 var acc_encoder_pool = sync.Pool{New: func() interface{} {
-	return rlp.NewEncoder(rlp.EncoderConfig{1 << 8, 1})
+	ret := new(rlp.Encoder)
+	ret.ResizeReset(1<<8, 1)
+	return ret
 }}
 
 func take_acc_encoder() (ret *rlp.Encoder) {
 	ret = acc_encoder_pool.Get().(*rlp.Encoder)
 	ret.Reset()
-	return
+	return ret
 }
 
 func return_acc_encoder(encoder *rlp.Encoder) {

@@ -19,8 +19,10 @@ package rlp
 import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"io"
+	"math"
 	"math/big"
 	"reflect"
 	"sync"
@@ -98,7 +100,7 @@ func Encode(w io.Writer, val interface{}) (err error) {
 			panic(rec)
 		}
 	}()
-	eb.Flush(nil, func(b ...byte) {
+	eb.Flush(-1, func(b ...byte) {
 		if _, err = w.Write(b); err != nil {
 			panic(err)
 		}
@@ -115,7 +117,7 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 	if err := eb.AppendAny(val); err != nil {
 		return nil, err
 	}
-	return eb.ToBytes(nil), nil
+	return eb.ToBytes(-1), nil
 }
 
 func BytesAppender(b *[]byte) func(...byte) {
@@ -125,20 +127,99 @@ func BytesAppender(b *[]byte) func(...byte) {
 }
 
 type Encoder struct {
-	str    []byte      // string data, contains everything except list headers
-	lheads []*ListHead // all list headers
-	lhsize int         // sum of sizes of all encoded list headers
+	str    []byte     // string data, contains everything except list headers
+	lheads []ListHead // all list headers
+	lhsize uint32     // sum of sizes of all encoded list headers
 }
-type EncoderConfig struct {
-	StringBufferCap   int
-	ListHeadBufferCap int
+type ListHead = struct {
+	strpos      uint32
+	base_lhsize uint32
+	elems_size  uint32
+	closed      bool
 }
 
-func NewEncoder(cfg EncoderConfig) *Encoder {
-	return &Encoder{
-		str:    make([]byte, 0, cfg.StringBufferCap),
-		lheads: make([]*ListHead, 0, cfg.ListHeadBufferCap),
+func (self *Encoder) Reset() {
+	self.str = self.str[:0]
+	self.lheads = self.lheads[:0]
+	self.lhsize = 0
+}
+
+func (self *Encoder) ResizeReset(string_buf_cap, list_buf_cap int) {
+	self.str = make([]byte, 0, string_buf_cap)
+	self.lheads = make([]ListHead, 0, list_buf_cap)
+	self.lhsize = 0
+}
+
+func (self *Encoder) ListsCount() int {
+	return cap(self.lheads)
+}
+
+func (self *Encoder) Size() uint32 {
+	return uint32(len(self.str)) + self.lhsize
+}
+
+func (self *Encoder) ListSize(list_pos int) uint32 {
+	if lh := self.lheads[list_pos]; lh.closed {
+		return lh.elems_size + uint32(headsize(uint64(lh.elems_size)))
 	}
+	panic("list is not closed")
+}
+
+func (self *Encoder) ListStart() (list_pos int) {
+	list_pos = len(self.lheads)
+	self.lheads = append(self.lheads, ListHead{strpos: uint32(len(self.str)), base_lhsize: self.lhsize})
+	return
+}
+
+func (self *Encoder) ListEnd(list_pos int) {
+	if lh := &self.lheads[list_pos]; !lh.closed {
+		lh.elems_size = self.Size() - lh.strpos - lh.base_lhsize
+		self.lhsize += uint32(headsize(uint64(lh.elems_size)))
+		lh.closed = true
+		return
+	}
+	panic("list is already closed")
+}
+
+func (self *Encoder) RevertToListStart(list_pos int) {
+	lh := self.lheads[list_pos]
+	self.lheads = self.lheads[:list_pos]
+	self.str = self.str[:lh.strpos]
+	self.lhsize = lh.base_lhsize
+}
+
+func (self *Encoder) Flush(list_pos int, appender func(...byte)) {
+	strpos := uint32(0)
+	if list_pos != -1 {
+		strpos = self.lheads[list_pos].strpos
+	} else {
+		list_pos = 0
+	}
+	for _, lh := range self.lheads[list_pos:] {
+		appender(self.str[strpos:lh.strpos]...)
+		strpos = lh.strpos
+		if !lh.closed {
+			panic("the list is not closed")
+		}
+		puthead(appender, 0xC0, 0xF7, uint64(lh.elems_size))
+	}
+	appender(self.str[strpos:]...)
+}
+
+func (self *Encoder) FlushToBytes(list_pos int, buf []byte) []byte {
+	self.Flush(list_pos, func(b ...byte) {
+		buf = append(buf, b...)
+	})
+	return buf
+}
+
+func (self *Encoder) ToBytes(list_pos int) []byte {
+	capacity := self.Size()
+	if list_pos != -1 {
+		lhead := self.lheads[list_pos]
+		capacity -= (lhead.strpos + lhead.base_lhsize)
+	}
+	return self.FlushToBytes(list_pos, make([]byte, 0, capacity))
 }
 
 // Encoder implements io.Writer so it can be passed it into EncodeRLP.
@@ -147,80 +228,13 @@ func (self *Encoder) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-type ListHead struct {
-	ordinal     int
-	strpos      int
-	base_lhsize int
-	elems_size  int
-}
-
-// append_size_to writes head to the given buffer, which must be at least
-// 9 bytes long. It returns the encoded bytes.
-func (self *ListHead) append_size_to(appender func(...byte)) {
-	if self.elems_size < 0 {
-		panic("the list is not finished")
-	}
-	puthead(appender, 0xC0, 0xF7, uint64(self.elems_size))
-}
-
-func (self *ListHead) Size() int {
-	if self.elems_size == -1 {
-		panic("list is not closed")
-	}
-	return self.elems_size + headsize(uint64(self.elems_size))
-}
-
-func (self *Encoder) ListStart() *ListHead {
-	lh := &ListHead{ordinal: len(self.lheads), strpos: len(self.str), base_lhsize: self.lhsize, elems_size: -1}
-	self.lheads = append(self.lheads, lh)
-	return lh
-}
-
-func (self *Encoder) ListEnd(lh *ListHead) {
-	if lh.elems_size != -1 {
-		panic("list is already closed")
-	}
-	lh.elems_size = self.Size() - lh.strpos - lh.base_lhsize
-	self.lhsize += headsize(uint64(lh.elems_size))
-}
-
-func (self *Encoder) EraseSince(lh *ListHead) {
-	self.str = self.str[:lh.strpos]
-	self.lheads = self.lheads[:lh.ordinal]
-	self.lhsize = lh.base_lhsize
-	// TODO maybe remove
-	lh.ordinal = -2
-}
-
 func (self *Encoder) AppendRaw(b ...byte) {
+	assert.Holds(math.MaxUint32-len(self.str) > len(b))
 	self.str = append(self.str, b...)
 }
 
 func (self *Encoder) AppendEmptyString() {
 	self.AppendRaw(EmptyString)
-}
-
-func ToRLPStringSimple(str []byte) []byte {
-	size := len(str)
-	ret := make([]byte, 0, size+bin.ActualSizeInBytes(uint64(size))+1)
-	ToRLPString(str, func(b ...byte) {
-		ret = append(ret, b...)
-	})
-	return ret
-}
-
-func ToRLPString(str []byte, appender func(...byte)) {
-	if size := len(str); size == 1 && str[0] <= 0x7F {
-		// fits single byte, no string header
-		appender(str[0])
-	} else {
-		if size < 56 {
-			appender(EmptyString + byte(size))
-		} else {
-			putint(appender, uint64(size), 0xB7)
-		}
-		appender(str...)
-	}
 }
 
 func (self *Encoder) AppendString(str []byte) {
@@ -261,54 +275,36 @@ func (self *Encoder) AppendAny(val interface{}) error {
 	return ti.writer(rval, self)
 }
 
-func (self *Encoder) Size() int {
-	return len(self.str) + self.lhsize
-}
-
-func (self *Encoder) Reset() {
-	self.str = self.str[:0]
-	self.lheads = self.lheads[:0]
-	self.lhsize = 0
-}
-
-func (self *Encoder) Flush(since *ListHead, appender func(...byte)) {
-	strpos := 0
-	lheads_offset := 0
-	if since != nil {
-		strpos = since.strpos
-		lheads_offset = since.ordinal + 1
-		since.append_size_to(appender)
-	}
-	for _, head := range self.lheads[lheads_offset:] {
-		appender(self.str[strpos:head.strpos]...)
-		strpos = head.strpos
-		head.append_size_to(appender)
-	}
-	appender(self.str[strpos:]...)
-}
-
-func (self *Encoder) FlushToBytes(since *ListHead, buf []byte) []byte {
-	self.Flush(since, func(b ...byte) {
-		buf = append(buf, b...)
+func ToRLPStringSimple(str []byte) (ret []byte) {
+	size := len(str)
+	ret = make([]byte, 0, size+int(bin.SizeInBytes(uint64(size))+1))
+	ToRLPString(str, func(b ...byte) {
+		ret = append(ret, b...)
 	})
-	return buf
+	return ret
 }
 
-func (self *Encoder) ToBytes(since *ListHead) []byte {
-	capacity := self.Size()
-	if since != nil {
-		capacity -= (since.strpos + since.base_lhsize)
+func ToRLPString(str []byte, appender func(...byte)) {
+	if size := len(str); size == 1 && str[0] <= 0x7F {
+		// fits single byte, no string header
+		appender(str[0])
+	} else {
+		if size < 56 {
+			appender(EmptyString + byte(size))
+		} else {
+			putint(appender, uint64(size), 0xB7)
+		}
+		appender(str...)
 	}
-	return self.FlushToBytes(since, make([]byte, 0, capacity))
 }
 
 // headsize returns the size of a list or string header
 // for a value of the given size.
-func headsize(size uint64) int {
+func headsize(size uint64) byte {
 	if size < 56 {
 		return 1
 	}
-	return 1 + bin.ActualSizeInBytes(size)
+	return 1 + bin.SizeInBytes(size)
 }
 
 // puthead writes a list or string header to buf.

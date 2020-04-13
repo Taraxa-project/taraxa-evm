@@ -41,7 +41,6 @@ type State interface {
 	// is defined according to EIP161 (balance = nonce = code = 0).
 	Empty(common.Address) bool
 
-	CreateAccount(common.Address)
 	SetCode(common.Address, []byte)
 	AddBalance(common.Address, *big.Int)
 	SubBalance(common.Address, *big.Int)

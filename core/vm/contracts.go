@@ -58,10 +58,10 @@ var PrecompiledContractsByzantium = Precompiles{
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
-func RunPrecompiledContract(p PrecompiledContract, contract *Contract) (ret []byte, err error) {
-	gas := p.RequiredGas(contract.Input)
+func RunPrecompiledContract(contract *Contract) (ret []byte, err error) {
+	gas := contract.precompiled.RequiredGas(contract.Input)
 	if contract.UseGas(gas) {
-		return p.Run(contract.Input)
+		return contract.precompiled.Run(contract.Input)
 	}
 	return nil, ErrOutOfGas
 }

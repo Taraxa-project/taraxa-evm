@@ -52,10 +52,10 @@ type Contract struct {
 	jumpdests map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
 	analysis  bitvec                 // Locally cached result of JUMPDEST analysis
 
-	Code     []byte
-	CodeHash common.Hash
-	CodeAddr common.Address
-	Input    []byte
+	Code        []byte
+	CodeHash    common.Hash
+	precompiled PrecompiledContract
+	Input       []byte
 
 	Gas   uint64
 	value *big.Int
@@ -169,16 +169,7 @@ func (c *Contract) Value() *big.Int {
 
 // SetCallCode sets the code of the contract and address of the backing data
 // object
-func (c *Contract) SetCallCode(addr common.Address, hash common.Hash, code []byte) {
+func (c *Contract) SetCallCode(hash common.Hash, code []byte) {
 	c.Code = code
 	c.CodeHash = hash
-	c.CodeAddr = addr
-}
-
-// SetCodeOptionalHash can be used to provide code, but it's optional to provide hash.
-// In case hash is not provided, the jumpdest analysis will not be saved to the parent context
-func (c *Contract) SetCodeOptionalHash(addr common.Address, codeAndHash codeAndHash) {
-	c.Code = codeAndHash.code
-	c.CodeHash = codeAndHash.hash
-	c.CodeAddr = addr
 }

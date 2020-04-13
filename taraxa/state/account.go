@@ -17,7 +17,7 @@ type Account struct {
 	code_size         uint64
 }
 
-func (self *Account) I_FromStorageEncoding(enc_storage []byte) (ret *Account) {
+func (self *Account) I_from_storage_encoding(enc_storage []byte) (ret *Account) {
 	rest, curr, err := rlp.SplitList(enc_storage)
 	util.PanicIfNotNil(err)
 	curr, rest, err = rlp.SplitString(rest)
@@ -59,7 +59,7 @@ func (self *Account) EncodeForTrie() (enc_storage, enc_hash []byte) {
 	}
 	encoder.AppendUint(self.code_size)
 	encoder.ListEnd(storage_rlp_list)
-	enc_storage = encoder.ToBytes(nil)
+	enc_storage = encoder.ToBytes(-1)
 	encoder.Reset()
 	hash_rlp_list := encoder.ListStart()
 	encoder.AppendUint(self.nonce)
@@ -75,7 +75,7 @@ func (self *Account) EncodeForTrie() (enc_storage, enc_hash []byte) {
 		encoder.AppendString(crypto.EmptyBytesKeccak256[:])
 	}
 	encoder.ListEnd(hash_rlp_list)
-	enc_hash = encoder.ToBytes(nil)
+	enc_hash = encoder.ToBytes(-1)
 	return_acc_encoder(encoder)
 	return
 }

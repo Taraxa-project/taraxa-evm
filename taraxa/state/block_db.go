@@ -10,26 +10,26 @@ import (
 	"math/big"
 )
 
-type BlockState struct {
+type BlockDB struct {
 	db      DB
 	blk_num types.BlockNum
 }
 
-func (self *BlockState) GetCode(code_hash *common.Hash) (ret []byte) {
+func (self *BlockDB) GetCode(code_hash *common.Hash) (ret []byte) {
 	ret = self.db.GetCode(code_hash)
 	return
 }
 
-func (self *BlockState) GetAccount(addr *common.Address) (ret Account, present bool) {
+func (self *BlockDB) GetAccount(addr *common.Address) (ret Account, present bool) {
 	enc_storage := self.GetAccountStorageEncoding(addr)
 	if present = len(enc_storage) != 0; present {
-		ret.I_FromStorageEncoding(enc_storage)
+		ret.I_from_storage_encoding(enc_storage)
 	}
 	return
 }
 
-func (self *BlockState) GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int {
-	if enc_storage := self.GetStorage(addr, key); len(enc_storage) != 0 {
+func (self *BlockDB) GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int {
+	if enc_storage := self.GetAccountStorageRaw(addr, key); len(enc_storage) != 0 {
 		return new(big.Int).SetBytes(enc_storage)
 	}
 	return common.Big0
@@ -40,9 +40,8 @@ type Proof = struct {
 	StorageProofs []trie.Proof
 }
 
-func (self *BlockState) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
-	addr_hash := util.HashOnStack(addr[:])
-	ret.AccountProof = trie.Prove(MainTrieSchema{}, state_root, &MainTrieInput{*self}, &addr_hash)
+func (self *BlockDB) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
+	ret.AccountProof = trie.Prove(MainTrieInputHistorical{BlockDB: self}, state_root, util.Hash(addr[:]))
 	if len(ret.AccountProof.Value) == 0 || len(keys) == 0 {
 		return
 	}
@@ -52,27 +51,26 @@ func (self *BlockState) Prove(state_root *common.Hash, addr *common.Address, key
 	if len(storage_root) == 0 {
 		return
 	}
-	acc_tr_input_reader := &AccountTrieInput{*self, addr}
+	acc_tr_input := AccountTrieInputHistorical{BlockDB: self, addr: addr}
 	storage_root_h := bin.HashView(storage_root)
 	for i := 0; i < len(keys); i++ {
-		key_hash := util.HashOnStack(keys[i][:])
-		ret.StorageProofs[i] = trie.Prove(AccountTrieSchema{}, storage_root_h, acc_tr_input_reader, &key_hash)
+		ret.StorageProofs[i] = trie.Prove(acc_tr_input, storage_root_h, util.Hash(keys[i][:]))
 	}
 	return
 }
 
-func (self *BlockState) GetAccountStorageEncoding(addr *common.Address) []byte {
+func (self *BlockDB) GetAccountStorageEncoding(addr *common.Address) []byte {
 	return self.db.GetMainTrieValue(self.blk_num, util.Hash(addr[:]))
 }
 
-func (self *BlockState) GetAccountEthEncoding(addr *common.Address) (ret []byte) {
+func (self *BlockDB) GetAccountEthEncoding(addr *common.Address) (ret []byte) {
 	if val := self.GetAccountStorageEncoding(addr); len(val) != 0 {
 		ret = MainTrieSchema{}.ValueStorageToHashEncoding(val)
 	}
 	return
 }
 
-func (self *BlockState) GetStorage(addr *common.Address, key *common.Hash) (ret []byte) {
+func (self *BlockDB) GetAccountStorageRaw(addr *common.Address, key *common.Hash) (ret []byte) {
 	key_hash := util.HashOnStack(key[:])
 	if ret = self.db.GetAccountTrieValue(self.blk_num, addr, &key_hash); len(ret) == 0 {
 		return
@@ -82,7 +80,7 @@ func (self *BlockState) GetStorage(addr *common.Address, key *common.Hash) (ret 
 	return
 }
 
-func (self *BlockState) GetCodeByAddress(addr *common.Address) (ret []byte) {
+func (self *BlockDB) GetCodeByAddress(addr *common.Address) (ret []byte) {
 	acc := self.GetAccountStorageEncoding(addr)
 	if len(acc) == 0 {
 		return

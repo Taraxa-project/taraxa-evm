@@ -542,16 +542,16 @@ func opGasprice(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	return nil, nil
 }
 
-func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error) {
-	num := stack.pop()
-	if evm.blk.Number > 257 && num.IsUint64() {
-		if num_64 := num.Uint64(); num_64 < evm.blk.Number {
+func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) (_ []byte, _ error) {
+	if num := stack.pop(); num.IsUint64() {
+		num_64 := num.Uint64()
+		if evm.blk.Number-257 < num_64 && num_64 < evm.blk.Number {
 			stack.push(evm.get_hash(num_64))
-			return nil, nil
+			return
 		}
 	}
 	stack.push(evm.int_pool.getZero())
-	return nil, nil
+	return
 }
 
 func opCoinbase(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error) {

@@ -31,7 +31,7 @@ func (self *Hasher) Reset() {
 
 var hashers_resetter SingleThreadExecutor
 var hashers = func() chan *Hasher {
-	ret := make(chan *Hasher, 1024)
+	ret := make(chan *Hasher, 2*1024)
 	for i := 0; i < cap(ret); i++ {
 		ret <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
 	}
@@ -44,14 +44,14 @@ func GetHasherFromPool() (ret *Hasher) {
 }
 
 func ReturnHasherToPool(hasher *Hasher) {
-	go func() { // TODO
-		hasher.Reset()
-		hashers <- hasher
-	}()
-	//hashers_resetter.Do(func() {
+	//go func() {
 	//	hasher.Reset()
 	//	hashers <- hasher
-	//})
+	//}()
+	hashers_resetter.Do(func() {
+		hasher.Reset()
+		hashers <- hasher
+	})
 }
 
 func Hash(bs ...[]byte) (ret *common.Hash) {
@@ -70,6 +70,10 @@ func HashOnStack(bs ...[]byte) (ret common.Hash) {
 		hasher.Write(b...)
 	}
 	hasher.state.Read(ret[:])
+	//go func() {
+	//	hasher.state.Reset()
+	//	hashers <- hasher
+	//}()
 	hashers_resetter.Do(func() {
 		hasher.state.Reset()
 		hashers <- hasher

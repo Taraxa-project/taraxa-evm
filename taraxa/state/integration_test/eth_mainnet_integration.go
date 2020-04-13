@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/dbg"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_rocksdb"
@@ -31,13 +32,20 @@ import (
 )
 
 func main() {
-	usr_dir, err := os.UserHomeDir()
-	util.PanicIfNotNil(err)
-	dest_data_dir := mkdirp(usr_dir + "/taraxa_evm_data")
+	var last_block_key = bin.BytesView("last_block")
 
-	debug.SetGCPercent(-1)
-	var max_heap_size uint64
-	var mem_stats runtime.MemStats
+	var profiling = false
+	var disable_gc = true
+
+	//usr_dir, err := os.UserHomeDir()
+	//util.PanicIfNotNil(err)
+	dest_data_dir := mkdirp("/Users/compuktor/taraxa_evm_data")
+
+	if disable_gc {
+		debug.SetGCPercent(-1)
+	}
+	//var max_heap_size uint64
+	//var mem_stats runtime.MemStats
 
 	//go func() {
 	//	util.PanicIfNotNil(http.ListenAndServe("localhost:6060", nil))
@@ -68,7 +76,6 @@ func main() {
 	//		}
 	//	}
 	//}()
-	profiling := false
 	profile_basedir := mkdirp(dest_data_dir + "/profiles/")
 	util.PanicIfNotNil(exec.Command("mkdir", "-p", profile_basedir).Run())
 	util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
@@ -81,18 +88,6 @@ func main() {
 	if profiling {
 		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
 	}
-	write_reset_profiles := func(start_time time.Time) {
-		if !profiling {
-			return
-		}
-		fmt.Println("writing profiles...")
-		pprof.StopCPUProfile()
-		for _, prof := range pprof.Profiles() {
-			prof.WriteTo(new_prof_file(last_profile_snapshot_time, prof.Name()), 1)
-		}
-		last_profile_snapshot_time = start_time
-		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
-	}
 
 	opts_w_default := gorocksdb.NewDefaultWriteOptions()
 	opts_r_default := gorocksdb.NewDefaultReadOptions()
@@ -102,14 +97,14 @@ func main() {
 	blk_db_opts.SetCreateIfMissingColumnFamilies(true)
 	blk_db_opts.IncreaseParallelism(runtime.NumCPU())
 	blk_db_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
-	blk_db_opts.SetMaxOpenFiles(8192)
-	blk_db_opts.OptimizeForPointLookup(1024)
+	//blk_db_opts.SetMaxOpenFiles(8192)
+	//blk_db_opts.OptimizeForPointLookup(1024)
+	blk_db_opts.SetMaxOpenFiles(1024)
 	blk_db, e0 := gorocksdb.OpenDbForReadOnly(
 		blk_db_opts,
 		"/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/blockchain",
 		false)
 	util.PanicIfNotNil(e0)
-	defer blk_db.Close()
 
 	type Transaction = struct {
 		From     common.Address  `json:"from" gencodec:"required"`
@@ -140,22 +135,22 @@ func main() {
 	}
 
 	getBlockByNumber := func(block_num types.BlockNum) *BlockInfo {
-		key := []byte(fmt.Sprintf("%09d", block_num))
-		block_json, err := blk_db.GetBytes(opts_r_default, key)
+		block_json, err := blk_db.GetPinned(opts_r_default, bin.BytesView(fmt.Sprintf("%09d", block_num)))
 		util.PanicIfNotNil(err)
 		ret := new(BlockInfo)
-		util.PanicIfNotNil(json.Unmarshal(block_json, ret))
+		util.PanicIfNotNil(json.Unmarshal(block_json.Data(), ret))
+		block_json.Destroy()
 		return ret
 	}
 
-	db_opts := gorocksdb.NewDefaultOptions()
-	db_opts.SetErrorIfExists(false)
-	db_opts.SetCreateIfMissing(true)
-	db_opts.SetCreateIfMissingColumnFamilies(true)
-	db_opts.IncreaseParallelism(runtime.NumCPU())
-	db_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
-	db_opts.SetMaxOpenFiles(7000)
-	const col_cnt = 6
+	statedb_opts := gorocksdb.NewDefaultOptions()
+	statedb_opts.SetErrorIfExists(false)
+	statedb_opts.SetCreateIfMissing(true)
+	statedb_opts.SetCreateIfMissingColumnFamilies(true)
+	statedb_opts.IncreaseParallelism(runtime.NumCPU())
+	statedb_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
+	statedb_opts.SetMaxOpenFiles(8192)
+	const col_cnt = 8
 	cfnames, cfopts := [col_cnt]string{}, [col_cnt]*gorocksdb.Options{}
 	for i := 0; i < col_cnt; i++ {
 		if i == 0 {
@@ -165,70 +160,92 @@ func main() {
 		}
 		cfopts[i] = gorocksdb.NewDefaultOptions()
 	}
-	db, cols, e1 := gorocksdb.OpenDbColumnFamilies(db_opts, mkdirp(dest_data_dir+"/foo"), cfnames[:], cfopts[:])
+	db, cols, e1 := gorocksdb.OpenDbColumnFamilies(statedb_opts, mkdirp(dest_data_dir+"/WIP_1"), cfnames[:], cfopts[:])
 	util.PanicIfNotNil(e1)
 	defer db.Close()
+	var state_db state_rocksdb.RocksDBStateDB
+	state_db.Init(db, state_rocksdb.Columns{
+		COL_code:                   cols[1],
+		COL_main_trie_node:         cols[2],
+		COL_main_trie_value:        cols[3],
+		COL_main_trie_value_latest: cols[4],
+		COL_acc_trie_node:          cols[5],
+		COL_acc_trie_value:         cols[6],
+		COL_acc_trie_value_latest:  cols[7],
+	})
 
 	var last_blk_num types.BlockNum
 	var last_root *common.Hash
-	last_block_num_b, err := db.GetBytes(opts_r_default, bin.BytesView("last_block"))
+	last_block_num_b, err := db.GetBytes(opts_r_default, last_block_key)
 	util.PanicIfNotNil(err)
 	if len(last_block_num_b) != 0 {
+		//last_blk_num = 1000000
 		last_blk_num = bin.DEC_b_endian_64(last_block_num_b)
 		last_root = &getBlockByNumber(last_blk_num).StateRoot
 	}
-	var state_db state_rocksdb.RocksDBStateDB
-	state_db.I(db, state_rocksdb.Columns{cols[1], cols[2], cols[3], cols[4], cols[5]})
-	state_api := new(state.API).I(
+	//for i := types.BlockNum(2670000); ; i++ {
+	//	last_blk_num = i
+	//	last_root = &getBlockByNumber(last_blk_num).StateRoot
+	//	if len(state_db.GetMainTrieNode(last_root)) != 0 {
+	//		break
+	//	}
+	//}
+
+	var state_transition_service state.StateTransitionService
+	state_transition_service.Init(
 		&state_db,
-		func(num types.BlockNum) *big.Int {
-			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
+		last_root,
+		trie.TrieWriterOpts{
+			FullNodeLevelsToCache: 5,
+			AnticipatedDepth:      trie.MaxDepth,
 		},
-		*params.MainnetChainConfig,
 		vm.ExecutionOptions{},
 		false,
-		last_blk_num,
-		last_root,
-		trie.TrieWriterOpts{},
+		func(num types.BlockNum) *big.Int {
+			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
+		}, *params.MainnetChainConfig,
 	)
-	state_transition_service := state_api.GetStateTransitionService()
 	if last_root == nil {
 		batch := gorocksdb.NewWriteBatch()
-		state_db.BatchBegin(batch)
+		state_db.TransactionBegin(batch)
 		root := state_transition_service.ApplyGenesis(core.MainnetGenesis().Alloc)
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
-		batch.Put(bin.BytesView("last_block"), bin.ENC_b_endian_64(0))
-		state_db.BatchDone()
+		batch.Put(last_block_key, bin.ENC_b_endian_64(0))
+		state_db.TransactionEnd()
 		util.PanicIfNotNil(db.Write(opts_w_default, batch))
 	}
 
-	min_tx_to_execute := 0
-	blocks := make(chan *BlockInfo, min_tx_to_execute/10+3)
-	block_load_requests := make(chan byte, cap(blocks))
+	min_tx_to_execute := 20000
+	block_chan := make(chan *BlockInfo, min_tx_to_execute/25+2)
+	block_load_requests := make(chan byte, cap(block_chan))
 	defer close(block_load_requests)
 	go func() {
-		defer close(blocks)
+		defer close(block_chan)
+		defer blk_db.Close()
 		next_to_load := last_blk_num + 1
-		for i := 0; i < cap(blocks); i++ {
-			blocks <- getBlockByNumber(next_to_load)
+		for i := 0; i < cap(block_chan); i++ {
+			block_chan <- getBlockByNumber(next_to_load)
 			next_to_load++
 		}
 		for {
 			if _, ok := <-block_load_requests; !ok {
 				break
 			}
-			blocks <- getBlockByNumber(next_to_load)
+			block_chan <- getBlockByNumber(next_to_load)
 			next_to_load++
 		}
 	}()
 
+	dbg.DebugState = true
+	dbg.DebugEVM = true
+
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
-	block_buf := make([]*BlockInfo, 0, 1<<8)
+	block_buf := make([]*BlockInfo, 0, cap(block_chan))
 	for {
 		tx_count := 0
 		for {
 			block_load_requests <- 0
-			last_block := <-blocks
+			last_block := <-block_chan
 			block_buf = append(block_buf, last_block)
 			tx_count += len(last_block.Transactions)
 			if tx_count >= min_tx_to_execute {
@@ -236,7 +253,7 @@ func main() {
 			}
 		}
 		batch := gorocksdb.NewWriteBatch()
-		state_db.BatchBegin(batch)
+		state_db.TransactionBegin(batch)
 		requests := make([]state.StateTransitionParams, len(block_buf))
 		for i, b := range block_buf {
 			requests[i] = state.StateTransitionParams{
@@ -262,15 +279,27 @@ func main() {
 		block_buf = block_buf[:0]
 		assert.EQ(result.StateRoot.Hex(), last_block.StateRoot.Hex())
 		//break
-		state_db.BatchDone()
-		batch.Put(bin.BytesView("last_block"), bin.ENC_b_endian_64(last_block.Number))
+		state_db.TransactionEnd()
+		batch.Put(last_block_key, bin.ENC_b_endian_64(last_block.Number))
 		util.PanicIfNotNil(db.Write(opts_w_default, batch))
-		if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
-			write_reset_profiles(time.Now())
+		batch.Destroy()
+		state_db.Refresh()
+
+		if disable_gc {
 			fmt.Println("gc...")
 			runtime.GC()
-			runtime.ReadMemStats(&mem_stats)
-			max_heap_size = mem_stats.HeapAlloc * 4
+			//if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
+			//
+			//	runtime.GC()
+			//	runtime.ReadMemStats(&mem_stats)
+			//	max_heap_size = mem_stats.HeapAlloc * 4
+			//}
+		}
+		if profiling {
+			pprof.StopCPUProfile()
+			util.PanicIfNotNil(pprof.WriteHeapProfile(new_prof_file(last_profile_snapshot_time, "heap")))
+			last_profile_snapshot_time = time.Now()
+			util.PanicIfNotNil(pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu")))
 		}
 	}
 }

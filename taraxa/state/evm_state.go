@@ -1,32 +1,37 @@
 package state
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/dbg"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"math/big"
+	"sort"
+	"strings"
 )
 
 type EVMState struct {
 	in       EVMStateInput
-	accounts map[common.Address]*local_account
 	refund   uint64
 	logs     []vm.LogRecord
-	dirties  map[common.Address]*dirty_record
-	journal  []journal_entry
-}
-type EVMStateInput interface {
-	GetCode(code_hash *common.Hash) []byte
-	GetAccount(addr *common.Address) (Account, bool)
-	GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int
+	accounts map[common.Address]*local_account
+	dirties  map[common.Address]*local_account
+	reverts  []func()
 }
 type local_account = struct {
 	AccountChange
 	storage_origin AccountStorage
 	suicided       bool
 	times_touched  int
+	times_dirtied  int
+}
+type EVMStateInput interface {
+	GetCode(code_hash *common.Hash) []byte
+	GetAccount(addr *common.Address) (Account, bool)
+	GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int
 }
 type AccountChange = struct {
 	Account
@@ -35,25 +40,16 @@ type AccountChange = struct {
 	storage_dirty AccountStorage
 }
 type AccountStorage = map[common.Hash]*big.Int
-type journal_entry = struct {
-	dirty_addr common.Address
-	read_only  bool
-	revert     func()
-}
 type EvmStateOpts = struct {
 	AccountCacheSize      int
 	DirtyAccountCacheSize int
-}
-type dirty_record = struct {
-	acc                *local_account
-	times_marked_dirty int
 }
 
 func NewEVMState(src EVMStateInput, opts EvmStateOpts) (ret EVMState) {
 	ret.in = src
 	ret.accounts = make(map[common.Address]*local_account, opts.AccountCacheSize)
-	ret.dirties = make(map[common.Address]*dirty_record, opts.DirtyAccountCacheSize)
-	ret.journal = make([]journal_entry, 0, opts.DirtyAccountCacheSize*2)
+	ret.dirties = make(map[common.Address]*local_account, opts.DirtyAccountCacheSize)
+	ret.reverts = make([]func(), 0, opts.DirtyAccountCacheSize*3)
 	return
 }
 
@@ -78,7 +74,7 @@ func (self *EVMState) HasBalance(address common.Address) bool {
 }
 
 func (self *EVMState) AssertBalanceGTE(address common.Address, amount *big.Int) bool {
-	return self.GetBalance(address).Cmp(amount) >= 0
+	return amount.Sign() == 0 || self.GetBalance(address).Cmp(amount) >= 0
 }
 
 func (self *EVMState) GetNonce(addr common.Address) uint64 {
@@ -142,7 +138,7 @@ func (self *EVMState) HasSuicided(addr common.Address) bool {
 	return false
 }
 
-var ripemd = common.HexToAddress("0000000000000000000000000000000000000003")
+var ripemd_addr = common.BytesToAddress([]byte{3})
 
 func (self *EVMState) AddBalance(addr common.Address, amount *big.Int) {
 	acc := self.get_or_create_account(addr)
@@ -150,13 +146,16 @@ func (self *EVMState) AddBalance(addr common.Address, amount *big.Int) {
 		self.set_balance(addr, acc, new(big.Int).Add(acc.balance, amount))
 		return
 	}
-	if !acc.is_empty() || addr == ripemd {
+	if !acc.is_empty() {
 		return
 	}
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.times_touched--
 	})
 	acc.times_touched++
+	if addr == ripemd_addr {
+		acc.times_dirtied++
+	}
 }
 
 func (self *EVMState) SubBalance(addr common.Address, amount *big.Int) {
@@ -168,7 +167,7 @@ func (self *EVMState) SubBalance(addr common.Address, amount *big.Int) {
 
 func (self *EVMState) set_balance(addr common.Address, acc *local_account, amount *big.Int) {
 	balance_prev := acc.balance
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.balance = balance_prev
 	})
 	acc.balance = amount
@@ -176,7 +175,7 @@ func (self *EVMState) set_balance(addr common.Address, acc *local_account, amoun
 
 func (self *EVMState) IncrementNonce(addr common.Address) {
 	acc := self.get_or_create_account(addr)
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.nonce--
 	})
 	acc.nonce++
@@ -189,7 +188,7 @@ func (self *EVMState) SetCode(addr common.Address, code []byte) {
 	if code_size == 0 {
 		return
 	}
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.code_dirty = false
 		acc.code_hash, acc.code_size, acc.code = nil, 0, nil
 	})
@@ -203,7 +202,7 @@ func (self *EVMState) SetState(addr common.Address, key common.Hash, value *big.
 	if prev.Cmp(value) == 0 {
 		return
 	}
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.storage_dirty[key] = prev
 	})
 	if acc.storage_dirty == nil {
@@ -220,31 +219,24 @@ func (self *EVMState) Suicide(addr common.Address, newAddr common.Address) {
 	}
 	self.AddBalance(newAddr, acc.balance)
 	suicided_prev, balance_prev := acc.suicided, acc.balance
-	self.register_change(addr, acc, func() {
+	self.add_acc_revert(addr, acc, func() {
 		acc.suicided, acc.balance = suicided_prev, balance_prev
 	})
 	acc.suicided, acc.balance = true, common.Big0
-}
-
-func (self *EVMState) CreateAccount(addr common.Address) {
-	prev := self.get_account(addr)
-	if prev == nil {
-		self.create_account(addr)
-		return
-	}
-	prev_val := *prev
-	self.register_change(addr, prev, func() {
-		*prev = prev_val
-	})
-	*prev = local_account{}
-	prev.balance = prev_val.balance
 }
 
 func (self *EVMState) get_or_create_account(addr common.Address) *local_account {
 	if acc := self.get_account(addr); acc != nil {
 		return acc
 	}
-	return self.create_account(addr)
+	new := new(local_account)
+	new.balance = common.Big0
+	self.add_acc_revert(addr, new, func() {
+		self.accounts[addr] = nil
+		delete(self.dirties, addr)
+	})
+	self.accounts[addr] = new
+	return new
 }
 
 func (self *EVMState) get_account(addr common.Address) *local_account {
@@ -258,22 +250,6 @@ func (self *EVMState) get_account(addr common.Address) *local_account {
 	}
 	self.accounts[addr] = nil
 	return nil
-}
-
-func (self *EVMState) create_account(addr common.Address) *local_account {
-	new := new_account()
-	self.register_change(addr, new, func() {
-		self.accounts[addr] = nil
-		delete(self.dirties, addr)
-	})
-	self.accounts[addr] = new
-	return new
-}
-
-func new_account() *local_account {
-	ret := new(local_account)
-	ret.balance = common.Big0
-	return ret
 }
 
 func (self *EVMState) get_storage(addr common.Address, acc *local_account, key common.Hash) *big.Int {
@@ -300,7 +276,7 @@ func (self *EVMState) get_origin_storage(addr common.Address, acc *local_account
 
 func (self *EVMState) AddLog(log vm.LogRecord) {
 	pos := len(self.logs)
-	self.register_change_r_only(func() {
+	self.add_revert(func() {
 		self.logs = self.logs[:pos]
 	})
 	self.logs = append(self.logs, log)
@@ -312,7 +288,7 @@ func (self *EVMState) GetLogs() []vm.LogRecord {
 
 func (self *EVMState) AddRefund(gas uint64) {
 	prev := self.refund
-	self.register_change_r_only(func() {
+	self.add_revert(func() {
 		self.refund = prev
 	})
 	self.refund += gas
@@ -323,7 +299,7 @@ func (self *EVMState) SubRefund(gas uint64) {
 		panic("Refund counter below zero")
 	}
 	prev := self.refund
-	self.register_change_r_only(func() {
+	self.add_revert(func() {
 		self.refund = prev
 	})
 	self.refund -= gas
@@ -334,32 +310,27 @@ func (self *EVMState) GetRefund() uint64 {
 }
 
 func (self *EVMState) Snapshot() int {
-	return len(self.journal)
+	return len(self.reverts)
 }
 
 func (self *EVMState) RevertToSnapshot(snapshot int) {
-	for i := len(self.journal) - 1; i >= snapshot; i-- {
-		change := &self.journal[i]
-		if !change.read_only {
-			self.dirties[change.dirty_addr].times_marked_dirty--
-		}
-		change.revert()
+	for i := len(self.reverts) - 1; i >= snapshot; i-- {
+		self.reverts[i]()
 	}
-	self.journal = self.journal[:snapshot]
+	self.reverts = self.reverts[:snapshot]
 }
 
-func (self *EVMState) register_change(addr common.Address, acc *local_account, revert func()) {
-	dirty_rec := self.dirties[addr]
-	if dirty_rec == nil {
-		dirty_rec = &dirty_record{acc: acc}
-		self.dirties[addr] = dirty_rec
-	}
-	dirty_rec.times_marked_dirty++
-	self.journal = append(self.journal, journal_entry{dirty_addr: addr, revert: revert})
+func (self *EVMState) add_acc_revert(addr common.Address, acc *local_account, revert func()) {
+	self.dirties[addr] = acc
+	acc.times_dirtied++
+	self.add_revert(func() {
+		acc.times_dirtied--
+		revert()
+	})
 }
 
-func (self *EVMState) register_change_r_only(revert func()) {
-	self.journal = append(self.journal, journal_entry{read_only: true, revert: revert})
+func (self *EVMState) add_revert(revert func()) {
+	self.reverts = append(self.reverts, revert)
 }
 
 type EVMStateOutput = struct {
@@ -368,23 +339,62 @@ type EVMStateOutput = struct {
 }
 
 func (self *EVMState) Commit(delete_empty_accounts bool, sink EVMStateOutput) {
-	dirties := self.dirties
-	self.dirties = make(map[common.Address]*dirty_record)
-	self.journal, self.refund, self.logs = self.journal[:0], 0, self.logs[:0]
-	for addr, dirty_rec := range dirties {
-		if dirty_rec.times_marked_dirty == 0 {
+	self.reverts, self.logs, self.refund = self.reverts[:0], self.logs[:0], 0
+	type dbg_rec = struct {
+		key string
+		val string
+	}
+	var recs []dbg_rec
+	for addr, acc := range self.dirties {
+		delete(self.dirties, addr)
+		times_dirtied, times_touched := acc.times_dirtied, acc.times_touched
+		acc.times_dirtied, acc.times_touched = 0, 0
+		if times_dirtied == 0 {
 			continue
 		}
-		acc := dirty_rec.acc
-		touched_only := dirty_rec.times_marked_dirty == acc.times_touched
-		acc.times_touched = 0
 		if acc.suicided || delete_empty_accounts && acc.is_empty() {
 			sink.OnAccountDeleted(addr)
 			self.accounts[addr] = nil
+			if dbg.Debugging && dbg.DebugStateCommit {
+				recs = append(recs, dbg_rec{addr.Hex(), "   DELETED"})
+			}
 			continue
 		}
-		if touched_only {
+		if times_dirtied == times_touched {
 			continue
+		}
+		if dbg.Debugging && dbg.DebugStateCommit {
+			recs = append(recs, dbg_rec{
+				addr.Hex(),
+				fmt.Sprint(
+					"   nonce: ", acc.nonce,
+					"\n   balance: ", acc.balance.String(),
+					"\n   code_hash: ", func() string {
+						if acc.code_hash == nil {
+							return "NIL"
+						}
+						return acc.code_hash.Hex()
+					}(),
+					"\n   storage: ", func() string {
+						var recs []dbg_rec
+						for k, v := range acc.storage_dirty {
+							if v.Sign() == 0 {
+								recs = append(recs, dbg_rec{k.Hex(), "DELETED"})
+							} else {
+								recs = append(recs, dbg_rec{k.Hex(), common.BigToHash(v).Hex()})
+							}
+						}
+						sort.Slice(recs, func(i, j int) bool {
+							return strings.Compare(recs[i].key, recs[j].key) < 0
+						})
+						ret_str := ""
+						for _, rec := range recs {
+							ret_str += "    \n" + rec.key + " :: " + rec.val
+						}
+						return ret_str
+					}(),
+				),
+			})
 		}
 		sink.OnAccountChanged(addr, acc.AccountChange)
 		acc.code_dirty = false
@@ -398,5 +408,14 @@ func (self *EVMState) Commit(delete_empty_accounts bool, sink EVMStateOutput) {
 			acc.storage_origin[k] = v
 		}
 		acc.storage_dirty = nil
+	}
+	if dbg.Debugging && dbg.DebugStateCommit {
+		sort.Slice(recs, func(i, j int) bool {
+			return strings.Compare(recs[i].key, recs[j].key) < 0
+		})
+		for _, rec := range recs {
+			fmt.Println("ACC CHANGE:", rec.key)
+			fmt.Println(rec.val)
+		}
 	}
 }

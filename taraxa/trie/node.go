@@ -6,8 +6,10 @@ type node interface {
 	get_hash() *node_hash
 }
 
+const full_node_child_cnt = 16
+
 type full_node struct {
-	children [16]node
+	children [full_node_child_cnt]node
 	hash     *node_hash
 }
 
@@ -23,20 +25,19 @@ func (self *short_node) get_hash() *node_hash { return self.hash }
 
 type node_hash common.Hash
 
-func (self *node_hash) common_hash() *common.Hash { return (*common.Hash)(self) }
 func (self *node_hash) get_hash() *node_hash      { return self }
+func (self *node_hash) common_hash() *common.Hash { return (*common.Hash)(self) }
 
-type value_node struct{ Value }
+type value_node struct {
+	val Value
+}
 
 // TODO ugly
 func (self value_node) get_hash() *node_hash { panic("N/A") }
 
-type RawValue struct {
-	ENC_storage []byte
-	ENC_hash    []byte
-}
+type internal_value struct{ enc_storage, enc_hash []byte }
 
-func (self RawValue) EncodeForTrie() (enc_storage, enc_hash []byte) {
-	enc_storage, enc_hash = self.ENC_storage, self.ENC_hash
+func (self internal_value) EncodeForTrie() (enc_storage, enc_hash []byte) {
+	enc_storage, enc_hash = self.enc_storage, self.enc_hash
 	return
 }

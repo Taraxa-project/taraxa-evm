@@ -12,32 +12,44 @@ func (AccountTrieSchema) ValueStorageToHashEncoding(enc_storage []byte) (enc_has
 
 func (AccountTrieSchema) MaxValueSizeToStoreInTrie() int { return 8 }
 
-type AccountTrieInput struct {
-	BlockState
+type AccountTrieInputHistorical struct {
+	AccountTrieSchema
+	*BlockDB
 	addr *common.Address
 }
 
-func (self *AccountTrieInput) GetValue(key *common.Hash) []byte {
+func (self AccountTrieInputHistorical) GetValue(key *common.Hash) []byte {
 	return self.db.GetAccountTrieValue(self.blk_num, self.addr, key)
 }
 
-func (self *AccountTrieInput) GetNode(node_hash *common.Hash) []byte {
+func (self AccountTrieInputHistorical) GetNode(node_hash *common.Hash) []byte {
 	return self.db.GetAccountTrieNode(node_hash)
 }
 
-type AccountTrieOutput struct {
-	BlockState
+type AccountTrieIOPending struct {
+	AccountTrieSchema
+	*PendingBlockDB
 	addr *common.Address
 }
 
-func (self *AccountTrieOutput) PutValue(key *common.Hash, v []byte) {
+func (self AccountTrieIOPending) GetValue(key *common.Hash) []byte {
+	return self.db.GetAccountTrieValueLatest(self.addr, key)
+}
+
+func (self AccountTrieIOPending) GetNode(node_hash *common.Hash) []byte {
+	return self.db.GetAccountTrieNode(node_hash)
+}
+
+func (self AccountTrieIOPending) PutValue(key *common.Hash, v []byte) {
 	self.db.PutAccountTrieValue(self.blk_num, self.addr, key, v)
+	self.db.PutAccountTrieValueLatest(self.addr, key, v)
 }
 
-func (self *AccountTrieOutput) DeleteValue(key *common.Hash) {
-	self.PutValue(key, nil)
+func (self AccountTrieIOPending) DeleteValue(key *common.Hash) {
+	self.db.PutAccountTrieValue(self.blk_num, self.addr, key, nil)
+	self.db.DeleteAccountTrieValueLatest(self.addr, key)
 }
 
-func (self *AccountTrieOutput) PutNode(node_hash *common.Hash, node []byte) {
+func (self AccountTrieIOPending) PutNode(node_hash *common.Hash, node []byte) {
 	self.db.PutAccountTrieNode(node_hash, node)
 }
