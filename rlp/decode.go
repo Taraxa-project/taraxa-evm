@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"math/big"
 	"reflect"
@@ -130,19 +131,16 @@ func Decode(r io.Reader, val interface{}) error {
 	return NewStream(r, 0).Decode(val)
 }
 
-// DecodeBytes parses RLP data from b into val.
+// MustDecodeBytes parses RLP data from b into val.
 // Please see the documentation of Decode for the decoding rules.
 // The input must contain exactly one value and no trailing data.
-func DecodeBytes(b []byte, val interface{}) error {
+func MustDecodeBytes(b []byte, val interface{}) {
 	// TODO: this could use a Stream from a pool.
 	r := bytes.NewReader(b)
-	if err := NewStream(r, uint64(len(b))).Decode(val); err != nil {
-		return err
-	}
+	util.PanicIfNotNil(NewStream(r, uint64(len(b))).Decode(val))
 	if r.Len() > 0 {
-		return ErrMoreThanOneValue
+		panic(ErrMoreThanOneValue)
 	}
-	return nil
 }
 
 type decodeError struct {

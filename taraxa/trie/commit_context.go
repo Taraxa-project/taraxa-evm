@@ -1,7 +1,6 @@
 package trie
 
 import (
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"runtime"
@@ -34,8 +33,6 @@ func get_commit_ctx(depth byte) *commit_context {
 	runtime.SetFinalizer(ret, func(ctx *commit_context) {
 		if ctx.enc_hash.encoder.ListsCount() == int(depth) {
 			pool.Put(ctx)
-		} else {
-			fmt.Println("miss")
 		}
 	})
 	return ret

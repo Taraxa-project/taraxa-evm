@@ -45,8 +45,8 @@ var (
 	ErrInvalidRecoveryID   = errors.New("invalid signature recovery id")
 	ErrInvalidKey          = errors.New("invalid private key")
 
-	ErrSignFailed          = errors.New("signing failed")
-	ErrRecoverFailed       = errors.New("recovery failed")
+	ErrSignFailed    = errors.New("signing failed")
+	ErrRecoverFailed = errors.New("recovery failed")
 )
 
 // Sign creates a recoverable ECDSA signature.

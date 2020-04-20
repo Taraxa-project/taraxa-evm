@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"golang.org/x/crypto/sha3"
 	"hash"
+	"runtime"
 )
 
 type Hasher struct {
@@ -31,23 +32,19 @@ func (self *Hasher) Reset() {
 
 var hashers_resetter SingleThreadExecutor
 var hashers = func() chan *Hasher {
-	ret := make(chan *Hasher, 2*1024)
+	// TODO configurable size
+	ret := make(chan *Hasher, runtime.NumCPU()*128)
 	for i := 0; i < cap(ret); i++ {
 		ret <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
 	}
 	return ret
 }()
 
-func GetHasherFromPool() (ret *Hasher) {
-	ret = <-hashers
-	return
+func GetHasherFromPool() *Hasher {
+	return <-hashers
 }
 
 func ReturnHasherToPool(hasher *Hasher) {
-	//go func() {
-	//	hasher.Reset()
-	//	hashers <- hasher
-	//}()
 	hashers_resetter.Do(func() {
 		hasher.Reset()
 		hashers <- hasher
@@ -70,10 +67,6 @@ func HashOnStack(bs ...[]byte) (ret common.Hash) {
 		hasher.Write(b...)
 	}
 	hasher.state.Read(ret[:])
-	//go func() {
-	//	hasher.state.Reset()
-	//	hashers <- hasher
-	//}()
 	hashers_resetter.Do(func() {
 		hasher.state.Reset()
 		hashers <- hasher

@@ -21,7 +21,7 @@ import (
 	"math/big"
 )
 
-type DaoForkTarget = interface {
+type DaoForkTarget interface {
 	GetBalance(common.Address) *big.Int
 	AddBalance(common.Address, *big.Int)
 	SubBalance(common.Address, *big.Int)

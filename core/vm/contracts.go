@@ -23,6 +23,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/crypto/bn256"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"golang.org/x/crypto/ripemd160"
 	"math/big"
 )
@@ -96,7 +97,7 @@ func (c *ecrecover) Run(input []byte) ([]byte, error) {
 	}
 
 	// the first byte of pubkey is bitcoin heritage
-	return common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32), nil
+	return common.LeftPadBytes(util.Hash(pubKey[1:])[12:], 32), nil
 }
 
 // SHA256 implemented as a native contract.

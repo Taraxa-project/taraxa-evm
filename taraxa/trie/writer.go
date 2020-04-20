@@ -3,45 +3,39 @@ package trie
 import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
-type TrieWriter struct {
+type Writer struct {
+	Reader
 	db         DB
 	root       node
-	opts       TrieWriterOpts
+	cache_opts WriterCacheOpts
 	kbuf_0     hex_key
 	kbuf_1     hex_key
 	commit_ctx *commit_context
 }
-type TrieWriterOpts struct {
+type WriterCacheOpts struct {
 	FullNodeLevelsToCache byte
-	AnticipatedDepth      byte
+	ExpectedDepth         byte
 }
 
-const MaxDepth = common.HashLength * 2
-const hex_key_len = MaxDepth + 1
-const hex_key_compact_len = common.HashLength + 1
-
-type hex_key = [hex_key_len]byte
-type hex_key_compact = [hex_key_compact_len]byte
-
-func (self *TrieWriter) Init(db DB, root_hash *common.Hash, opts TrieWriterOpts) *TrieWriter {
-	assert.Holds(opts.FullNodeLevelsToCache <= MaxDepth)
-	assert.Holds(opts.AnticipatedDepth <= MaxDepth)
+func (self *Writer) Init(db DB, root_hash *common.Hash, cache_opts WriterCacheOpts) *Writer {
+	assert.Holds(cache_opts.FullNodeLevelsToCache <= MaxDepth)
+	assert.Holds(cache_opts.ExpectedDepth <= MaxDepth)
+	self.Reader.ReadOnlyDB = db
 	self.db = db
 	if root_hash != nil {
 		self.root = (*node_hash)(root_hash)
 	}
-	self.opts = opts
-	self.commit_ctx = get_commit_ctx(opts.AnticipatedDepth)
+	self.cache_opts = cache_opts
+	self.commit_ctx = get_commit_ctx(cache_opts.ExpectedDepth)
 	return self
 }
 
-func (self *TrieWriter) Commit() *common.Hash {
+func (self *Writer) Commit() *common.Hash {
 	if self.root == nil {
 		return nil
 	}
@@ -54,11 +48,10 @@ func (self *TrieWriter) Commit() *common.Hash {
 }
 
 // TODO parallel
-func (self *TrieWriter) commit(ctx *commit_context, full_nodes_above byte, key_prefix []byte, n node) node {
+func (self *Writer) commit(ctx *commit_context, full_nodes_above byte, key_prefix []byte, n node) node {
 	is_root := len(key_prefix) == 0
 	switch n := n.(type) {
 	case *node_hash:
-		//assert.Holds(!ctx.enc_hash.disabled)
 		ctx.enc_hash.AppendString(n[:])
 		ctx.enc_storage.AppendString(n[:])
 		return n
@@ -108,7 +101,7 @@ func (self *TrieWriter) commit(ctx *commit_context, full_nodes_above byte, key_p
 		if n.hash != nil {
 			ctx.enc_hash.AppendString(n.hash[:])
 			ctx.enc_storage.AppendString(n.hash[:])
-			if self.opts.FullNodeLevelsToCache <= full_nodes_above {
+			if self.cache_opts.FullNodeLevelsToCache <= full_nodes_above {
 				return n.hash
 			}
 			return n
@@ -131,7 +124,7 @@ func (self *TrieWriter) commit(ctx *commit_context, full_nodes_above byte, key_p
 				ctx.enc_storage.RevertToListStart(storage_list_start)
 				ctx.enc_storage.AppendString(n.hash[:])
 			}
-			if self.opts.FullNodeLevelsToCache <= full_nodes_above {
+			if self.cache_opts.FullNodeLevelsToCache <= full_nodes_above {
 				return n.hash
 			}
 		}
@@ -140,19 +133,15 @@ func (self *TrieWriter) commit(ctx *commit_context, full_nodes_above byte, key_p
 	panic("impossible")
 }
 
-type Value interface {
-	EncodeForTrie() (enc_storage, enc_hash []byte)
-}
-
-func (self *TrieWriter) Put(k *common.Hash, v Value) {
+func (self *Writer) Put(k *common.Hash, v Value) {
 	self.write(k, value_node{v})
 }
 
-func (self *TrieWriter) Delete(k *common.Hash) {
+func (self *Writer) Delete(k *common.Hash) {
 	self.write(k, nil_val_node)
 }
 
-func (self *TrieWriter) write(k *common.Hash, v value_node) {
+func (self *Writer) write(k *common.Hash, v value_node) {
 	keybytes_to_hex(k[:], self.kbuf_0[:])
 	if v != nil_val_node {
 		self.root = self.mpt_insert(self.root, 0, v)
@@ -168,13 +157,13 @@ func (self *TrieWriter) write(k *common.Hash, v value_node) {
 }
 
 // TODO maybe dirty checking is worthwhile
-func (self *TrieWriter) mpt_insert(n node, keypos int, value value_node) node {
+func (self *Writer) mpt_insert(n node, keypos int, value value_node) node {
 	switch n := n.(type) {
 	case *short_node:
 		n.hash = nil
 		matchlen := prefixLen(self.kbuf_0[keypos:], n.key_part)
 		keypos_after_match := keypos + matchlen
-		if keypos_after_match == hex_key_len {
+		if keypos_after_match == HexKeyLen {
 			n.val = value
 			return n
 		}
@@ -214,7 +203,7 @@ func (self *TrieWriter) mpt_insert(n node, keypos int, value value_node) node {
 // TODO maybe panic/recover harms performance
 var mpt_del_not_found = errors.New("key not found")
 
-func (self *TrieWriter) mpt_del(n node, keypos int) node {
+func (self *Writer) mpt_del(n node, keypos int) node {
 	switch n := n.(type) {
 	case *short_node:
 		matchlen := prefixLen(self.kbuf_0[keypos:], n.key_part)
@@ -271,11 +260,10 @@ func (self *TrieWriter) mpt_del(n node, keypos int) node {
 	panic("impossible")
 }
 
-func (self *TrieWriter) shift(n *short_node, new_prefix []byte, pivot byte, new_suffix []byte, up bool) node {
-	// TODO reuse buffers
+func (self *Writer) shift(n *short_node, new_prefix []byte, pivot byte, new_suffix []byte, up bool) node {
 	if n.val == nil_val_node {
 		hex_key := append(append(append(self.kbuf_1[:0], new_prefix...), pivot), new_suffix...)
-		n.val = self.get_val_node_by_hex_k(hex_key)
+		n.val = self.resolve_val_n_by_hex_k(hex_key)
 		if up {
 			n.key_part = common.CopyBytes(hex_key[len(new_prefix):])
 			return n
@@ -293,86 +281,6 @@ func (self *TrieWriter) shift(n *short_node, new_prefix []byte, pivot byte, new_
 	return n
 }
 
-func (self *TrieWriter) resolve(hash *node_hash, key_prefix_base []byte, key_prefix_rest ...byte) (ret node) {
-	enc := self.db.GetNode(hash.common_hash())
-	assert.Holds(len(enc) != 0)
-	key_prefix := append(append(self.kbuf_1[:0], key_prefix_base...), key_prefix_rest...)
-	ret, _ = self.dec_node(key_prefix, hash, enc)
-	return
+func (self *Writer) resolve(hash *node_hash, key_prefix_base []byte, key_prefix_rest ...byte) node {
+	return self.Reader.resolve(hash, append(append(self.kbuf_1[:0], key_prefix_base...), key_prefix_rest...))
 }
-
-func (self *TrieWriter) dec_node(key_prefix []byte, db_hash *node_hash, buf []byte) (node, []byte) {
-	kind, tagsize, total_size, err := rlp.ReadKind(buf)
-	util.PanicIfNotNil(err)
-	payload, rest := buf[tagsize:total_size], buf[total_size:]
-	switch kind {
-	case rlp.List:
-		size, err := rlp.CountValues(payload) // TODO optimize
-		util.PanicIfNotNil(err)
-		switch size {
-		case 1, 2:
-			return self.dec_short(key_prefix, db_hash, buf[:total_size], tagsize), rest
-		case full_node_child_cnt:
-			return self.dec_full(key_prefix, db_hash, payload), rest
-		default:
-			panic("impossible")
-		}
-	case rlp.String:
-		switch len(payload) {
-		case 0:
-			return nil, rest
-		case common.HashLength:
-			return (*node_hash)(bin.HashView(payload)), rest
-		default:
-			panic("impossible")
-		}
-	default:
-		panic("impossible")
-	}
-}
-
-func (self *TrieWriter) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, payload_start byte) *short_node {
-	key_ext, content, err := rlp.SplitString(enc[payload_start:])
-	util.PanicIfNotNil(err)
-	key_ext = compact_to_hex(key_ext)
-	ret := &short_node{key_part: key_ext, hash: db_hash}
-	if hasTerm(key_ext) {
-		if len(content) == 0 {
-			ret.val = self.get_val_node_by_hex_k(append(key_prefix, key_ext...))
-			return ret
-		}
-		content, _, err = rlp.SplitString(content)
-		util.PanicIfNotNil(err)
-		if l := len(content); l == common.HashLength {
-			ret.hash = (*node_hash)(bin.HashView(content))
-			ret.val = nil_val_node
-		} else {
-			assert.Holds(0 < l && l <= self.db.MaxValueSizeToStoreInTrie())
-			ret.val = value_node{internal_value{content, self.db.ValueStorageToHashEncoding(content)}}
-		}
-		return ret
-	}
-	ret.val, _ = self.dec_node(append(key_prefix, key_ext...), nil, content)
-	if _, child_is_hash := ret.val.(*node_hash); child_is_hash && ret.hash == nil {
-		ret.hash = (*node_hash)(util.Hash(enc))
-	}
-	return ret
-}
-
-func (self *TrieWriter) dec_full(key_prefix []byte, db_hash *node_hash, enc []byte) *full_node {
-	ret := &full_node{hash: db_hash}
-	for i := byte(0); i < full_node_child_cnt; i++ {
-		ret.children[i], enc = self.dec_node(append(key_prefix, i), nil, enc)
-	}
-	return ret
-}
-
-func (self *TrieWriter) get_val_node_by_hex_k(hex_key []byte) value_node {
-	var key common.Hash
-	hex_to_keybytes(hex_key, key[:])
-	enc_storage := self.db.GetValue(&key)
-	assert.Holds(len(enc_storage) != 0)
-	return value_node{internal_value{enc_storage, self.db.ValueStorageToHashEncoding(enc_storage)}}
-}
-
-var nil_val_node = value_node{nil}

@@ -22,7 +22,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/dbg"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/big"
@@ -58,20 +57,20 @@ type EVMConfig struct {
 	gas_table       GasTable
 	blk             *Block
 }
-type ExecutionOptions = struct {
+type ExecutionOptions struct {
 	DisableNonceCheck, DisableGasFee bool
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
 type Precompiles = map[common.Address]PrecompiledContract
 type InstructionSet = [256]operation
-type Block = struct {
+type Block struct {
 	Number     types.BlockNum // Provides information for NUMBER
 	Author     common.Address // Provides information for COINBASE
 	GasLimit   uint64         // Provides information for GASLIMIT
 	Time       uint64         // Provides information for TIME
 	Difficulty *big.Int       // Provides information for DIFFICULTY
 }
-type Transaction = struct {
+type Transaction struct {
 	From     common.Address // Provides information for ORIGIN
 	GasPrice *big.Int       // Provides information for GASPRICE
 	To       *common.Address
@@ -115,7 +114,7 @@ func NewEVMConfig(get_hash GetHashFunc, blk *Block, rules params.Rules, opts Exe
 	return ret
 }
 
-type ExecutionResult = struct {
+type ExecutionResult struct {
 	CodeRet         []byte
 	NewContractAddr common.Address
 	Logs            []LogRecord
@@ -125,9 +124,6 @@ type ExecutionResult = struct {
 }
 
 func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
-	if dbg.Debugging && dbg.DebugState {
-		state = LoggingState{state}
-	}
 	if !cfg.opts.DisableNonceCheck {
 		if nonce := state.GetNonce(trx.From); nonce < trx.Nonce {
 			ret.ConsensusErr = ErrNonceTooHigh
@@ -171,7 +167,11 @@ func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
 	var run_code func(*EVM)
 	if contract_creation {
 		run_code = func(evm *EVM) {
-			ret.CodeRet, ret.NewContractAddr, gas_left, ret.CodeErr = evm.create_1(caller, trx.Input, gas_left, trx.Value)
+			ret.CodeRet, ret.NewContractAddr, gas_left, ret.CodeErr = evm.create_1(
+				caller,
+				trx.Input,
+				gas_left,
+				trx.Value)
 		}
 	} else {
 		state.IncrementNonce(trx.From)
@@ -185,7 +185,6 @@ func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
 	if run_code != nil {
 		run_code(&EVM{EVMConfig: cfg, state: state, trx: trx})
 		ret.Logs = state.GetLogs()
-		// TransitionState refund counter, capped to half of the used gas.
 		if refund, refund_max := state.GetRefund(), (gas_cap-gas_left)/2; refund < refund_max {
 			gas_left += refund
 		} else {
@@ -273,7 +272,7 @@ func (evm *EVM) create_2(caller ContractRef, code []byte, gas uint64, endowment 
 	return evm.create(caller, codeAndHash, gas, endowment, contractAddr)
 }
 
-type codeAndHash = struct {
+type codeAndHash struct {
 	code []byte
 	hash common.Hash
 }
@@ -515,11 +514,6 @@ func (self *EVM) run_code(contract *Contract, readOnly bool) (ret []byte, err er
 		}
 		if memorySize > 0 {
 			mem.Resize(memorySize)
-		}
-		if dbg.Debugging && dbg.DebugEVM {
-			mem.Print()
-			stack.Print()
-			fmt.Println("OP:", pc, op)
 		}
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, mem, stack)

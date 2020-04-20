@@ -30,7 +30,7 @@ var (
 
 type typeinfo struct {
 	decoder decoder
-	writer writer
+	writer  writer
 }
 
 // represents struct tags

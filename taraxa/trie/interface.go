@@ -7,23 +7,15 @@ type Schema interface {
 	MaxValueSizeToStoreInTrie() int
 }
 
-type Reader interface {
+type ReadOnlyDB interface {
+	Schema
 	GetValue(key *common.Hash) []byte
 	GetNode(node_hash *common.Hash) []byte
 }
 
-type Writer interface {
+type DB interface {
+	ReadOnlyDB
 	PutValue(key *common.Hash, v []byte)
 	DeleteValue(key *common.Hash)
 	PutNode(node_hash *common.Hash, node []byte)
-}
-
-type ReadOnlyDB interface {
-	Schema
-	Reader
-}
-
-type DB interface {
-	ReadOnlyDB
-	Writer
 }

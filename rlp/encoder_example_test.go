@@ -41,11 +41,11 @@ func (x *MyCoolType) EncodeRLP(w io.Writer) (err error) {
 
 func ExampleEncoder() {
 	var t *MyCoolType // t is nil pointer to MyCoolType
-	bytes, _ := EncodeToBytes(t)
+	bytes, _ := MustEncodeToBytes(t)
 	fmt.Printf("%v → %X\n", t, bytes)
 
 	t = &MyCoolType{Name: "foobar", a: 5, b: 6}
-	bytes, _ = EncodeToBytes(t)
+	bytes, _ = MustEncodeToBytes(t)
 	fmt.Printf("%v → %X\n", t, bytes)
 
 	// Output:

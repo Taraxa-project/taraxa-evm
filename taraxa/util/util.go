@@ -1,7 +1,6 @@
 package util
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"math"
 	"math/rand"
@@ -9,7 +8,7 @@ import (
 	"sync"
 )
 
-type Any = interface{}
+type Any interface{}
 
 func IsReallyNil(value Any) bool {
 	if value == nil {
@@ -82,18 +81,4 @@ func RandomBytes(desired_len int) []byte {
 func LockUnlock(l sync.Locker) func() {
 	l.Lock()
 	return l.Unlock
-}
-
-
-func RLPListAt(list []byte, pos uint) ([]byte, error) {
-	rest, element, err := rlp.SplitList(list)
-	if err != nil {
-		return nil, err
-	}
-	for i := uint(0); i <= pos; i++ {
-		if _, element, rest, err = rlp.Split(rest); err != nil {
-			return nil, err
-		}
-	}
-	return element, nil
 }

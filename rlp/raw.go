@@ -17,6 +17,7 @@
 package rlp
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"reflect"
 )
@@ -36,6 +37,13 @@ func Split(b []byte) (k Kind, content, rest []byte, err error) {
 		return 0, nil, b, err
 	}
 	return k, b[tagsize:total_size], b[total_size:], nil
+}
+
+func MustSplit(b []byte) (k Kind, content, rest []byte) {
+	var err error
+	k, content, rest, err = Split(b)
+	util.PanicIfNotNil(err)
+	return
 }
 
 // SplitString splits b into the content of an RLP string

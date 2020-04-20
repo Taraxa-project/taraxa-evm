@@ -19,6 +19,7 @@ package rlp
 import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"io"
@@ -110,14 +111,12 @@ func Encode(w io.Writer, val interface{}) (err error) {
 
 // EncodeToBytes returns the RLP encoding of val.
 // Please see the documentation of Encode for the encoding rules.
-func EncodeToBytes(val interface{}) ([]byte, error) {
+func MustEncodeToBytes(val interface{}) []byte {
 	eb := encbufPool.Get().(*Encoder)
 	defer encbufPool.Put(eb)
 	eb.Reset()
-	if err := eb.AppendAny(val); err != nil {
-		return nil, err
-	}
-	return eb.ToBytes(-1), nil
+	util.PanicIfNotNil(eb.AppendAny(val))
+	return eb.ToBytes(-1)
 }
 
 func BytesAppender(b *[]byte) func(...byte) {
@@ -131,7 +130,7 @@ type Encoder struct {
 	lheads []ListHead // all list headers
 	lhsize uint32     // sum of sizes of all encoded list headers
 }
-type ListHead = struct {
+type ListHead struct {
 	strpos      uint32
 	base_lhsize uint32
 	elems_size  uint32

@@ -35,7 +35,7 @@ var (
 	big32 = big.NewInt(32)
 )
 
-type BlockNumAndCoinbase = struct {
+type BlockNumAndCoinbase struct {
 	Number types.BlockNum
 	Author common.Address
 }

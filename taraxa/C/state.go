@@ -1,0 +1,289 @@
+package main
+
+//#include "types.h"
+//#include <rocksdb/c.h>
+import "C"
+import (
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_concurrent_schedule"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/tecbot/gorocksdb"
+	"math/big"
+	"sync"
+	"unsafe"
+)
+
+type state_API struct {
+	db             state_db_rocksdb.DB
+	get_blk_hash_C C.taraxa_evm_GetBlockHash
+	state.API
+}
+
+func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
+	hash_c, err := C.taraxa_evm_GetBlockHashApply(self.get_blk_hash_C, C.uint64_t(num))
+	util.PanicIfNotNil(err)
+	return new(big.Int).SetBytes(bin.AnyBytes2(unsafe.Pointer(&hash_c.Val), common.HashLength))
+}
+
+//export taraxa_evm_state_API_New
+func taraxa_evm_state_API_New(
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) state_API_ptr_C {
+	defer handle_err(cb_err)
+	var params struct {
+		RocksDBPtr                 uintptr
+		RocksDBColumnFamilyHandles [state_db_rocksdb.COL_COUNT]uintptr
+		GetBlockHash               uintptr
+		LastStateRoot              common.Hash
+		ChainConfig                state_common.ChainConfig
+		StateTransitionCacheOpts   state_transition.CacheOpts
+	}
+	dec_rlp(params_enc, &params)
+	self := new(state_API)
+	rocksdb := gorocksdb.NewDBFromNative(unsafe.Pointer(params.RocksDBPtr))
+	var columns state_db_rocksdb.Columns
+	for i, ptr := range params.RocksDBColumnFamilyHandles {
+		columns[i] = gorocksdb.NewNativeColumnFamilyHandle1(unsafe.Pointer(ptr))
+	}
+	self.db.Init(rocksdb, columns)
+	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
+	self.API.Init(&self.db, self.blk_hash, params.LastStateRoot, params.ChainConfig, params.StateTransitionCacheOpts)
+	defer util.LockUnlock(&state_API_alloc_mu)()
+	lastpos := len(state_API_available_ptrs) - 1
+	assert.Holds(lastpos >= 0)
+	ptr := state_API_available_ptrs[lastpos]
+	state_API_available_ptrs = state_API_available_ptrs[:lastpos]
+	state_API_instances[ptr] = self
+	return state_API_ptr_C(ptr)
+}
+
+//export taraxa_evm_state_API_Free
+func taraxa_evm_state_API_Free(
+	ptr state_API_ptr_C,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	defer util.LockUnlock(&state_API_alloc_mu)()
+	assert.Holds(state_API_instances[ptr] == nil)
+	state_API_instances[ptr], state_API_available_ptrs = nil, append(state_API_available_ptrs, state_API_ptr(ptr))
+}
+
+//export taraxa_evm_state_API_DB_TransactionBegin
+func taraxa_evm_state_API_DB_TransactionBegin(
+	ptr state_API_ptr_C,
+	batch *C.rocksdb_writebatch_t,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	self := state_API_instances[state_API_ptr(ptr)]
+	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(batch)))
+}
+
+//export taraxa_evm_state_API_DB_TransactionEnd
+func taraxa_evm_state_API_DB_TransactionEnd(
+	ptr state_API_ptr_C,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	self := state_API_instances[state_API_ptr(ptr)]
+	self.db.TransactionEnd()
+}
+
+//export taraxa_evm_state_API_DB_Refresh
+func taraxa_evm_state_API_DB_Refresh(
+	ptr state_API_ptr_C,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	self := state_API_instances[state_API_ptr(ptr)]
+	self.db.Refresh()
+}
+
+//export taraxa_evm_state_API_Historical_Prove
+func taraxa_evm_state_API_Historical_Prove(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum    types.BlockNum
+		StateRoot common.Hash
+		Addr      common.Address
+		Keys      []common.Hash
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.Historical.AtBlock(params.BlkNum).Prove(&params.StateRoot, &params.Addr, params.Keys...)
+	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_API_Historical_GetAccountRawEth
+func taraxa_evm_state_API_Historical_GetAccountRawEth(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.Historical.AtBlock(params.BlkNum).GetAccountRawEth(&params.Addr)
+	call_bytes_cb(ret, cb)
+}
+
+//export taraxa_evm_state_API_Historical_GetAccountStorageRaw
+func taraxa_evm_state_API_Historical_GetAccountStorageRaw(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+		Key    common.Hash
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.Historical.AtBlock(params.BlkNum).GetAccountStorageRaw(&params.Addr, &params.Key)
+	call_bytes_cb(ret, cb)
+}
+
+//export taraxa_evm_state_API_Historical_GetCodeByAddress
+func taraxa_evm_state_API_Historical_GetCodeByAddress(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.Historical.AtBlock(params.BlkNum).GetCodeByAddress(&params.Addr)
+	call_bytes_cb(ret, cb)
+}
+
+//export taraxa_evm_state_API_DryRunner_Apply
+func taraxa_evm_state_API_DryRunner_Apply(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		Blk  vm.Block
+		Trx  vm.Transaction
+		Opts *vm.ExecutionOptions
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.DryRunner.Apply(&params.Blk, &params.Trx, params.Opts)
+	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_API_StateTransition_ApplyAccounts
+func taraxa_evm_state_API_StateTransition_ApplyAccounts(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params state_transition.AccountMap
+	dec_json(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.StateTransition.ApplyAccounts(params)
+	call_bytes_cb(bin.AnyBytes2(unsafe.Pointer(&ret), common.HashLength), cb)
+}
+
+//export taraxa_evm_state_API_StateTransition_Apply
+func taraxa_evm_state_API_StateTransition_Apply(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params state_transition.Params
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.StateTransition.Apply(params)
+	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin
+func taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params vm.Block
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	self.ConcurrentScheduleGeneration.Begin(params)
+}
+
+//export taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions
+func taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params []state_concurrent_schedule.TransactionWithHash
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	self.ConcurrentScheduleGeneration.SubmitTransactions(params...)
+}
+
+//export taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit
+func taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit(
+	ptr state_API_ptr_C,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params []common.Hash
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[state_API_ptr(ptr)]
+	ret := self.ConcurrentScheduleGeneration.Commit(params...)
+	enc_rlp(&ret, cb)
+}
+
+type state_API_ptr = uint16
+type state_API_ptr_C = C.uint16_t
+
+const state_API_max_instances = 1024
+
+var state_API_alloc_mu sync.Mutex
+var state_API_instances [state_API_max_instances]*state_API
+var state_API_available_ptrs = func() (ret []state_API_ptr) {
+	ret = make([]state_API_ptr, state_API_max_instances)
+	for i := state_API_ptr(0); i < state_API_max_instances; i++ {
+		ret[i] = i
+	}
+	return
+}()

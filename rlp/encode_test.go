@@ -276,5 +276,5 @@ func TestEncode(t *testing.T) {
 }
 
 func TestEncodeToBytes(t *testing.T) {
-	runEncTests(t, EncodeToBytes)
+	runEncTests(t, MustEncodeToBytes)
 }

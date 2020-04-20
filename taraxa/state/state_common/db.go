@@ -1,4 +1,4 @@
-package state
+package state_common
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"

@@ -3,6 +3,7 @@ package bin
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"math/big"
 	"reflect"
 	"unsafe"
 )
@@ -26,8 +27,8 @@ func HashView(bytes []byte) (ret *common.Hash) {
 	return
 }
 
-func AddrView(bytes []byte) *common.Address {
-	return (*common.Address)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data))
+func HashToBig(in *common.Hash, out *big.Int) *big.Int {
+	return out.SetBytes(AnyBytes2(unsafe.Pointer(in), common.HashLength))
 }
 
 func AnyBytes1(ptr uintptr, length int) (ret []byte) {
