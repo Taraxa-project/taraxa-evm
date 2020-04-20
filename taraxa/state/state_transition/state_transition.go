@@ -124,10 +124,10 @@ func (self *StateTransition) Apply(params Params) (ret Result) {
 	}
 	for _, addr := range self.pending_accounts_keys {
 		acc := self.pending_accounts[addr]
-		delete(self.pending_accounts, addr)
 		if acc == nil {
 			continue
 		}
+		delete(self.pending_accounts, addr)
 		acc.executor.Do(func() {
 			if acc.trie_w != nil {
 				acc.acc.StorageRootHash = acc.trie_w.Commit()
@@ -169,11 +169,9 @@ func (self *StateTransition) GetAccountStorage(addr *common.Address, key *common
 }
 
 func (self *StateTransition) OnAccountChanged(addr common.Address, change state_evm.AccountChange) {
-	acc, present := self.pending_accounts[addr]
+	acc := self.pending_accounts[addr]
 	if acc == nil {
-		if !present {
-			self.pending_accounts_keys = append(self.pending_accounts_keys, addr)
-		}
+		self.pending_accounts_keys = append(self.pending_accounts_keys, addr)
 		acc = new(pending_account)
 		self.pending_accounts[addr] = acc
 		self.main_tr_w_executor.Do(func() {
@@ -205,7 +203,7 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 }
 
 func (self *StateTransition) OnAccountDeleted(addr common.Address) {
-	self.pending_accounts[addr] = nil
+	delete(self.pending_accounts, addr)
 	self.main_tr_w_executor.Do(func() {
 		self.main_tr_w.Delete(util.Hash(addr[:]))
 	})
