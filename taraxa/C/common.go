@@ -1,6 +1,6 @@
 package main
 
-//#include "types.h"
+//#include "common.h"
 import "C"
 import (
 	"encoding/json"

@@ -1,6 +1,7 @@
 package main
 
-//#include "types.h"
+//#include "common.h"
+//#include "state.h"
 //#include <rocksdb/c.h>
 import "C"
 import (
@@ -37,7 +38,7 @@ func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
 func taraxa_evm_state_API_New(
 	params_enc C.taraxa_evm_Bytes,
 	cb_err C.taraxa_evm_BytesCallback,
-) state_API_ptr_C {
+) C.taraxa_evm_state_API_ptr {
 	defer handle_err(cb_err)
 	var params struct {
 		RocksDBPtr                 uintptr
@@ -63,12 +64,12 @@ func taraxa_evm_state_API_New(
 	ptr := state_API_available_ptrs[lastpos]
 	state_API_available_ptrs = state_API_available_ptrs[:lastpos]
 	state_API_instances[ptr] = self
-	return state_API_ptr_C(ptr)
+	return C.taraxa_evm_state_API_ptr(ptr)
 }
 
 //export taraxa_evm_state_API_Free
 func taraxa_evm_state_API_Free(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
@@ -79,7 +80,7 @@ func taraxa_evm_state_API_Free(
 
 //export taraxa_evm_state_API_DB_TransactionBegin
 func taraxa_evm_state_API_DB_TransactionBegin(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	batch *C.rocksdb_writebatch_t,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
@@ -90,7 +91,7 @@ func taraxa_evm_state_API_DB_TransactionBegin(
 
 //export taraxa_evm_state_API_DB_TransactionEnd
 func taraxa_evm_state_API_DB_TransactionEnd(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
@@ -100,7 +101,7 @@ func taraxa_evm_state_API_DB_TransactionEnd(
 
 //export taraxa_evm_state_API_DB_Refresh
 func taraxa_evm_state_API_DB_Refresh(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
@@ -110,7 +111,7 @@ func taraxa_evm_state_API_DB_Refresh(
 
 //export taraxa_evm_state_API_Historical_Prove
 func taraxa_evm_state_API_Historical_Prove(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -130,7 +131,7 @@ func taraxa_evm_state_API_Historical_Prove(
 
 //export taraxa_evm_state_API_Historical_GetAccountRawEth
 func taraxa_evm_state_API_Historical_GetAccountRawEth(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -148,7 +149,7 @@ func taraxa_evm_state_API_Historical_GetAccountRawEth(
 
 //export taraxa_evm_state_API_Historical_GetAccountStorageRaw
 func taraxa_evm_state_API_Historical_GetAccountStorageRaw(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -167,7 +168,7 @@ func taraxa_evm_state_API_Historical_GetAccountStorageRaw(
 
 //export taraxa_evm_state_API_Historical_GetCodeByAddress
 func taraxa_evm_state_API_Historical_GetCodeByAddress(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -185,7 +186,7 @@ func taraxa_evm_state_API_Historical_GetCodeByAddress(
 
 //export taraxa_evm_state_API_DryRunner_Apply
 func taraxa_evm_state_API_DryRunner_Apply(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -204,7 +205,7 @@ func taraxa_evm_state_API_DryRunner_Apply(
 
 //export taraxa_evm_state_API_StateTransition_ApplyAccounts
 func taraxa_evm_state_API_StateTransition_ApplyAccounts(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -219,7 +220,7 @@ func taraxa_evm_state_API_StateTransition_ApplyAccounts(
 
 //export taraxa_evm_state_API_StateTransition_Apply
 func taraxa_evm_state_API_StateTransition_Apply(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -234,7 +235,7 @@ func taraxa_evm_state_API_StateTransition_Apply(
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin
 func taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
@@ -247,7 +248,7 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin(
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions
 func taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
@@ -260,7 +261,7 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions(
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit
 func taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit(
-	ptr state_API_ptr_C,
+	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
@@ -274,7 +275,6 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit(
 }
 
 type state_API_ptr = uint16
-type state_API_ptr_C = C.uint16_t
 
 const state_API_max_instances = 1024
 

@@ -1,7 +1,6 @@
 #ifndef TARAXA_EVM_COMMON_H
 #define TARAXA_EVM_COMMON_H
 
-#include <stdlib.h>
 #include <stdint.h>
 
 #define SLICE(type) struct { type *Data; size_t Len; }
