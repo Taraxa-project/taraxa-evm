@@ -36,7 +36,9 @@ func enc_rlp(in interface{}, out C.taraxa_evm_BytesCallback) {
 }
 
 func handle_err(cb C.taraxa_evm_BytesCallback) {
+	fmt.Println("1")
 	util.Recover(func(issue util.Any) {
+		fmt.Println("2")
 		call_bytes_cb(bin.BytesView(fmt.Sprint(issue)), cb)
 	})
 }
