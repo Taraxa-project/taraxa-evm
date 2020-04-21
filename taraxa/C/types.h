@@ -22,6 +22,6 @@ FUNCTION(taraxa_evm_BytesCallback, taraxa_evm_Bytes, void);
 FUNCTION(taraxa_evm_GetBlockHash, taraxa_evm_BlockNum, taraxa_evm_Hash);
 
 #undef SLICE
-#undef DEFINE_FN
+#undef FUNCTION
 
 #endif
