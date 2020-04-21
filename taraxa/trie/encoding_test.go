@@ -104,7 +104,7 @@ func BenchmarkHexToKeybytes(b *testing.B) {
 }
 
 func hexToCompact(hex []byte) []byte {
-	return hex_to_compact(hex, make([]byte, len(hex)/2+1))
+	return hex_to_compact(hex, &hex_key_compact{})
 }
 
 func hexToKeybytes(hex []byte) (key []byte) {

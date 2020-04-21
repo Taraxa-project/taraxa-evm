@@ -339,9 +339,10 @@ var bn256PairingTests = []precompiledTest{
 func testPrecompiled(addr string, test precompiledTest, t *testing.T) {
 	p := PrecompiledContractsByzantium[common.HexToAddress(addr)]
 	in := common.Hex2Bytes(test.input)
-	contract := NewContract(AccountRef(common.HexToAddress("1337")), nil, new(big.Int), p.RequiredGas(in), input)
+	contract := NewContract(AccountRef(common.HexToAddress("1337")), nil, new(big.Int), p.RequiredGas(in), in)
+	contract.precompiled = p
 	t.Run(fmt.Sprintf("%s-Gas=%d", test.name, contract.Gas), func(t *testing.T) {
-		if res, err := RunPrecompiledContract(p, in, contract); err != nil {
+		if res, err := RunPrecompiledContract(contract); err != nil {
 			t.Error(err)
 		} else if common.Bytes2Hex(res) != test.expected {
 			t.Errorf("Expected %v, got %v", test.expected, common.Bytes2Hex(res))
@@ -356,7 +357,8 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 	p := PrecompiledContractsByzantium[common.HexToAddress(addr)]
 	in := common.Hex2Bytes(test.input)
 	reqGas := p.RequiredGas(in)
-	contract := NewContract(AccountRef(common.HexToAddress("1337")), nil, new(big.Int), reqGas, input)
+	contract := NewContract(AccountRef(common.HexToAddress("1337")), nil, new(big.Int), reqGas, in)
+	contract.precompiled = p
 
 	var (
 		res  []byte
@@ -369,7 +371,7 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 		for i := 0; i < bench.N; i++ {
 			contract.Gas = reqGas
 			copy(data, in)
-			res, err = RunPrecompiledContract(p, data, contract)
+			res, err = RunPrecompiledContract(contract)
 		}
 		bench.StopTimer()
 		//Check if it is correct

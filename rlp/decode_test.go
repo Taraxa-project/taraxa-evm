@@ -803,7 +803,7 @@ func encodeTestSlice(n uint) []byte {
 	for i := uint(0); i < n; i++ {
 		s[i] = i
 	}
-	b, err := MustEncodeToBytes(s)
+	b, err := EncodeToBytes(s)
 	if err != nil {
 		panic(fmt.Sprintf("encode error: %v", err))
 	}

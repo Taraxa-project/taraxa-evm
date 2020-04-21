@@ -111,12 +111,21 @@ func Encode(w io.Writer, val interface{}) (err error) {
 
 // EncodeToBytes returns the RLP encoding of val.
 // Please see the documentation of Encode for the encoding rules.
-func MustEncodeToBytes(val interface{}) []byte {
+func EncodeToBytes(val interface{}) (ret []byte, err error) {
 	eb := encbufPool.Get().(*Encoder)
 	defer encbufPool.Put(eb)
 	eb.Reset()
-	util.PanicIfNotNil(eb.AppendAny(val))
-	return eb.ToBytes(-1)
+	if err = eb.AppendAny(val); err == nil {
+		ret = eb.ToBytes(-1)
+	}
+	return
+}
+
+func MustEncodeToBytes(val interface{}) (ret []byte) {
+	var err error
+	ret, err = EncodeToBytes(val)
+	util.PanicIfNotNil(err)
+	return
 }
 
 func BytesAppender(b *[]byte) func(...byte) {

@@ -23,7 +23,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 type twoOperandTest struct {
@@ -32,23 +31,21 @@ type twoOperandTest struct {
 	expected string
 }
 
-func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, interpreter *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error)) {
+func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error)) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		pc             = uint64(0)
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
+		pc    = uint64(0)
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	for i, test := range tests {
 		x := new(big.Int).SetBytes(common.Hex2Bytes(test.x))
 		shift := new(big.Int).SetBytes(common.Hex2Bytes(test.y))
 		expected := new(big.Int).SetBytes(common.Hex2Bytes(test.expected))
 		stack.push(x)
 		stack.push(shift)
-		opFn(&pc, evmInterpreter, nil, nil, stack)
+		opFn(&pc, &evm, nil, nil, stack)
 		actual := stack.pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %v, got %v", i, expected, actual)
@@ -56,13 +53,13 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 		// Check pool usage
 		// 1.pool is not allowed to contain anything on the stack
 		// 2.pool is not allowed to contain the same pointers twice
-		if evmInterpreter.intPool.pool.len() > 0 {
+		if evm.int_pool.pool.len() > 0 {
 
 			poolvals := make(map[*big.Int]struct{})
 			poolvals[actual] = struct{}{}
 
-			for evmInterpreter.intPool.pool.len() > 0 {
-				key := evmInterpreter.intPool.get()
+			for evm.int_pool.pool.len() > 0 {
+				key := evm.int_pool.get()
 				if _, exist := poolvals[key]; exist {
 					t.Errorf("Testcase %d, pool contains double-entry", i)
 				}
@@ -70,18 +67,16 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 			}
 		}
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestByteOp(t *testing.T) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	tests := []struct {
 		v        string
 		th       uint64
@@ -102,13 +97,13 @@ func TestByteOp(t *testing.T) {
 		th := new(big.Int).SetUint64(test.th)
 		stack.push(val)
 		stack.push(th)
-		opByte(&pc, evmInterpreter, nil, nil, stack)
+		opByte(&pc, &evm, nil, nil, stack)
 		actual := stack.pop()
 		if actual.Cmp(test.expected) != 0 {
 			t.Fatalf("Expected  [%v] %v:th byte to be %v, was %v.", test.v, test.th, test.expected, actual)
 		}
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestSHL(t *testing.T) {
@@ -210,13 +205,11 @@ func TestSLT(t *testing.T) {
 
 func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error), args ...string) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	// convert args
 	byteArgs := make([][]byte, len(args))
 	for i, arg := range args {
@@ -229,10 +222,10 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contrac
 			a := new(big.Int).SetBytes(arg)
 			stack.push(a)
 		}
-		op(&pc, evmInterpreter, nil, nil, stack)
+		op(&pc, &evm, nil, nil, stack)
 		stack.pop()
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpAdd64(b *testing.B) {
@@ -445,40 +438,36 @@ func BenchmarkOpIsZero(b *testing.B) {
 
 func TestOpMstore(t *testing.T) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(64)
 	pc := uint64(0)
 	v := "abcdef00000000000000abba000000000deaf000000c0de00100000000133700"
 	stack.pushN(new(big.Int).SetBytes(common.Hex2Bytes(v)), big.NewInt(0))
-	opMstore(&pc, evmInterpreter, nil, mem, stack)
+	opMstore(&pc, &evm, nil, mem, stack)
 	if got := common.Bytes2Hex(mem.Get(0, 32)); got != v {
 		t.Fatalf("Mstore fail, got %v, expected %v", got, v)
 	}
 	stack.pushN(big.NewInt(0x1), big.NewInt(0))
-	opMstore(&pc, evmInterpreter, nil, mem, stack)
+	opMstore(&pc, &evm, nil, mem, stack)
 	if common.Bytes2Hex(mem.Get(0, 32)) != "0000000000000000000000000000000000000000000000000000000000000001" {
 		t.Fatalf("Mstore failed to overwrite previous value")
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpMstore(bench *testing.B) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(64)
 	pc := uint64(0)
 	memStart := big.NewInt(0)
@@ -487,20 +476,18 @@ func BenchmarkOpMstore(bench *testing.B) {
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		stack.pushN(value, memStart)
-		opMstore(&pc, evmInterpreter, nil, mem, stack)
+		opMstore(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpSHA3(bench *testing.B) {
 	var (
-		env            = NewEVM(nil, params.TestChainConfig.Rules(0), ctx{})
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = env.interpreter
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(32)
 	pc := uint64(0)
 	start := big.NewInt(0)
@@ -508,9 +495,9 @@ func BenchmarkOpSHA3(bench *testing.B) {
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		stack.pushN(big.NewInt(32), start)
-		opSha3(&pc, evmInterpreter, nil, mem, stack)
+		opSha3(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestCreate2Addreses(t *testing.T) {
