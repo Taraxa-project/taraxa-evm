@@ -9,14 +9,14 @@ import (
 type ConcurrentScheduleGeneration struct {
 	db             state_common.DB
 	get_block_hash vm.GetHashFunc
-	chain_cfg      state_common.EvmChainConfig
+	chain_cfg      state_common.EVMChainConfig
 	curr_blk       vm.Block
 }
 
 func (self *ConcurrentScheduleGeneration) Init(
 	db state_common.DB,
 	get_block_hash vm.GetHashFunc,
-	chain_cfg state_common.EvmChainConfig,
+	chain_cfg state_common.EVMChainConfig,
 ) {
 	self.db = db
 	self.get_block_hash = get_block_hash

@@ -119,8 +119,8 @@ type ExecutionResult struct {
 	NewContractAddr common.Address
 	Logs            []LogRecord
 	GasUsed         uint64
-	CodeErr         error
-	ConsensusErr    error
+	CodeErr         util.ErrorString
+	ConsensusErr    util.ErrorString
 }
 
 func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
@@ -146,7 +146,7 @@ func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
 			return
 		}
 		if gas_intrinsic, err := IntrinsicGas(trx.Input, contract_creation, cfg.rules.IsHomestead); err != nil {
-			ret.ConsensusErr = err
+			ret.ConsensusErr = util.ErrorString(err.Error())
 			return
 		} else {
 			if gas_left < gas_intrinsic {
@@ -163,27 +163,27 @@ func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
 	if !cfg.opts.DisableGasFee {
 		state.SubBalance(trx.From, gas_fee)
 	}
-	caller := AccountRef(trx.From)
-	var run_code func(*EVM)
+	var run_code func(*EVM) ([]byte, common.Address, uint64, error)
 	if contract_creation {
-		run_code = func(evm *EVM) {
-			ret.CodeRet, ret.NewContractAddr, gas_left, ret.CodeErr = evm.create_1(
-				caller,
-				trx.Input,
-				gas_left,
-				trx.Value)
+		run_code = func(evm *EVM) (ret []byte, contract_addr common.Address, gas_left uint64, err error) {
+			return evm.create_1(AccountRef(trx.From), trx.Input, gas_left, trx.Value)
 		}
 	} else {
 		state.IncrementNonce(trx.From)
-		contract, snapshot := call_begin(cfg, state, caller, *trx.To, trx.Input, gas_left, trx.Value)
+		contract, snapshot := call_begin(cfg, state, AccountRef(trx.From), *trx.To, trx.Input, gas_left, trx.Value)
 		if contract != nil {
-			run_code = func(evm *EVM) {
-				ret.CodeRet, gas_left, ret.CodeErr = evm.call_end(contract, snapshot, false)
+			run_code = func(evm *EVM) (ret []byte, contract_addr common.Address, gas_left uint64, err error) {
+				ret, gas_left, err = evm.call_end(contract, snapshot, false)
+				return
 			}
 		}
 	}
 	if run_code != nil {
-		run_code(&EVM{EVMConfig: cfg, state: state, trx: trx})
+		var err error
+		ret.CodeRet, ret.NewContractAddr, gas_left, err = run_code(&EVM{EVMConfig: cfg, state: state, trx: trx})
+		if err != nil {
+			ret.CodeErr = util.ErrorString(err.Error())
+		}
 		ret.Logs = state.GetLogs()
 		if refund, refund_max := state.GetRefund(), (gas_cap-gas_left)/2; refund < refund_max {
 			gas_left += refund

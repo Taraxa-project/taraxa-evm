@@ -63,13 +63,6 @@ func (self BlockDB) GetAccountRaw(addr *common.Address) []byte {
 	return self.db.GetMainTrieValue(self.blk_num, util.Hash(addr[:]))
 }
 
-func (self BlockDB) GetAccountRawEth(addr *common.Address) (ret []byte) {
-	if val := self.GetAccountRaw(addr); len(val) != 0 {
-		ret = state_common.MainTrieSchema{}.ValueStorageToHashEncoding(val)
-	}
-	return
-}
-
 func (self BlockDB) GetAccountStorageRaw(addr *common.Address, key *common.Hash) (ret []byte) {
 	key_hash := util.HashOnStack(key[:])
 	if ret = self.db.GetAccountTrieValue(self.blk_num, addr, &key_hash); len(ret) != 0 {

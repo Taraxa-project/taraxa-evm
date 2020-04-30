@@ -159,8 +159,8 @@ func main() {
 		},
 		last_root,
 		state_common.ChainConfig{
-			EvmChainConfig: state_common.EvmChainConfig{
-				EthChainCfg: *params.MainnetChainConfig,
+			EVMChainConfig: state_common.EVMChainConfig{
+				ETHChainConfig: *params.MainnetChainConfig,
 			},
 		},
 		state_transition.CacheOpts{
@@ -178,7 +178,7 @@ func main() {
 	if is_genesis {
 		batch := gorocksdb.NewWriteBatch()
 		state_db.TransactionBegin(batch)
-		root := state_transition_service.ApplyAccounts(core.MainnetGenesis().Alloc)
+		root := state_transition_service.ApplyGenesis(core.MainnetGenesis().Alloc)
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 		batch.Put(last_block_key, bin.ENC_b_endian_64(0))
 		state_db.TransactionEnd()

@@ -7,7 +7,7 @@ import (
 	"math/big"
 )
 
-type TxIndex = uint
+type TxIndex = uint32
 
 type Account struct {
 	Nonce           uint64
@@ -18,11 +18,11 @@ type Account struct {
 }
 
 type ChainConfig struct {
-	EvmChainConfig
+	EVMChainConfig
 	DisableBlockRewards bool
 }
-
-type EvmChainConfig struct {
-	EthChainCfg      params.ChainConfig
-	EvmExecutionOpts vm.ExecutionOptions
+type EVMChainConfig struct {
+	ETHChainConfig
+	vm.ExecutionOptions
 }
+type ETHChainConfig = params.ChainConfig

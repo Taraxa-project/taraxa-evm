@@ -25,8 +25,8 @@ func (self *API) Init(
 	state_transition_cache_opts state_transition.CacheOpts,
 ) *API {
 	self.Historical = state_historical.DB{db}
-	self.DryRunner.Init(self.Historical, get_block_hash, chain_cfg.EvmChainConfig)
-	self.ConcurrentScheduleGeneration.Init(db, get_block_hash, chain_cfg.EvmChainConfig)
+	self.DryRunner.Init(self.Historical, get_block_hash, chain_cfg.EVMChainConfig)
+	self.ConcurrentScheduleGeneration.Init(db, get_block_hash, chain_cfg.EVMChainConfig)
 	self.StateTransition.Init(db, get_block_hash, last_state_root, chain_cfg, state_transition_cache_opts)
 	return self
 }

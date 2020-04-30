@@ -64,7 +64,7 @@ func (self *StateTransition) Init(
 
 type AccountMap = core.GenesisAlloc
 
-func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
+func (self *StateTransition) ApplyGenesis(accs AccountMap) common.Hash {
 	for addr, acc := range accs {
 		trie_acc := &state_common.Account{Nonce: acc.Nonce, Balance: acc.Balance, CodeSize: uint64(len(acc.Code))}
 		if trie_acc.CodeSize != 0 {
@@ -92,10 +92,11 @@ func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
 
 type Params struct {
 	Block              *vm.Block
-	Uncles             []ethash.BlockNumAndCoinbase
+	Uncles             []UncleBlock
 	Transactions       []vm.Transaction
 	ConcurrentSchedule state_concurrent_schedule.ConcurrentSchedule
 }
+type UncleBlock = ethash.BlockNumAndCoinbase
 type Result struct {
 	StateRoot        common.Hash
 	ExecutionResults []vm.ExecutionResult
@@ -104,12 +105,12 @@ type Result struct {
 func (self *StateTransition) Apply(params Params) (ret Result) {
 	ret.ExecutionResults = make([]vm.ExecutionResult, len(params.Transactions))
 	self.curr_blk_num = params.Block.Number
-	rules := self.chain_cfg.EthChainCfg.Rules(params.Block.Number)
+	rules := self.chain_cfg.ETHChainConfig.Rules(params.Block.Number)
 	if rules.IsDAOFork {
 		misc.ApplyDAOHardFork(&self.evm_st)
 		self.evm_st.Commit(rules.IsEIP158, self)
 	}
-	evm_cfg := vm.NewEVMConfig(self.get_block_hash, params.Block, rules, self.chain_cfg.EvmExecutionOpts)
+	evm_cfg := vm.NewEVMConfig(self.get_block_hash, params.Block, rules, self.chain_cfg.ExecutionOptions)
 	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(len(params.Transactions)); i < cnt; i++ {
 		ret.ExecutionResults[i] = vm.Main(&evm_cfg, &self.evm_st, &params.Transactions[i])
 		self.evm_st.Commit(rules.IsEIP158, self)

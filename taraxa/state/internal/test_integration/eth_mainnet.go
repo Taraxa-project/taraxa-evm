@@ -148,8 +148,8 @@ func main() {
 		},
 		common.Hash{},
 		state_common.ChainConfig{
-			EvmChainConfig: state_common.EvmChainConfig{
-				EthChainCfg: *params.MainnetChainConfig,
+			EVMChainConfig: state_common.EVMChainConfig{
+				ETHChainConfig: *params.MainnetChainConfig,
 			},
 		},
 		state_transition.CacheOpts{
@@ -165,7 +165,7 @@ func main() {
 	)
 	batch := gorocksdb.NewWriteBatch()
 	state_db.TransactionBegin(batch)
-	root := SUT.ApplyAccounts(core.MainnetGenesis().Alloc)
+	root := SUT.ApplyGenesis(core.MainnetGenesis().Alloc)
 	assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 	state_db.TransactionEnd()
 	util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))

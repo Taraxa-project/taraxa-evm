@@ -28,7 +28,6 @@ var (
 		ConstantinopleBlock: 7280000,
 		PetersburgBlock:     7280000,
 	}
-	TestChainConfig = &ChainConfig{DAOForkBlock: types.BlockNumberNil}
 )
 
 type ChainConfig struct {
