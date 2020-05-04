@@ -17,11 +17,6 @@ func taraxa_evm_GC() {
 	runtime.GC()
 }
 
-//export taraxa_evm_Traceback
-func taraxa_evm_Traceback(cb C.taraxa_evm_BytesCallback) {
-	call_bytes_cb(debug.Stack(), cb)
-}
-
 func main() {
 
 }

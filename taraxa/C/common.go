@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"reflect"
+	"runtime/debug"
 	"unsafe"
 )
 
@@ -37,6 +38,11 @@ func enc_rlp(in interface{}, out C.taraxa_evm_BytesCallback) {
 
 func handle_err(cb C.taraxa_evm_BytesCallback) {
 	if issue := recover(); issue != nil {
-		call_bytes_cb(bin.BytesView(fmt.Sprint(issue)), cb)
+		msg := "\n" +
+			"=== Error in Go runtime. Message:\n" +
+			fmt.Sprint(issue) + "\n" +
+			"=== Go backtrace:\n" +
+			bin.StringView(debug.Stack())
+		call_bytes_cb(bin.BytesView(msg), cb)
 	}
 }
