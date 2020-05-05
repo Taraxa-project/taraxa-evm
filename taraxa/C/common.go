@@ -39,9 +39,9 @@ func enc_rlp(in interface{}, out C.taraxa_evm_BytesCallback) {
 func handle_err(cb C.taraxa_evm_BytesCallback) {
 	if issue := recover(); issue != nil {
 		msg := "\n" +
-			"=== Error in Go runtime. Message:\n" +
+			"=== Error. Message:\n" +
 			fmt.Sprint(issue) + "\n" +
-			"=== Go backtrace:\n" +
+			"=== backtrace:\n" +
 			bin.StringView(debug.Stack())
 		call_bytes_cb(bin.BytesView(msg), cb)
 	}
