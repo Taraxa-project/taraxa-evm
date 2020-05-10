@@ -3,10 +3,8 @@ package main
 //#include "common.h"
 import "C"
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"reflect"
 	"runtime/debug"
@@ -15,10 +13,6 @@ import (
 
 func dec_rlp(enc C.taraxa_evm_Bytes, out interface{}) {
 	rlp.MustDecodeBytes(bin.AnyBytes2(unsafe.Pointer(enc.Data), int(enc.Len)), out)
-}
-
-func dec_json(enc C.taraxa_evm_Bytes, out interface{}) {
-	util.PanicIfNotNil(json.Unmarshal(bin.AnyBytes2(unsafe.Pointer(enc.Data), int(enc.Len)), out))
 }
 
 func bytes_to_c(b []byte) (ret C.taraxa_evm_Bytes) {

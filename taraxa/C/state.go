@@ -185,36 +185,40 @@ func taraxa_evm_state_API_DryRunner_Apply(
 //export taraxa_evm_state_API_StateTransition_ApplyGenesis
 func taraxa_evm_state_API_StateTransition_ApplyGenesis(
 	ptr C.taraxa_evm_state_API_ptr,
-	batch *C.rocksdb_writebatch_t,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params state_transition.AccountMap
-	dec_json(params_enc, &params)
+	var params struct {
+		BatchPtr   uintptr
+		AccountMap state_transition.AccountMap
+	}
+	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(batch)))
+	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
-	ret := self.StateTransition.ApplyGenesis(params)
+	ret := self.StateTransition.ApplyGenesis(params.AccountMap)
 	call_bytes_cb(bin.AnyBytes2(unsafe.Pointer(&ret), common.HashLength), cb)
 }
 
 //export taraxa_evm_state_API_StateTransition_Apply
 func taraxa_evm_state_API_StateTransition_Apply(
 	ptr C.taraxa_evm_state_API_ptr,
-	batch *C.rocksdb_writebatch_t,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params state_transition.Params
+	var params struct {
+		BatchPtr              uintptr
+		StateTransitionParams state_transition.Params
+	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(batch)))
+	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
-	ret := self.StateTransition.Apply(params)
+	ret := self.StateTransition.Apply(params.StateTransitionParams)
 	enc_rlp(&ret, cb)
 }
 
@@ -225,10 +229,12 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params vm.Block
+	var params struct {
+		Block vm.Block
+	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.ConcurrentScheduleGeneration.Begin(params)
+	self.ConcurrentScheduleGeneration.Begin(params.Block)
 }
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions
@@ -238,10 +244,12 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params []state_concurrent_schedule.TransactionWithHash
+	var params struct {
+		Transactions []state_concurrent_schedule.TransactionWithHash
+	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.ConcurrentScheduleGeneration.SubmitTransactions(params...)
+	self.ConcurrentScheduleGeneration.SubmitTransactions(params.Transactions...)
 }
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit
@@ -252,16 +260,18 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_Commit(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params []common.Hash
+	var params struct {
+		TransactionHashes []common.Hash
+	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	ret := self.ConcurrentScheduleGeneration.Commit(params...)
+	ret := self.ConcurrentScheduleGeneration.Commit(params.TransactionHashes...)
 	enc_rlp(&ret, cb)
 }
 
-type state_API_ptr = uint16
+type state_API_ptr = byte
 
-const state_API_max_instances = 1024
+const state_API_max_instances = ^state_API_ptr(0)
 
 var state_API_alloc_mu sync.Mutex
 var state_API_instances [state_API_max_instances]*state_API
