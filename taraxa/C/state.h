@@ -3,6 +3,6 @@
 
 #include <stdint.h>
 
-typedef uint16_t taraxa_evm_state_API_ptr;
+typedef uint8_t taraxa_evm_state_API_ptr;
 
 #endif
