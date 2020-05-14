@@ -5,6 +5,7 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -49,23 +50,40 @@ func taraxa_evm_state_API_New(
 		CurrStateRoot              common.Hash
 		StateTransitionCacheOpts   state_transition.CacheOpts
 	}
+	fmt.Println("1")
 	dec_rlp(params_enc, &params)
+	fmt.Println("11")
 	self := new(state_API)
+	fmt.Println("111")
 	rocksdb := gorocksdb.NewDBFromNative(unsafe.Pointer(params.RocksDBPtr))
+	fmt.Println("1111")
 	var columns state_db_rocksdb.Columns
+	fmt.Println("11111")
 	for i, ptr := range params.RocksDBColumnFamilyHandles {
+		fmt.Println("111111")
 		columns[i] = gorocksdb.NewNativeColumnFamilyHandle1(unsafe.Pointer(ptr))
+		fmt.Println("1111111")
 	}
+	fmt.Println("11111111")
 	self.db.Init(rocksdb, columns)
+	fmt.Println("1111111111")
 	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
+	fmt.Println("11111111111")
 	self.API.Init(&self.db, self.blk_hash,
 		params.ChainConfig, params.CurrBlkNum, params.CurrStateRoot, params.StateTransitionCacheOpts)
+	fmt.Println("111111111111")
 	defer util.LockUnlock(&state_API_alloc_mu)()
+	fmt.Println("1111111111111")
 	lastpos := len(state_API_available_ptrs) - 1
+	fmt.Println("11111111111111")
 	assert.Holds(lastpos >= 0)
+	fmt.Println("111111111111111")
 	ptr := state_API_available_ptrs[lastpos]
+	fmt.Println("1111111111111111")
 	state_API_available_ptrs = state_API_available_ptrs[:lastpos]
+	fmt.Println("11111111111111111")
 	state_API_instances[ptr] = self
+	fmt.Println("111111111111111111")
 	return C.taraxa_evm_state_API_ptr(ptr)
 }
 
@@ -110,8 +128,8 @@ func taraxa_evm_state_API_Historical_Prove(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_API_Historical_GetAccountRaw
-func taraxa_evm_state_API_Historical_GetAccountRaw(
+//export taraxa_evm_state_API_Historical_GetAccount
+func taraxa_evm_state_API_Historical_GetAccount(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -128,8 +146,8 @@ func taraxa_evm_state_API_Historical_GetAccountRaw(
 	call_bytes_cb(ret, cb)
 }
 
-//export taraxa_evm_state_API_Historical_GetAccountStorageRaw
-func taraxa_evm_state_API_Historical_GetAccountStorageRaw(
+//export taraxa_evm_state_API_Historical_GetAccountStorage
+func taraxa_evm_state_API_Historical_GetAccountStorage(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
