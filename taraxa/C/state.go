@@ -52,6 +52,7 @@ func taraxa_evm_state_API_New(
 	}
 	fmt.Println("1")
 	dec_rlp(params_enc, &params)
+	fmt.Println("PARAMS:", params)
 	fmt.Println("11")
 	self := new(state_API)
 	fmt.Println("111")
