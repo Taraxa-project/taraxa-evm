@@ -2,4 +2,4 @@ package types
 
 type BlockNum = uint64
 
-const BlockNumberNil = ^BlockNum(0)
+const BlockNumberNIL = ^BlockNum(0)

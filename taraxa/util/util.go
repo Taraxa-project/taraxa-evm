@@ -64,14 +64,15 @@ func Min(i, j int) int {
 	}
 	return j
 }
-func RandomBytes(desired_len int) []byte {
+
+func RandomBytes(desired_len int, rnd *rand.Rand) []byte {
 	ret := make([]byte, 0, desired_len)
 	for {
 		curr_len := len(ret)
 		if curr_len == desired_len {
 			break
 		}
-		bin.ENC_b_endian_compact_64(rand.Uint64(), func(b ...byte) {
+		bin.ENC_b_endian_compact_64(rnd.Uint64(), func(b ...byte) {
 			ret = append(ret, b[:Min(len(b), desired_len-curr_len)]...)
 		})
 	}

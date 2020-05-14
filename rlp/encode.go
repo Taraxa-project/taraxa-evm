@@ -18,7 +18,6 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -263,15 +262,17 @@ func (self *Encoder) AppendUint(i uint64) {
 	}
 }
 
-func (self *Encoder) AppendBigInt(i *big.Int) error {
-	if cmp := i.Cmp(common.Big0); cmp == -1 {
-		return fmt.Errorf("rlp: cannot encode negative *big.Int")
-	} else if cmp == 0 {
+func (self *Encoder) AppendBigInt(i *big.Int) (err error) {
+	if i == nil {
 		self.AppendEmptyString()
-	} else {
+	} else if sign := i.Sign(); sign == 0 {
+		self.AppendEmptyString()
+	} else if sign == 1 {
 		self.AppendString(i.Bytes())
+	} else {
+		err = fmt.Errorf("rlp: cannot encode negative *big.Int")
 	}
-	return nil
+	return
 }
 
 func (self *Encoder) AppendAny(val interface{}) error {
@@ -360,10 +361,22 @@ func makeWriter(typ reflect.Type, ts tags) (writer, error) {
 		return writeEncodableNoPtr, nil
 	case kind == reflect.Interface:
 		return writeInterface, nil
-	case typ.AssignableTo(reflect.PtrTo(bigInt)):
+	case typ.AssignableTo(bigint_ptr_t):
 		return writeBigIntPtr, nil
+	case typ.ConvertibleTo(bigint_ptr_t):
+		return func(value reflect.Value, encoder *Encoder) error {
+			return writeBigIntPtr(value.Convert(bigint_ptr_t), encoder)
+		}, nil
 	case typ.AssignableTo(bigInt):
-		return writeBigIntNoPtr, nil
+		return func(value reflect.Value, encoder *Encoder) error {
+			val := value.Interface().(big.Int)
+			return encoder.AppendBigInt(&val)
+		}, nil
+	case typ.ConvertibleTo(bigInt):
+		return func(value reflect.Value, encoder *Encoder) error {
+			val := value.Convert(bigInt).Interface().(big.Int)
+			return encoder.AppendBigInt(&val)
+		}, nil
 	case isUint(kind):
 		return writeUint, nil
 	case kind == reflect.Bool:
@@ -380,6 +393,8 @@ func makeWriter(typ reflect.Type, ts tags) (writer, error) {
 		return makeStructWriter(typ)
 	case kind == reflect.Ptr:
 		return makePtrWriter(typ)
+	case kind == reflect.Map:
+		return makeMapWriter(typ)
 	default:
 		return nil, fmt.Errorf("rlp: type %v is not RLP-serializable", typ)
 	}
@@ -409,17 +424,7 @@ func writeBool(val reflect.Value, w *Encoder) error {
 }
 
 func writeBigIntPtr(val reflect.Value, w *Encoder) error {
-	ptr := val.Interface().(*big.Int)
-	if ptr == nil {
-		w.AppendEmptyString()
-		return nil
-	}
-	return w.AppendBigInt(ptr)
-}
-
-func writeBigIntNoPtr(val reflect.Value, w *Encoder) error {
-	i := val.Interface().(big.Int)
-	return w.AppendBigInt(&i)
+	return w.AppendBigInt(val.Interface().(*big.Int))
 }
 
 func writeBytes(val reflect.Value, w *Encoder) error {
@@ -556,4 +561,22 @@ func makePtrWriter(typ reflect.Type) (writer, error) {
 		return etypeinfo.writer(val.Elem(), w)
 	}
 	return writer, err
+}
+
+func makeMapWriter(typ reflect.Type) (writer, error) {
+	k_type_info, err_0 := cachedTypeInfo1(typ.Key(), tags{})
+	util.PanicIfNotNil(err_0)
+	v_type_info, err_1 := cachedTypeInfo1(typ.Elem(), tags{})
+	util.PanicIfNotNil(err_1)
+	return func(value reflect.Value, encoder *Encoder) error {
+		list_start := encoder.ListStart()
+		for i := value.MapRange(); i.Next(); {
+			list_start := encoder.ListStart()
+			util.PanicIfNotNil(k_type_info.writer(i.Key(), encoder))
+			util.PanicIfNotNil(v_type_info.writer(i.Value(), encoder))
+			encoder.ListEnd(list_start)
+		}
+		encoder.ListEnd(list_start)
+		return nil
+	}, nil
 }

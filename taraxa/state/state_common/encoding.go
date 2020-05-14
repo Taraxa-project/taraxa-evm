@@ -5,7 +5,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"math/big"
 	"sync"
@@ -20,23 +19,17 @@ var EmptyRLPListHash = func() common.Hash {
 }()
 
 func DecodeAccount(acc *Account, enc_storage []byte) {
-	rest, curr, err := rlp.SplitList(enc_storage)
-	util.PanicIfNotNil(err)
-	curr, rest, err = rlp.SplitString(rest)
-	util.PanicIfNotNil(err)
-	acc.Nonce = bin.DEC_b_endian_compact_64(curr)
-	curr, rest, err = rlp.SplitString(rest)
-	util.PanicIfNotNil(err)
-	acc.Balance = new(big.Int).SetBytes(curr)
-	curr, rest, err = rlp.SplitString(rest)
-	util.PanicIfNotNil(err)
-	acc.StorageRootHash = bin.HashView(curr)
-	curr, rest, err = rlp.SplitString(rest)
-	util.PanicIfNotNil(err)
-	acc.CodeHash = bin.HashView(curr)
-	curr, rest, err = rlp.SplitString(rest)
-	util.PanicIfNotNil(err)
-	acc.CodeSize = bin.DEC_b_endian_compact_64(curr)
+	rest, tmp := rlp.MustSplitList(enc_storage)
+	tmp, rest = rlp.MustSplitSring(rest)
+	acc.Nonce = bin.DEC_b_endian_compact_64(tmp)
+	tmp, rest = rlp.MustSplitSring(rest)
+	acc.Balance = new(big.Int).SetBytes(tmp)
+	tmp, rest = rlp.MustSplitSring(rest)
+	acc.StorageRootHash = bin.HashView(tmp)
+	tmp, rest = rlp.MustSplitSring(rest)
+	acc.CodeHash = bin.HashView(tmp)
+	tmp, rest = rlp.MustSplitSring(rest)
+	acc.CodeSize = bin.DEC_b_endian_compact_64(tmp)
 }
 
 type AccountEncoder struct{ *Account }

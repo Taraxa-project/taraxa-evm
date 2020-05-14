@@ -63,17 +63,20 @@ type ExecutionOptions struct {
 type GetHashFunc = func(types.BlockNum) *big.Int
 type Precompiles = map[common.Address]PrecompiledContract
 type InstructionSet = [256]operation
-type Block struct {
-	Number     types.BlockNum // Provides information for NUMBER
+type BlockWithoutNumber struct {
 	Author     common.Address // Provides information for COINBASE
 	GasLimit   uint64         // Provides information for GASLIMIT
 	Time       uint64         // Provides information for TIME
 	Difficulty *big.Int       // Provides information for DIFFICULTY
 }
+type Block struct {
+	Number types.BlockNum // Provides information for NUMBER
+	BlockWithoutNumber
+}
 type Transaction struct {
-	From     common.Address // Provides information for ORIGIN
-	GasPrice *big.Int       // Provides information for GASPRICE
-	To       *common.Address
+	From     common.Address  // Provides information for ORIGIN
+	GasPrice *big.Int        // Provides information for GASPRICE
+	To       *common.Address `rlp:"nil"`
 	Nonce    uint64
 	Value    *big.Int
 	Gas      uint64
@@ -163,25 +166,25 @@ func Main(cfg *EVMConfig, state State, trx *Transaction) (ret ExecutionResult) {
 	if !cfg.opts.DisableGasFee {
 		state.SubBalance(trx.From, gas_fee)
 	}
-	var run_code func(*EVM) ([]byte, common.Address, uint64, error)
+	var run_code func(*EVM) error
 	if contract_creation {
-		run_code = func(evm *EVM) (ret []byte, contract_addr common.Address, gas_left uint64, err error) {
-			return evm.create_1(AccountRef(trx.From), trx.Input, gas_left, trx.Value)
+		run_code = func(evm *EVM) (err error) {
+			ret.CodeRet, ret.NewContractAddr, gas_left, err =
+				evm.create_1(AccountRef(trx.From), trx.Input, gas_left, trx.Value)
+			return
 		}
 	} else {
 		state.IncrementNonce(trx.From)
 		contract, snapshot := call_begin(cfg, state, AccountRef(trx.From), *trx.To, trx.Input, gas_left, trx.Value)
 		if contract != nil {
-			run_code = func(evm *EVM) (ret []byte, contract_addr common.Address, gas_left uint64, err error) {
-				ret, gas_left, err = evm.call_end(contract, snapshot, false)
+			run_code = func(evm *EVM) (err error) {
+				ret.CodeRet, gas_left, err = evm.call_end(contract, snapshot, false)
 				return
 			}
 		}
 	}
 	if run_code != nil {
-		var err error
-		ret.CodeRet, ret.NewContractAddr, gas_left, err = run_code(&EVM{EVMConfig: cfg, state: state, trx: trx})
-		if err != nil {
+		if err := run_code(&EVM{EVMConfig: cfg, state: state, trx: trx}); err != nil {
 			ret.CodeErr = util.ErrorString(err.Error())
 		}
 		ret.Logs = state.GetLogs()

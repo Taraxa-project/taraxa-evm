@@ -13,6 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_concurrent_schedule"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
@@ -70,18 +71,17 @@ func main() {
 		Miner  common.Address `json:"miner"  gencodec:"required"`
 	}
 	type VmBlock struct {
-		Number     types.BlockNum `json:"number" gencodec:"required"`
 		Miner      common.Address `json:"miner" gencodec:"required"`
 		GasLimit   hexutil.Uint64 `json:"gasLimit"  gencodec:"required"`
 		Time       hexutil.Uint64 `json:"timestamp"  gencodec:"required"`
 		Difficulty *hexutil.Big   `json:"difficulty"  gencodec:"required"`
 	}
 	type BlockInfo struct {
+		Hash      common.Hash `json:"hash" gencodec:"required"`
+		StateRoot common.Hash `json:"stateRoot" gencodec:"required"`
 		VmBlock
-		UncleBlocks  []UncleBlock  `json:"uncleBlocks"  gencodec:"required"`
 		Transactions []Transaction `json:"transactions"  gencodec:"required"`
-		Hash         common.Hash   `json:"hash" gencodec:"required"`
-		StateRoot    common.Hash   `json:"stateRoot" gencodec:"required"`
+		UncleBlocks  []UncleBlock  `json:"uncleBlocks"  gencodec:"required"`
 	}
 	getBlockByNumber := func(block_num types.BlockNum) *BlockInfo {
 		block_json, err := blk_db.GetPinned(opts_r_default, bin.BytesView(fmt.Sprintf("%09d", block_num)))
@@ -146,12 +146,13 @@ func main() {
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		common.Hash{},
 		state_common.ChainConfig{
 			EVMChainConfig: state_common.EVMChainConfig{
 				ETHChainConfig: *params.MainnetChainConfig,
 			},
 		},
+		0,
+		common.Hash{},
 		state_transition.CacheOpts{
 			MainTrieWriterOpts: trie.WriterCacheOpts{
 				FullNodeLevelsToCache: 5,
@@ -165,24 +166,25 @@ func main() {
 	)
 	batch := gorocksdb.NewWriteBatch()
 	state_db.TransactionBegin(batch)
-	root := SUT.ApplyGenesis(core.MainnetGenesis().Alloc)
+	root := SUT.ApplyAccounts(core.MainnetGenesis().Alloc)
 	assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 	state_db.TransactionEnd()
 	util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 	state_db.Refresh()
 
-	for i := types.BlockNum(0); i < param.NumBlocksToExecute; i++ {
+	for i := types.BlockNum(1); i <= param.NumBlocksToExecute; i++ {
 		block_load_requests <- 0
 		blk := <-block_chan
 		tx_count := len(blk.Transactions)
 		batch := gorocksdb.NewWriteBatch()
 		state_db.TransactionBegin(batch)
-		fmt.Println("block", blk.Number, "tx_count:", tx_count)
-		result := SUT.Apply(state_transition.Params{
-			Block:        (*vm.Block)(unsafe.Pointer(&blk.VmBlock)),
-			Uncles:       *(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&blk.UncleBlocks)),
-			Transactions: *(*[]vm.Transaction)(unsafe.Pointer(&blk.Transactions)),
-		})
+		fmt.Println("block", i, "tx_count:", tx_count)
+		result := SUT.ApplyBlock(
+			(*vm.BlockWithoutNumber)(unsafe.Pointer(&blk.VmBlock)),
+			*(*[]vm.Transaction)(unsafe.Pointer(&blk.Transactions)),
+			*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&blk.UncleBlocks)),
+			state_concurrent_schedule.ConcurrentSchedule{},
+		)
 		assert.EQ(result.StateRoot.Hex(), blk.StateRoot.Hex())
 		state_db.TransactionEnd()
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))

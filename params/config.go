@@ -42,7 +42,7 @@ type ChainConfig struct {
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
-	if fork_start == types.BlockNumberNil || block_num == types.BlockNumberNil {
+	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
 		return false
 	}
 	return fork_start <= block_num
@@ -59,7 +59,7 @@ func (c *ChainConfig) Rules(num types.BlockNum) Rules {
 		IsEIP158:         isForked(c.EIP158Block, num),
 		IsByzantium:      isForked(c.ByzantiumBlock, num),
 		IsConstantinople: isForked(c.ConstantinopleBlock, num),
-		IsPetersburg:     isForked(c.PetersburgBlock, num) || c.PetersburgBlock == types.BlockNumberNil && isForked(c.ConstantinopleBlock, num),
-		IsDAOFork:        c.DAOForkBlock != types.BlockNumberNil && c.DAOForkBlock == num,
+		IsPetersburg:     isForked(c.PetersburgBlock, num) || c.PetersburgBlock == types.BlockNumberNIL && isForked(c.ConstantinopleBlock, num),
+		IsDAOFork:        c.DAOForkBlock != types.BlockNumberNIL && c.DAOForkBlock == num,
 	}
 }

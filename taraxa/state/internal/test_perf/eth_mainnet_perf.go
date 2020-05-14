@@ -32,6 +32,7 @@ import (
 	"unsafe"
 )
 
+// TODO fix it
 func main() {
 	var last_block_key = bin.BytesView("last_block")
 	const min_tx_to_execute = 0
@@ -89,7 +90,6 @@ func main() {
 		Miner  common.Address `json:"miner"  gencodec:"required"`
 	}
 	type VmBlock struct {
-		Number     types.BlockNum `json:"number" gencodec:"required"`
 		Miner      common.Address `json:"miner" gencodec:"required"`
 		GasLimit   hexutil.Uint64 `json:"gasLimit"  gencodec:"required"`
 		Time       hexutil.Uint64 `json:"timestamp"  gencodec:"required"`
@@ -157,12 +157,13 @@ func main() {
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		last_root,
 		state_common.ChainConfig{
 			EVMChainConfig: state_common.EVMChainConfig{
 				ETHChainConfig: *params.MainnetChainConfig,
 			},
 		},
+		last_blk_num,
+		last_root,
 		state_transition.CacheOpts{
 			MainTrieWriterOpts: trie.WriterCacheOpts{
 				FullNodeLevelsToCache: 5,
@@ -178,7 +179,7 @@ func main() {
 	if is_genesis {
 		batch := gorocksdb.NewWriteBatch()
 		state_db.TransactionBegin(batch)
-		root := state_transition_service.ApplyGenesis(core.MainnetGenesis().Alloc)
+		root := state_transition_service.ApplyAccounts(core.MainnetGenesis().Alloc)
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 		batch.Put(last_block_key, bin.ENC_b_endian_64(0))
 		state_db.TransactionEnd()
@@ -221,10 +222,10 @@ func main() {
 		}
 		batch := gorocksdb.NewWriteBatch()
 		state_db.TransactionBegin(batch)
-		requests := make([]state_transition.Params, len(block_buf))
+		requests := make([]state_transition.Block, len(block_buf))
 		for i, b := range block_buf {
-			requests[i] = state_transition.Params{
-				Block:        (*vm.Block)(unsafe.Pointer(&b.VmBlock)),
+			requests[i] = state_transition.Block{
+				EVMBlock:     *(*vm.BlockWithoutNumber)(unsafe.Pointer(&b.VmBlock)),
 				Uncles:       *(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)),
 				Transactions: *(*[]vm.Transaction)(unsafe.Pointer(&b.Transactions)),
 			}
@@ -233,7 +234,7 @@ func main() {
 		fmt.Println("blocks:", block_buf[0].Number, "-", last_block.Number, "tx_count:", tx_count)
 		now := time.Now()
 		assert.Holds(len(requests) == 1)
-		result := state_transition_service.Apply(requests[0])
+		result := state_transition_service.ApplyBlock(requests[0])
 		tps := float64(tx_count) / time.Now().Sub(now).Seconds()
 		tps_sum += tps
 		tps_cnt++

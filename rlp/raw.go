@@ -46,6 +46,20 @@ func MustSplit(b []byte) (k Kind, content, rest []byte) {
 	return
 }
 
+func MustSplitSring(b []byte) (content, rest []byte) {
+	var err error
+	content, rest, err = SplitString(b)
+	util.PanicIfNotNil(err)
+	return
+}
+
+func MustSplitList(b []byte) (content, rest []byte) {
+	var err error
+	content, rest, err = SplitList(b)
+	util.PanicIfNotNil(err)
+	return
+}
+
 // SplitString splits b into the content of an RLP string
 // and any remaining bytes after the string.
 func SplitString(b []byte) (content, rest []byte, err error) {

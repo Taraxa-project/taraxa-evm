@@ -44,8 +44,9 @@ func taraxa_evm_state_API_New(
 		RocksDBPtr                 uintptr
 		RocksDBColumnFamilyHandles [state_db_rocksdb.COL_COUNT]uintptr
 		GetBlockHash               uintptr
-		LastStateRoot              common.Hash
 		ChainConfig                state_common.ChainConfig
+		CurrBlkNum                 types.BlockNum
+		CurrStateRoot              common.Hash
 		StateTransitionCacheOpts   state_transition.CacheOpts
 	}
 	dec_rlp(params_enc, &params)
@@ -57,7 +58,8 @@ func taraxa_evm_state_API_New(
 	}
 	self.db.Init(rocksdb, columns)
 	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
-	self.API.Init(&self.db, self.blk_hash, params.LastStateRoot, params.ChainConfig, params.StateTransitionCacheOpts)
+	self.API.Init(&self.db, self.blk_hash,
+		params.ChainConfig, params.CurrBlkNum, params.CurrStateRoot, params.StateTransitionCacheOpts)
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	lastpos := len(state_API_available_ptrs) - 1
 	assert.Holds(lastpos >= 0)
@@ -182,8 +184,8 @@ func taraxa_evm_state_API_DryRunner_Apply(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_API_StateTransition_ApplyGenesis
-func taraxa_evm_state_API_StateTransition_ApplyGenesis(
+//export taraxa_evm_state_API_StateTransition_ApplyAccounts
+func taraxa_evm_state_API_StateTransition_ApplyAccounts(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -198,12 +200,12 @@ func taraxa_evm_state_API_StateTransition_ApplyGenesis(
 	self := state_API_instances[state_API_ptr(ptr)]
 	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
-	ret := self.StateTransition.ApplyGenesis(params.AccountMap)
+	ret := self.StateTransition.ApplyAccounts(params.AccountMap)
 	call_bytes_cb(bin.AnyBytes2(unsafe.Pointer(&ret), common.HashLength), cb)
 }
 
-//export taraxa_evm_state_API_StateTransition_Apply
-func taraxa_evm_state_API_StateTransition_Apply(
+//export taraxa_evm_state_API_StateTransition_ApplyBlock
+func taraxa_evm_state_API_StateTransition_ApplyBlock(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -211,14 +213,18 @@ func taraxa_evm_state_API_StateTransition_Apply(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		BatchPtr              uintptr
-		StateTransitionParams state_transition.Params
+		BatchPtr           uintptr
+		EVMBlock           vm.BlockWithoutNumber
+		Transactions       []vm.Transaction
+		Uncles             []state_transition.UncleBlock
+		ConcurrentSchedule state_concurrent_schedule.ConcurrentSchedule
 	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
 	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
-	ret := self.StateTransition.Apply(params.StateTransitionParams)
+	ret := self.StateTransition.ApplyBlock(
+		&params.EVMBlock, params.Transactions, params.Uncles, params.ConcurrentSchedule)
 	enc_rlp(&ret, cb)
 }
 
@@ -230,11 +236,11 @@ func taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		Block vm.Block
+		Block vm.BlockWithoutNumber
 	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.ConcurrentScheduleGeneration.Begin(params.Block)
+	self.ConcurrentScheduleGeneration.Begin(&params.Block)
 }
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_SubmitTransactions

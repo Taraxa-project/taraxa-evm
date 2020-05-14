@@ -26,7 +26,7 @@ type StateTransition struct {
 	acc_tr_writer_opts    trie.WriterCacheOpts
 	pending_accounts      map[common.Address]*pending_account
 	pending_accounts_keys []common.Address
-	evm_st                state_evm.EVMState
+	evm_state             state_evm.EVMState
 	curr_blk_num          types.BlockNum
 }
 
@@ -39,34 +39,40 @@ type CacheOpts struct {
 func (self *StateTransition) Init(
 	db state_common.DB,
 	get_block_hash vm.GetHashFunc,
-	last_state_root common.Hash,
 	chain_cfg state_common.ChainConfig,
+	curr_blk_num types.BlockNum,
+	curr_state_root common.Hash,
 	cache_opts CacheOpts,
-) {
+) *StateTransition {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.chain_cfg = chain_cfg
-	last_state_root_ptr := &last_state_root
-	if last_state_root == state_common.EmptyRLPListHash || last_state_root == common.ZeroHash {
-		last_state_root_ptr = nil
+	self.curr_blk_num = curr_blk_num
+	curr_state_root_ptr := &curr_state_root
+	if curr_state_root == state_common.EmptyRLPListHash || curr_state_root == common.ZeroHash {
+		curr_state_root_ptr = nil
 	}
-	self.main_tr_w.Init(main_trie_db{StateTransition: self}, last_state_root_ptr, cache_opts.MainTrieWriterOpts)
+	self.main_tr_w.Init(main_trie_db{StateTransition: self}, curr_state_root_ptr, cache_opts.MainTrieWriterOpts)
 	self.acc_tr_writer_opts = cache_opts.AccTrieWriterOpts
 	dirty_accs_per_block := uint32(util.CeilPow2(int(cache_opts.ExpectedMaxNumTrxPerBlock * 2)))
 	accs_per_block := dirty_accs_per_block * 2
 	self.pending_accounts = make(map[common.Address]*pending_account, accs_per_block)
 	self.pending_accounts_keys = make([]common.Address, 0, accs_per_block)
-	self.evm_st.Init(self, state_evm.CacheOpts{
+	self.evm_state.Init(self, state_evm.CacheOpts{
 		AccountsPrealloc:      accs_per_block,
 		DirtyAccountsPrealloc: dirty_accs_per_block,
 	})
+	return self
 }
 
 type AccountMap = core.GenesisAlloc
 
-func (self *StateTransition) ApplyGenesis(accs AccountMap) common.Hash {
+func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
 	for addr, acc := range accs {
-		trie_acc := &state_common.Account{Nonce: acc.Nonce, Balance: acc.Balance, CodeSize: uint64(len(acc.Code))}
+		trie_acc := state_common.Account{Nonce: acc.Nonce, Balance: acc.Balance, CodeSize: uint64(len(acc.Code))}
+		if trie_acc.Balance == nil {
+			trie_acc.Balance = common.Big0
+		}
 		if trie_acc.CodeSize != 0 {
 			code_hash := util.Hash(acc.Code)
 			trie_acc.CodeHash = code_hash
@@ -82,7 +88,7 @@ func (self *StateTransition) ApplyGenesis(accs AccountMap) common.Hash {
 			}
 			trie_acc.StorageRootHash = acc_tr_w.Commit()
 		}
-		self.main_tr_w.Put(util.Hash(addr[:]), state_common.AccountEncoder{trie_acc})
+		self.main_tr_w.Put(util.Hash(addr[:]), state_common.AccountEncoder{&trie_acc})
 	}
 	if ret := self.main_tr_w.Commit(); ret != nil {
 		return *ret
@@ -90,38 +96,38 @@ func (self *StateTransition) ApplyGenesis(accs AccountMap) common.Hash {
 	return state_common.EmptyRLPListHash
 }
 
-type Params struct {
-	Block              *vm.Block
-	Uncles             []UncleBlock
-	Transactions       []vm.Transaction
-	ConcurrentSchedule state_concurrent_schedule.ConcurrentSchedule
-}
 type UncleBlock = ethash.BlockNumAndCoinbase
 type Result struct {
 	StateRoot        common.Hash
 	ExecutionResults []vm.ExecutionResult
 }
 
-func (self *StateTransition) Apply(params Params) (ret Result) {
-	ret.ExecutionResults = make([]vm.ExecutionResult, len(params.Transactions))
-	self.curr_blk_num = params.Block.Number
-	rules := self.chain_cfg.ETHChainConfig.Rules(params.Block.Number)
+func (self *StateTransition) ApplyBlock(
+	evm_block *vm.BlockWithoutNumber,
+	transactions []vm.Transaction,
+	uncles []UncleBlock,
+	concurrent_schedule state_concurrent_schedule.ConcurrentSchedule,
+) (ret Result) {
+	ret.ExecutionResults = make([]vm.ExecutionResult, len(transactions))
+	self.curr_blk_num++
+	rules := self.chain_cfg.ETHChainConfig.Rules(self.curr_blk_num)
 	if rules.IsDAOFork {
-		misc.ApplyDAOHardFork(&self.evm_st)
-		self.evm_st.Commit(rules.IsEIP158, self)
+		misc.ApplyDAOHardFork(&self.evm_state)
+		self.evm_state.Commit(rules.IsEIP158, self)
 	}
-	evm_cfg := vm.NewEVMConfig(self.get_block_hash, params.Block, rules, self.chain_cfg.ExecutionOptions)
-	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(len(params.Transactions)); i < cnt; i++ {
-		ret.ExecutionResults[i] = vm.Main(&evm_cfg, &self.evm_st, &params.Transactions[i])
-		self.evm_st.Commit(rules.IsEIP158, self)
+	evm_blk := vm.Block{self.curr_blk_num, *evm_block}
+	evm_cfg := vm.NewEVMConfig(self.get_block_hash, &evm_blk, rules, self.chain_cfg.ExecutionOptions)
+	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(len(transactions)); i < cnt; i++ {
+		ret.ExecutionResults[i] = vm.Main(&evm_cfg, &self.evm_state, &transactions[i])
+		self.evm_state.Commit(rules.IsEIP158, self)
 	}
 	if !self.chain_cfg.DisableBlockRewards {
 		ethash.AccumulateRewards(
 			rules,
-			ethash.BlockNumAndCoinbase{params.Block.Number, params.Block.Author},
-			params.Uncles,
-			self.evm_st.AddBalance)
-		self.evm_st.Commit(rules.IsEIP158, self)
+			ethash.BlockNumAndCoinbase{self.curr_blk_num, evm_block.Author},
+			uncles,
+			self.evm_state.AddBalance)
+		self.evm_state.Commit(rules.IsEIP158, self)
 	}
 	for _, addr := range self.pending_accounts_keys {
 		acc := self.pending_accounts[addr]
@@ -143,7 +149,7 @@ func (self *StateTransition) Apply(params Params) (ret Result) {
 			ret.StateRoot = state_common.EmptyRLPListHash
 		}
 	})
-	self.evm_st.Reset()
+	self.evm_state.Reset()
 	self.pending_accounts_keys = self.pending_accounts_keys[:0]
 	self.main_tr_w_executor.Synchronize()
 	return
