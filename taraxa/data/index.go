@@ -17,9 +17,7 @@ var Dir = func() string {
 }()
 
 func Parse_eth_mainnet_genesis_accounts() (ret state_transition.AccountMap) {
-	f, err := os.Open(path.Join(Dir, "eth_mainnet_genesis_accounts.rlp"))
-	util.PanicIfNotNil(err)
-	util.PanicIfNotNil(rlp.Decode(f, &ret))
+	parse_rlp_file("eth_mainnet_genesis_accounts", &ret)
 	return
 }
 
@@ -30,8 +28,12 @@ func Parse_eth_mainnet_blocks_0_300000() (ret []struct {
 	Transactions []vm.Transaction
 	UncleBlocks  []state_transition.UncleBlock
 }) {
-	f, err := os.Open(path.Join(Dir, "eth_mainnet_blocks_0_300000.rlp"))
-	util.PanicIfNotNil(err)
-	util.PanicIfNotNil(rlp.Decode(f, &ret))
+	parse_rlp_file("eth_mainnet_blocks_0_300000", &ret)
 	return
+}
+
+func parse_rlp_file(short_file_name string, out interface{}) {
+	f, err := os.Open(path.Join(Dir, short_file_name+".rlp"))
+	util.PanicIfNotNil(err)
+	util.PanicIfNotNil(rlp.Decode(f, out))
 }

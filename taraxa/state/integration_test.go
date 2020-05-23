@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
@@ -79,12 +80,12 @@ func TestEthMainnetSmoke(t *testing.T) {
 	assert.EQ(root.Hex(), blocks[0].StateRoot.Hex())
 	state_db.TransactionEnd()
 	util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
+	batch.Destroy()
 	state_db.Refresh()
 
-	blk_num := 1
 	progress_bar := progressbar.Default(int64(len(blocks)))
 	defer progress_bar.Finish()
-	for ; blk_num < len(blocks); blk_num++ {
+	for blk_num := 1; blk_num < len(blocks); blk_num++ {
 		blk := blocks[blk_num]
 		batch := gorocksdb.NewWriteBatch()
 		state_db.TransactionBegin(batch)
@@ -94,6 +95,10 @@ func TestEthMainnetSmoke(t *testing.T) {
 			blk.UncleBlocks,
 			state_concurrent_schedule.ConcurrentSchedule{},
 		)
+		if blk_num == 46214 {
+			fmt.Println(result.StateRoot.Hex())
+			return
+		}
 		assert.EQ(result.StateRoot.Hex(), blk.StateRoot.Hex())
 		state_db.TransactionEnd()
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
