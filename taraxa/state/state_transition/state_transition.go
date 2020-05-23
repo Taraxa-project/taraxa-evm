@@ -1,6 +1,8 @@
 package state_transition
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -14,6 +16,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"math/big"
 )
 
@@ -110,6 +113,16 @@ func (self *StateTransition) ApplyBlock(
 ) (ret Result) {
 	ret.ExecutionResults = make([]vm.ExecutionResult, len(transactions))
 	self.curr_blk_num++
+	if self.curr_blk_num == 62509 {
+		json_bytes, err := json.Marshal([]interface{}{
+			evm_block,
+			transactions,
+			uncles,
+			concurrent_schedule,
+		})
+		util.PanicIfNotNil(err)
+		fmt.Println(bin.StringView(json_bytes))
+	}
 	rules := self.chain_cfg.ETHChainConfig.Rules(self.curr_blk_num)
 	if rules.IsDAOFork {
 		misc.ApplyDAOHardFork(&self.evm_state)
