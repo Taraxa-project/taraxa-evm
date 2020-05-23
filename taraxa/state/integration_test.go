@@ -1,7 +1,6 @@
 package state
 
 import (
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
@@ -13,6 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/schollz/progressbar/v3"
 	"github.com/tecbot/gorocksdb"
 	"math/big"
 	"math/rand"
@@ -82,7 +82,8 @@ func TestEthMainnetSmoke(t *testing.T) {
 	state_db.Refresh()
 
 	blk_num := 1
-	defer fmt.Println("# executed blocks:", blk_num)
+	progress_bar := progressbar.Default(int64(len(blocks)))
+	defer progress_bar.Finish()
 	for ; blk_num < len(blocks); blk_num++ {
 		blk := blocks[blk_num]
 		batch := gorocksdb.NewWriteBatch()
@@ -98,6 +99,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 		batch.Destroy()
 		state_db.Refresh()
+		progress_bar.Add(1)
 	}
 }
 
