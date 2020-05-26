@@ -5,8 +5,6 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -34,12 +32,6 @@ func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
 	hash_c, err := C.taraxa_evm_GetBlockHashApply(self.get_blk_hash_C, C.uint64_t(num))
 	util.PanicIfNotNil(err)
 	return new(big.Int).SetBytes(bin.AnyBytes2(unsafe.Pointer(&hash_c.Val), common.HashLength))
-}
-
-func dump_json(val interface{}) {
-	b, err := json.Marshal(val)
-	util.PanicIfNotNil(err)
-	fmt.Println(string(b))
 }
 
 //export taraxa_evm_state_API_New
@@ -151,7 +143,6 @@ func taraxa_evm_state_API_Historical_GetAccountStorage(
 		Key    common.Hash
 	}
 	dec_rlp(params_enc, &params)
-	dump_json(params)
 	self := state_API_instances[state_API_ptr(ptr)]
 	ret := self.Historical.AtBlock(params.BlkNum).GetAccountStorageRaw(&params.Addr, &params.Key)
 	call_bytes_cb(ret, cb)
@@ -209,7 +200,6 @@ func taraxa_evm_state_API_StateTransition_ApplyAccounts(
 		AccountMap state_transition.AccountMap
 	}
 	dec_rlp(params_enc, &params)
-	dump_json(params)
 	self := state_API_instances[state_API_ptr(ptr)]
 	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
