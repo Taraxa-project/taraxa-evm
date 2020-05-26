@@ -3,6 +3,7 @@ package state_db_rocksdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -181,6 +182,7 @@ func (self *DB) get(col *gorocksdb.ColumnFamilyHandle, k []byte) (ret []byte) {
 
 func (self *DB) find_trie_value(itr_pool *sync.Pool, key []byte) (ret []byte) {
 	defer util.LockUnlock(self.itr_pools_mu.RLocker())()
+	fmt.Println("find_trie_value", key)
 	itr := itr_pool.Get().(*gorocksdb.Iterator)
 	defer itr_pool.Put(itr)
 	if itr.SeekForPrev(key); !itr.Valid() {
