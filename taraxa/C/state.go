@@ -178,7 +178,7 @@ func taraxa_evm_state_API_DryRunner_Apply(
 		BlkNum types.BlockNum
 		Blk    vm.BlockWithoutNumber
 		Trx    vm.Transaction
-		Opts   *vm.ExecutionOptions
+		Opts   *vm.ExecutionOptions `rlp:"nil"`
 	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
