@@ -26,6 +26,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"math/big"
 	"strings"
 )
@@ -57,10 +58,25 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 
 // GenesisAccount is an account in the state of the genesis block.
 type GenesisAccount struct {
-	Code    []byte                      `json:"code,omitempty"`
-	Storage map[common.Hash]common.Hash `json:"storage,omitempty"`
-	Balance *big.Int                    `json:"balance" gencodec:"required"`
-	Nonce   uint64                      `json:"nonce,omitempty"`
+	Code    []byte         `json:"code,omitempty"`
+	Storage GenesisStorage `json:"storage,omitempty"`
+	Balance *big.Int       `json:"balance" gencodec:"required"`
+	Nonce   uint64         `json:"nonce,omitempty"`
+}
+
+type GenesisStorage map[common.Hash]common.Hash
+
+func (self *GenesisStorage) DecodeRLP(stream *rlp.Stream) error {
+	var intermediate [][2][]byte
+	stream.Decode(&intermediate)
+	if len(*self) < len(intermediate) {
+		*self = make(GenesisStorage, len(intermediate))
+	}
+	for _, entry := range intermediate {
+		assert.Holds(len(entry[0]) <= common.HashLength && len(entry[1]) <= common.HashLength)
+		(*self)[common.BytesToHash(entry[0])] = common.BytesToHash(entry[1])
+	}
+	return nil
 }
 
 // field type overrides for gencodec
