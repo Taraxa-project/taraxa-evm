@@ -183,7 +183,7 @@ func (st *StateTransition) preCheck() error {
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the used gas. It returns an error if failed.
 // An error indicates a consensus issue.
-func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr error, consensusErr error) {
+func (st *StateTransition) TransitionDb() (ret []byte, new_contract_addr common.Address, usedGas uint64, vmerr error, consensusErr error) {
 	if consensusErr = st.preCheck(); consensusErr != nil {
 		return
 	}
@@ -194,13 +194,13 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 	// Pay intrinsic gas
 	gas, consensusErr := IntrinsicGas(st.data, contractCreation, homestead)
 	if consensusErr != nil {
-		return nil, 0, nil, consensusErr
+		return nil, new_contract_addr, 0, nil, consensusErr
 	}
 	if consensusErr = st.useGas(gas); consensusErr != nil {
-		return nil, 0, nil, consensusErr
+		return nil, new_contract_addr, 0, nil, consensusErr
 	}
 	if contractCreation {
-		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
+		ret, new_contract_addr, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.IncrementNonce(sender.Address())
@@ -212,14 +212,14 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, vmerr err
 		// sufficient balance to make the transfer happen. The first
 		// balance transfer may never fail.
 		if vmerr == vm.ErrInsufficientBalance {
-			return nil, 0, nil, vmerr
+			return nil, new_contract_addr, 0, nil, vmerr
 		}
 	}
 	st.refundGas()
 	if !st.disable_miner_reward {
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	}
-	return ret, st.gasUsed(), vmerr, nil
+	return ret, new_contract_addr, st.gasUsed(), vmerr, nil
 }
 
 func (st *StateTransition) refundGas() {

@@ -8,7 +8,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/state"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trx_engine/trx_engine_base"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -68,7 +67,7 @@ func (this *EthTrxEngine) TransitionState(req *trx_engine.StateTransitionRequest
 		ret.UsedGas += hexutil.Uint64(txResult.GasUsed)
 		ethReceipt := types.NewReceipt(intermediateRoot, txErr != nil, uint64(ret.UsedGas))
 		if tx.To == nil {
-			ethReceipt.ContractAddress = crypto.CreateAddress(tx.From, uint64(tx.Nonce))
+			ethReceipt.ContractAddress = txResult.NewContractAddr
 		}
 		ethReceipt.TxHash = tx.Hash
 		ethReceipt.GasUsed = txResult.GasUsed

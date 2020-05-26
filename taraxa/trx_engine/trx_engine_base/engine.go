@@ -40,10 +40,11 @@ type TransactionRequest = struct {
 }
 
 type TransactionResult = struct {
-	EVMReturnValue []byte
-	GasUsed        uint64
-	ContractErr    error
-	ConsensusErr   error
+	EVMReturnValue  []byte
+	NewContractAddr common.Address
+	GasUsed         uint64
+	ContractErr     error
+	ConsensusErr    error
 }
 
 func (this *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *TransactionResult {
@@ -67,8 +68,8 @@ func (this *BaseTrxEngine) ExecuteTransaction(req *TransactionRequest) *Transact
 			return vm.NewEVMInterpreterWithExecutionController(evm, this.EvmConfig, req.OnEvmInstruction)
 		},
 	)
-	ret, usedGas, vmErr, consensusErr := core.
+	ret, new_contract_addr, usedGas, vmErr, consensusErr := core.
 		NewStateTransition(evm, msg, req.GasPool, req.DisableMinerReward).
 		TransitionDb()
-	return &TransactionResult{ret, usedGas, vmErr, consensusErr}
+	return &TransactionResult{ret, new_contract_addr, usedGas, vmErr, consensusErr}
 }
