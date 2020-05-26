@@ -13,6 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 )
@@ -80,9 +81,11 @@ func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
 		}
 		if len(acc.Storage) != 0 {
 			var acc_tr_w trie.Writer
+			addr := addr
 			acc_tr_w.Init(account_trie_db{StateTransition: self, addr: &addr}, nil, self.acc_tr_writer_opts)
 			for k, v := range acc.Storage {
 				v := new(big.Int).SetBytes(v[:])
+				assert.Holds(v.Sign() != 0)
 				acc_tr_w.Put(keccak256.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
 			}
 			trie_acc.StorageRootHash = acc_tr_w.Commit()
