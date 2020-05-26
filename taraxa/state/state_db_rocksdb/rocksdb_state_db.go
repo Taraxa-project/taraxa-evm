@@ -3,6 +3,7 @@ package state_db_rocksdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -144,7 +145,7 @@ func (self *DB) GetMainTrieNode(node_hash *common.Hash) (ret []byte) {
 
 func (self *DB) GetMainTrieValue(block_num types.BlockNum, addr_hash *common.Hash) (ret []byte) {
 	key := main_trie_val_key(block_num, addr_hash)
-	ret = self.find_trie_value(COL_main_trie_value, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
+	ret = self.find_trie_value(&self.col_main_trie_value_itr_pool, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
 	return
 }
 
@@ -161,7 +162,7 @@ func (self *DB) GetAccountTrieNode(node_hash *common.Hash) (ret []byte) {
 func (self *DB) GetAccountTrieValue(block_num types.BlockNum, addr *common.Address, key_hash *common.Hash) (
 	ret []byte) {
 	key := acc_trie_val_key(block_num, addr, key_hash)
-	ret = self.find_trie_value(COL_acc_trie_value, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
+	ret = self.find_trie_value(&self.col_acc_trie_value_itr_pool, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
 	return
 }
 
@@ -179,12 +180,11 @@ func (self *DB) get(col *gorocksdb.ColumnFamilyHandle, k []byte) (ret []byte) {
 	return
 }
 
-func (self *DB) find_trie_value(col Column, key []byte) (ret []byte) {
-	//defer util.LockUnlock(self.itr_pools_mu.RLocker())()
-	//itr := itr_pool.Get().(*gorocksdb.Iterator)
-	//defer itr_pool.Put(itr)
-	itr := self.db.NewIteratorCF(opts_r_default_itr, self.cols[col])
-
+func (self *DB) find_trie_value(itr_pool *sync.Pool, key []byte) (ret []byte) {
+	defer util.LockUnlock(self.itr_pools_mu.RLocker())()
+	fmt.Println("find_trie_value", key)
+	itr := itr_pool.Get().(*gorocksdb.Iterator)
+	defer itr_pool.Put(itr)
 	if itr.SeekForPrev(key); !itr.Valid() {
 		if err := itr.Err(); err != nil {
 			panic(err)
