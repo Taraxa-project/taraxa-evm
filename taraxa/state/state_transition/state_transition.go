@@ -14,6 +14,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 )
 
@@ -74,7 +75,7 @@ func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
 			trie_acc.Balance = common.Big0
 		}
 		if trie_acc.CodeSize != 0 {
-			code_hash := util.Hash(acc.Code)
+			code_hash := keccak256.Hash(acc.Code)
 			trie_acc.CodeHash = code_hash
 			self.db.PutCode(code_hash, acc.Code)
 		}
@@ -84,11 +85,11 @@ func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
 			for k, v := range acc.Storage {
 				v := new(big.Int).SetBytes(v[:])
 				assert.Holds(v.Sign() != 0)
-				acc_tr_w.Put(util.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
+				acc_tr_w.Put(keccak256.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
 			}
 			trie_acc.StorageRootHash = acc_tr_w.Commit()
 		}
-		self.main_tr_w.Put(util.Hash(addr[:]), state_common.AccountEncoder{&trie_acc})
+		self.main_tr_w.Put(keccak256.Hash(addr[:]), state_common.AccountEncoder{&trie_acc})
 	}
 	if ret := self.main_tr_w.Commit(); ret != nil {
 		return *ret
@@ -160,7 +161,7 @@ func (self *StateTransition) GetCode(hash *common.Hash) []byte {
 }
 
 func (self *StateTransition) GetAccount(addr *common.Address) (ret state_common.Account, present bool) {
-	enc_storage := self.db.GetMainTrieValueLatest(util.Hash(addr[:]))
+	enc_storage := self.db.GetMainTrieValueLatest(keccak256.Hash(addr[:]))
 	if present = len(enc_storage) != 0; present {
 		state_common.DecodeAccount(&ret, enc_storage)
 	}
@@ -168,7 +169,7 @@ func (self *StateTransition) GetAccount(addr *common.Address) (ret state_common.
 }
 
 func (self *StateTransition) GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int {
-	if enc_storage := self.db.GetAccountTrieValueLatest(addr, util.Hash(key[:])); len(enc_storage) != 0 {
+	if enc_storage := self.db.GetAccountTrieValueLatest(addr, keccak256.Hash(key[:])); len(enc_storage) != 0 {
 		_, val, _ := rlp.MustSplit(enc_storage)
 		return new(big.Int).SetBytes(val)
 	}
@@ -182,7 +183,7 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 		acc = new(pending_account)
 		self.pending_accounts[addr] = acc
 		self.main_tr_w_executor.Do(func() {
-			self.main_tr_w.Put(util.Hash(addr[:]), acc)
+			self.main_tr_w.Put(keccak256.Hash(addr[:]), acc)
 		})
 	}
 	acc.executor.Do(func() {
@@ -201,9 +202,9 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 		}
 		for k, v := range change.StorageDirty {
 			if v.Sign() == 0 {
-				acc.trie_w.Delete(util.Hash(k[:]))
+				acc.trie_w.Delete(keccak256.Hash(k[:]))
 			} else {
-				acc.trie_w.Put(util.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
+				acc.trie_w.Put(keccak256.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
 			}
 		}
 	})
@@ -212,6 +213,6 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 func (self *StateTransition) OnAccountDeleted(addr common.Address) {
 	delete(self.pending_accounts, addr)
 	self.main_tr_w_executor.Do(func() {
-		self.main_tr_w.Delete(util.Hash(addr[:]))
+		self.main_tr_w.Delete(keccak256.Hash(addr[:]))
 	})
 }

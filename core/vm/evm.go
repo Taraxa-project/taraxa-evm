@@ -24,6 +24,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 	"sync"
 )
@@ -270,7 +271,7 @@ func (evm *EVM) create_1(caller ContractRef, code []byte, gas uint64, value *big
 // The different between create_2 with create_1 is create_2 uses sha3(0xff ++ msg.sender ++ salt ++ sha3(init_code))[12:]
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
 func (evm *EVM) create_2(caller ContractRef, code []byte, gas uint64, endowment *big.Int, salt *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
-	codeAndHash := codeAndHash{code, util.HashOnStack(code)}
+	codeAndHash := codeAndHash{code, keccak256.HashOnStack(code)}
 	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), codeAndHash.hash[:])
 	return evm.create(caller, codeAndHash, gas, endowment, contractAddr)
 }

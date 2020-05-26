@@ -1,9 +1,8 @@
 package bin
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"math/big"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"math/rand"
 	"reflect"
 	"unsafe"
 )
@@ -18,17 +17,6 @@ func StringView(bytes []byte) string {
 func BytesView(str string) (ret []byte) {
 	ret = AnyBytes1((*reflect.StringHeader)(unsafe.Pointer(&str)).Data, len(str))
 	return
-}
-
-func HashView(bytes []byte) (ret *common.Hash) {
-	if l := len(bytes); l != 0 && assert.Holds(l == common.HashLength) {
-		ret = (*common.Hash)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data))
-	}
-	return
-}
-
-func HashToBig(in *common.Hash, out *big.Int) *big.Int {
-	return out.SetBytes(AnyBytes2(unsafe.Pointer(in), common.HashLength))
 }
 
 func AnyBytes1(ptr uintptr, length int) (ret []byte) {
@@ -134,4 +122,18 @@ func SizeInBytes(i uint64) byte {
 	default:
 		return 8
 	}
+}
+
+func RandomBytes(desired_len int, rnd *rand.Rand) []byte {
+	ret := make([]byte, 0, desired_len)
+	for {
+		curr_len := len(ret)
+		if curr_len == desired_len {
+			break
+		}
+		ENC_b_endian_compact_64(rnd.Uint64(), func(b ...byte) {
+			ret = append(ret, b[:util.Min(len(b), desired_len-curr_len)]...)
+		})
+	}
+	return ret
 }

@@ -20,7 +20,7 @@ import (
 	"errors"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"golang.org/x/crypto/sha3"
 	"math/big"
 )
@@ -56,7 +56,7 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 // CreateAddress creates an ethereum address given the bytes and the nonce
 func CreateAddress(b common.Address, nonce uint64) common.Address {
 	data := rlp.MustEncodeToBytes([]interface{}{b, nonce})
-	hash := util.Hash(data)
+	hash := keccak256.Hash(data)
 	ret := common.BytesToAddress(hash[12:])
 	return ret
 }
@@ -64,7 +64,7 @@ func CreateAddress(b common.Address, nonce uint64) common.Address {
 // CreateAddress2 creates an ethereum address given the address bytes, initial
 // contract code hash and a salt.
 func CreateAddress2(b common.Address, salt [32]byte, inithash []byte) common.Address {
-	hash := util.Hash([]byte{0xff}, b.Bytes(), salt[:], inithash)
+	hash := keccak256.Hash([]byte{0xff}, b.Bytes(), salt[:], inithash)
 	ret := common.BytesToAddress(hash[12:])
 	return ret
 }

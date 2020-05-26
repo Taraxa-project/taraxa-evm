@@ -5,7 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
 type Reader struct{ ReadOnlyDB }
@@ -91,7 +91,7 @@ func (self Reader) dec_node(key_prefix []byte, db_hash *node_hash, buf []byte) (
 		case 0:
 			return nil, rest
 		case common.HashLength:
-			return (*node_hash)(bin.HashView(payload)), rest
+			return (*node_hash)(keccak256.HashView(payload)), rest
 		default:
 			panic("impossible")
 		}
@@ -113,7 +113,7 @@ func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, 
 		content, _, err = rlp.SplitString(content)
 		util.PanicIfNotNil(err)
 		if l := len(content); l == common.HashLength {
-			ret.hash = (*node_hash)(bin.HashView(content))
+			ret.hash = (*node_hash)(keccak256.HashView(content))
 			ret.val = nil_val_node
 		} else {
 			assert.Holds(0 < l && l <= self.MaxValueSizeToStoreInTrie())
@@ -123,7 +123,7 @@ func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, 
 	}
 	ret.val, _ = self.dec_node(append(key_prefix, key_ext...), nil, content)
 	if _, child_is_hash := ret.val.(*node_hash); child_is_hash && ret.hash == nil {
-		ret.hash = (*node_hash)(util.Hash(enc))
+		ret.hash = (*node_hash)(keccak256.Hash(enc))
 	}
 	return ret
 }

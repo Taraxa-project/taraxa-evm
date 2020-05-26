@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 	"sync"
 )
@@ -25,9 +26,9 @@ func DecodeAccount(acc *Account, enc_storage []byte) {
 	tmp, rest = rlp.MustSplitSring(rest)
 	acc.Balance = new(big.Int).SetBytes(tmp)
 	tmp, rest = rlp.MustSplitSring(rest)
-	acc.StorageRootHash = bin.HashView(tmp)
+	acc.StorageRootHash = keccak256.HashView(tmp)
 	tmp, rest = rlp.MustSplitSring(rest)
-	acc.CodeHash = bin.HashView(tmp)
+	acc.CodeHash = keccak256.HashView(tmp)
 	tmp, rest = rlp.MustSplitSring(rest)
 	acc.CodeSize = bin.DEC_b_endian_compact_64(tmp)
 }

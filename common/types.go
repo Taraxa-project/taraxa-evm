@@ -20,7 +20,9 @@ import (
 	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"math/big"
 	"math/rand"
 	"reflect"
@@ -63,6 +65,18 @@ func BigToHash(b *big.Int) Hash { return BytesToHash(b.Bytes()) }
 // HexToHash sets byte representation of s to hash.
 // If b is larger than len(h), b will be cropped from the left.
 func HexToHash(s string) Hash { return BytesToHash(FromHex(s)) }
+
+func (h *Hash) DecodeRLP(stream *rlp.Stream) error {
+	bytes, err := stream.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(bytes) > HashLength {
+		return errors.New("too long")
+	}
+	h.SetBytes(bytes)
+	return nil
+}
 
 // Bytes gets the byte representation of the underlying hash.
 func (h Hash) Bytes() []byte { return h[:] }

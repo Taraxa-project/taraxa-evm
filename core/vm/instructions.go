@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 )
 
@@ -382,7 +382,7 @@ func opSAR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stac
 func opSha3(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
 	data := memory.Get(offset.Int64(), size.Int64())
-	hash := util.Hash(data)
+	hash := keccak256.Hash(data)
 	stack.push(evm.int_pool.get().SetBytes(hash[:]))
 	evm.int_pool.put(offset, size)
 	return nil, nil

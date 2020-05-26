@@ -6,8 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/util_rlp"
 	"math/big"
 )
@@ -42,7 +41,7 @@ type Proof struct {
 }
 
 func (self BlockDB) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
-	ret.AccountProof = trie.Reader{main_trie_db{BlockDB: self}}.Prove(state_root, util.Hash(addr[:]))
+	ret.AccountProof = trie.Reader{main_trie_db{BlockDB: self}}.Prove(state_root, keccak256.Hash(addr[:]))
 	if len(ret.AccountProof.Value) == 0 || len(keys) == 0 {
 		return
 	}
@@ -52,19 +51,19 @@ func (self BlockDB) Prove(state_root *common.Hash, addr *common.Address, keys ..
 		return
 	}
 	acc_tr_reader := trie.Reader{account_trie_db{BlockDB: self, addr: addr}}
-	storage_root_h := bin.HashView(storage_root)
+	storage_root_h := keccak256.HashView(storage_root)
 	for i := 0; i < len(keys); i++ {
-		ret.StorageProofs[i] = acc_tr_reader.Prove(storage_root_h, util.Hash(keys[i][:]))
+		ret.StorageProofs[i] = acc_tr_reader.Prove(storage_root_h, keccak256.Hash(keys[i][:]))
 	}
 	return
 }
 
 func (self BlockDB) GetAccountRaw(addr *common.Address) []byte {
-	return self.db.GetMainTrieValue(self.blk_num, util.Hash(addr[:]))
+	return self.db.GetMainTrieValue(self.blk_num, keccak256.Hash(addr[:]))
 }
 
 func (self BlockDB) GetAccountStorageRaw(addr *common.Address, key *common.Hash) (ret []byte) {
-	key_hash := util.HashOnStack(key[:])
+	key_hash := keccak256.HashOnStack(key[:])
 	if ret = self.db.GetAccountTrieValue(self.blk_num, addr, &key_hash); len(ret) != 0 {
 		_, ret, _ = rlp.MustSplit(ret)
 	}
@@ -74,7 +73,7 @@ func (self BlockDB) GetAccountStorageRaw(addr *common.Address, key *common.Hash)
 func (self BlockDB) GetCodeByAddress(addr *common.Address) (ret []byte) {
 	if acc := self.GetAccountRaw(addr); len(acc) != 0 {
 		if code_hash := util_rlp.RLPListAt(acc, 3); len(code_hash) != 0 {
-			ret = self.db.GetCode(bin.HashView(code_hash))
+			ret = self.db.GetCode(keccak256.HashView(code_hash))
 		}
 	}
 	return

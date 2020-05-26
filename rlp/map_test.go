@@ -2,7 +2,6 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"hash/fnv"
@@ -31,7 +30,7 @@ func TestMap(t *testing.T) {
 	for i, n := 0, rnd.Intn(15); i < n; i++ {
 		var el1 TestStruct1
 		el1.F0 = rnd.Uint64()
-		el1.F1 = string(util.RandomBytes(rnd.Intn(15), rnd))
+		el1.F1 = string(bin.RandomBytes(rnd.Intn(15), rnd))
 		el1.F2 = make(TestMap0)
 		for i, n := 0, rnd.Intn(15); i < n; i++ {
 			var el0_list []TestStruct0
@@ -43,9 +42,9 @@ func TestMap(t *testing.T) {
 				}
 				el0_list = append(el0_list, el0)
 			}
-			el1.F2[string(util.RandomBytes(10, rnd))] = el0_list
+			el1.F2[string(bin.RandomBytes(10, rnd))] = el0_list
 		}
-		expected[string(util.RandomBytes(rnd.Intn(15), rnd))] = el1
+		expected[string(bin.RandomBytes(rnd.Intn(15), rnd))] = el1
 	}
 	actual := make(TestMap1)
 	MustDecodeBytes(MustEncodeToBytes(expected), &actual)

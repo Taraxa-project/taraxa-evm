@@ -3,7 +3,7 @@ package trie
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
 type hash_encoder struct {
@@ -45,11 +45,11 @@ func (self *hash_encoder) ListEnd(list_pos int, is_root bool, out **node_hash) {
 	if self.encoder.ListSize(list_pos) < common.HashLength && !is_root {
 		return
 	}
-	hasher := util.GetHasherFromPool()
+	hasher := keccak256.GetHasherFromPool()
 	self.encoder.Flush(list_pos, hasher.Write)
 	hash := hasher.Hash()
 	*out = (*node_hash)(hash)
-	util.ReturnHasherToPool(hasher)
+	keccak256.ReturnHasherToPool(hasher)
 	if !is_root {
 		self.encoder.RevertToListStart(list_pos)
 		self.encoder.AppendString(hash[:])

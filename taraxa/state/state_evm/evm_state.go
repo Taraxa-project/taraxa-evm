@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
 )
 
@@ -194,7 +195,7 @@ func (self *EVMState) SetCode(addr common.Address, code []byte) {
 	self.add_acc_revert(addr, acc, func() {
 		acc.CodeDirty, acc.CodeHash, acc.CodeSize, acc.Code = false, nil, 0, nil
 	})
-	acc.CodeDirty, acc.CodeHash, acc.CodeSize, acc.Code = true, util.Hash(code), uint64(code_size), code
+	acc.CodeDirty, acc.CodeHash, acc.CodeSize, acc.Code = true, keccak256.Hash(code), uint64(code_size), code
 }
 
 func (self *EVMState) SetState(addr common.Address, key common.Hash, value *big.Int) {

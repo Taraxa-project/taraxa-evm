@@ -1,10 +1,14 @@
-package util
+package keccak256
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"golang.org/x/crypto/sha3"
 	"hash"
+	"reflect"
 	"runtime"
+	"unsafe"
 )
 
 type Hasher struct {
@@ -30,7 +34,7 @@ func (self *Hasher) Reset() {
 	self.out = new(common.Hash)
 }
 
-var hashers_resetter SingleThreadExecutor
+var hashers_resetter util.SingleThreadExecutor
 var hashers = func() chan *Hasher {
 	// TODO configurable size
 	ret := make(chan *Hasher, runtime.NumCPU()*128)
@@ -71,5 +75,12 @@ func HashOnStack(bs ...[]byte) (ret common.Hash) {
 		hasher.state.Reset()
 		hashers <- hasher
 	})
+	return
+}
+
+func HashView(bytes []byte) (ret *common.Hash) {
+	if l := len(bytes); l != 0 && assert.Holds(l == common.HashLength) {
+		ret = (*common.Hash)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data))
+	}
 	return
 }
