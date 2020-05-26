@@ -154,6 +154,7 @@ func taraxa_evm_state_API_Historical_GetAccountStorage(
 	dump_json(params)
 	self := state_API_instances[state_API_ptr(ptr)]
 	ret := self.Historical.AtBlock(params.BlkNum).GetAccountStorageRaw(&params.Addr, &params.Key)
+	fmt.Println("ret:", ret)
 	call_bytes_cb(ret, cb)
 }
 
