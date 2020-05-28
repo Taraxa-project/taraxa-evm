@@ -49,6 +49,8 @@ func (self *DB) Init(db *gorocksdb.DB, cols Columns) *DB {
 
 func (self *DB) Close() {
 	defer util.LockUnlock(&self.close_mu)()
+	self.maintenance_task_executor.Synchronize()
+	self.batch_accessor.Synchronize()
 	self.closed = true
 }
 
