@@ -22,6 +22,8 @@ type DB struct {
 	maintenance_task_executor    util.SingleThreadExecutor
 	batch                        *gorocksdb.WriteBatch
 	batch_accessor               util.SingleThreadExecutor
+	close_mu                     sync.RWMutex
+	closed                       bool
 }
 
 type Columns = [COL_COUNT]*gorocksdb.ColumnFamilyHandle
@@ -45,9 +47,14 @@ func (self *DB) Init(db *gorocksdb.DB, cols Columns) *DB {
 	return self
 }
 
+func (self *DB) Close() {
+	defer util.LockUnlock(&self.close_mu)()
+	self.closed = true
+}
+
 func (self *DB) reset_itr_pools() {
-	self.col_main_trie_value_itr_pool = trie_value_itr_pool(self.db, self.cols[COL_main_trie_value])
-	self.col_acc_trie_value_itr_pool = trie_value_itr_pool(self.db, self.cols[COL_acc_trie_value])
+	self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(COL_main_trie_value)
+	self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(COL_acc_trie_value)
 }
 
 func (self *DB) TransactionBegin(batch *gorocksdb.WriteBatch) {
@@ -221,11 +228,14 @@ func acc_trie_val_latest_key(addr *common.Address, key_hash *common.Hash) (
 	return
 }
 
-func trie_value_itr_pool(db *gorocksdb.DB, col *gorocksdb.ColumnFamilyHandle) sync.Pool {
+func (self *DB) trie_value_itr_pool(col Column) sync.Pool {
 	return sync.Pool{New: func() interface{} {
-		ret := db.NewIteratorCF(opts_r_default_itr, col)
+		ret := self.db.NewIteratorCF(opts_r_default_itr, self.cols[col])
 		runtime.SetFinalizer(ret, func(itr *gorocksdb.Iterator) {
-			itr.Close()
+			defer util.LockUnlock(self.close_mu.RLocker())()
+			if !self.closed {
+				itr.Close()
+			}
 		})
 		return ret
 	}}
