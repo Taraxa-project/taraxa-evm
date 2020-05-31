@@ -205,7 +205,7 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 			self.main_tr_w.Put(keccak256.Hash(addr[:]), acc)
 		})
 	}
-	if change.CodeSize != 0 && change.BalanceDirty && !acc.balance_dirty {
+	if change.CodeSize == 0 && change.BalanceDirty && !acc.balance_dirty {
 		acc.balance_dirty = true
 		self.num_non_contract_accs_w_balance_change++
 	}
