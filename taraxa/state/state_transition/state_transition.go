@@ -137,16 +137,18 @@ func (self *StateTransition) ApplyBlock(
 			self.evm_state.AddBalance)
 		self.evm_state.Commit(rules.IsEIP158, self)
 	}
-	ret.BalanceChanges = make([]AddressAndBalance, 0, self.num_accounts_w_balance_change)
+	ret.BalanceChanges = make([]AddressAndBalance, self.num_accounts_w_balance_change)
+	balance_changes_pos := 0
 	for _, addr := range self.pending_accounts_keys {
 		acc := self.pending_accounts[addr]
 		if acc == nil {
 			continue
 		}
 		delete(self.pending_accounts, addr)
-		balance_changes_pos := len(ret.BalanceChanges)
+		balance_changes_pos_ := balance_changes_pos
 		if acc.balance_dirty {
-			ret.BalanceChanges = append(ret.BalanceChanges, AddressAndBalance{Addr: addr})
+			ret.BalanceChanges[balance_changes_pos_].Addr = addr
+			balance_changes_pos++
 		}
 		acc.executor.Do(func() {
 			if acc.trie_w != nil {
@@ -154,7 +156,7 @@ func (self *StateTransition) ApplyBlock(
 			}
 			acc.enc_storage, acc.enc_hash = state_common.AccountEncoder{&acc.acc}.EncodeForTrie()
 			if acc.balance_dirty {
-				ret.BalanceChanges[balance_changes_pos].Balance = acc.acc.Balance
+				ret.BalanceChanges[balance_changes_pos_].Balance = acc.acc.Balance
 			}
 		})
 	}
