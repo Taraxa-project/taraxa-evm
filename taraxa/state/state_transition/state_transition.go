@@ -19,17 +19,17 @@ import (
 )
 
 type StateTransition struct {
-	db                            state_common.DB
-	get_block_hash                vm.GetHashFunc
-	chain_cfg                     state_common.ChainConfig
-	main_tr_w                     trie.Writer
-	main_tr_w_executor            util.SingleThreadExecutor
-	acc_tr_writer_opts            trie.WriterCacheOpts
-	pending_accounts              map[common.Address]*pending_account
-	pending_accounts_keys         []common.Address
-	evm_state                     state_evm.EVMState
-	curr_blk_num                  types.BlockNum
-	num_accounts_w_balance_change uint64
+	db                                     state_common.DB
+	get_block_hash                         vm.GetHashFunc
+	chain_cfg                              state_common.ChainConfig
+	main_tr_w                              trie.Writer
+	main_tr_w_executor                     util.SingleThreadExecutor
+	acc_tr_writer_opts                     trie.WriterCacheOpts
+	pending_accounts                       map[common.Address]*pending_account
+	pending_accounts_keys                  []common.Address
+	evm_state                              state_evm.EVMState
+	curr_blk_num                           types.BlockNum
+	num_non_contract_accs_w_balance_change uint64
 }
 
 type CacheOpts struct {
@@ -105,9 +105,9 @@ type AddressAndBalance = struct {
 	Balance *big.Int
 }
 type Result struct {
-	StateRoot        common.Hash
-	ExecutionResults []vm.ExecutionResult
-	BalanceChanges   []AddressAndBalance
+	StateRoot                 common.Hash
+	ExecutionResults          []vm.ExecutionResult
+	NonContractBalanceChanges []AddressAndBalance
 }
 
 func (self *StateTransition) ApplyBlock(
@@ -137,7 +137,7 @@ func (self *StateTransition) ApplyBlock(
 			self.evm_state.AddBalance)
 		self.evm_state.Commit(rules.IsEIP158, self)
 	}
-	ret.BalanceChanges = make([]AddressAndBalance, self.num_accounts_w_balance_change)
+	ret.NonContractBalanceChanges = make([]AddressAndBalance, self.num_non_contract_accs_w_balance_change)
 	balance_changes_pos := 0
 	for _, addr := range self.pending_accounts_keys {
 		acc := self.pending_accounts[addr]
@@ -147,7 +147,7 @@ func (self *StateTransition) ApplyBlock(
 		delete(self.pending_accounts, addr)
 		balance_changes_pos_ := balance_changes_pos
 		if acc.balance_dirty {
-			ret.BalanceChanges[balance_changes_pos_].Addr = addr
+			ret.NonContractBalanceChanges[balance_changes_pos_].Addr = addr
 			balance_changes_pos++
 		}
 		acc.executor.Do(func() {
@@ -156,7 +156,7 @@ func (self *StateTransition) ApplyBlock(
 			}
 			acc.enc_storage, acc.enc_hash = state_common.AccountEncoder{&acc.acc}.EncodeForTrie()
 			if acc.balance_dirty {
-				ret.BalanceChanges[balance_changes_pos_].Balance = acc.acc.Balance
+				ret.NonContractBalanceChanges[balance_changes_pos_].Balance = acc.acc.Balance
 			}
 		})
 	}
@@ -169,8 +169,9 @@ func (self *StateTransition) ApplyBlock(
 	})
 	self.evm_state.Reset()
 	self.pending_accounts_keys = self.pending_accounts_keys[:0]
-	self.num_accounts_w_balance_change = 0
+	self.num_non_contract_accs_w_balance_change = 0
 	self.main_tr_w_executor.Synchronize()
+	ret.NonContractBalanceChanges = ret.NonContractBalanceChanges[:balance_changes_pos]
 	return
 }
 
@@ -204,9 +205,9 @@ func (self *StateTransition) OnAccountChanged(addr common.Address, change state_
 			self.main_tr_w.Put(keccak256.Hash(addr[:]), acc)
 		})
 	}
-	if change.BalanceDirty && !acc.balance_dirty {
+	if change.CodeSize != 0 && change.BalanceDirty && !acc.balance_dirty {
 		acc.balance_dirty = true
-		self.num_accounts_w_balance_change++
+		self.num_non_contract_accs_w_balance_change++
 	}
 	acc.executor.Do(func() {
 		acc.acc = change.Account
