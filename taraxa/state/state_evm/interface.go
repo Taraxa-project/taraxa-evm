@@ -10,6 +10,7 @@ type AccountChange struct {
 	state_common.Account
 	Code         []byte
 	CodeDirty    bool
+	BalanceDirty bool
 	StorageDirty AccountStorage
 }
 

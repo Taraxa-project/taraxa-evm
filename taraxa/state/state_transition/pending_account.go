@@ -7,11 +7,12 @@ import (
 )
 
 type pending_account struct {
-	acc         state_common.Account
-	trie_w      *trie.Writer
-	executor    util.SingleThreadExecutor
-	enc_storage []byte
-	enc_hash    []byte
+	acc           state_common.Account
+	balance_dirty bool
+	trie_w        *trie.Writer
+	executor      util.SingleThreadExecutor
+	enc_storage   []byte
+	enc_hash      []byte
 }
 
 func (self *pending_account) EncodeForTrie() (r0, r1 []byte) {

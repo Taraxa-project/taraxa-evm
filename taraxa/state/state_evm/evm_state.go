@@ -170,11 +170,11 @@ func (self *EVMState) SubBalance(addr common.Address, amount *big.Int) {
 }
 
 func (self *EVMState) set_balance(addr common.Address, acc *local_account, amount *big.Int) {
-	balance_prev := acc.Balance
+	balance_prev, dirty_prev := acc.Balance, acc.BalanceDirty
 	self.add_acc_revert(addr, acc, func() {
-		acc.Balance = balance_prev
+		acc.Balance, acc.BalanceDirty = balance_prev, dirty_prev
 	})
-	acc.Balance = amount
+	acc.Balance, acc.BalanceDirty = amount, true
 }
 
 func (self *EVMState) IncrementNonce(addr common.Address) {
