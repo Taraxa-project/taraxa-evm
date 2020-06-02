@@ -76,7 +76,7 @@ func taraxa_evm_state_API_New(
 		make([]byte, 0, params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*1024)
 	self.rlp_encoder_StateTransition_ApplyBlock.ResizeReset(
 		cap(self.rlp_buf_StateTransition_ApplyBlock),
-		int(params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*3))
+		int(params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*128))
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	lastpos := len(state_API_available_ptrs) - 1
 	assert.Holds(lastpos >= 0)
