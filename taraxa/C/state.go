@@ -95,7 +95,6 @@ func taraxa_evm_state_API_Free(
 	defer handle_err(cb_err)
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	state_API_instances[ptr].db.Close()
-	state_API_instances[ptr].StateTransition.DumpStats()
 	state_API_instances[ptr], state_API_available_ptrs = nil, append(state_API_available_ptrs, state_API_ptr(ptr))
 }
 
