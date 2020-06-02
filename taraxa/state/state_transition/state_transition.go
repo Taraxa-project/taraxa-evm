@@ -1,8 +1,6 @@
 package state_transition
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -69,9 +67,6 @@ func (self *StateTransition) Init(
 	})
 	self.result_buf.ExecutionResults = make([]vm.ExecutionResult, cache_opts.ExpectedMaxNumTrxPerBlock)
 	self.result_buf.NonContractBalanceChanges = make([]AddressAndBalance, cache_opts.ExpectedMaxNumTrxPerBlock*2)
-	b, e := json.Marshal(self.chain_cfg)
-	util.PanicIfNotNil(e)
-	fmt.Println("cfg:", string(b))
 	return self
 }
 
