@@ -477,7 +477,6 @@ func (self *EVM) run_code(contract *Contract, readOnly bool) (ret []byte, err er
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(pc)
 		operation := self.instruction_set[op]
-		fmt.Println("OP:", op)
 		if !operation.valid {
 			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
 		}
