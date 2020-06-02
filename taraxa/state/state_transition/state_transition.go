@@ -29,7 +29,8 @@ type StateTransition struct {
 	pending_accounts_keys                  []common.Address
 	evm_state                              state_evm.EVMState
 	curr_blk_num                           types.BlockNum
-	num_non_contract_accs_w_balance_change uint64
+	num_non_contract_accs_w_balance_change int
+	result_buf                             Result
 }
 
 type CacheOpts struct {
@@ -64,6 +65,8 @@ func (self *StateTransition) Init(
 		AccountsPrealloc:      accs_per_block,
 		DirtyAccountsPrealloc: dirty_accs_per_block,
 	})
+	self.result_buf.ExecutionResults = make([]vm.ExecutionResult, cache_opts.ExpectedMaxNumTrxPerBlock)
+	self.result_buf.NonContractBalanceChanges = make([]AddressAndBalance, cache_opts.ExpectedMaxNumTrxPerBlock*2)
 	return self
 }
 
@@ -115,8 +118,14 @@ func (self *StateTransition) ApplyBlock(
 	transactions []vm.Transaction,
 	uncles []UncleBlock,
 	concurrent_schedule state_concurrent_schedule.ConcurrentSchedule,
-) (ret Result) {
-	ret.ExecutionResults = make([]vm.ExecutionResult, len(transactions))
+) (ret *Result) {
+	ret = &self.result_buf
+	trx_cnt := len(transactions)
+	if cap(ret.ExecutionResults) < trx_cnt {
+		ret.ExecutionResults = make([]vm.ExecutionResult, trx_cnt)
+	} else {
+		ret.ExecutionResults = ret.ExecutionResults[:trx_cnt]
+	}
 	self.curr_blk_num++
 	rules := self.chain_cfg.ETHChainConfig.Rules(self.curr_blk_num)
 	if rules.IsDAOFork {
@@ -125,7 +134,7 @@ func (self *StateTransition) ApplyBlock(
 	}
 	evm_blk := vm.Block{self.curr_blk_num, *evm_block}
 	evm_cfg := vm.NewEVMConfig(self.get_block_hash, &evm_blk, rules, self.chain_cfg.ExecutionOptions)
-	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(len(transactions)); i < cnt; i++ {
+	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(trx_cnt); i < cnt; i++ {
 		ret.ExecutionResults[i] = vm.Main(&evm_cfg, &self.evm_state, &transactions[i])
 		self.evm_state.Commit(rules.IsEIP158, self)
 	}
@@ -137,7 +146,11 @@ func (self *StateTransition) ApplyBlock(
 			self.evm_state.AddBalance)
 		self.evm_state.Commit(rules.IsEIP158, self)
 	}
-	ret.NonContractBalanceChanges = make([]AddressAndBalance, self.num_non_contract_accs_w_balance_change)
+	if cap(ret.NonContractBalanceChanges) < self.num_non_contract_accs_w_balance_change {
+		ret.NonContractBalanceChanges = make([]AddressAndBalance, self.num_non_contract_accs_w_balance_change)
+	} else {
+		ret.NonContractBalanceChanges = ret.NonContractBalanceChanges[:self.num_non_contract_accs_w_balance_change]
+	}
 	balance_changes_pos := 0
 	for _, addr := range self.pending_accounts_keys {
 		acc := self.pending_accounts[addr]

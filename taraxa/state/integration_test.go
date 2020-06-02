@@ -70,7 +70,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 			AccTrieWriterOpts: trie.WriterCacheOpts{
 				ExpectedDepth: 16,
 			},
-			ExpectedMaxNumTrxPerBlock: 100,
+			ExpectedMaxNumTrxPerBlock: 300,
 		},
 	)
 	batch := gorocksdb.NewWriteBatch()

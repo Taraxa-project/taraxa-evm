@@ -213,20 +213,21 @@ func (self *Encoder) Flush(list_pos int, appender func(...byte)) {
 	appender(self.str[strpos:]...)
 }
 
-func (self *Encoder) FlushToBytes(list_pos int, buf []byte) []byte {
+func (self *Encoder) FlushToBytes(list_pos int, buf *[]byte) {
 	self.Flush(list_pos, func(b ...byte) {
-		buf = append(buf, b...)
+		*buf = append(*buf, b...)
 	})
-	return buf
 }
 
-func (self *Encoder) ToBytes(list_pos int) []byte {
+func (self *Encoder) ToBytes(list_pos int) (ret []byte) {
 	capacity := self.Size()
 	if list_pos != -1 {
 		lhead := self.lheads[list_pos]
 		capacity -= (lhead.strpos + lhead.base_lhsize)
 	}
-	return self.FlushToBytes(list_pos, make([]byte, 0, capacity))
+	ret = make([]byte, 0, capacity)
+	self.FlushToBytes(list_pos, &ret)
+	return
 }
 
 // Encoder implements io.Writer so it can be passed it into EncodeRLP.

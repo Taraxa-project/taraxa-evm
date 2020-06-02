@@ -8,6 +8,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_concurrent_schedule"
@@ -23,8 +24,17 @@ import (
 )
 
 type state_API struct {
-	db             state_db_rocksdb.DB
-	get_blk_hash_C C.taraxa_evm_GetBlockHash
+	db                                state_db_rocksdb.DB
+	get_blk_hash_C                    C.taraxa_evm_GetBlockHash
+	params_StateTransition_ApplyBlock struct {
+		BatchPtr           uintptr
+		EVMBlock           vm.BlockWithoutNumber
+		Transactions       []vm.Transaction
+		Uncles             []state_transition.UncleBlock
+		ConcurrentSchedule state_concurrent_schedule.ConcurrentSchedule
+	}
+	rlp_buf_StateTransition_ApplyBlock     []byte
+	rlp_encoder_StateTransition_ApplyBlock rlp.Encoder
 	state.API
 }
 
@@ -60,6 +70,13 @@ func taraxa_evm_state_API_New(
 	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
 	self.API.Init(&self.db, self.blk_hash,
 		params.ChainConfig, params.CurrBlkNum, params.CurrStateRoot, params.StateTransitionCacheOpts)
+	self.params_StateTransition_ApplyBlock.Transactions =
+		make([]vm.Transaction, 0, params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock)
+	self.rlp_buf_StateTransition_ApplyBlock =
+		make([]byte, 0, params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*1024)
+	self.rlp_encoder_StateTransition_ApplyBlock.ResizeReset(
+		cap(self.rlp_buf_StateTransition_ApplyBlock),
+		int(params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*3))
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	lastpos := len(state_API_available_ptrs) - 1
 	assert.Holds(lastpos >= 0)
@@ -215,20 +232,21 @@ func taraxa_evm_state_API_StateTransition_ApplyBlock(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	var params struct {
-		BatchPtr           uintptr
-		EVMBlock           vm.BlockWithoutNumber
-		Transactions       []vm.Transaction
-		Uncles             []state_transition.UncleBlock
-		ConcurrentSchedule state_concurrent_schedule.ConcurrentSchedule
-	}
-	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
+	params := &self.params_StateTransition_ApplyBlock
+	params.Transactions = params.Transactions[:0]
+	params.Uncles = params.Uncles[:0]
+	params.ConcurrentSchedule.ParallelTransactions = params.ConcurrentSchedule.ParallelTransactions[:0]
+	dec_rlp(params_enc, params)
 	self.db.TransactionBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.TransactionEnd()
 	ret := self.StateTransition.ApplyBlock(
 		&params.EVMBlock, params.Transactions, params.Uncles, params.ConcurrentSchedule)
-	enc_rlp(&ret, cb)
+	self.rlp_buf_StateTransition_ApplyBlock = self.rlp_buf_StateTransition_ApplyBlock[:0]
+	self.rlp_encoder_StateTransition_ApplyBlock.Reset()
+	self.rlp_encoder_StateTransition_ApplyBlock.AppendAny(ret)
+	self.rlp_encoder_StateTransition_ApplyBlock.FlushToBytes(-1, &self.rlp_buf_StateTransition_ApplyBlock)
+	call_bytes_cb(self.rlp_buf_StateTransition_ApplyBlock, cb)
 }
 
 //export taraxa_evm_state_API_ConcurrentScheduleGeneration_Begin
