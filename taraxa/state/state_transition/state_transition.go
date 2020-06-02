@@ -1,6 +1,7 @@
 package state_transition
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -16,6 +17,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"math/big"
+	"time"
 )
 
 type StateTransition struct {
@@ -31,6 +33,8 @@ type StateTransition struct {
 	curr_blk_num                           types.BlockNum
 	num_non_contract_accs_w_balance_change int
 	result_buf                             Result
+	st_total_time                          uint64
+	st_total_calls                         uint64
 }
 
 type CacheOpts struct {
@@ -113,12 +117,21 @@ type Result struct {
 	NonContractBalanceChanges []AddressAndBalance
 }
 
+func (self *StateTransition) DumpStats() {
+	fmt.Println("st_total_time:", self.st_total_time, "st_total_calls", self.st_total_calls)
+}
+
 func (self *StateTransition) ApplyBlock(
 	evm_block *vm.BlockWithoutNumber,
 	transactions []vm.Transaction,
 	uncles []UncleBlock,
 	concurrent_schedule state_concurrent_schedule.ConcurrentSchedule,
 ) (ret *Result) {
+	start := time.Now()
+	defer func() {
+		self.st_total_time += uint64(time.Now().Sub(start).Microseconds())
+		self.st_total_calls++
+	}()
 	ret = &self.result_buf
 	trx_cnt := len(transactions)
 	if cap(ret.ExecutionResults) < trx_cnt {
