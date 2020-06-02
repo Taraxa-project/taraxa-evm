@@ -8,6 +8,7 @@ import (
 	"hash"
 	"reflect"
 	"runtime"
+	"sync"
 	"unsafe"
 )
 
@@ -35,16 +36,31 @@ func (self *Hasher) Reset() {
 }
 
 var hashers_resetter util.SingleThreadExecutor
-var hashers = func() chan *Hasher {
-	// TODO configurable size
-	ret := make(chan *Hasher, runtime.NumCPU()*128)
-	for i := 0; i < cap(ret); i++ {
-		ret <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
+var hashers chan *Hasher
+var hashers_init_mu sync.Mutex
+
+func InitPool(size uint64) {
+	defer util.LockUnlock(&hashers_init_mu)()
+	if hashers != nil {
+		panic("already initialized")
 	}
-	return ret
-}()
+	init_pool(size)
+}
+
+func init_pool(size uint64) {
+	hashers = make(chan *Hasher, size)
+	for i := uint64(0); i < size; i++ {
+		hashers <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
+	}
+}
 
 func GetHasherFromPool() *Hasher {
+	if hashers == nil {
+		defer util.LockUnlock(&hashers_init_mu)()
+		if hashers == nil {
+			init_pool(uint64(runtime.NumCPU()) * 128)
+		}
+	}
 	return <-hashers
 }
 
