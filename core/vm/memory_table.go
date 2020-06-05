@@ -22,76 +22,76 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
 
-func memorySha3(stack *Stack) *big.Int {
+func memorySha3(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryCallDataCopy(stack *Stack) *big.Int {
+func memoryCallDataCopy(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryReturnDataCopy(stack *Stack) *big.Int {
+func memoryReturnDataCopy(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryCodeCopy(stack *Stack) *big.Int {
+func memoryCodeCopy(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryExtCodeCopy(stack *Stack) *big.Int {
+func memoryExtCodeCopy(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(1), stack.Back(3))
 }
 
-func memoryMLoad(stack *Stack) *big.Int {
+func memoryMLoad(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), big.NewInt(32))
 }
 
-func memoryMStore8(stack *Stack) *big.Int {
+func memoryMStore8(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), big.NewInt(1))
 }
 
-func memoryMStore(stack *Stack) *big.Int {
+func memoryMStore(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), big.NewInt(32))
 }
 
-func memoryCreate(stack *Stack) *big.Int {
+func memoryCreate(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(1), stack.Back(2))
 }
 
-func memoryCreate2(stack *Stack) *big.Int {
+func memoryCreate2(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(1), stack.Back(2))
 }
 
-func memoryCall(stack *Stack) *big.Int {
+func memoryCall(stack *stack) *big.Int {
 	x := calcMemSize(stack.Back(5), stack.Back(6))
 	y := calcMemSize(stack.Back(3), stack.Back(4))
 
 	return math.BigMax(x, y)
 }
 
-func memoryDelegateCall(stack *Stack) *big.Int {
+func memoryDelegateCall(stack *stack) *big.Int {
 	x := calcMemSize(stack.Back(4), stack.Back(5))
 	y := calcMemSize(stack.Back(2), stack.Back(3))
 
 	return math.BigMax(x, y)
 }
 
-func memoryStaticCall(stack *Stack) *big.Int {
+func memoryStaticCall(stack *stack) *big.Int {
 	x := calcMemSize(stack.Back(4), stack.Back(5))
 	y := calcMemSize(stack.Back(2), stack.Back(3))
 
 	return math.BigMax(x, y)
 }
 
-func memoryReturn(stack *Stack) *big.Int {
+func memoryReturn(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryRevert(stack *Stack) *big.Int {
+func memoryRevert(stack *stack) *big.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryLog(stack *Stack) *big.Int {
+func memoryLog(stack *stack) *big.Int {
 	mSize, mStart := stack.Back(1), stack.Back(0)
 	return calcMemSize(mStart, mSize)
 }

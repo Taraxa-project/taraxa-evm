@@ -60,11 +60,7 @@ func makelist(g *core.Genesis) allocList {
 
 func makealloc(g *core.Genesis) string {
 	a := makelist(g)
-	data, err := rlp.EncodeToBytes(a)
-	if err != nil {
-		panic(err)
-	}
-	return strconv.QuoteToASCII(string(data))
+	return strconv.QuoteToASCII(string(rlp.MustEncodeToBytes(a)))
 }
 
 func main() {

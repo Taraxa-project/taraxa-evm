@@ -1,54 +1,23 @@
 package util
 
 import (
-	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"hash/crc64"
-	"math/big"
-	"math/rand"
+	"math"
 	"reflect"
+	"sync"
 )
 
-type Predicate func(interface{}) bool
+type Any interface{}
 
-func Sum(x, y *big.Int) *big.Int {
-	if x == nil {
-		x = common.Big0
+func IsReallyNil(value Any) bool {
+	if value == nil {
+		return true
 	}
-	if y == nil {
-		y = common.Big0
+	switch reflectValue := reflect.ValueOf(value); reflectValue.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
+		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return reflectValue.IsNil()
 	}
-	return new(big.Int).Add(x, y)
-}
-
-func DoNothing() {}
-
-func Chain(f, g func()) func() {
-	return func() {
-		defer g()
-		f()
-	}
-}
-
-type Remapper func(key, oldValue interface{}, wasPresent bool) (newValue interface{})
-
-func ForEach(indexableWithLength interface{}, cb func(i int, val interface{})) {
-	val := reflect.ValueOf(indexableWithLength)
-	length := val.Len()
-	for i := 0; i < length; i++ {
-		cb(i, val.Index(i).Interface())
-	}
-}
-
-func Join(separator string, indexableWithLength interface{}) (result string) {
-	length := reflect.ValueOf(indexableWithLength).Len()
-	ForEach(indexableWithLength, func(i int, val interface{}) {
-		result += fmt.Sprint(val)
-		if i < length-1 {
-			result += separator
-		}
-	})
-	return
+	return false
 }
 
 func Max(x, y int) int {
@@ -58,35 +27,43 @@ func Max(x, y int) int {
 	return y
 }
 
-func IsReallyNil(value interface{}) bool {
-	if value == nil {
-		return true
-	}
-	reflectValue := reflect.ValueOf(value)
-	switch reflectValue.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
-		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
-		return reflectValue.IsNil()
-	}
-	return false
+type ErrorString string
+
+func (this ErrorString) Error() string {
+	return string(this)
 }
 
-var CRC64_ISO_TABLE = crc64.MakeTable(crc64.ISO)
-
-func CRC64(b []byte) uint64 {
-	return crc64.Checksum(b, CRC64_ISO_TABLE)
-}
-
-func Times(N int, action func(int)) {
-	for i := 0; i < N; i++ {
-		action(i)
+func Stringify(err_ptr *error) {
+	if err := *err_ptr; err != nil {
+		*err_ptr = ErrorString(err.Error())
 	}
 }
 
-func RandomBytes(N int) (ret []byte) {
-	buf := new(big.Int)
-	for len(ret) < N {
-		ret = append(ret, buf.SetUint64(rand.Uint64()).Bytes()...)
+func PanicIfNotNil(value interface{}) bool {
+	if !IsReallyNil(value) {
+		panic(value)
 	}
-	return ret[:N]
+	return true
+}
+
+func CeilPow2(x int) int {
+	return 1 << uint(math.Ceil(math.Log2(float64(x))))
+}
+
+func Recover(handler func(issue Any)) {
+	if r := recover(); r != nil {
+		handler(r)
+	}
+}
+
+func Min(i, j int) int {
+	if i < j {
+		return i
+	}
+	return j
+}
+
+func LockUnlock(l sync.Locker) func() {
+	l.Lock()
+	return l.Unlock
 }

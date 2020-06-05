@@ -16,15 +16,18 @@
 
 package vm
 
-import "errors"
+import (
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+)
 
 // List execution errors
 var (
-	ErrOutOfGas                 = errors.New("out of gas")
-	ErrCodeStoreOutOfGas        = errors.New("contract creation code storage out of gas")
-	ErrDepth                    = errors.New("max call depth exceeded")
-	ErrTraceLimitReached        = errors.New("the number of logs reached the specified limit")
-	ErrInsufficientBalance      = errors.New("insufficient balance for transfer")
-	ErrContractAddressCollision = errors.New("contract address collision")
-	ErrNoCompatibleInterpreter  = errors.New("no compatible interpreter")
+	ErrOutOfGas                  = util.ErrorString("out of gas")
+	ErrCodeStoreOutOfGas         = util.ErrorString("contract creation code storage out of gas")
+	ErrDepth                     = util.ErrorString("max call depth exceeded")
+	ErrInsufficientBalance       = util.ErrorString("insufficient balance for transfer")
+	ErrContractAddressCollision  = util.ErrorString("contract address collision")
+	ErrInsufficientBalanceForGas = util.ErrorString("insufficient balance to pay for gas")
+	ErrNonceTooHigh              = util.ErrorString("nonce too high")
+	ErrNonceTooLow               = util.ErrorString("nonce too low")
 )

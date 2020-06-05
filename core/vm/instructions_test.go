@@ -23,7 +23,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 type twoOperandTest struct {
@@ -32,23 +31,21 @@ type twoOperandTest struct {
 	expected string
 }
 
-func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error)) {
+func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error)) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		pc             = uint64(0)
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
+		pc    = uint64(0)
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	for i, test := range tests {
 		x := new(big.Int).SetBytes(common.Hex2Bytes(test.x))
 		shift := new(big.Int).SetBytes(common.Hex2Bytes(test.y))
 		expected := new(big.Int).SetBytes(common.Hex2Bytes(test.expected))
 		stack.push(x)
 		stack.push(shift)
-		opFn(&pc, evmInterpreter, nil, nil, stack)
+		opFn(&pc, &evm, nil, nil, stack)
 		actual := stack.pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %v, got %v", i, expected, actual)
@@ -56,13 +53,13 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 		// Check pool usage
 		// 1.pool is not allowed to contain anything on the stack
 		// 2.pool is not allowed to contain the same pointers twice
-		if evmInterpreter.intPool.pool.len() > 0 {
+		if evm.int_pool.pool.len() > 0 {
 
 			poolvals := make(map[*big.Int]struct{})
 			poolvals[actual] = struct{}{}
 
-			for evmInterpreter.intPool.pool.len() > 0 {
-				key := evmInterpreter.intPool.get()
+			for evm.int_pool.pool.len() > 0 {
+				key := evm.int_pool.get()
 				if _, exist := poolvals[key]; exist {
 					t.Errorf("Testcase %d, pool contains double-entry", i)
 				}
@@ -70,18 +67,16 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 			}
 		}
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestByteOp(t *testing.T) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	tests := []struct {
 		v        string
 		th       uint64
@@ -102,13 +97,13 @@ func TestByteOp(t *testing.T) {
 		th := new(big.Int).SetUint64(test.th)
 		stack.push(val)
 		stack.push(th)
-		opByte(&pc, evmInterpreter, nil, nil, stack)
+		opByte(&pc, &evm, nil, nil, stack)
 		actual := stack.pop()
 		if actual.Cmp(test.expected) != 0 {
 			t.Fatalf("Expected  [%v] %v:th byte to be %v, was %v.", test.v, test.th, test.expected, actual)
 		}
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestSHL(t *testing.T) {
@@ -208,15 +203,13 @@ func TestSLT(t *testing.T) {
 	testTwoOperandOp(t, tests, opSlt)
 }
 
-func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error), args ...string) {
+func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error), args ...string) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	// convert args
 	byteArgs := make([][]byte, len(args))
 	for i, arg := range args {
@@ -229,10 +222,10 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVMInterpret
 			a := new(big.Int).SetBytes(arg)
 			stack.push(a)
 		}
-		op(&pc, evmInterpreter, nil, nil, stack)
+		op(&pc, &evm, nil, nil, stack)
 		stack.pop()
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpAdd64(b *testing.B) {
@@ -445,40 +438,36 @@ func BenchmarkOpIsZero(b *testing.B) {
 
 func TestOpMstore(t *testing.T) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(64)
 	pc := uint64(0)
 	v := "abcdef00000000000000abba000000000deaf000000c0de00100000000133700"
 	stack.pushN(new(big.Int).SetBytes(common.Hex2Bytes(v)), big.NewInt(0))
-	opMstore(&pc, evmInterpreter, nil, mem, stack)
+	opMstore(&pc, &evm, nil, mem, stack)
 	if got := common.Bytes2Hex(mem.Get(0, 32)); got != v {
 		t.Fatalf("Mstore fail, got %v, expected %v", got, v)
 	}
 	stack.pushN(big.NewInt(0x1), big.NewInt(0))
-	opMstore(&pc, evmInterpreter, nil, mem, stack)
+	opMstore(&pc, &evm, nil, mem, stack)
 	if common.Bytes2Hex(mem.Get(0, 32)) != "0000000000000000000000000000000000000000000000000000000000000001" {
 		t.Fatalf("Mstore failed to overwrite previous value")
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpMstore(bench *testing.B) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
 
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(64)
 	pc := uint64(0)
 	memStart := big.NewInt(0)
@@ -487,20 +476,18 @@ func BenchmarkOpMstore(bench *testing.B) {
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		stack.pushN(value, memStart)
-		opMstore(&pc, evmInterpreter, nil, mem, stack)
+		opMstore(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func BenchmarkOpSHA3(bench *testing.B) {
 	var (
-		env            = NewEVM(Context{}, nil, params.TestChainConfig, new(Config))
-		stack          = newstack()
-		mem            = NewMemory()
-		evmInterpreter = NewEVMInterpreter(env, env.vmConfig)
+		evm   EVM
+		stack = newstack()
+		mem   = NewMemory()
 	)
-	env.interpreter = evmInterpreter
-	evmInterpreter.intPool = poolOfIntPools.get()
+	evm.int_pool = poolOfIntPools.get()
 	mem.Resize(32)
 	pc := uint64(0)
 	start := big.NewInt(0)
@@ -508,9 +495,9 @@ func BenchmarkOpSHA3(bench *testing.B) {
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		stack.pushN(big.NewInt(32), start)
-		opSha3(&pc, evmInterpreter, nil, mem, stack)
+		opSha3(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evmInterpreter.intPool)
+	poolOfIntPools.put(evm.int_pool)
 }
 
 func TestCreate2Addreses(t *testing.T) {
@@ -571,15 +558,6 @@ func TestCreate2Addreses(t *testing.T) {
 		code := common.FromHex(tt.code)
 		codeHash := crypto.Keccak256(code)
 		address := crypto.CreateAddress2(origin, salt, codeHash)
-		/*
-			stack          := newstack()
-			// salt, but we don't need that for this test
-			stack.push(big.NewInt(int64(len(code)))) //size
-			stack.push(big.NewInt(0)) // memstart
-			stack.push(big.NewInt(0)) // value
-			gas, _ := gasCreate2(params.GasTable{}, nil, nil, stack, nil, 0)
-			fmt.Printf("Example %d\n* address `0x%x`\n* salt `0x%x`\n* init_code `0x%x`\n* gas (assuming no mem expansion): `%v`\n* result: `%s`\n\n", i,origin, salt, code, gas, address.String())
-		*/
 		expected := common.BytesToAddress(common.FromHex(tt.expected))
 		if !bytes.Equal(expected.Bytes(), address.Bytes()) {
 			t.Errorf("test %d: expected %s, got %s", i, expected.String(), address.String())

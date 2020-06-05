@@ -1,19 +1,23 @@
 module github.com/Taraxa-project/taraxa-evm
 
-go 1.12
+go 1.13
 
 require (
-	github.com/allegro/bigcache v1.2.1
-	github.com/aristanetworks/goarista v0.0.0-20190712234253-ed1100a1c015
-	github.com/btcsuite/btcd v0.0.0-20190824003749-130ea5bddde3
-	github.com/cornelk/hashmap v1.0.0
-	github.com/dchest/siphash v1.2.1
-	github.com/emirpasic/gods v1.12.0
-	github.com/go-stack/stack v1.8.0
-	github.com/google/uuid v1.1.1
-	github.com/hashicorp/golang-lru v0.5.3
-	github.com/syndtr/goleveldb v1.0.0
-	github.com/tecbot/gorocksdb v0.0.0-20190705090504-162552197222
-	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472
-	golang.org/x/sys v0.0.0-20190412213103-97732733099d
+	github.com/btcsuite/btcd v0.20.1-beta
+	github.com/davecgh/go-spew v1.1.1
+	github.com/emicklei/dot v0.10.2
+	github.com/facebookgo/ensure v0.0.0-20200202191622-63f1cf65ac4c // indirect
+	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 // indirect
+	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4 // indirect
+	github.com/fjl/gencodec v0.0.0-20191126094850-e283372f291f // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/schollz/progressbar/v3 v3.3.3
+	github.com/stretchr/testify v1.5.1
+	github.com/tecbot/gorocksdb v0.0.0-00010101000000-000000000000
+	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
+	golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
+	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
+
+replace github.com/tecbot/gorocksdb => github.com/02p01r/gorocksdb v0.0.0-20200420134024-2457c9d8faf8

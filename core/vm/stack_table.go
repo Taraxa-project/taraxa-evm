@@ -18,18 +18,16 @@ package vm
 
 import (
 	"fmt"
-
-	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
 func makeStackFunc(pop, push int) stackValidationFunc {
-	return func(stack *Stack) error {
+	return func(stack *stack) error {
 		if err := stack.require(pop); err != nil {
 			return err
 		}
 
-		if stack.len()+push-pop > int(params.StackLimit) {
-			return fmt.Errorf("stack limit reached %d (%d)", stack.len(), params.StackLimit)
+		if stack.len()+push-pop > int(StackLimit) {
+			return fmt.Errorf("stack limit reached %d (%d)", stack.len(), StackLimit)
 		}
 		return nil
 	}

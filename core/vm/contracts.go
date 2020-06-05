@@ -23,7 +23,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/crypto/bn256"
-	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"golang.org/x/crypto/ripemd160"
 	"math/big"
 )
@@ -32,13 +32,13 @@ import (
 // requires a deterministic gas count based on the input size of the Run method of the
 // contract.
 type PrecompiledContract interface {
-	RequiredGas(input []byte) uint64  // RequiredPrice calculates the contract gas use
-	Run(input []byte) ([]byte, error) // Run runs the precompiled contract
+	RequiredGas(input []byte) uint64
+	Run(input []byte) ([]byte, error)
 }
 
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
 // contracts used in the Frontier and Homestead releases.
-var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
+var PrecompiledContractsHomestead = Precompiles{
 	common.BytesToAddress([]byte{1}): &ecrecover{},
 	common.BytesToAddress([]byte{2}): &sha256hash{},
 	common.BytesToAddress([]byte{3}): &ripemd160hash{},
@@ -47,7 +47,7 @@ var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
 // contracts used in the Byzantium release.
-var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
+var PrecompiledContractsByzantium = Precompiles{
 	common.BytesToAddress([]byte{1}): &ecrecover{},
 	common.BytesToAddress([]byte{2}): &sha256hash{},
 	common.BytesToAddress([]byte{3}): &ripemd160hash{},
@@ -59,10 +59,10 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
-func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contract) (ret []byte, err error) {
-	gas := p.RequiredGas(input)
+func RunPrecompiledContract(contract *Contract) (ret []byte, err error) {
+	gas := contract.precompiled.RequiredGas(contract.Input)
 	if contract.UseGas(gas) {
-		return p.Run(input)
+		return contract.precompiled.Run(contract.Input)
 	}
 	return nil, ErrOutOfGas
 }
@@ -71,7 +71,7 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contr
 type ecrecover struct{}
 
 func (c *ecrecover) RequiredGas(input []byte) uint64 {
-	return params.EcrecoverGas
+	return EcrecoverGas
 }
 
 func (c *ecrecover) Run(input []byte) ([]byte, error) {
@@ -97,7 +97,7 @@ func (c *ecrecover) Run(input []byte) ([]byte, error) {
 	}
 
 	// the first byte of pubkey is bitcoin heritage
-	return common.LeftPadBytes(crypto.Keccak256(pubKey[1:])[12:], 32), nil
+	return common.LeftPadBytes(keccak256.Hash(pubKey[1:])[12:], 32), nil
 }
 
 // SHA256 implemented as a native contract.
@@ -108,7 +108,7 @@ type sha256hash struct{}
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *sha256hash) RequiredGas(input []byte) uint64 {
-	return uint64(len(input)+31)/32*params.Sha256PerWordGas + params.Sha256BaseGas
+	return uint64(len(input)+31)/32*Sha256PerWordGas + Sha256BaseGas
 }
 func (c *sha256hash) Run(input []byte) ([]byte, error) {
 	h := sha256.Sum256(input)
@@ -123,7 +123,7 @@ type ripemd160hash struct{}
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *ripemd160hash) RequiredGas(input []byte) uint64 {
-	return uint64(len(input)+31)/32*params.Ripemd160PerWordGas + params.Ripemd160BaseGas
+	return uint64(len(input)+31)/32*Ripemd160PerWordGas + Ripemd160BaseGas
 }
 func (c *ripemd160hash) Run(input []byte) ([]byte, error) {
 	ripemd := ripemd160.New()
@@ -139,7 +139,7 @@ type dataCopy struct{}
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
 func (c *dataCopy) RequiredGas(input []byte) uint64 {
-	return uint64(len(input)+31)/32*params.IdentityPerWordGas + params.IdentityBaseGas
+	return uint64(len(input)+31)/32*IdentityPerWordGas + IdentityBaseGas
 }
 func (c *dataCopy) Run(in []byte) ([]byte, error) {
 	return in, nil
@@ -214,7 +214,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 		)
 	}
 	gas.Mul(gas, math.BigMax(adjExpLen, big1))
-	gas.Div(gas, new(big.Int).SetUint64(params.ModExpQuadCoeffDiv))
+	gas.Div(gas, new(big.Int).SetUint64(ModExpQuadCoeffDiv))
 
 	if gas.BitLen() > 64 {
 		return math.MaxUint64
@@ -275,7 +275,7 @@ type bn256Add struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256Add) RequiredGas(input []byte) uint64 {
-	return params.Bn256AddGas
+	return Bn256AddGas
 }
 
 func (c *bn256Add) Run(input []byte) ([]byte, error) {
@@ -297,7 +297,7 @@ type bn256ScalarMul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256ScalarMul) RequiredGas(input []byte) uint64 {
-	return params.Bn256ScalarMulGas
+	return Bn256ScalarMulGas
 }
 
 func (c *bn256ScalarMul) Run(input []byte) ([]byte, error) {
@@ -326,7 +326,7 @@ type bn256Pairing struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
 func (c *bn256Pairing) RequiredGas(input []byte) uint64 {
-	return params.Bn256PairingBaseGas + uint64(len(input)/192)*params.Bn256PairingPerPointGas
+	return Bn256PairingBaseGas + uint64(len(input)/192)*Bn256PairingPerPointGas
 }
 
 func (c *bn256Pairing) Run(input []byte) ([]byte, error) {

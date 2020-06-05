@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"math/big"
 	"reflect"
@@ -130,19 +131,16 @@ func Decode(r io.Reader, val interface{}) error {
 	return NewStream(r, 0).Decode(val)
 }
 
-// DecodeBytes parses RLP data from b into val.
+// MustDecodeBytes parses RLP data from b into val.
 // Please see the documentation of Decode for the decoding rules.
 // The input must contain exactly one value and no trailing data.
-func DecodeBytes(b []byte, val interface{}) error {
+func MustDecodeBytes(b []byte, val interface{}) {
 	// TODO: this could use a Stream from a pool.
 	r := bytes.NewReader(b)
-	if err := NewStream(r, uint64(len(b))).Decode(val); err != nil {
-		return err
-	}
+	util.PanicIfNotNil(NewStream(r, uint64(len(b))).Decode(val))
 	if r.Len() > 0 {
-		return ErrMoreThanOneValue
+		panic(ErrMoreThanOneValue)
 	}
-	return nil
 }
 
 type decodeError struct {
@@ -190,6 +188,7 @@ func addErrorContext(err error, ctx string) error {
 var (
 	decoderInterface = reflect.TypeOf(new(Decoder)).Elem()
 	bigInt           = reflect.TypeOf(big.Int{})
+	bigint_ptr_t     = reflect.PtrTo(bigInt)
 )
 
 func makeDecoder(typ reflect.Type, tags tags) (dec decoder, err error) {
@@ -201,10 +200,28 @@ func makeDecoder(typ reflect.Type, tags tags) (dec decoder, err error) {
 		return decodeDecoder, nil
 	case kind != reflect.Ptr && reflect.PtrTo(typ).Implements(decoderInterface):
 		return decodeDecoderNoPtr, nil
-	case typ.AssignableTo(reflect.PtrTo(bigInt)):
-		return decodeBigInt, nil
+	case typ.AssignableTo(bigint_ptr_t):
+		return func(s *Stream, val reflect.Value) error {
+			if val.IsNil() {
+				val.Set(reflect.New(typ.Elem()))
+			}
+			return decodeBigInt(s, val)
+		}, nil
+	case typ.ConvertibleTo(bigint_ptr_t):
+		return func(s *Stream, val reflect.Value) error {
+			if val.IsNil() {
+				val.Set(reflect.New(typ.Elem()))
+			}
+			return decodeBigInt(s, val.Convert(bigint_ptr_t))
+		}, nil
 	case typ.AssignableTo(bigInt):
-		return decodeBigIntNoPtr, nil
+		return func(s *Stream, val reflect.Value) error {
+			return decodeBigInt(s, val.Addr())
+		}, nil
+	case typ.ConvertibleTo(bigInt):
+		return func(s *Stream, val reflect.Value) error {
+			return decodeBigInt(s, val.Addr().Convert(bigint_ptr_t))
+		}, nil
 	case isUint(kind):
 		return decodeUint, nil
 	case kind == reflect.Bool:
@@ -222,6 +239,8 @@ func makeDecoder(typ reflect.Type, tags tags) (dec decoder, err error) {
 		return makePtrDecoder(typ)
 	case kind == reflect.Interface:
 		return decodeInterface, nil
+	case kind == reflect.Map:
+		return makeMapDecoder(typ)
 	default:
 		return nil, fmt.Errorf("rlp: type %v is not RLP-serializable", typ)
 	}
@@ -264,25 +283,16 @@ func decodeString(s *Stream, val reflect.Value) error {
 	return nil
 }
 
-func decodeBigIntNoPtr(s *Stream, val reflect.Value) error {
-	return decodeBigInt(s, val.Addr())
-}
-
 func decodeBigInt(s *Stream, val reflect.Value) error {
 	b, err := s.Bytes()
 	if err != nil {
 		return wrapStreamError(err, val.Type())
 	}
-	i := val.Interface().(*big.Int)
-	if i == nil {
-		i = new(big.Int)
-		val.Set(reflect.ValueOf(i))
-	}
 	// Reject leading zero bytes
 	if len(b) > 0 && b[0] == 0 {
 		return wrapStreamError(ErrCanonInt, val.Type())
 	}
-	i.SetBytes(b)
+	val.Interface().(*big.Int).SetBytes(b)
 	return nil
 }
 
@@ -549,6 +559,34 @@ func decodeDecoder(s *Stream, val reflect.Value) error {
 	return val.Interface().(Decoder).DecodeRLP(s)
 }
 
+func makeMapDecoder(typ reflect.Type) (decoder, error) {
+	k_typ := typ.Key()
+	v_typ := typ.Elem()
+	k_type_info, err_0 := cachedTypeInfo1(k_typ, tags{})
+	util.PanicIfNotNil(err_0)
+	v_type_info, err_1 := cachedTypeInfo1(v_typ, tags{})
+	util.PanicIfNotNil(err_1)
+	return func(strm *Stream, value reflect.Value) error {
+		_, err := strm.List()
+		util.PanicIfNotNil(err)
+		value.Set(reflect.MakeMap(typ))
+		for {
+			_, err := strm.List()
+			if err == EOL {
+				break
+			}
+			util.PanicIfNotNil(err)
+			k, v := reflect.New(k_typ).Elem(), reflect.New(v_typ).Elem()
+			util.PanicIfNotNil(k_type_info.decoder(strm, k))
+			util.PanicIfNotNil(v_type_info.decoder(strm, v))
+			value.SetMapIndex(k, v)
+			util.PanicIfNotNil(strm.ListEnd())
+		}
+		util.PanicIfNotNil(strm.ListEnd())
+		return nil
+	}, nil
+}
+
 // Kind represents the kind of value contained in an RLP stream.
 type Kind int
 
@@ -603,7 +641,7 @@ type Stream struct {
 	kind    Kind   // kind of value ahead
 	size    uint64 // size of value ahead
 	byteval byte   // value of single byte in type tag
-	kinderr error  // error from last readKind
+	kinderr error  // error from last ReadKind
 	stack   []listpos
 }
 
@@ -681,16 +719,16 @@ func (s *Stream) Raw() ([]byte, error) {
 	// the original header has already been read and is no longer
 	// available. read content and put a new header in front of it.
 	start := headsize(size)
-	buf := make([]byte, uint64(start)+size)
-	if err := s.readFull(buf[start:]); err != nil {
+	buf := make([]byte, 0, uint64(start)+size)
+	if kind == String {
+		puthead(BytesAppender(&buf), 0x80, 0xB7, size)
+	} else {
+		puthead(BytesAppender(&buf), 0xC0, 0xF7, size)
+	}
+	if err := s.readFull(buf[len(buf):cap(buf)]); err != nil {
 		return nil, err
 	}
-	if kind == String {
-		puthead(buf, 0x80, 0xB7, size)
-	} else {
-		puthead(buf, 0xC0, 0xF7, size)
-	}
-	return buf, nil
+	return buf[:cap(buf)], nil
 }
 
 // Uint reads an RLP string of up to 8 bytes and returns its contents
@@ -895,7 +933,7 @@ func (s *Stream) Kind() (kind Kind, size uint64, err error) {
 		}
 	}
 	// Note: this might return a sticky error generated
-	// by an earlier call to readKind.
+	// by an earlier call to ReadKind.
 	return s.kind, s.size, s.kinderr
 }
 

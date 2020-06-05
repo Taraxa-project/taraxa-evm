@@ -192,4 +192,3 @@ func ParseCombinedJSON(combinedJSON []byte, source string, languageVersion strin
 	}
 	return contracts, nil
 }
-

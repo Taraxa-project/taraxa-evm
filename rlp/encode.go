@@ -18,19 +18,28 @@ package rlp
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"io"
+	"math"
 	"math/big"
 	"reflect"
 	"sync"
 )
 
-var (
-	EmptyList   = []byte{0xC0}
-)
+const EmptyString = 0x80
 
-// Encoder is implemented by types that require custom
+var encoderInterface = reflect.TypeOf(new(RLPEncodable)).Elem()
+
+// encbufs are pooled.
+var encbufPool = sync.Pool{
+	New: func() interface{} { return new(Encoder) },
+}
+
+// RLPEncodable is implemented by types that require custom
 // encoding rules or want to encode private fields.
-type Encoder interface {
+type RLPEncodable interface {
 	// EncodeRLP should write the RLP encoding of its receiver to w.
 	// If the implementation is a pointer method, it may also be
 	// called for nil pointers.
@@ -48,9 +57,9 @@ type Encoder interface {
 //
 // Encode uses the following type-dependent encoding rules:
 //
-// If the type implements the Encoder interface, Encode calls
+// If the type implements the RLPEncodable interface, Encode calls
 // EncodeRLP. This is true even for nil pointers, please see the
-// documentation for Encoder.
+// documentation for RLPEncodable.
 //
 // To encode a pointer, the value being pointed to is encoded. For nil
 // pointers, Encode will encode the zero value of the type. A nil
@@ -74,269 +83,272 @@ type Encoder interface {
 //
 // Boolean values are not supported, nor are signed integers, floating
 // point numbers, maps, channels and functions.
-func Encode(w io.Writer, val interface{}) error {
-	if outer, ok := w.(*encbuf); ok {
+func Encode(w io.Writer, val interface{}) (err error) {
+	if outer, ok := w.(*Encoder); ok {
 		// Encode was called by some type's EncodeRLP.
-		// Avoid copying by writing to the outer encbuf directly.
-		return outer.encode(val)
+		// Avoid copying by writing to the outer Encoder directly.
+		return outer.AppendAny(val)
 	}
-	eb := encbufPool.Get().(*encbuf)
+	eb := encbufPool.Get().(*Encoder)
 	defer encbufPool.Put(eb)
-	eb.reset()
-	if err := eb.encode(val); err != nil {
-		return err
+	eb.Reset()
+	if err = eb.AppendAny(val); err != nil {
+		return
 	}
-	return eb.toWriter(w)
+	defer func() {
+		if rec := recover(); rec != nil && rec != err {
+			panic(rec)
+		}
+	}()
+	eb.Flush(-1, func(b ...byte) {
+		if _, err = w.Write(b); err != nil {
+			panic(err)
+		}
+	})
+	return
 }
 
 // EncodeToBytes returns the RLP encoding of val.
 // Please see the documentation of Encode for the encoding rules.
-func EncodeToBytes(val interface{}) ([]byte, error) {
-	eb := encbufPool.Get().(*encbuf)
+func EncodeToBytes(val interface{}) (ret []byte, err error) {
+	eb := encbufPool.Get().(*Encoder)
 	defer encbufPool.Put(eb)
-	eb.reset()
-	if err := eb.encode(val); err != nil {
-		return nil, err
+	eb.Reset()
+	if err = eb.AppendAny(val); err == nil {
+		ret = eb.ToBytes(-1)
 	}
-	return eb.toBytes(), nil
+	return
 }
 
-// EncodeToReader returns a reader from which the RLP encoding of val
-// can be read. The returned size is the total size of the encoded
-// data.
-//
-// Please see the documentation of Encode for the encoding rules.
-func EncodeToReader(val interface{}) (size int, r io.Reader, err error) {
-	eb := encbufPool.Get().(*encbuf)
-	eb.reset()
-	if err := eb.encode(val); err != nil {
-		return 0, nil, err
-	}
-	return eb.size(), &encReader{buf: eb}, nil
+func MustEncodeToBytes(val interface{}) (ret []byte) {
+	var err error
+	ret, err = EncodeToBytes(val)
+	util.PanicIfNotNil(err)
+	return
 }
 
-type encbuf struct {
-	str     []byte      // string data, contains everything except list headers
-	lheads  []*listhead // all list headers
-	lhsize  int         // sum of sizes of all encoded list headers
-	sizebuf []byte      // 9-byte auxiliary buffer for uint encoding
-}
-
-type listhead struct {
-	offset int // index of this header in string data
-	size   int // total size of encoded data (including list headers)
-}
-
-// encode writes head to the given buffer, which must be at least
-// 9 bytes long. It returns the encoded bytes.
-func (head *listhead) encode(buf []byte) []byte {
-	return buf[:puthead(buf, 0xC0, 0xF7, uint64(head.size))]
-}
-
-// headsize returns the size of a list or string header
-// for a value of the given size.
-func headsize(size uint64) int {
-	if size < 56 {
-		return 1
-	}
-	return 1 + intsize(size)
-}
-
-// puthead writes a list or string header to buf.
-// buf must be at least 9 bytes long.
-func puthead(buf []byte, smalltag, largetag byte, size uint64) int {
-	if size < 56 {
-		buf[0] = smalltag + byte(size)
-		return 1
-	}
-	sizesize := putint(buf[1:], size)
-	buf[0] = largetag + byte(sizesize)
-	return sizesize + 1
-}
-
-// encbufs are pooled.
-var encbufPool = sync.Pool{
-	New: func() interface{} { return &encbuf{sizebuf: make([]byte, 9)} },
-}
-
-func (w *encbuf) reset() {
-	w.lhsize = 0
-	if w.str != nil {
-		w.str = w.str[:0]
-	}
-	if w.lheads != nil {
-		w.lheads = w.lheads[:0]
+func BytesAppender(b *[]byte) func(...byte) {
+	return func(bs ...byte) {
+		*b = append(*b, bs...)
 	}
 }
 
-// encbuf implements io.Writer so it can be passed it into EncodeRLP.
-func (w *encbuf) Write(b []byte) (int, error) {
-	w.str = append(w.str, b...)
+type Encoder struct {
+	str    []byte     // string data, contains everything except list headers
+	lheads []ListHead // all list headers
+	lhsize uint32     // sum of sizes of all encoded list headers
+}
+type ListHead struct {
+	strpos      uint32
+	base_lhsize uint32
+	elems_size  uint32
+	closed      bool
+}
+
+func (self *Encoder) Reset() {
+	self.str = self.str[:0]
+	self.lheads = self.lheads[:0]
+	self.lhsize = 0
+}
+
+func (self *Encoder) ResizeReset(string_buf_cap, list_buf_cap int) {
+	self.str = make([]byte, 0, string_buf_cap)
+	self.lheads = make([]ListHead, 0, list_buf_cap)
+	self.lhsize = 0
+}
+
+func (self *Encoder) ListsCount() int {
+	return cap(self.lheads)
+}
+
+func (self *Encoder) Size() uint32 {
+	return uint32(len(self.str)) + self.lhsize
+}
+
+func (self *Encoder) ListSize(list_pos int) uint32 {
+	if lh := self.lheads[list_pos]; lh.closed {
+		return lh.elems_size + uint32(headsize(uint64(lh.elems_size)))
+	}
+	panic("list is not closed")
+}
+
+func (self *Encoder) ListStart() (list_pos int) {
+	list_pos = len(self.lheads)
+	self.lheads = append(self.lheads, ListHead{strpos: uint32(len(self.str)), base_lhsize: self.lhsize})
+	return
+}
+
+func (self *Encoder) ListEnd(list_pos int) {
+	if lh := &self.lheads[list_pos]; !lh.closed {
+		lh.elems_size = self.Size() - lh.strpos - lh.base_lhsize
+		self.lhsize += uint32(headsize(uint64(lh.elems_size)))
+		lh.closed = true
+		return
+	}
+	panic("list is already closed")
+}
+
+func (self *Encoder) RevertToListStart(list_pos int) {
+	lh := self.lheads[list_pos]
+	self.lheads = self.lheads[:list_pos]
+	self.str = self.str[:lh.strpos]
+	self.lhsize = lh.base_lhsize
+}
+
+func (self *Encoder) Flush(list_pos int, appender func(...byte)) {
+	strpos := uint32(0)
+	if list_pos != -1 {
+		strpos = self.lheads[list_pos].strpos
+	} else {
+		list_pos = 0
+	}
+	for _, lh := range self.lheads[list_pos:] {
+		appender(self.str[strpos:lh.strpos]...)
+		strpos = lh.strpos
+		if !lh.closed {
+			panic("the list is not closed")
+		}
+		puthead(appender, 0xC0, 0xF7, uint64(lh.elems_size))
+	}
+	appender(self.str[strpos:]...)
+}
+
+func (self *Encoder) FlushToBytes(list_pos int, buf *[]byte) {
+	self.Flush(list_pos, func(b ...byte) {
+		*buf = append(*buf, b...)
+	})
+}
+
+func (self *Encoder) ToBytes(list_pos int) (ret []byte) {
+	capacity := self.Size()
+	if list_pos != -1 {
+		lhead := self.lheads[list_pos]
+		capacity -= (lhead.strpos + lhead.base_lhsize)
+	}
+	ret = make([]byte, 0, capacity)
+	self.FlushToBytes(list_pos, &ret)
+	return
+}
+
+// Encoder implements io.Writer so it can be passed it into EncodeRLP.
+func (self *Encoder) Write(b []byte) (int, error) {
+	self.AppendRaw(b...)
 	return len(b), nil
 }
 
-func (w *encbuf) encode(val interface{}) error {
+func (self *Encoder) AppendRaw(b ...byte) {
+	assert.Holds(math.MaxUint32-len(self.str) > len(b))
+	self.str = append(self.str, b...)
+}
+
+func (self *Encoder) AppendEmptyString() {
+	self.AppendRaw(EmptyString)
+}
+
+func (self *Encoder) AppendString(str []byte) {
+	if len(str) == 0 {
+		self.AppendEmptyString()
+		return
+	}
+	ToRLPString(str, self.AppendRaw)
+}
+
+func (self *Encoder) AppendUint(i uint64) {
+	if i == 0 {
+		self.AppendEmptyString()
+	} else if i < 128 {
+		self.AppendRaw(byte(i))
+	} else {
+		putint(self.AppendRaw, i, EmptyString)
+	}
+}
+
+func (self *Encoder) AppendBigInt(i *big.Int) (err error) {
+	if i == nil {
+		self.AppendEmptyString()
+	} else if sign := i.Sign(); sign == 0 {
+		self.AppendEmptyString()
+	} else if sign == 1 {
+		self.AppendString(i.Bytes())
+	} else {
+		err = fmt.Errorf("rlp: cannot encode negative *big.Int")
+	}
+	return
+}
+
+func (self *Encoder) AppendAny(val interface{}) error {
 	rval := reflect.ValueOf(val)
 	ti, err := cachedTypeInfo(rval.Type(), tags{})
 	if err != nil {
 		return err
 	}
-	return ti.writer(rval, w)
+	return ti.writer(rval, self)
 }
 
-func (w *encbuf) encodeStringHeader(size int) {
-	if size < 56 {
-		w.str = append(w.str, 0x80+byte(size))
-	} else {
-		// TODO: encode to w.str directly
-		sizesize := putint(w.sizebuf[1:], uint64(size))
-		w.sizebuf[0] = 0xB7 + byte(sizesize)
-		w.str = append(w.str, w.sizebuf[:sizesize+1]...)
-	}
+func ToRLPStringSimple(str []byte) (ret []byte) {
+	size := len(str)
+	ret = make([]byte, 0, size+int(bin.SizeInBytes(uint64(size))+1))
+	ToRLPString(str, func(b ...byte) {
+		ret = append(ret, b...)
+	})
+	return ret
 }
 
-func (w *encbuf) encodeString(b []byte) {
-	if len(b) == 1 && b[0] <= 0x7F {
+func ToRLPString(str []byte, appender func(...byte)) {
+	if size := len(str); size == 1 && str[0] <= 0x7F {
 		// fits single byte, no string header
-		w.str = append(w.str, b[0])
+		appender(str[0])
 	} else {
-		w.encodeStringHeader(len(b))
-		w.str = append(w.str, b...)
+		if size < 56 {
+			appender(EmptyString + byte(size))
+		} else {
+			putint(appender, uint64(size), 0xB7)
+		}
+		appender(str...)
 	}
 }
 
-func (w *encbuf) list() *listhead {
-	lh := &listhead{offset: len(w.str), size: w.lhsize}
-	w.lheads = append(w.lheads, lh)
-	return lh
+// headsize returns the size of a list or string header
+// for a value of the given size.
+func headsize(size uint64) byte {
+	if size < 56 {
+		return 1
+	}
+	return 1 + bin.SizeInBytes(size)
 }
 
-func (w *encbuf) listEnd(lh *listhead) {
-	lh.size = w.size() - lh.offset - lh.size
-	if lh.size < 56 {
-		w.lhsize++ // length encoded into kind tag
+// puthead writes a list or string header to buf.
+// buf must be at least 9 bytes long.
+func puthead(appender func(...byte), smalltag, largetag byte, size uint64) {
+	if size < 56 {
+		appender(smalltag + byte(size))
 	} else {
-		w.lhsize += 1 + intsize(uint64(lh.size))
+		putint(appender, size, largetag)
 	}
 }
 
-func (w *encbuf) size() int {
-	return len(w.str) + w.lhsize
-}
-
-func (w *encbuf) toBytes() []byte {
-	out := make([]byte, w.size())
-	strpos := 0
-	pos := 0
-	for _, head := range w.lheads {
-		// write string data before header
-		n := copy(out[pos:], w.str[strpos:head.offset])
-		pos += n
-		strpos += n
-		// write the header
-		enc := head.encode(out[pos:])
-		pos += len(enc)
-	}
-	// copy string data after the last list header
-	copy(out[pos:], w.str[strpos:])
-	return out
-}
-
-func (w *encbuf) toWriter(out io.Writer) (err error) {
-	strpos := 0
-	for _, head := range w.lheads {
-		// write string data before header
-		if head.offset-strpos > 0 {
-			n, err := out.Write(w.str[strpos:head.offset])
-			strpos += n
-			if err != nil {
-				return err
-			}
-		}
-		// write the header
-		enc := head.encode(w.sizebuf)
-		if _, err = out.Write(enc); err != nil {
-			return err
-		}
-	}
-	if strpos < len(w.str) {
-		// write string data after the last list header
-		_, err = out.Write(w.str[strpos:])
-	}
-	return err
-}
-
-// encReader is the io.Reader returned by EncodeToReader.
-// It releases its encbuf at EOF.
-type encReader struct {
-	buf    *encbuf // the buffer we're reading from. this is nil when we're at EOF.
-	lhpos  int     // index of list header that we're reading
-	strpos int     // current position in string buffer
-	piece  []byte  // next piece to be read
-}
-
-func (r *encReader) Read(b []byte) (n int, err error) {
-	for {
-		if r.piece = r.next(); r.piece == nil {
-			// Put the encode buffer back into the pool at EOF when it
-			// is first encountered. Subsequent calls still return EOF
-			// as the error but the buffer is no longer valid.
-			if r.buf != nil {
-				encbufPool.Put(r.buf)
-				r.buf = nil
-			}
-			return n, io.EOF
-		}
-		nn := copy(b[n:], r.piece)
-		n += nn
-		if nn < len(r.piece) {
-			// piece didn't fit, see you next time.
-			r.piece = r.piece[nn:]
-			return n, nil
-		}
-		r.piece = nil
-	}
-}
-
-// next returns the next piece of data to be read.
-// it returns nil at EOF.
-func (r *encReader) next() []byte {
+// putint writes i to the beginning of b in big endian byte
+// order, using the least number of bytes needed to represent i.
+func putint(appender func(...byte), i uint64, tag byte) {
 	switch {
-	case r.buf == nil:
-		return nil
-
-	case r.piece != nil:
-		// There is still data available for reading.
-		return r.piece
-
-	case r.lhpos < len(r.buf.lheads):
-		// We're before the last list header.
-		head := r.buf.lheads[r.lhpos]
-		sizebefore := head.offset - r.strpos
-		if sizebefore > 0 {
-			// String data before header.
-			p := r.buf.str[r.strpos:head.offset]
-			r.strpos += sizebefore
-			return p
-		}
-		r.lhpos++
-		return head.encode(r.buf.sizebuf)
-
-	case r.strpos < len(r.buf.str):
-		// String data at the end, after all list headers.
-		p := r.buf.str[r.strpos:]
-		r.strpos = len(r.buf.str)
-		return p
-
+	case i < (1 << 8):
+		appender(1+tag, byte(i))
+	case i < (1 << 16):
+		appender(2+tag, byte(i>>8), byte(i))
+	case i < (1 << 24):
+		appender(3+tag, byte(i>>16), byte(i>>8), byte(i))
+	case i < (1 << 32):
+		appender(4+tag, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	case i < (1 << 40):
+		appender(5+tag, byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	case i < (1 << 48):
+		appender(6+tag, byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	case i < (1 << 56):
+		appender(7+tag, byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	default:
-		return nil
+		appender(8+tag, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 	}
 }
-
-var (
-	encoderInterface = reflect.TypeOf(new(Encoder)).Elem()
-	big0             = big.NewInt(0)
-)
 
 // makeWriter creates a writer function for the given type.
 func makeWriter(typ reflect.Type, ts tags) (writer, error) {
@@ -345,15 +357,27 @@ func makeWriter(typ reflect.Type, ts tags) (writer, error) {
 	case typ == rawValueType:
 		return writeRawValue, nil
 	case typ.Implements(encoderInterface):
-		return writeEncoder, nil
+		return writeEncodable, nil
 	case kind != reflect.Ptr && reflect.PtrTo(typ).Implements(encoderInterface):
-		return writeEncoderNoPtr, nil
+		return writeEncodableNoPtr, nil
 	case kind == reflect.Interface:
 		return writeInterface, nil
-	case typ.AssignableTo(reflect.PtrTo(bigInt)):
+	case typ.AssignableTo(bigint_ptr_t):
 		return writeBigIntPtr, nil
+	case typ.ConvertibleTo(bigint_ptr_t):
+		return func(value reflect.Value, encoder *Encoder) error {
+			return writeBigIntPtr(value.Convert(bigint_ptr_t), encoder)
+		}, nil
 	case typ.AssignableTo(bigInt):
-		return writeBigIntNoPtr, nil
+		return func(value reflect.Value, encoder *Encoder) error {
+			val := value.Interface().(big.Int)
+			return encoder.AppendBigInt(&val)
+		}, nil
+	case typ.ConvertibleTo(bigInt):
+		return func(value reflect.Value, encoder *Encoder) error {
+			val := value.Convert(bigInt).Interface().(big.Int)
+			return encoder.AppendBigInt(&val)
+		}, nil
 	case isUint(kind):
 		return writeUint, nil
 	case kind == reflect.Bool:
@@ -370,6 +394,8 @@ func makeWriter(typ reflect.Type, ts tags) (writer, error) {
 		return makeStructWriter(typ)
 	case kind == reflect.Ptr:
 		return makePtrWriter(typ)
+	case kind == reflect.Map:
+		return makeMapWriter(typ)
 	default:
 		return nil, fmt.Errorf("rlp: type %v is not RLP-serializable", typ)
 	}
@@ -379,67 +405,35 @@ func isByte(typ reflect.Type) bool {
 	return typ.Kind() == reflect.Uint8 && !typ.Implements(encoderInterface)
 }
 
-func writeRawValue(val reflect.Value, w *encbuf) error {
-	w.str = append(w.str, val.Bytes()...)
+func writeRawValue(val reflect.Value, w *Encoder) error {
+	w.AppendRaw(val.Bytes()...)
 	return nil
 }
 
-func writeUint(val reflect.Value, w *encbuf) error {
-	i := val.Uint()
-	if i == 0 {
-		w.str = append(w.str, 0x80)
-	} else if i < 128 {
-		// fits single byte
-		w.str = append(w.str, byte(i))
-	} else {
-		// TODO: encode int to w.str directly
-		s := putint(w.sizebuf[1:], i)
-		w.sizebuf[0] = 0x80 + byte(s)
-		w.str = append(w.str, w.sizebuf[:s+1]...)
-	}
+func writeUint(val reflect.Value, w *Encoder) error {
+	w.AppendUint(val.Uint())
 	return nil
 }
 
-func writeBool(val reflect.Value, w *encbuf) error {
+func writeBool(val reflect.Value, w *Encoder) error {
 	if val.Bool() {
-		w.str = append(w.str, 0x01)
+		w.AppendRaw(0x01)
 	} else {
-		w.str = append(w.str, 0x80)
+		w.AppendEmptyString()
 	}
 	return nil
 }
 
-func writeBigIntPtr(val reflect.Value, w *encbuf) error {
-	ptr := val.Interface().(*big.Int)
-	if ptr == nil {
-		w.str = append(w.str, 0x80)
-		return nil
-	}
-	return writeBigInt(ptr, w)
+func writeBigIntPtr(val reflect.Value, w *Encoder) error {
+	return w.AppendBigInt(val.Interface().(*big.Int))
 }
 
-func writeBigIntNoPtr(val reflect.Value, w *encbuf) error {
-	i := val.Interface().(big.Int)
-	return writeBigInt(&i, w)
-}
-
-func writeBigInt(i *big.Int, w *encbuf) error {
-	if cmp := i.Cmp(big0); cmp == -1 {
-		return fmt.Errorf("rlp: cannot encode negative *big.Int")
-	} else if cmp == 0 {
-		w.str = append(w.str, 0x80)
-	} else {
-		w.encodeString(i.Bytes())
-	}
+func writeBytes(val reflect.Value, w *Encoder) error {
+	w.AppendString(val.Bytes())
 	return nil
 }
 
-func writeBytes(val reflect.Value, w *encbuf) error {
-	w.encodeString(val.Bytes())
-	return nil
-}
-
-func writeByteArray(val reflect.Value, w *encbuf) error {
+func writeByteArray(val reflect.Value, w *Encoder) error {
 	if !val.CanAddr() {
 		// Slice requires the value to be addressable.
 		// Make it addressable by copying.
@@ -449,29 +443,23 @@ func writeByteArray(val reflect.Value, w *encbuf) error {
 	}
 	size := val.Len()
 	slice := val.Slice(0, size).Bytes()
-	w.encodeString(slice)
+	w.AppendString(slice)
 	return nil
 }
 
-func writeString(val reflect.Value, w *encbuf) error {
+func writeString(val reflect.Value, w *Encoder) error {
 	s := val.String()
-	if len(s) == 1 && s[0] <= 0x7f {
-		// fits single byte, no string header
-		w.str = append(w.str, s[0])
-	} else {
-		w.encodeStringHeader(len(s))
-		w.str = append(w.str, s...)
-	}
+	w.AppendString(bin.BytesView(s))
 	return nil
 }
 
-func writeEncoder(val reflect.Value, w *encbuf) error {
-	return val.Interface().(Encoder).EncodeRLP(w)
+func writeEncodable(val reflect.Value, w *Encoder) error {
+	return val.Interface().(RLPEncodable).EncodeRLP(w)
 }
 
-// writeEncoderNoPtr handles non-pointer values that implement Encoder
+// writeEncodableNoPtr handles non-pointer values that implement RLPEncodable
 // with a pointer receiver.
-func writeEncoderNoPtr(val reflect.Value, w *encbuf) error {
+func writeEncodableNoPtr(val reflect.Value, w *Encoder) error {
 	if !val.CanAddr() {
 		// We can't get the address. It would be possible to make the
 		// value addressable by creating a shallow copy, but this
@@ -482,15 +470,15 @@ func writeEncoderNoPtr(val reflect.Value, w *encbuf) error {
 		// interface. We don't want to handle it that way.
 		return fmt.Errorf("rlp: game over: unadressable value of type %v, EncodeRLP is pointer method", val.Type())
 	}
-	return val.Addr().Interface().(Encoder).EncodeRLP(w)
+	return val.Addr().Interface().(RLPEncodable).EncodeRLP(w)
 }
 
-func writeInterface(val reflect.Value, w *encbuf) error {
+func writeInterface(val reflect.Value, w *Encoder) error {
 	if val.IsNil() {
 		// Write empty list. This is consistent with the previous RLP
 		// encoder that we had and should therefore avoid any
 		// problems.
-		w.str = append(w.str, 0xC0)
+		w.AppendRaw(0xC0)
 		return nil
 	}
 	eval := val.Elem()
@@ -506,9 +494,9 @@ func makeSliceWriter(typ reflect.Type, ts tags) (writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	writer := func(val reflect.Value, w *encbuf) error {
+	writer := func(val reflect.Value, w *Encoder) error {
 		if !ts.tail {
-			defer w.listEnd(w.list())
+			defer w.ListEnd(w.ListStart())
 		}
 		vlen := val.Len()
 		for i := 0; i < vlen; i++ {
@@ -526,14 +514,13 @@ func makeStructWriter(typ reflect.Type) (writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	writer := func(val reflect.Value, w *encbuf) error {
-		lh := w.list()
+	writer := func(val reflect.Value, w *Encoder) error {
+		defer w.ListEnd(w.ListStart())
 		for _, f := range fields {
 			if err := f.info.writer(val.Field(f.index), w); err != nil {
 				return err
 			}
 		}
-		w.listEnd(lh)
 		return nil
 	}
 	return writer, nil
@@ -546,29 +533,29 @@ func makePtrWriter(typ reflect.Type) (writer, error) {
 	}
 
 	// determine nil pointer handler
-	var nilfunc func(*encbuf) error
+	var nilfunc func(*Encoder) error
 	kind := typ.Elem().Kind()
 	switch {
 	case kind == reflect.Array && isByte(typ.Elem().Elem()):
-		nilfunc = func(w *encbuf) error {
-			w.str = append(w.str, 0x80)
+		nilfunc = func(w *Encoder) error {
+			w.AppendRaw(EmptyString)
 			return nil
 		}
 	case kind == reflect.Struct || kind == reflect.Array:
-		nilfunc = func(w *encbuf) error {
+		nilfunc = func(w *Encoder) error {
 			// encoding the zero value of a struct/array could trigger
 			// infinite recursion, avoid that.
-			w.listEnd(w.list())
+			w.ListEnd(w.ListStart())
 			return nil
 		}
 	default:
 		zero := reflect.Zero(typ.Elem())
-		nilfunc = func(w *encbuf) error {
+		nilfunc = func(w *Encoder) error {
 			return etypeinfo.writer(zero, w)
 		}
 	}
 
-	writer := func(val reflect.Value, w *encbuf) error {
+	writer := func(val reflect.Value, w *Encoder) error {
 		if val.IsNil() {
 			return nilfunc(w)
 		}
@@ -577,70 +564,20 @@ func makePtrWriter(typ reflect.Type) (writer, error) {
 	return writer, err
 }
 
-// putint writes i to the beginning of b in big endian byte
-// order, using the least number of bytes needed to represent i.
-func putint(b []byte, i uint64) (size int) {
-	switch {
-	case i < (1 << 8):
-		b[0] = byte(i)
-		return 1
-	case i < (1 << 16):
-		b[0] = byte(i >> 8)
-		b[1] = byte(i)
-		return 2
-	case i < (1 << 24):
-		b[0] = byte(i >> 16)
-		b[1] = byte(i >> 8)
-		b[2] = byte(i)
-		return 3
-	case i < (1 << 32):
-		b[0] = byte(i >> 24)
-		b[1] = byte(i >> 16)
-		b[2] = byte(i >> 8)
-		b[3] = byte(i)
-		return 4
-	case i < (1 << 40):
-		b[0] = byte(i >> 32)
-		b[1] = byte(i >> 24)
-		b[2] = byte(i >> 16)
-		b[3] = byte(i >> 8)
-		b[4] = byte(i)
-		return 5
-	case i < (1 << 48):
-		b[0] = byte(i >> 40)
-		b[1] = byte(i >> 32)
-		b[2] = byte(i >> 24)
-		b[3] = byte(i >> 16)
-		b[4] = byte(i >> 8)
-		b[5] = byte(i)
-		return 6
-	case i < (1 << 56):
-		b[0] = byte(i >> 48)
-		b[1] = byte(i >> 40)
-		b[2] = byte(i >> 32)
-		b[3] = byte(i >> 24)
-		b[4] = byte(i >> 16)
-		b[5] = byte(i >> 8)
-		b[6] = byte(i)
-		return 7
-	default:
-		b[0] = byte(i >> 56)
-		b[1] = byte(i >> 48)
-		b[2] = byte(i >> 40)
-		b[3] = byte(i >> 32)
-		b[4] = byte(i >> 24)
-		b[5] = byte(i >> 16)
-		b[6] = byte(i >> 8)
-		b[7] = byte(i)
-		return 8
-	}
-}
-
-// intsize computes the minimum number of bytes required to store i.
-func intsize(i uint64) (size int) {
-	for size = 1; ; size++ {
-		if i >>= 8; i == 0 {
-			return size
+func makeMapWriter(typ reflect.Type) (writer, error) {
+	k_type_info, err_0 := cachedTypeInfo1(typ.Key(), tags{})
+	util.PanicIfNotNil(err_0)
+	v_type_info, err_1 := cachedTypeInfo1(typ.Elem(), tags{})
+	util.PanicIfNotNil(err_1)
+	return func(value reflect.Value, encoder *Encoder) error {
+		list_start := encoder.ListStart()
+		for i := value.MapRange(); i.Next(); {
+			list_start := encoder.ListStart()
+			util.PanicIfNotNil(k_type_info.writer(i.Key(), encoder))
+			util.PanicIfNotNil(v_type_info.writer(i.Value(), encoder))
+			encoder.ListEnd(list_start)
 		}
-	}
+		encoder.ListEnd(list_start)
+		return nil
+	}, nil
 }

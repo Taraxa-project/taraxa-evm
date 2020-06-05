@@ -20,7 +20,9 @@ import (
 	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"math/big"
 	"math/rand"
 	"reflect"
@@ -46,6 +48,8 @@ var (
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
 
+var ZeroHash Hash
+
 // BytesToHash sets b to hash.
 // If b is larger than len(h), b will be cropped from the left.
 func BytesToHash(b []byte) Hash {
@@ -61,6 +65,18 @@ func BigToHash(b *big.Int) Hash { return BytesToHash(b.Bytes()) }
 // HexToHash sets byte representation of s to hash.
 // If b is larger than len(h), b will be cropped from the left.
 func HexToHash(s string) Hash { return BytesToHash(FromHex(s)) }
+
+func (h *Hash) DecodeRLP(stream *rlp.Stream) error {
+	bytes, err := stream.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(bytes) > HashLength {
+		return errors.New("too long")
+	}
+	h.SetBytes(bytes)
+	return nil
+}
 
 // Bytes gets the byte representation of the underlying hash.
 func (h Hash) Bytes() []byte { return h[:] }
@@ -106,12 +122,12 @@ func (h Hash) MarshalText() ([]byte, error) {
 
 // SetBytes sets the hash to the value of b.
 // If b is larger than len(h), b will be cropped from the left.
-func (h *Hash) SetBytes(b []byte) {
+func (h *Hash) SetBytes(b []byte) *Hash {
 	if len(b) > len(h) {
 		b = b[len(b)-HashLength:]
 	}
-
 	copy(h[HashLength-len(b):], b)
+	return h
 }
 
 // Generate implements testing/quick.Generator.
@@ -173,6 +189,8 @@ func (h UnprefixedHash) MarshalText() ([]byte, error) {
 
 // Address represents the 20 byte address of an Ethereum account.
 type Address [AddressLength]byte
+
+var ZeroAddress Address
 
 // BytesToAddress returns Address with value b.
 // If b is larger than len(h), b will be cropped from the left.
