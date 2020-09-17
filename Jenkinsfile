@@ -16,10 +16,8 @@ pipeline {
         stage('Go Tests') {
             steps {
                 sh '''
-                    # Hack, get right mount point
-                    WORKSPACE_FIXED=$(echo $WORKSPACE | sed 's,/var/jenkins_home/,/var/lib/jenkins/,g')
                     docker run --rm --name go-evm-${TEST_NAME} \
-                        -v ${WORKSPACE_FIXED}:/app \
+                        -v ${WORKSPACE}:/app \
                         -v ${ETH_TEST_DATA_DIR}:${ETH_TEST_DATA_DIR}:ro \
                         -v ${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME}:${ETH_TEST_RESULTS_BASE_DIR}/${TEST_NAME} \
                         -e ETH_TEST_DATA_DIR=${ETH_TEST_DATA_DIR} \
