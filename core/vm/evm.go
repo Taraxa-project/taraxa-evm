@@ -116,7 +116,6 @@ func (self *EVM) Init(cfg Config) *EVM {
 	for i := range self.stack_prealloc {
 		self.stack_prealloc[i].Init(int(cfg.StackPrealloc))
 	}
-	self.bigconv.Init()
 	return self
 }
 

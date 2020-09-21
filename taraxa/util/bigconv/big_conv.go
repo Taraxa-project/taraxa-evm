@@ -10,13 +10,11 @@ import (
 )
 
 type BigConv struct {
-	buf  common.Hash
-	addr *common.Address
+	buf common.Hash
 }
 
-func (self *BigConv) Init() *BigConv {
-	self.addr = (*common.Address)(bin.UnsafeAdd(unsafe.Pointer(&self.buf), uintptr(len(self.buf)-common.AddressLength)))
-	return self
+func (self *BigConv) addr_ptr() *common.Address {
+	return (*common.Address)(bin.UnsafeAdd(unsafe.Pointer(&self.buf), uintptr(common.HashLength-common.AddressLength)))
 }
 
 func (self *BigConv) ToHash(b *big.Int) (ret *common.Hash) {
@@ -33,10 +31,10 @@ func (self *BigConv) ToHash(b *big.Int) (ret *common.Hash) {
 func (self *BigConv) ToAddr(b *big.Int) (ret *common.Address) {
 	switch l := b.BitLen(); {
 	case l <= common.AddressLength*8:
-		ret = self.addr
-		b.FillBytes(self.addr[:])
+		ret = self.addr_ptr()
+		b.FillBytes(ret[:])
 	case l <= common.HashLength*8:
-		ret = self.addr
+		ret = self.addr_ptr()
 		b.FillBytes(self.buf[:])
 	default:
 		ret = new(common.Address)
