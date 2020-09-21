@@ -24,52 +24,59 @@ import (
 // stack is an object for basic stack operations. Items popped to the stack are
 // expected to be changed and modified. stack does not take care of adding newly
 // initialised objects.
-type stack struct {
-	data []*big.Int
+type Stack struct {
+	desired_cap int
+	data        []*big.Int
 }
 
-func newstack() *stack {
-	return &stack{data: make([]*big.Int, 0, StackLimit)}
+func (self *Stack) Init(desired_cap int) *Stack {
+	self.desired_cap = desired_cap
+	self.data = make([]*big.Int, 0, desired_cap)
+	return self
 }
 
-func (st *stack) push(d *big.Int) {
+func (self *Stack) reset() {
+	self.data = self.data[:0:self.desired_cap]
+}
+
+func (st *Stack) push(d *big.Int) {
 	// NOTE push limit (1024) is checked in baseCheck
 	//stackItem := new(big.Int).Set(d)
 	//st.data = append(st.data, stackItem)
 	st.data = append(st.data, d)
 }
-func (st *stack) pushN(ds ...*big.Int) {
+func (st *Stack) pushN(ds ...*big.Int) {
 	st.data = append(st.data, ds...)
 }
 
-func (st *stack) pop() (ret *big.Int) {
+func (st *Stack) pop() (ret *big.Int) {
 	ret = st.data[len(st.data)-1]
 	st.data = st.data[:len(st.data)-1]
 	return
 }
 
-func (st *stack) len() int {
+func (st *Stack) len() int {
 	return len(st.data)
 }
 
-func (st *stack) swap(n int) {
+func (st *Stack) swap(n int) {
 	st.data[st.len()-n], st.data[st.len()-1] = st.data[st.len()-1], st.data[st.len()-n]
 }
 
-func (st *stack) dup(pool *int_pool, n int) {
+func (st *Stack) dup(pool *int_pool, n int) {
 	st.push(pool.get().Set(st.data[st.len()-n]))
 }
 
-func (st *stack) peek() *big.Int {
+func (st *Stack) peek() *big.Int {
 	return st.data[st.len()-1]
 }
 
 // Back returns the n'th item in stack
-func (st *stack) Back(n int) *big.Int {
+func (st *Stack) Back(n int) *big.Int {
 	return st.data[st.len()-n-1]
 }
 
-func (st *stack) require(n int) error {
+func (st *Stack) require(n int) error {
 	if st.len() < n {
 		return fmt.Errorf("stack underflow (%d <=> %d)", len(st.data), n)
 	}
@@ -77,11 +84,11 @@ func (st *stack) require(n int) error {
 }
 
 // Print dumps the content of the stack
-func (st *stack) Print() {
+func (st *Stack) Print() {
 	fmt.Println("### stack ###")
 	if len(st.data) > 0 {
-		for i, val := range st.data {
-			fmt.Printf("%-3d  %v\n", i, val)
+		for i := range st.data {
+			fmt.Printf("%-3d  %v\n", i, st.data[len(st.data)-i-1])
 		}
 	} else {
 		fmt.Println("-- empty --")

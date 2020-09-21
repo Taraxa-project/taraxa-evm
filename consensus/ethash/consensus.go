@@ -17,10 +17,11 @@
 package ethash
 
 import (
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/params"
-	"math/big"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
 var (
@@ -35,7 +36,7 @@ var (
 	big32 = big.NewInt(32)
 )
 
-type BlockNumAndCoinbase struct {
+type BlockNumAndCoinbase = struct {
 	Number types.BlockNum
 	Author common.Address
 }
@@ -44,10 +45,10 @@ type BlockNumAndCoinbase struct {
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func AccumulateRewards(
-	rules params.Rules,
+	rules vm.Rules,
 	header BlockNumAndCoinbase,
 	uncles []BlockNumAndCoinbase,
-	add_balance func(common.Address, *big.Int)) {
+	state vm.State) {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if rules.IsByzantium {
@@ -65,9 +66,9 @@ func AccumulateRewards(
 		r.Sub(r, header_num_big)
 		r.Mul(r, blockReward)
 		r.Div(r, big8)
-		add_balance(uncle.Author, r)
+		state.GetAccount(&uncle.Author).AddBalance(r)
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
-	add_balance(header.Author, reward)
+	state.GetAccount(&header.Author).AddBalance(reward)
 }

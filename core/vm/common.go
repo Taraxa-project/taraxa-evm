@@ -19,6 +19,8 @@ package vm
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
@@ -26,7 +28,7 @@ import (
 // calculates the memory size required for a step
 func calcMemSize(off, l *big.Int) *big.Int {
 	if l.Sign() == 0 {
-		return common.Big0
+		return bigutil.Big0
 	}
 
 	return new(big.Int).Add(off, l)

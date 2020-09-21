@@ -17,6 +17,7 @@
 package abi
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"math/big"
 	"reflect"
 
@@ -47,9 +48,9 @@ func packElement(t Type, reflectValue reflect.Value) []byte {
 		return common.LeftPadBytes(reflectValue.Bytes(), 32)
 	case BoolTy:
 		if reflectValue.Bool() {
-			return math.PaddedBigBytes(common.Big1, 32)
+			return math.PaddedBigBytes(bigutil.Big1, 32)
 		}
-		return math.PaddedBigBytes(common.Big0, 32)
+		return math.PaddedBigBytes(bigutil.Big0, 32)
 	case BytesTy:
 		if reflectValue.Kind() == reflect.Array {
 			reflectValue = mustArrayToByteSlice(reflectValue)

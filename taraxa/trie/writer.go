@@ -2,6 +2,7 @@ package trie
 
 import (
 	"errors"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
@@ -153,7 +154,7 @@ func (self *Writer) write(k *common.Hash, v value_node) {
 		}
 	})
 	self.root = self.mpt_del(self.root, 0)
-	self.db.DeleteValue(k)
+	self.db.PutValue(k, nil)
 }
 
 // TODO maybe dirty checking is worthwhile

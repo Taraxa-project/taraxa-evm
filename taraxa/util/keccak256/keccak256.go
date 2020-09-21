@@ -1,24 +1,34 @@
 package keccak256
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"golang.org/x/crypto/sha3"
 	"hash"
 	"reflect"
 	"runtime"
 	"sync"
 	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"golang.org/x/crypto/sha3"
 )
 
 type Hasher struct {
-	state hash_state
-	out   *common.Hash
+	state              hash_state
+	result_buf         *common.Hash
+	result_buf_escaped bool
+	from_pool          bool
 }
 type hash_state interface {
 	hash.Hash
 	Read([]byte) (int, error)
+}
+
+func (self *Hasher) Init() *Hasher {
+	self.state = sha3.NewLegacyKeccak256().(hash_state)
+	self.result_buf = new(common.Hash)
+	return self
 }
 
 func (self *Hasher) Write(b ...byte) {
@@ -26,49 +36,73 @@ func (self *Hasher) Write(b ...byte) {
 }
 
 func (self *Hasher) Hash() *common.Hash {
-	self.state.Read(self.out[:])
-	return self.out
+	self.state.Read(self.result_buf[:])
+	self.result_buf_escaped = true
+	return self.result_buf
+}
+
+func (self *Hasher) HashAndReturnByValue() (ret common.Hash) {
+	self.state.Read(ret[:])
+	return
 }
 
 func (self *Hasher) Reset() {
 	self.state.Reset()
-	self.out = new(common.Hash)
+	if self.result_buf_escaped {
+		self.result_buf = new(common.Hash)
+		self.result_buf_escaped = false
+	}
 }
 
-var hashers_resetter util.SingleThreadExecutor
 var hashers chan *Hasher
-var hashers_init_mu sync.Mutex
+var hashers_expended chan *Hasher
+var pool_init_mu sync.Mutex
+
+func init_pool(num_hashers uint64) {
+	hashers = make(chan *Hasher, num_hashers)
+	hashers_expended = make(chan *Hasher, (num_hashers/2)+1)
+	for i := uint64(0); i < num_hashers; i++ {
+		hasher := new(Hasher).Init()
+		hasher.from_pool = true
+		hashers <- hasher
+	}
+	go func() {
+		for {
+			hasher := <-hashers_expended
+			hasher.Reset()
+			hashers <- hasher
+		}
+	}()
+}
 
 func InitPool(size uint64) {
-	defer util.LockUnlock(&hashers_init_mu)()
+	defer util.LockUnlock(&pool_init_mu)()
 	if hashers != nil {
-		panic("already initialized")
+		panic("already initialized: either by you or lazily")
 	}
 	init_pool(size)
 }
 
-func init_pool(size uint64) {
-	hashers = make(chan *Hasher, size)
-	for i := uint64(0); i < size; i++ {
-		hashers <- &Hasher{sha3.NewLegacyKeccak256().(hash_state), new(common.Hash)}
-	}
-}
-
-func GetHasherFromPool() *Hasher {
+func GetHasherFromPool() (ret *Hasher) {
 	if hashers == nil {
-		defer util.LockUnlock(&hashers_init_mu)()
+		pool_init_mu.Lock()
 		if hashers == nil {
-			init_pool(uint64(runtime.NumCPU()) * 128)
+			init_pool(uint64(runtime.NumCPU()) * 512)
 		}
+		pool_init_mu.Unlock()
 	}
-	return <-hashers
+	select {
+	case ret = <-hashers:
+	default:
+		ret = new(Hasher).Init()
+	}
+	return
 }
 
 func ReturnHasherToPool(hasher *Hasher) {
-	hashers_resetter.Do(func() {
-		hasher.Reset()
-		hashers <- hasher
-	})
+	if hasher.from_pool {
+		hashers_expended <- hasher
+	}
 }
 
 func Hash(bs ...[]byte) (ret *common.Hash) {
@@ -81,16 +115,13 @@ func Hash(bs ...[]byte) (ret *common.Hash) {
 	return
 }
 
-func HashOnStack(bs ...[]byte) (ret common.Hash) {
+func HashAndReturnByValue(bs ...[]byte) (ret common.Hash) {
 	hasher := GetHasherFromPool()
 	for _, b := range bs {
 		hasher.Write(b...)
 	}
-	hasher.state.Read(ret[:])
-	hashers_resetter.Do(func() {
-		hasher.state.Reset()
-		hashers <- hasher
-	})
+	ret = hasher.HashAndReturnByValue()
+	ReturnHasherToPool(hasher)
 	return
 }
 

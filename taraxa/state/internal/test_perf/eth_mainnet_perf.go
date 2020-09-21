@@ -1,25 +1,8 @@
-//+build none
-
 package main
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
-	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
-	"github.com/tecbot/gorocksdb"
 	"math"
 	"math/big"
 	"os"
@@ -30,23 +13,43 @@ import (
 	"strconv"
 	"time"
 	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
+
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
+	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
+	"github.com/Taraxa-project/taraxa-evm/core"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/tecbot/gorocksdb"
 )
 
-// TODO fix it
 func main() {
 	var last_block_key = bin.BytesView("last_block")
-	const min_tx_to_execute = 0
-	var profiling = true
-	var disable_gc = true
 
-	dest_data_dir := mkdirp("/Users/compuktor/taraxa_evm_data")
+	const profiling = false
+	const disable_gc = profiling || false
+
+	d, e1 := os.UserHomeDir()
+	util.PanicIfNotNil(e1)
+
+	const desired_num_trx_per_block = 0
+	dest_data_dir := mkdirp(d + "/taraxa_evm_test")
 
 	if disable_gc {
 		debug.SetGCPercent(-1)
 	}
 	var max_heap_size uint64
 	var mem_stats runtime.MemStats
-
 	profile_basedir := mkdirp(dest_data_dir + "/profiles/")
 	util.PanicIfNotNil(exec.Command("mkdir", "-p", profile_basedir).Run())
 	util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
@@ -72,7 +75,7 @@ func main() {
 	blk_db_opts.SetMaxOpenFiles(32)
 	blk_db, e0 := gorocksdb.OpenDbForReadOnly(
 		blk_db_opts,
-		"/Volumes/A/eth-mainnet/eth_mainnet_rocksdb/blockchain",
+		"/home/oleg/win10/ubuntu/blockchain",
 		false)
 	util.PanicIfNotNil(e0)
 
@@ -151,90 +154,72 @@ func main() {
 		last_root = getBlockByNumber(last_blk_num).StateRoot
 	}
 
-	var state_transition_service state_transition.StateTransition
-	state_transition_service.Init(
+	SUT := new(state_transition.StateTransition).Init(
 		&state_db,
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		state_common.ChainConfig{
-			EVMChainConfig: state_common.EVMChainConfig{
-				ETHChainConfig: *params.MainnetChainConfig,
+		state_config.ChainConfig{
+			Execution: state_config.ExecutionConfig{
+				ETHForks: *params.MainnetChainConfig,
 			},
 		},
 		last_blk_num,
-		last_root,
-		state_transition.CacheOpts{
-			MainTrieWriterOpts: trie.WriterCacheOpts{
-				FullNodeLevelsToCache: 5,
-				ExpectedDepth:         trie.MaxDepth,
+		&last_root,
+		state_transition.StateTransitionOpts{
+			TrieWriters: state_transition.TrieWriterOpts{
+				MainTrieWriterOpts: trie.WriterCacheOpts{
+					FullNodeLevelsToCache: 16,
+					ExpectedDepth:         trie.MaxDepth,
+				},
+				AccTrieWriterOpts: trie.WriterCacheOpts{
+					ExpectedDepth: 20,
+				},
 			},
-			AccTrieWriterOpts: trie.WriterCacheOpts{
-				ExpectedDepth: 16,
-			},
-			ExpectedMaxNumTrxPerBlock: 400,
+			ExpectedMaxNumTrxPerBlock: 80000,
 		},
 	)
 
 	if is_genesis {
 		batch := gorocksdb.NewWriteBatch()
-		state_db.TransactionBegin(batch)
-		root := state_transition_service.ApplyAccounts(core.MainnetGenesis().Alloc)
+		state_db.BatchBegin(batch)
+		root := SUT.GenesisInit(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 		batch.Put(last_block_key, bin.ENC_b_endian_64(0))
-		state_db.TransactionEnd()
+		state_db.BatchEnd()
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 		state_db.Refresh()
 	}
 
-	block_chan := make(chan *BlockInfo, min_tx_to_execute/25+2)
-	block_load_requests := make(chan byte, cap(block_chan))
-	defer close(block_load_requests)
-	go func() {
-		defer close(block_chan)
-		defer blk_db.Close()
-		next_to_load := last_blk_num + 1
-		for i := 0; i < cap(block_chan); i++ {
-			block_chan <- getBlockByNumber(next_to_load)
-			next_to_load++
-		}
-		for {
-			if _, ok := <-block_load_requests; !ok {
-				break
-			}
-			block_chan <- getBlockByNumber(next_to_load)
-			next_to_load++
-		}
-	}()
-
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
-	block_buf := make([]*BlockInfo, 0, cap(block_chan))
+	var block_buf []*BlockInfo
 	for {
+		block_buf = block_buf[:0]
+		block_num_from := last_blk_num + 1
 		tx_count := 0
 		for {
-			block_load_requests <- 0
-			last_block := <-block_chan
+			last_blk_num++
+			last_block := getBlockByNumber(last_blk_num)
 			block_buf = append(block_buf, last_block)
 			tx_count += len(last_block.Transactions)
-			if tx_count >= min_tx_to_execute {
+			if tx_count >= desired_num_trx_per_block {
 				break
 			}
 		}
 		batch := gorocksdb.NewWriteBatch()
-		state_db.TransactionBegin(batch)
-		requests := make([]state_transition.Block, len(block_buf))
-		for i, b := range block_buf {
-			requests[i] = state_transition.Block{
-				EVMBlock:     *(*vm.BlockWithoutNumber)(unsafe.Pointer(&b.VmBlock)),
-				Uncles:       *(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)),
-				Transactions: *(*[]vm.Transaction)(unsafe.Pointer(&b.Transactions)),
-			}
-		}
-		last_block := block_buf[len(block_buf)-1]
-		fmt.Println("blocks:", block_buf[0].Number, "-", last_block.Number, "tx_count:", tx_count)
+		state_db.BatchBegin(batch)
+		fmt.Println("blocks:", block_num_from, "-", last_blk_num, "tx_count:", tx_count)
 		now := time.Now()
-		assert.Holds(len(requests) == 1)
-		result := state_transition_service.ApplyBlock(requests[0])
+		for _, b := range block_buf {
+			SUT.BeginBlock((*vm.BlockWithoutNumber)(unsafe.Pointer(&b.VmBlock)))
+			for i := range b.Transactions {
+				SUT.SubmitTransaction((*vm.Transaction)(unsafe.Pointer(&b.Transactions[i])))
+			}
+			SUT.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
+		}
+		result := SUT.CommitSync()
+		assert.EQ(result.StateRoot.Hex(), block_buf[len(block_buf)-1].StateRoot.Hex())
+		//return
 		tps := float64(tx_count) / time.Now().Sub(now).Seconds()
 		tps_sum += tps
 		tps_cnt++
@@ -245,12 +230,8 @@ func main() {
 			tps_max = tps
 		}
 		fmt.Println("TPS current:", tps, "avg:", tps_sum/float64(tps_cnt), "min:", tps_min, "max:", tps_max)
-		block_buf = block_buf[:0]
-		assert.EQ(result.StateRoot.Hex(), last_block.StateRoot.Hex())
-		// break
-		// 0xc87292d07ff3df4bf44452fa01e9a7eee9966f5c861dcfcff60c3de176d50607
-		state_db.TransactionEnd()
-		batch.Put(last_block_key, bin.ENC_b_endian_64(last_block.Number))
+		state_db.BatchEnd()
+		batch.Put(last_block_key, bin.ENC_b_endian_64(last_blk_num))
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 		batch.Destroy()
 		state_db.Refresh()

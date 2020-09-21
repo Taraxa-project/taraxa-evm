@@ -19,14 +19,13 @@ package common
 import (
 	"database/sql/driver"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"math/big"
 	"math/rand"
 	"reflect"
-	"strings"
+
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"golang.org/x/crypto/sha3"
@@ -52,15 +51,10 @@ var ZeroHash Hash
 
 // BytesToHash sets b to hash.
 // If b is larger than len(h), b will be cropped from the left.
-func BytesToHash(b []byte) Hash {
-	var h Hash
-	h.SetBytes(b)
-	return h
+func BytesToHash(b []byte) (ret Hash) {
+	ret.SetBytes(b)
+	return
 }
-
-// BigToHash sets byte representation of b to hash.
-// If b is larger than len(h), b will be cropped from the left.
-func BigToHash(b *big.Int) Hash { return BytesToHash(b.Bytes()) }
 
 // HexToHash sets byte representation of s to hash.
 // If b is larger than len(h), b will be cropped from the left.
@@ -124,9 +118,10 @@ func (h Hash) MarshalText() ([]byte, error) {
 // If b is larger than len(h), b will be cropped from the left.
 func (h *Hash) SetBytes(b []byte) *Hash {
 	if len(b) > len(h) {
-		b = b[len(b)-HashLength:]
+		copy(h[HashLength-len(b):], b[len(b)-HashLength:])
+	} else {
+		copy(h[HashLength-len(b):], b)
 	}
-	copy(h[HashLength-len(b):], b)
 	return h
 }
 
@@ -200,10 +195,6 @@ func BytesToAddress(b []byte) Address {
 	return a
 }
 
-// BigToAddress returns Address with byte values of b.
-// If b is larger than len(h), b will be cropped from the left.
-func BigToAddress(b *big.Int) Address { return BytesToAddress(b.Bytes()) }
-
 // HexToAddress returns Address with byte values of s.
 // If s is larger than len(h), s will be cropped from the left.
 func HexToAddress(s string) Address { return BytesToAddress(FromHex(s)) }
@@ -262,10 +253,11 @@ func (a Address) Format(s fmt.State, c rune) {
 // SetBytes sets the address to the value of b.
 // If b is larger than len(a) it will panic.
 func (a *Address) SetBytes(b []byte) {
-	if len(b) > len(a) {
-		b = b[len(b)-AddressLength:]
+	if len(b) > AddressLength {
+		copy(a[AddressLength-len(b):], b[len(b)-AddressLength:])
+	} else {
+		copy(a[AddressLength-len(b):], b)
 	}
-	copy(a[AddressLength-len(b):], b)
 }
 
 // MarshalText returns the hex representation of a.
@@ -314,67 +306,4 @@ func (a *Address) UnmarshalGraphQL(input interface{}) error {
 		err = fmt.Errorf("Unexpected type for Address: %v", input)
 	}
 	return err
-}
-
-// UnprefixedAddress allows marshaling an Address without 0x prefix.
-type UnprefixedAddress Address
-
-// UnmarshalText decodes the address from hex. The 0x prefix is optional.
-func (a *UnprefixedAddress) UnmarshalText(input []byte) error {
-	return hexutil.UnmarshalFixedUnprefixedText("UnprefixedAddress", input, a[:])
-}
-
-// MarshalText encodes the address as hex.
-func (a UnprefixedAddress) MarshalText() ([]byte, error) {
-	return []byte(hex.EncodeToString(a[:])), nil
-}
-
-// MixedcaseAddress retains the original string, which may or may not be
-// correctly checksummed
-type MixedcaseAddress struct {
-	addr     Address
-	original string
-}
-
-// NewMixedcaseAddress constructor (mainly for testing)
-
-// NewMixedcaseAddressFromString is mainly meant for unit-testing
-
-// UnmarshalJSON parses MixedcaseAddress
-func (ma *MixedcaseAddress) UnmarshalJSON(input []byte) error {
-	if err := hexutil.UnmarshalFixedJSON(addressT, input, ma.addr[:]); err != nil {
-		return err
-	}
-	return json.Unmarshal(input, &ma.original)
-}
-
-// MarshalJSON marshals the original value
-func (ma *MixedcaseAddress) MarshalJSON() ([]byte, error) {
-	if strings.HasPrefix(ma.original, "0x") || strings.HasPrefix(ma.original, "0X") {
-		return json.Marshal(fmt.Sprintf("0x%s", ma.original[2:]))
-	}
-	return json.Marshal(fmt.Sprintf("0x%s", ma.original))
-}
-
-// Address returns the address
-func (ma *MixedcaseAddress) Address() Address {
-	return ma.addr
-}
-
-// String implements fmt.Stringer
-func (ma *MixedcaseAddress) String() string {
-	if ma.ValidChecksum() {
-		return fmt.Sprintf("%s [chksum ok]", ma.original)
-	}
-	return fmt.Sprintf("%s [chksum INVALID]", ma.original)
-}
-
-// ValidChecksum returns true if the address has valid checksum
-func (ma *MixedcaseAddress) ValidChecksum() bool {
-	return ma.original == ma.addr.Hex()
-}
-
-// Original returns the mixed-case input string
-func (ma *MixedcaseAddress) Original() string {
-	return ma.original
 }

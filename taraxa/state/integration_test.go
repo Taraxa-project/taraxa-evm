@@ -1,27 +1,29 @@
 package state
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/data"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_concurrent_schedule"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"github.com/schollz/progressbar/v3"
-	"github.com/tecbot/gorocksdb"
 	"math/big"
 	"math/rand"
-	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"testing"
+
+	"github.com/schollz/progressbar/v3"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
+
+	"github.com/Taraxa-project/taraxa-evm/core"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/data"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/tecbot/gorocksdb"
 )
 
 func TestEthMainnetSmoke(t *testing.T) {
@@ -30,7 +32,6 @@ func TestEthMainnetSmoke(t *testing.T) {
 	mkdirp(dest_data_dir)
 	defer os.RemoveAll(dest_data_dir)
 
-	genesis_accounts := data.Parse_eth_mainnet_genesis_accounts()
 	blocks := data.Parse_eth_mainnet_blocks_0_300000()
 
 	opts_w_default := gorocksdb.NewDefaultWriteOptions()
@@ -55,29 +56,31 @@ func TestEthMainnetSmoke(t *testing.T) {
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(blocks[num].Hash[:])
 		},
-		state_common.ChainConfig{
-			EVMChainConfig: state_common.EVMChainConfig{
-				ETHChainConfig: *params.MainnetChainConfig,
+		state_config.ChainConfig{
+			Execution: state_config.ExecutionConfig{
+				ETHForks: *params.MainnetChainConfig,
 			},
 		},
 		0,
-		common.Hash{},
-		state_transition.CacheOpts{
-			MainTrieWriterOpts: trie.WriterCacheOpts{
-				FullNodeLevelsToCache: 5,
-				ExpectedDepth:         trie.MaxDepth,
+		nil,
+		state_transition.StateTransitionOpts{
+			TrieWriters: state_transition.TrieWriterOpts{
+				MainTrieWriterOpts: trie.WriterCacheOpts{
+					FullNodeLevelsToCache: 5,
+					ExpectedDepth:         trie.MaxDepth,
+				},
+				AccTrieWriterOpts: trie.WriterCacheOpts{
+					ExpectedDepth: 16,
+				},
 			},
-			AccTrieWriterOpts: trie.WriterCacheOpts{
-				ExpectedDepth: 16,
-			},
-			ExpectedMaxNumTrxPerBlock: 300,
+			ExpectedMaxNumTrxPerBlock: 500,
 		},
 	)
 	batch := gorocksdb.NewWriteBatch()
-	state_db.TransactionBegin(batch)
-	root := SUT.ApplyAccounts(genesis_accounts)
+	state_db.BatchBegin(batch)
+	root := SUT.GenesisInit(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
 	assert.EQ(root.Hex(), blocks[0].StateRoot.Hex())
-	state_db.TransactionEnd()
+	state_db.BatchEnd()
 	util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 	batch.Destroy()
 	state_db.Refresh()
@@ -86,15 +89,15 @@ func TestEthMainnetSmoke(t *testing.T) {
 	for blk_num := 1; blk_num < len(blocks); blk_num++ {
 		blk := blocks[blk_num]
 		batch := gorocksdb.NewWriteBatch()
-		state_db.TransactionBegin(batch)
-		result := SUT.ApplyBlock(
-			&blk.EVMBlock,
-			blk.Transactions,
-			blk.UncleBlocks,
-			state_concurrent_schedule.ConcurrentSchedule{},
-		)
+		state_db.BatchBegin(batch)
+		SUT.BeginBlock(&blk.EVMBlock)
+		for i := range blk.Transactions {
+			SUT.SubmitTransaction(&blk.Transactions[i])
+		}
+		SUT.EndBlock(blk.UncleBlocks)
+		result := SUT.CommitSync()
 		assert.EQ(result.StateRoot.Hex(), blk.StateRoot.Hex())
-		state_db.TransactionEnd()
+		state_db.BatchEnd()
 		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
 		batch.Destroy()
 		state_db.Refresh()

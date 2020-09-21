@@ -19,6 +19,7 @@ package abi
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"math/big"
 	"reflect"
 
@@ -251,7 +252,7 @@ func toGoType(index int, t Type, output []byte) (interface{}, error) {
 // interprets a 32 byte slice as an offset and then determines which indice to look to decode the type.
 func lengthPrefixPointsTo(index int, output []byte) (start int, length int, err error) {
 	bigOffsetEnd := big.NewInt(0).SetBytes(output[index : index+32])
-	bigOffsetEnd.Add(bigOffsetEnd, common.Big32)
+	bigOffsetEnd.Add(bigOffsetEnd, bigutil.Big32)
 	outputLength := big.NewInt(int64(len(output)))
 
 	if bigOffsetEnd.Cmp(outputLength) > 0 {

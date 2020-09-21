@@ -20,14 +20,16 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
+// TODO compress to error codes
 // List execution errors
 var (
-	ErrOutOfGas                  = util.ErrorString("out of gas")
-	ErrCodeStoreOutOfGas         = util.ErrorString("contract creation code storage out of gas")
-	ErrDepth                     = util.ErrorString("max call depth exceeded")
-	ErrInsufficientBalance       = util.ErrorString("insufficient balance for transfer")
-	ErrContractAddressCollision  = util.ErrorString("contract address collision")
-	ErrInsufficientBalanceForGas = util.ErrorString("insufficient balance to pay for gas")
-	ErrNonceTooHigh              = util.ErrorString("nonce too high")
-	ErrNonceTooLow               = util.ErrorString("nonce too low")
+	ErrOutOfGas                       = util.ErrorString("out of gas")
+	ErrIntrinsicGas                   = util.ErrorString("intrinsic gas too low")
+	ErrCodeStoreOutOfGas              = util.ErrorString("contract creation code storage out of gas")
+	ErrDepth                          = util.ErrorString("max call depth exceeded")
+	ErrInsufficientBalanceForTransfer = util.ErrorString("insufficient balance for transfer")
+	ErrContractAddressCollision       = util.ErrorString("contract address collision")
+	ErrInsufficientBalanceForGas      = util.ErrorString("insufficient balance to pay for gas")
+	ErrNonceTooHigh                   = util.ErrorString("nonce too high")
+	ErrNonceTooLow                    = util.ErrorString("nonce too low")
 )

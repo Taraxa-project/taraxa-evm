@@ -7,6 +7,7 @@ import (
 
 type DB struct{ state_common.DB }
 
-func (self DB) AtBlock(blk_num types.BlockNum) BlockDB {
-	return BlockDB{self.DB, blk_num}
+func (self *DB) ReadBlock(n types.BlockNum) (*BlockReader, state_common.BlockReadTransaction) {
+	tx := self.NewBlockReadTransaction(n)
+	return new(BlockReader).SetTransaction(tx), tx
 }

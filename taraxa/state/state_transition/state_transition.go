@@ -1,254 +1,155 @@
 package state_transition
 
 import (
+	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_historical"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+
+	"github.com/Taraxa-project/taraxa-evm/core"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_concurrent_schedule"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
-	"math/big"
 )
 
+// TODO memory leaks??
 type StateTransition struct {
-	db                                     state_common.DB
-	get_block_hash                         vm.GetHashFunc
-	chain_cfg                              state_common.ChainConfig
-	main_tr_w                              trie.Writer
-	main_tr_w_executor                     util.SingleThreadExecutor
-	acc_tr_writer_opts                     trie.WriterCacheOpts
-	pending_accounts                       map[common.Address]*pending_account
-	pending_accounts_keys                  []common.Address
-	evm_state                              state_evm.EVMState
-	curr_blk_num                           types.BlockNum
-	num_non_contract_accs_w_balance_change int
-	result_buf                             Result
+	exec_cfg          state_config.ExecutionConfig
+	db                state_common.DB
+	dpos_contract     *dpos.Contract
+	curr_blk_num      types.BlockNum
+	exec_results      []vm.ExecutionResult
+	evm               vm.EVM
+	last_block_reader state_historical.BlockReader
+	evm_state         state_evm.EVMState
+	trie_sink         TrieSink
 }
 
-type CacheOpts struct {
-	MainTrieWriterOpts        trie.WriterCacheOpts
-	AccTrieWriterOpts         trie.WriterCacheOpts
+type StateTransitionOpts struct {
+	TrieWriters               TrieWriterOpts
 	ExpectedMaxNumTrxPerBlock uint32
 }
 
 func (self *StateTransition) Init(
 	db state_common.DB,
 	get_block_hash vm.GetHashFunc,
-	chain_cfg state_common.ChainConfig,
+	chain_cfg state_config.ChainConfig,
 	curr_blk_num types.BlockNum,
-	curr_state_root common.Hash,
-	cache_opts CacheOpts,
+	curr_state_root *common.Hash,
+	opts StateTransitionOpts,
 ) *StateTransition {
 	self.db = db
-	self.get_block_hash = get_block_hash
-	self.chain_cfg = chain_cfg
+	self.exec_cfg = chain_cfg.Execution
 	self.curr_blk_num = curr_blk_num
-	curr_state_root_ptr := &curr_state_root
-	if curr_state_root == state_common.EmptyRLPListHash || curr_state_root == common.ZeroHash {
-		curr_state_root_ptr = nil
-	}
-	self.main_tr_w.Init(main_trie_db{StateTransition: self}, curr_state_root_ptr, cache_opts.MainTrieWriterOpts)
-	self.acc_tr_writer_opts = cache_opts.AccTrieWriterOpts
-	dirty_accs_per_block := uint32(util.CeilPow2(int(cache_opts.ExpectedMaxNumTrxPerBlock * 2)))
+	dirty_accs_per_block := uint32(util.CeilPow2(int(opts.ExpectedMaxNumTrxPerBlock * 2)))
 	accs_per_block := dirty_accs_per_block * 2
-	self.pending_accounts = make(map[common.Address]*pending_account, accs_per_block)
-	self.pending_accounts_keys = make([]common.Address, 0, accs_per_block)
-	self.evm_state.Init(self, state_evm.CacheOpts{
-		AccountsPrealloc:      accs_per_block,
-		DirtyAccountsPrealloc: dirty_accs_per_block,
+	self.evm_state.Init(&self.last_block_reader, state_evm.CacheOpts{
+		AccountBufferSize: accs_per_block * 2,
+		RevertLogSize:     4 * 64,
 	})
-	self.result_buf.ExecutionResults = make([]vm.ExecutionResult, cache_opts.ExpectedMaxNumTrxPerBlock)
-	self.result_buf.NonContractBalanceChanges = make([]AddressAndBalance, cache_opts.ExpectedMaxNumTrxPerBlock*2)
+	self.evm.Init(vm.Config{
+		U256PoolSize:        vm.StackLimit,
+		NumStacksToPrealloc: vm.StackLimit,
+		StackPrealloc:       vm.StackLimit,
+		MemPoolSize:         32 * 1024 * 1024,
+	})
+	self.evm.SetGetHash(get_block_hash)
+	self.evm.SetState(&self.evm_state)
+	self.trie_sink.Init(curr_state_root, TrieSinkOpts{
+		TrieWriters:              opts.TrieWriters,
+		NumDirtyAccountsToBuffer: dirty_accs_per_block,
+	})
+	self.exec_results = make([]vm.ExecutionResult, opts.ExpectedMaxNumTrxPerBlock)
+	if chain_cfg.DPOS != nil {
+		self.dpos_contract = new(dpos.Contract).Init(*chain_cfg.DPOS, dpos_storage_adapter{self})
+	}
 	return self
 }
 
-type AccountMap = core.GenesisAlloc
-
-func (self *StateTransition) ApplyAccounts(accs AccountMap) common.Hash {
-	for addr, acc := range accs {
-		trie_acc := state_common.Account{Nonce: acc.Nonce, Balance: acc.Balance, CodeSize: uint64(len(acc.Code))}
-		if trie_acc.Balance == nil {
-			trie_acc.Balance = common.Big0
-		}
-		if trie_acc.CodeSize != 0 {
-			code_hash := keccak256.Hash(acc.Code)
-			trie_acc.CodeHash = code_hash
-			self.db.PutCode(code_hash, acc.Code)
-		}
-		if len(acc.Storage) != 0 {
-			var acc_tr_w trie.Writer
-			addr := addr
-			acc_tr_w.Init(account_trie_db{StateTransition: self, addr: &addr}, nil, self.acc_tr_writer_opts)
-			for k, v := range acc.Storage {
-				v := new(big.Int).SetBytes(v[:])
-				assert.Holds(v.Sign() != 0)
-				acc_tr_w.Put(keccak256.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
-			}
-			trie_acc.StorageRootHash = acc_tr_w.Commit()
-		}
-		self.main_tr_w.Put(keccak256.Hash(addr[:]), state_common.AccountEncoder{&trie_acc})
-	}
-	if ret := self.main_tr_w.Commit(); ret != nil {
-		return *ret
-	}
-	return state_common.EmptyRLPListHash
+type GenesisConfig struct {
+	Balances core.BalanceMap
+	DPOS     *dpos.GenesisConfig
 }
 
-type UncleBlock = ethash.BlockNumAndCoinbase
-type AddressAndBalance = struct {
-	Addr    common.Address
-	Balance *big.Int
-}
-type Result struct {
-	StateRoot                 common.Hash
-	ExecutionResults          []vm.ExecutionResult
-	NonContractBalanceChanges []AddressAndBalance
+func (self *StateTransition) GenesisInit(cfg GenesisConfig) *common.Hash {
+	self.begin_block()
+	for addr, balance := range cfg.Balances {
+		self.evm_state.GetAccount(&addr).AddBalance(balance)
+	}
+	if self.dpos_contract != nil {
+		util.PanicIfNotNil(self.dpos_contract.GenesisInit(*cfg.DPOS))
+	}
+	self.evm_state_checkpoint()
+	batch := self.evm_state.Commit()
+	defer self.evm_state.Cleanup(batch)
+	return self.trie_sink.CommitSync(batch)
 }
 
-func (self *StateTransition) ApplyBlock(
-	evm_block *vm.BlockWithoutNumber,
-	transactions []vm.Transaction,
-	uncles []UncleBlock,
-	concurrent_schedule state_concurrent_schedule.ConcurrentSchedule,
-) (ret *Result) {
-	ret = &self.result_buf
-	trx_cnt := len(transactions)
-	if cap(ret.ExecutionResults) < trx_cnt {
-		ret.ExecutionResults = make([]vm.ExecutionResult, trx_cnt)
-	} else {
-		ret.ExecutionResults = ret.ExecutionResults[:trx_cnt]
-	}
+func (self *StateTransition) begin_block() {
+	db_tx := self.db.NewBlockCreationTransaction(self.curr_blk_num)
+	self.last_block_reader.SetTransaction(db_tx)
+	self.trie_sink.BeginBatch(db_tx)
+}
+
+func (self *StateTransition) evm_state_checkpoint() {
+	self.evm_state.Checkpoint(&self.trie_sink, self.evm.Rules.IsEIP158)
+}
+
+func (self *StateTransition) BeginBlock(blk *vm.BlockWithoutNumber) {
 	self.curr_blk_num++
-	rules := self.chain_cfg.ETHChainConfig.Rules(self.curr_blk_num)
-	if rules.IsDAOFork {
+	self.begin_block()
+	self.evm.SetBlock(self.curr_blk_num, blk)
+	precompiles_changed := self.evm.SetRules(self.exec_cfg.ETHForks.Rules(self.curr_blk_num))
+	if self.dpos_contract != nil && precompiles_changed {
+		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
+	}
+	if self.exec_cfg.ETHForks.IsDAOFork(self.curr_blk_num) {
 		misc.ApplyDAOHardFork(&self.evm_state)
-		self.evm_state.Commit(rules.IsEIP158, self)
+		self.evm_state_checkpoint()
 	}
-	evm_blk := vm.Block{self.curr_blk_num, *evm_block}
-	evm_cfg := vm.NewEVMConfig(self.get_block_hash, &evm_blk, rules, self.chain_cfg.ExecutionOptions)
-	for i, cnt := state_common.TxIndex(0), state_common.TxIndex(trx_cnt); i < cnt; i++ {
-		ret.ExecutionResults[i] = vm.Main(&evm_cfg, &self.evm_state, &transactions[i])
-		self.evm_state.Commit(rules.IsEIP158, self)
+}
+
+func (self *StateTransition) SubmitTransaction(trx *vm.Transaction) {
+	self.exec_results = append(self.exec_results, self.evm.Main(trx, self.exec_cfg.Options))
+	self.evm_state_checkpoint()
+}
+
+func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
+	if self.dpos_contract != nil {
+		self.dpos_contract.Commit()
+		self.evm_state_checkpoint()
 	}
-	if !self.chain_cfg.DisableBlockRewards {
+	if !self.exec_cfg.DisableBlockRewards {
 		ethash.AccumulateRewards(
-			rules,
-			ethash.BlockNumAndCoinbase{self.curr_blk_num, evm_block.Author},
+			self.evm.Rules,
+			ethash.BlockNumAndCoinbase{self.curr_blk_num, self.evm.Block.Author},
 			uncles,
-			self.evm_state.AddBalance)
-		self.evm_state.Commit(rules.IsEIP158, self)
+			&self.evm_state)
+		self.evm_state_checkpoint()
 	}
-	if cap(ret.NonContractBalanceChanges) < self.num_non_contract_accs_w_balance_change {
-		ret.NonContractBalanceChanges = make([]AddressAndBalance, self.num_non_contract_accs_w_balance_change)
-	} else {
-		ret.NonContractBalanceChanges = ret.NonContractBalanceChanges[:self.num_non_contract_accs_w_balance_change]
-	}
-	balance_changes_pos := 0
-	for _, addr := range self.pending_accounts_keys {
-		acc := self.pending_accounts[addr]
-		if acc == nil {
-			continue
-		}
-		delete(self.pending_accounts, addr)
-		balance_changes_pos_ := balance_changes_pos
-		if acc.balance_dirty {
-			ret.NonContractBalanceChanges[balance_changes_pos_].Addr = addr
-			balance_changes_pos++
-		}
-		acc.executor.Do(func() {
-			if acc.trie_w != nil {
-				acc.acc.StorageRootHash = acc.trie_w.Commit()
-			}
-			acc.enc_storage, acc.enc_hash = state_common.AccountEncoder{&acc.acc}.EncodeForTrie()
-			if acc.balance_dirty {
-				ret.NonContractBalanceChanges[balance_changes_pos_].Balance = acc.acc.Balance
-			}
-		})
-	}
-	self.main_tr_w_executor.Do(func() {
-		if h := self.main_tr_w.Commit(); h != nil {
-			ret.StateRoot = *h
-		} else {
-			ret.StateRoot = state_common.EmptyRLPListHash
-		}
-	})
-	self.evm_state.Reset()
-	self.pending_accounts_keys = self.pending_accounts_keys[:0]
-	self.num_non_contract_accs_w_balance_change = 0
-	self.main_tr_w_executor.Synchronize()
-	ret.NonContractBalanceChanges = ret.NonContractBalanceChanges[:balance_changes_pos]
+}
+
+type StateTransitionResult struct {
+	StateRoot        *common.Hash
+	ExecutionResults []vm.ExecutionResult
+}
+
+func (self *StateTransition) CommitSync() (ret StateTransitionResult) {
+	ret.ExecutionResults = self.exec_results
+	bin.ZFill_3(unsafe.Pointer(&self.exec_results), unsafe.Sizeof(self.exec_results[0]))
+	self.exec_results = self.exec_results[:0]
+	batch := self.evm_state.Commit()
+	defer self.evm_state.Cleanup(batch)
+	ret.StateRoot = self.trie_sink.CommitSync(batch)
 	return
-}
-
-func (self *StateTransition) GetCode(hash *common.Hash) []byte {
-	return self.db.GetCode(hash)
-}
-
-func (self *StateTransition) GetAccount(addr *common.Address) (ret state_common.Account, present bool) {
-	enc_storage := self.db.GetMainTrieValueLatest(keccak256.Hash(addr[:]))
-	if present = len(enc_storage) != 0; present {
-		state_common.DecodeAccount(&ret, enc_storage)
-	}
-	return
-}
-
-func (self *StateTransition) GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int {
-	if enc_storage := self.db.GetAccountTrieValueLatest(addr, keccak256.Hash(key[:])); len(enc_storage) != 0 {
-		_, val, _ := rlp.MustSplit(enc_storage)
-		return new(big.Int).SetBytes(val)
-	}
-	return common.Big0
-}
-
-func (self *StateTransition) OnAccountChanged(addr common.Address, change state_evm.AccountChange) {
-	acc := self.pending_accounts[addr]
-	if acc == nil {
-		self.pending_accounts_keys = append(self.pending_accounts_keys, addr)
-		acc = new(pending_account)
-		self.pending_accounts[addr] = acc
-		self.main_tr_w_executor.Do(func() {
-			self.main_tr_w.Put(keccak256.Hash(addr[:]), acc)
-		})
-	}
-	if change.CodeSize == 0 && change.BalanceDirty && !acc.balance_dirty {
-		acc.balance_dirty = true
-		self.num_non_contract_accs_w_balance_change++
-	}
-	acc.executor.Do(func() {
-		acc.acc = change.Account
-		if change.CodeDirty {
-			self.db.PutCode(change.CodeHash, change.Code)
-		}
-		if len(change.StorageDirty) == 0 {
-			return
-		}
-		if acc.trie_w == nil {
-			acc.trie_w = new(trie.Writer).Init(
-				account_trie_db{StateTransition: self, addr: &addr},
-				acc.acc.StorageRootHash,
-				self.acc_tr_writer_opts)
-		}
-		for k, v := range change.StorageDirty {
-			if v.Sign() == 0 {
-				acc.trie_w.Delete(keccak256.Hash(k[:]))
-			} else {
-				acc.trie_w.Put(keccak256.Hash(k[:]), state_common.EncodeAccountTrieValue(v))
-			}
-		}
-	})
-}
-
-func (self *StateTransition) OnAccountDeleted(addr common.Address) {
-	delete(self.pending_accounts, addr)
-	self.main_tr_w_executor.Do(func() {
-		self.main_tr_w.Delete(keccak256.Hash(addr[:]))
-	})
 }

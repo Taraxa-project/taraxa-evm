@@ -18,34 +18,22 @@ package vm
 
 import (
 	"math/big"
-	"sync"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 )
-
-const bigint_pool_limit = 512
-
-var poolOfIntPools = intPoolPool{sync.Pool{New: func() interface{} {
-	return &int_pool{pool: stack{data: make([]*big.Int, 0, bigint_pool_limit)}}
-}}}
-
-// intPoolPool manages a pool of intPools.
-type intPoolPool struct {
-	pool sync.Pool
-}
-
-// get is looking for an available pool to return.
-func (this *intPoolPool) get() *int_pool {
-	return this.pool.Get().(*int_pool)
-}
-
-// put a pool that has been allocated with get.
-func (this *intPoolPool) put(ip *int_pool) {
-	this.pool.Put(ip)
-}
 
 // int_pool is a pool of big integers that
 // can be reused for all big.Int operations.
 type int_pool struct {
-	pool stack
+	pool Stack
+}
+
+func (self *int_pool) Init(capacity int) *int_pool {
+	self.pool.Init(capacity)
+	for i := 0; i < capacity; i++ {
+		self.pool.push(new(big.Int).Set(bigutil.MaxU256))
+	}
+	return self
 }
 
 // get retrieves a big int from the pool, allocating one if the pool is empty.
@@ -61,7 +49,7 @@ func (p *int_pool) get() *big.Int {
 // a new one if the pool is empty.
 func (p *int_pool) getZero() *big.Int {
 	if p.pool.len() > 0 {
-		return p.pool.pop().SetUint64(0)
+		return p.pool.pop().Set(bigutil.Big0)
 	}
 	return new(big.Int)
 }
@@ -70,7 +58,7 @@ func (p *int_pool) getZero() *big.Int {
 // Note, the values as saved as is; neither put nor get zeroes the ints out!
 func (p *int_pool) put(is ...*big.Int) {
 	for _, i := range is {
-		if len(p.pool.data) == bigint_pool_limit {
+		if len(p.pool.data) == cap(p.pool.data) {
 			return
 		}
 		p.pool.push(i)

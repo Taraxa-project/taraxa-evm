@@ -21,11 +21,14 @@ import (
 	"math/big"
 )
 
+type InstructionSet = [256]operation
+
 type (
-	executionFunc       func(pc *uint64, interpreter *EVM, contract *Contract, memory *Memory, stack *stack) ([]byte, error)
-	gasFunc             func(*EVM, *Contract, *stack, *Memory, uint64) (uint64, error) // last parameter is the requested memory size as a uint64
-	stackValidationFunc func(*stack) error
-	memorySizeFunc      func(*stack) *big.Int
+	program_counter     = uint64
+	executionFunc       func(*program_counter, *EVM, *Contract, *Memory, *Stack) ([]byte, error)
+	gasFunc             func(*EVM, *Contract, *Stack, *Memory, uint64) (uint64, error) // last parameter is the requested memory size as a uint64
+	stackValidationFunc func(*Stack) error
+	memorySizeFunc      func(*Stack) *big.Int
 )
 
 var errGasUintOverflow = errors.New("gas uint64 overflow")

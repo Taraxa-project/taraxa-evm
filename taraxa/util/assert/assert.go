@@ -1,6 +1,9 @@
 package assert
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func EQ(a, b interface{}) (ret bool) {
 	if a != b {
@@ -9,9 +12,12 @@ func EQ(a, b interface{}) (ret bool) {
 	return
 }
 
-func Holds(condition bool) (ret bool) {
+func Holds(condition bool, msg ...string) (ret bool) {
 	if ret = condition; !ret {
-		panic("assertion error")
+		if len(msg) == 0 {
+			panic("assertion error")
+		}
+		panic(strings.Join(msg, " "))
 	}
 	return
 }

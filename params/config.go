@@ -16,7 +16,10 @@
 
 package params
 
-import "github.com/Taraxa-project/taraxa-evm/core/types"
+import (
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
+)
 
 var (
 	MainnetChainConfig = &ChainConfig{
@@ -48,18 +51,17 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 	return fork_start <= block_num
 }
 
-type Rules struct {
-	IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg, IsDAOFork bool
+func (c *ChainConfig) IsDAOFork(num types.BlockNum) bool {
+	return c.DAOForkBlock != types.BlockNumberNIL && c.DAOForkBlock == num
 }
 
-func (c *ChainConfig) Rules(num types.BlockNum) Rules {
-	return Rules{
+func (c *ChainConfig) Rules(num types.BlockNum) vm.Rules {
+	return vm.Rules{
 		IsHomestead:      isForked(c.HomesteadBlock, num),
 		IsEIP150:         isForked(c.EIP150Block, num),
 		IsEIP158:         isForked(c.EIP158Block, num),
 		IsByzantium:      isForked(c.ByzantiumBlock, num),
 		IsConstantinople: isForked(c.ConstantinopleBlock, num),
 		IsPetersburg:     isForked(c.PetersburgBlock, num) || c.PetersburgBlock == types.BlockNumberNIL && isForked(c.ConstantinopleBlock, num),
-		IsDAOFork:        c.DAOForkBlock != types.BlockNumberNIL && c.DAOForkBlock == num,
 	}
 }

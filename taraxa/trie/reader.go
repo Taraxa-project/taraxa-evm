@@ -46,7 +46,6 @@ func (self Reader) hash_fully(n node, enc *hash_encoder, prefix []byte) (ret *no
 			self.hash_fully(n.val, enc, append(prefix, n.key_part...))
 		}
 		enc.ListEnd(hash_list, is_root, &ret)
-		return
 	case *full_node:
 		hash_list := enc.ListStart()
 		for i := 0; i < full_node_child_cnt; i++ {
@@ -58,15 +57,51 @@ func (self Reader) hash_fully(n node, enc *hash_encoder, prefix []byte) (ret *no
 		}
 		enc.AppendString(nil)
 		enc.ListEnd(hash_list, is_root, &ret)
-		return
+	default:
+		panic("impossible")
 	}
-	panic("impossible")
+	return
+}
+
+type KVCallback = func(*common.Hash, Value)
+
+func (self Reader) ForEach(root_hash *common.Hash, with_values bool, cb KVCallback) {
+	var kbuf hex_key
+	self.for_each((*node_hash)(root_hash), with_values, cb, kbuf[:0])
+}
+
+func (self Reader) for_each(n node, with_values bool, cb KVCallback, prefix []byte) {
+	switch n := n.(type) {
+	case *node_hash:
+		self.for_each(self.resolve(n, prefix), with_values, cb, prefix)
+	case *short_node:
+		key_extended := append(prefix, n.key_part...)
+		if val_n, has_val := n.val.(value_node); has_val {
+			var key common.Hash
+			hex_to_keybytes(key_extended, key[:])
+			if val_n == nil_val_node && with_values {
+				val_n = self.resolve_val_n(&key)
+			}
+			cb(&key, val_n.val)
+		} else {
+			self.for_each(n.val, with_values, cb, key_extended)
+		}
+	case *full_node:
+		for i := 0; i < full_node_child_cnt; i++ {
+			if c := n.children[i]; c != nil {
+				self.for_each(c, with_values, cb, append(prefix, byte(i)))
+			}
+		}
+	default:
+		panic("impossible")
+	}
 }
 
 func (self Reader) resolve(hash *node_hash, key_prefix []byte) (ret node) {
-	enc := self.GetNode(hash.common_hash())
-	assert.Holds(len(enc) != 0)
-	ret, _ = self.dec_node(key_prefix, hash, enc)
+	self.GetNode(hash.common_hash(), func(bytes []byte) {
+		ret, _ = self.dec_node(key_prefix, hash, bytes)
+	})
+	assert.Holds(ret != nil)
 	return
 }
 
@@ -91,7 +126,7 @@ func (self Reader) dec_node(key_prefix []byte, db_hash *node_hash, buf []byte) (
 		case 0:
 			return nil, rest
 		case common.HashLength:
-			return (*node_hash)(keccak256.HashView(payload)), rest
+			return (*node_hash)(new(common.Hash).SetBytes(payload)), rest
 		default:
 			panic("impossible")
 		}
@@ -100,8 +135,8 @@ func (self Reader) dec_node(key_prefix []byte, db_hash *node_hash, buf []byte) (
 	}
 }
 
-func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, payload_start byte) *short_node {
-	key_ext, content, err := rlp.SplitString(enc[payload_start:])
+func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, buf []byte, payload_start byte) *short_node {
+	key_ext, content, err := rlp.SplitString(buf[payload_start:])
 	util.PanicIfNotNil(err)
 	key_ext = compact_to_hex(key_ext)
 	ret := &short_node{key_part: key_ext, hash: db_hash}
@@ -112,6 +147,7 @@ func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, 
 		}
 		content, _, err = rlp.SplitString(content)
 		util.PanicIfNotNil(err)
+		content = common.CopyBytes(content)
 		if l := len(content); l == common.HashLength {
 			ret.hash = (*node_hash)(keccak256.HashView(content))
 			ret.val = nil_val_node
@@ -123,7 +159,8 @@ func (self Reader) dec_short(key_prefix []byte, db_hash *node_hash, enc []byte, 
 	}
 	ret.val, _ = self.dec_node(append(key_prefix, key_ext...), nil, content)
 	if _, child_is_hash := ret.val.(*node_hash); child_is_hash && ret.hash == nil {
-		ret.hash = (*node_hash)(keccak256.Hash(enc))
+		// TODO WTF is this
+		ret.hash = (*node_hash)(keccak256.Hash(buf))
 	}
 	return ret
 }
@@ -136,10 +173,20 @@ func (self Reader) dec_full(key_prefix []byte, db_hash *node_hash, enc []byte) *
 	return ret
 }
 
+// TODO lazy load?
+// TODO make sure values are not loaded twice
 func (self Reader) resolve_val_n_by_hex_k(hex_key []byte) (ret value_node) {
 	var key common.Hash
 	hex_to_keybytes(hex_key, key[:])
-	enc_storage := self.GetValue(&key)
-	assert.Holds(len(enc_storage) != 0)
-	return value_node{internal_value{enc_storage, self.ValueStorageToHashEncoding(enc_storage)}}
+	return self.resolve_val_n(&key)
+}
+
+func (self Reader) resolve_val_n(key *common.Hash) (ret value_node) {
+	self.GetValue(key, func(enc_storage []byte) {
+		// TODO eliminate this copy
+		enc_storage = common.CopyBytes(enc_storage)
+		ret.val = internal_value{enc_storage, self.ValueStorageToHashEncoding(enc_storage)}
+	})
+	assert.Holds(ret.val != nil)
+	return
 }

@@ -9,13 +9,12 @@ type Schema interface {
 
 type ReadOnlyDB interface {
 	Schema
-	GetValue(key *common.Hash) []byte
-	GetNode(node_hash *common.Hash) []byte
+	GetValue(*common.Hash, func([]byte))
+	GetNode(*common.Hash, func([]byte))
 }
 
 type DB interface {
 	ReadOnlyDB
-	PutValue(key *common.Hash, v []byte)
-	DeleteValue(key *common.Hash)
-	PutNode(node_hash *common.Hash, node []byte)
+	PutValue(*common.Hash, []byte)
+	PutNode(*common.Hash, []byte)
 }

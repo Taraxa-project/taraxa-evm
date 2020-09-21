@@ -1,10 +1,11 @@
 package bin
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"math/rand"
 	"reflect"
 	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 func StringView(bytes []byte) string {
@@ -29,11 +30,10 @@ func AnyBytes2(ptr unsafe.Pointer, length int) (ret []byte) {
 	return
 }
 
-func Concat(s1 []byte, s2 ...byte) []byte {
-	r := make([]byte, len(s1)+len(s2))
-	copy(r, s1)
-	copy(r[len(s1):], s2)
-	return r
+func Concat(s1 []byte, s2 ...byte) (ret []byte) {
+	ret = make([]byte, len(s1)+len(s2))
+	copy(ret[copy(ret, s1):], s2)
+	return
 }
 
 func ENC_b_endian_64(v uint64) []byte {
@@ -52,6 +52,13 @@ func ENC_b_endian_64(v uint64) []byte {
 func DEC_b_endian_64(b []byte) uint64 {
 	return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
 		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+}
+
+func ENC_b_endian_compact_64_1(i uint64) (ret []byte) {
+	ENC_b_endian_compact_64(i, func(b ...byte) {
+		ret = b
+	})
+	return
 }
 
 func ENC_b_endian_compact_64(i uint64, appender func(...byte)) {
@@ -131,9 +138,62 @@ func RandomBytes(desired_len int, rnd *rand.Rand) []byte {
 		if curr_len == desired_len {
 			break
 		}
-		ENC_b_endian_compact_64(rnd.Uint64(), func(b ...byte) {
+		var i uint64
+		if rnd == nil {
+			i = rand.Uint64()
+		} else {
+			i = rnd.Uint64()
+		}
+		ENC_b_endian_compact_64(i, func(b ...byte) {
 			ret = append(ret, b[:util.Min(len(b), desired_len-curr_len)]...)
 		})
 	}
 	return ret
 }
+
+const zfill_batch_size = 8 * 1024
+
+var zfill_batch = make([]byte, zfill_batch_size)
+
+func ZFill_1(s []byte) {
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&s))
+	for zfill_batch_size <= sh.Len {
+		*(*[zfill_batch_size]byte)(unsafe.Pointer(sh.Data)) = [zfill_batch_size]byte{}
+		sh.Data += zfill_batch_size
+		sh.Len -= zfill_batch_size
+	}
+	if sh.Len != 0 {
+		copy(s, zfill_batch)
+	}
+}
+
+func ZFill_2(slice_ptr unsafe.Pointer, max_elements int, elem_size uintptr) {
+	sh := *(*reflect.SliceHeader)(slice_ptr)
+	if max_elements < 0 {
+		sh.Len = sh.Len * int(elem_size)
+	} else {
+		sh.Len = util.Min(sh.Len, max_elements) * int(elem_size)
+	}
+	ZFill_1(*(*[]byte)(unsafe.Pointer(&sh)))
+}
+
+func ZFill_3(slice_ptr unsafe.Pointer, elem_size uintptr) {
+	ZFill_2(slice_ptr, -1, elem_size)
+}
+
+func UnsafeAdd(p unsafe.Pointer, x uintptr) unsafe.Pointer {
+	return unsafe.Pointer(uintptr(p) + x)
+}
+
+var IsPlatformBigEndian = func() bool {
+	var buf [2]byte
+	*(*uint16)(unsafe.Pointer(&buf[0])) = uint16(0xabcd)
+	switch buf {
+	case [2]byte{0xcd, 0xab}:
+		return false
+	case [2]byte{0xab, 0xcd}:
+		return true
+	default:
+		panic("Could not determine native endianness.")
+	}
+}()

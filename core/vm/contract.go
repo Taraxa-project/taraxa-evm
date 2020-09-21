@@ -22,154 +22,73 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
-// ContractRef is a reference to the contract's backing object
-type ContractRef interface {
-	Address() common.Address
-}
-
-// AccountRef implements ContractRef.
-//
-// Account references are used during EVM initialisation and
-// it's primary use is to fetch addresses. Removing this object
-// proves difficult because of the cached jump destinations which
-// are fetched from the parent contract (i.e. the caller), which
-// is a ContractRef.
-type AccountRef common.Address
-
-// Address casts AccountRef to a Address
-func (ar AccountRef) Address() common.Address { return (common.Address)(ar) }
-
 // Contract represents an ethereum contract in the state database. It contains
-// the contract code, calling arguments. Contract implements ContractRef
+// the contract code, calling arguments.
 type Contract struct {
+	CallFrame
+	code                   CodeAndHash
+	code_jumpdest_analysis bitvec
+}
+type CallFrame = struct {
 	// CallerAddress is the result of the caller which initialised this
 	// contract. However when the "call method" is delegated this value
 	// needs to be initialised to that of the caller's caller.
-	CallerAddress common.Address
-	caller        ContractRef
-	self          ContractRef
+	CallerAccount StateAccount
+	Account       StateAccount
+	Input         []byte
+	Gas           uint64
+	Value         *big.Int
+}
 
-	jumpdests map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
-	analysis  bitvec                 // Locally cached result of JUMPDEST analysis
-
-	Code        []byte
-	CodeHash    common.Hash
-	precompiled PrecompiledContract
-	Input       []byte
-
-	Gas   uint64
-	value *big.Int
+type CodeAndHash struct {
+	Code     []byte
+	CodeHash *common.Hash
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
-func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64, input []byte) *Contract {
-	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object, Input: input}
-
-	if parent, ok := caller.(*Contract); ok {
-		// Reuse JUMPDEST analysis from parent context if available.
-		c.jumpdests = parent.jumpdests
-	} else {
-		c.jumpdests = make(map[common.Hash]bitvec)
-	}
-
-	// Gas should be a pointer so it can safely be reduced through the run
-	// This pointer will be off the state transition
-	c.Gas = gas
-	// ensures a value is set
-	c.value = value
-
-	return c
+func NewContract(frame CallFrame, code CodeAndHash) (ret Contract) {
+	ret.CallFrame = frame
+	ret.code = code
+	return
 }
 
-func (c *Contract) validJumpdest(dest *big.Int) bool {
-	udest := dest.Uint64()
+func (self *Contract) GetCode() []byte {
+	return self.code.Code
+}
+
+// TODO optimize and refactor
+func (self *Contract) ValidJumpdest(evm *EVM, dest *big.Int) bool {
 	// PC cannot go beyond len(code) and certainly can't be bigger than 63bits.
 	// Don't bother checking for JUMPDEST in that case.
-	if dest.BitLen() >= 63 || udest >= uint64(len(c.Code)) {
+	if !dest.IsUint64() {
 		return false
 	}
-	// Only JUMPDESTs allowed for destinations
-	if OpCode(c.Code[udest]) != JUMPDEST {
+	udest := dest.Uint64()
+	if self.GetOp(udest) != JUMPDEST {
 		return false
 	}
-	// Do we have a contract hash already?
-	if c.CodeHash != (common.Hash{}) {
-		// Does parent context have the analysis?
-		analysis, exist := c.jumpdests[c.CodeHash]
-		if !exist {
-			// Do the analysis and save in parent context
-			// We do not need to store it in c.analysis
-			analysis = codeBitmap(c.Code)
-			c.jumpdests[c.CodeHash] = analysis
+	analysis := self.code_jumpdest_analysis
+	if cached := analysis != nil; !cached {
+		if analysis, cached = evm.AnalyzeJumpdests(self.code); !cached {
+			self.code_jumpdest_analysis = analysis
 		}
-		return analysis.codeSegment(udest)
 	}
-	// We don't have the code hash, most likely a piece of initcode not already
-	// in state trie. In that case, we do an analysis, and save it locally, so
-	// we don't have to recalculate it for every JUMP instruction in the execution
-	// However, we don't save it within the parent context
-	if c.analysis == nil {
-		c.analysis = codeBitmap(c.Code)
-	}
-	return c.analysis.codeSegment(udest)
-}
-
-// AsDelegate sets the contract to be a delegate call and returns the current
-// contract (for chaining calls)
-func (c *Contract) AsDelegate() *Contract {
-	// NOTE: caller must, at all times be a contract. It should never happen
-	// that caller is something other than a Contract.
-	parent := c.caller.(*Contract)
-	c.CallerAddress = parent.CallerAddress
-	c.value = parent.value
-
-	return c
+	return analysis.codeSegment(udest)
 }
 
 // GetOp returns the n'th element in the contract's byte array
-func (c *Contract) GetOp(n uint64) OpCode {
-	return OpCode(c.GetByte(n))
-}
-
-// GetByte returns the n'th byte in the contract's byte array
-func (c *Contract) GetByte(n uint64) byte {
-	if n < uint64(len(c.Code)) {
-		return c.Code[n]
+func (self *Contract) GetOp(n uint64) OpCode {
+	if n < uint64(len(self.code.Code)) {
+		return OpCode(self.code.Code[n])
 	}
-
 	return 0
 }
 
-// Caller returns the caller of the contract.
-//
-// Caller will recursively call caller when the contract is a delegate
-// call, including that of caller's caller.
-func (c *Contract) Caller() common.Address {
-	return c.CallerAddress
-}
-
 // UseGas attempts the use gas and subtracts it and returns true on success
-func (c *Contract) UseGas(gas uint64) (ok bool) {
-	if c.Gas < gas {
+func (self *Contract) UseGas(gas uint64) (ok bool) {
+	if self.Gas < gas {
 		return false
 	}
-	c.Gas -= gas
+	self.Gas -= gas
 	return true
-}
-
-// Address returns the contracts address
-func (c *Contract) Address() common.Address {
-	return c.self.Address()
-}
-
-// Value returns the contracts value (sent to it from it's caller)
-func (c *Contract) Value() *big.Int {
-	return c.value
-}
-
-// SetCallCode sets the code of the contract and address of the backing data
-// object
-func (c *Contract) SetCallCode(hash common.Hash, code []byte) {
-	c.Code = code
-	c.CodeHash = hash
 }

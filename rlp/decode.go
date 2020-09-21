@@ -22,11 +22,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"math/big"
 	"reflect"
 	"strings"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 var (
@@ -131,16 +132,23 @@ func Decode(r io.Reader, val interface{}) error {
 	return NewStream(r, 0).Decode(val)
 }
 
-// MustDecodeBytes parses RLP data from b into val.
+// DecodeBytes parses RLP data from b into val.
 // Please see the documentation of Decode for the decoding rules.
 // The input must contain exactly one value and no trailing data.
-func MustDecodeBytes(b []byte, val interface{}) {
+func DecodeBytes(b []byte, val interface{}) error {
 	// TODO: this could use a Stream from a pool.
 	r := bytes.NewReader(b)
-	util.PanicIfNotNil(NewStream(r, uint64(len(b))).Decode(val))
-	if r.Len() > 0 {
-		panic(ErrMoreThanOneValue)
+	if err := NewStream(r, uint64(len(b))).Decode(val); err != nil {
+		return err
 	}
+	if r.Len() > 0 {
+		return ErrMoreThanOneValue
+	}
+	return nil
+}
+
+func MustDecodeBytes(b []byte, val interface{}) {
+	util.PanicIfNotNil(DecodeBytes(b, val))
 }
 
 type decodeError struct {
@@ -562,28 +570,42 @@ func decodeDecoder(s *Stream, val reflect.Value) error {
 func makeMapDecoder(typ reflect.Type) (decoder, error) {
 	k_typ := typ.Key()
 	v_typ := typ.Elem()
+	reflect.MapOf(k_typ, v_typ) // assert map type is valid
 	k_type_info, err_0 := cachedTypeInfo1(k_typ, tags{})
 	util.PanicIfNotNil(err_0)
 	v_type_info, err_1 := cachedTypeInfo1(v_typ, tags{})
 	util.PanicIfNotNil(err_1)
 	return func(strm *Stream, value reflect.Value) error {
-		_, err := strm.List()
-		util.PanicIfNotNil(err)
+		if _, err := strm.List(); err != nil {
+			return err
+		}
+		// TODO only if the map is nil?
 		value.Set(reflect.MakeMap(typ))
 		for {
 			_, err := strm.List()
 			if err == EOL {
 				break
 			}
-			util.PanicIfNotNil(err)
-			k, v := reflect.New(k_typ).Elem(), reflect.New(v_typ).Elem()
-			util.PanicIfNotNil(k_type_info.decoder(strm, k))
-			util.PanicIfNotNil(v_type_info.decoder(strm, v))
+			if err != nil {
+				return err
+			}
+			k := reflect.New(k_typ).Elem()
+			if err := k_type_info.decoder(strm, k); err != nil {
+				return err
+			}
+			if value.MapIndex(k).IsValid() {
+				return util.ErrorString("duplicate key")
+			}
+			v := reflect.New(v_typ).Elem()
+			if err := v_type_info.decoder(strm, v); err != nil {
+				return err
+			}
 			value.SetMapIndex(k, v)
-			util.PanicIfNotNil(strm.ListEnd())
+			if err := strm.ListEnd(); err != nil {
+				return err
+			}
 		}
-		util.PanicIfNotNil(strm.ListEnd())
-		return nil
+		return strm.ListEnd()
 	}, nil
 }
 
