@@ -189,23 +189,16 @@ var ZeroAddress Address
 
 // BytesToAddress returns Address with value b.
 // If b is larger than len(h), b will be cropped from the left.
-func BytesToAddress(b []byte) Address {
-	var a Address
-	a.SetBytes(b)
-	return a
+func BytesToAddress(b []byte) (ret Address) {
+	ret.SetBytes(b)
+	return
 }
 
 // HexToAddress returns Address with byte values of s.
 // If s is larger than len(h), s will be cropped from the left.
-func HexToAddress(s string) Address { return BytesToAddress(FromHex(s)) }
-
-// IsHexAddress verifies whether a string can represent a valid hex-encoded
-// Ethereum address or not.
-func IsHexAddress(s string) bool {
-	if hasHexPrefix(s) {
-		s = s[2:]
-	}
-	return len(s) == 2*AddressLength && isHex(s)
+func HexToAddress(s string) (ret Address) {
+	ret.SetBytes(FromHex(s))
+	return
 }
 
 // Bytes gets the string representation of the underlying address.
