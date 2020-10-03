@@ -1,8 +1,12 @@
-package state_trie
+package state_db
 
 import (
 	"math/big"
 	"sync"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/util_rlp"
@@ -12,10 +16,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
+
+var MainTrieReader = trie.Reader{MainTrieSchema{}}
 
 type MainTrieSchema struct{}
 
@@ -138,41 +143,34 @@ var acc_encoder_pool = sync.Pool{New: func() interface{} {
 	return ret
 }}
 
-type MainTrieDBReadOnly struct {
-	MainTrieSchema
-	db_tx state_common.BlockReadTransaction
+type MainTrieReadTxn struct {
+	Tx ReadTx
 }
 
-func (self *MainTrieDBReadOnly) SetTransaction(db_tx state_common.BlockReadTransaction) {
-	self.db_tx = db_tx
+func (self MainTrieReadTxn) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Tx.Get(COL_main_trie_value, key, cb)
 }
 
-func (self *MainTrieDBReadOnly) GetValue(key *common.Hash, cb func(v []byte)) {
-	self.db_tx.GetMainTrieValue(key, cb)
+func (self MainTrieReadTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Tx.Get(COL_main_trie_node, node_hash, cb)
 }
 
-func (self *MainTrieDBReadOnly) GetNode(node_hash *common.Hash, cb func([]byte)) {
-	self.db_tx.GetMainTrieNode(node_hash, cb)
+type MainTrieWriteTxn struct {
+	Tx WriteTx
 }
 
-type MainTrieDB struct {
-	MainTrieDBReadOnly
-	db_tx state_common.BlockCreationTransaction
+func (self MainTrieWriteTxn) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Tx.Get(COL_main_trie_value, key, cb)
 }
 
-func (self *MainTrieDB) SetTransaction(db_tx state_common.BlockCreationTransaction) {
-	self.MainTrieDBReadOnly.SetTransaction(db_tx)
-	self.db_tx = db_tx
+func (self MainTrieWriteTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Tx.Get(COL_main_trie_node, node_hash, cb)
 }
 
-func (self *MainTrieDB) GetTransaction() state_common.BlockCreationTransaction {
-	return self.db_tx
+func (self MainTrieWriteTxn) PutValue(key *common.Hash, v []byte) {
+	self.Tx.Put(COL_main_trie_value, key, v)
 }
 
-func (self *MainTrieDB) PutValue(key *common.Hash, v []byte) {
-	self.db_tx.PutMainTrieValue(key, v)
-}
-
-func (self *MainTrieDB) PutNode(node_hash *common.Hash, node []byte) {
-	self.db_tx.PutMainTrieNode(node_hash, node)
+func (self MainTrieWriteTxn) PutNode(node_hash *common.Hash, node []byte) {
+	self.Tx.Put(COL_main_trie_node, node_hash, node)
 }

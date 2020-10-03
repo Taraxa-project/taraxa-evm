@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"reflect"
 	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 )
 
 const WordSize = int(unsafe.Sizeof(big.Word(0)))
@@ -35,6 +37,35 @@ func FromBytes(bytes []byte) *big.Int {
 	default:
 		return new(big.Int).SetBytes(bytes)
 	}
+}
+
+func ZeroIfNIL(x *big.Int) *big.Int {
+	if x == nil {
+		return Big0
+	}
+	return x
+}
+
+func Add(x, y *big.Int) *big.Int {
+	if x == nil || x.Sign() == 0 {
+		return ZeroIfNIL(y)
+	}
+	if y == nil || y.Sign() == 0 {
+		return ZeroIfNIL(x)
+	}
+	return new(big.Int).Add(x, y)
+}
+
+func USub(x, y *big.Int) *big.Int {
+	if x == nil || x.Sign() == 0 {
+		ret := ZeroIfNIL(y)
+		assert.Holds(ret.Sign() == 0)
+		return ret
+	}
+	if y == nil || y.Sign() == 0 {
+		return ZeroIfNIL(x)
+	}
+	return new(big.Int).Sub(x, y)
 }
 
 type UnsignedBytes []byte

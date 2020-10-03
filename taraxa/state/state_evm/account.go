@@ -3,7 +3,6 @@ package state_evm
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -20,9 +19,9 @@ type Account struct {
 }
 type AccountBody struct {
 	AccountChange
+	suicided       bool
 	sink           AccountMutation
 	storage_origin EVMStorage
-	suicided       bool
 	times_touched  uint32
 	mod_count      uint32
 }
@@ -37,13 +36,7 @@ func (self *Account) IsNotNIL() bool {
 }
 
 func (self *Account) set_NIL() {
-	if self.IsNotNIL() {
-		if self.Code != nil {
-			self.Code.Free()
-			self.Code = nil
-		}
-		self.AccountBody = nil
-	}
+	self.AccountBody = nil
 }
 
 func (self *Account) IsEIP161Empty() bool {
@@ -84,7 +77,7 @@ func (self *Account) GetCode() []byte {
 	if self.Code == nil {
 		self.Code = self.host.in.GetCode(self.CodeHash)
 	}
-	return self.Code.Value()
+	return self.Code
 }
 
 func (self *Account) GetCodeSize() uint64 {
@@ -204,8 +197,7 @@ func (self *Account) SetCode(code []byte) {
 	self.register_change(func() {
 		self.CodeDirty, self.CodeHash, self.CodeSize, self.Code = false, nil, 0, nil
 	})
-	self.CodeDirty, self.CodeHash, self.CodeSize, self.Code =
-		true, keccak256.Hash(code), uint64(code_size), state_common.SimpleManagedSlice(code)
+	self.CodeDirty, self.CodeHash, self.CodeSize, self.Code = true, keccak256.Hash(code), uint64(code_size), code
 }
 
 func (self *Account) SetStateRawIrreversibly(key *common.Hash, value []byte) {

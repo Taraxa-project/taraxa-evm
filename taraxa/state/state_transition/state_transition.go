@@ -1,12 +1,9 @@
 package state_transition
 
 import (
-	"unsafe"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_historical"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 
@@ -15,22 +12,20 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 // TODO memory leaks??
 type StateTransition struct {
-	exec_cfg          state_config.ExecutionConfig
-	db                state_common.DB
+	exec_cfg          state_common.ExecutionConfig
+	db                state_db.DB
 	dpos_contract     *dpos.Contract
 	curr_blk_num      types.BlockNum
-	exec_results      []vm.ExecutionResult
 	evm               vm.EVM
-	last_block_reader state_historical.BlockReader
+	last_block_reader state_db.BlockReader
 	evm_state         state_evm.EVMState
 	trie_sink         TrieSink
 }
@@ -41,16 +36,18 @@ type StateTransitionOpts struct {
 }
 
 func (self *StateTransition) Init(
-	db state_common.DB,
+	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
-	chain_cfg state_config.ChainConfig,
-	curr_blk_num types.BlockNum,
+	chain_cfg state_common.ChainConfig,
+	curr_blk_num types.BlockNum, // TODO use types.BlockNumberNIL instead of 0
 	curr_state_root *common.Hash,
 	opts StateTransitionOpts,
 ) *StateTransition {
 	self.db = db
 	self.exec_cfg = chain_cfg.Execution
 	self.curr_blk_num = curr_blk_num
+	self.last_block_reader = state_db.BlockReader{db.ReadBlock(self.curr_blk_num)}
+	defer self.last_block_reader.NotifyDone()
 	dirty_accs_per_block := uint32(util.CeilPow2(int(opts.ExpectedMaxNumTrxPerBlock * 2)))
 	accs_per_block := dirty_accs_per_block * 2
 	self.evm_state.Init(&self.last_block_reader, state_evm.CacheOpts{
@@ -69,7 +66,6 @@ func (self *StateTransition) Init(
 		TrieWriters:              opts.TrieWriters,
 		NumDirtyAccountsToBuffer: dirty_accs_per_block,
 	})
-	self.exec_results = make([]vm.ExecutionResult, opts.ExpectedMaxNumTrxPerBlock)
 	if chain_cfg.DPOS != nil {
 		self.dpos_contract = new(dpos.Contract).Init(*chain_cfg.DPOS, dpos_storage_adapter{self})
 	}
@@ -90,15 +86,13 @@ func (self *StateTransition) GenesisInit(cfg GenesisConfig) *common.Hash {
 		util.PanicIfNotNil(self.dpos_contract.GenesisInit(*cfg.DPOS))
 	}
 	self.evm_state_checkpoint()
-	batch := self.evm_state.Commit()
-	defer self.evm_state.Cleanup(batch)
-	return self.trie_sink.CommitSync(batch)
+	return self.Commit()
 }
 
 func (self *StateTransition) begin_block() {
-	db_tx := self.db.NewBlockCreationTransaction(self.curr_blk_num)
-	self.last_block_reader.SetTransaction(db_tx)
-	self.trie_sink.BeginBatch(db_tx)
+	db_tx := self.db.WriteBlock(self.curr_blk_num)
+	self.last_block_reader.Tx = db_tx
+	self.trie_sink.SetTransaction(db_tx)
 }
 
 func (self *StateTransition) evm_state_checkpoint() {
@@ -119,14 +113,16 @@ func (self *StateTransition) BeginBlock(blk *vm.BlockWithoutNumber) {
 	}
 }
 
-func (self *StateTransition) SubmitTransaction(trx *vm.Transaction) {
-	self.exec_results = append(self.exec_results, self.evm.Main(trx, self.exec_cfg.Options))
+func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.ExecutionResult) {
+	ret = self.evm.Main(trx, self.exec_cfg.Options)
 	self.evm_state_checkpoint()
+	return
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
+	defer self.last_block_reader.NotifyDone()
 	if self.dpos_contract != nil {
-		self.dpos_contract.Commit()
+		self.dpos_contract.Commit(self.curr_blk_num)
 		self.evm_state_checkpoint()
 	}
 	if !self.exec_cfg.DisableBlockRewards {
@@ -139,17 +135,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 	}
 }
 
-type StateTransitionResult struct {
-	StateRoot        *common.Hash
-	ExecutionResults []vm.ExecutionResult
-}
-
-func (self *StateTransition) CommitSync() (ret StateTransitionResult) {
-	ret.ExecutionResults = self.exec_results
-	bin.ZFill_3(unsafe.Pointer(&self.exec_results), unsafe.Sizeof(self.exec_results[0]))
-	self.exec_results = self.exec_results[:0]
-	batch := self.evm_state.Commit()
-	defer self.evm_state.Cleanup(batch)
-	ret.StateRoot = self.trie_sink.CommitSync(batch)
-	return
+func (self *StateTransition) Commit() *common.Hash {
+	self.evm_state.Commit()
+	return self.trie_sink.Commit()
 }

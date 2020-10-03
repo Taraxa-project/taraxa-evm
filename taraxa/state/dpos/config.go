@@ -1,11 +1,13 @@
 package dpos
 
 import (
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 )
 
 type Config struct {
-	EligibilityBalanceThreshold state_common.TaraxaBalance
+	EligibilityBalanceThreshold *big.Int
 	WithdrawalDelay             types.BlockNum
+	DepositDelay                types.BlockNum
 }

@@ -3,9 +3,7 @@ package state_evm
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_trie"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -13,17 +11,17 @@ import (
 )
 
 type AccountChange struct {
-	state_trie.Account
-	Code            state_common.ManagedSlice
-	CodeDirty       bool
+	state_db.Account
 	StorageDirty    EVMStorage
 	RawStorageDirty RawStorage
+	Code            []byte
+	CodeDirty       bool
 }
 type EVMStorage = map[bigutil.UnsignedStr]*big.Int
 type RawStorage = map[common.Hash][]byte
 
 type Input interface {
-	GetCode(*common.Hash) state_common.ManagedSlice
+	GetCode(*common.Hash) []byte
 	GetRawAccount(*common.Address, func([]byte))
 	GetAccountStorage(*common.Address, *common.Hash, func([]byte))
 }
@@ -33,7 +31,5 @@ type Sink interface {
 }
 type AccountMutation interface {
 	Update(AccountChange)
-}
-type AccountMutations interface {
-	ForEachMutationWithDuplicates(func(AccountMutation))
+	Commit()
 }

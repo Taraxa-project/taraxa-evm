@@ -245,12 +245,13 @@ func (a Address) Format(s fmt.State, c rune) {
 
 // SetBytes sets the address to the value of b.
 // If b is larger than len(a) it will panic.
-func (a *Address) SetBytes(b []byte) {
+func (self *Address) SetBytes(b []byte) *Address {
 	if len(b) > AddressLength {
-		copy(a[AddressLength-len(b):], b[len(b)-AddressLength:])
+		copy(self[AddressLength-len(b):], b[len(b)-AddressLength:])
 	} else {
-		copy(a[AddressLength-len(b):], b)
+		copy(self[AddressLength-len(b):], b)
 	}
+	return self
 }
 
 // MarshalText returns the hex representation of a.

@@ -10,11 +10,9 @@ require (
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.5.1
-	github.com/tecbot/gorocksdb v0.0.0-00010101000000-000000000000
+	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c
 	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
 	golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )
-
-replace github.com/tecbot/gorocksdb => github.com/02p01r/gorocksdb v0.0.0-20200420134024-2457c9d8faf8

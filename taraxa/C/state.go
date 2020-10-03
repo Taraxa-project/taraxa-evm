@@ -9,11 +9,11 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -34,7 +34,7 @@ type state_API struct {
 		BatchPtr     uintptr
 		EVMBlock     vm.BlockWithoutNumber
 		Transactions []vm.Transaction
-		Uncles       []state_common.UncleBlock
+		Uncles       []state_db.UncleBlock
 	}
 	rlp_buf_StateTransition_ApplyBlock []byte
 	rlp_encoder_StateTransition_Apply  rlp.Encoder
@@ -57,7 +57,7 @@ func taraxa_evm_state_API_New(
 		RocksDBPtr                 uintptr
 		RocksDBColumnFamilyHandles [state_db_rocksdb.COL_COUNT]uintptr
 		GetBlockHash               uintptr
-		ChainConfig                state_config.ChainConfig
+		ChainConfig                state_common.ChainConfig
 		CurrBlkNum                 types.BlockNum
 		CurrStateRoot              common.Hash
 		StateTransitionCacheOpts   state_transition.StateTransitionOpts
@@ -65,7 +65,7 @@ func taraxa_evm_state_API_New(
 	dec_rlp(params_enc, &params)
 	self := new(state_API)
 	rocksdb := gorocksdb.NewDBFromNative(unsafe.Pointer(params.RocksDBPtr))
-	var columns state_db_rocksdb.Columns
+	var columns state_db_rocksdb.CFHandles
 	for i, ptr := range params.RocksDBColumnFamilyHandles {
 		columns[i] = gorocksdb.NewNativeColumnFamilyHandle1(unsafe.Pointer(ptr))
 	}
@@ -107,7 +107,7 @@ func taraxa_evm_state_API_NotifyStateTransitionCommitted(
 ) {
 	defer handle_err(cb_err)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.db.Refresh()
+	self.db.NotifyBatchCommitted()
 }
 
 //export taraxa_evm_state_API_Historical_Prove
@@ -230,7 +230,7 @@ func taraxa_evm_state_API_StateTransition_GenesisInit(
 	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[state_API_ptr(ptr)]
-	self.db.BatchBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
+	self.db.SetBatch(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.BatchEnd()
 	ret := self.StateTransition.GenesisInit(params.Config)
 	call_bytes_cb(bin.AnyBytes2(unsafe.Pointer(&ret), common.HashLength), cb)
@@ -249,19 +249,20 @@ func taraxa_evm_state_API_StateTransition_Apply(
 	params.Transactions = params.Transactions[:0]
 	params.Uncles = params.Uncles[:0]
 	dec_rlp(params_enc, params)
-	self.db.BatchBegin(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
+	self.db.SetBatch(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
 	defer self.db.BatchEnd()
 	self.StateTransition.BeginBlock(&params.EVMBlock)
 	for i := range self.params_StateTransition_ApplyBlock.Transactions {
-		self.StateTransition.SubmitTransaction(&self.params_StateTransition_ApplyBlock.Transactions[i])
+		self.StateTransition.ExecuteTransaction(&self.params_StateTransition_ApplyBlock.Transactions[i])
 	}
 	self.StateTransition.EndBlock(self.params_StateTransition_ApplyBlock.Uncles)
-	ret := self.StateTransition.CommitSync()
-	self.rlp_encoder_StateTransition_Apply.Reset()
-	self.rlp_encoder_StateTransition_Apply.AppendAny(ret)
-	buf := self.rlp_buf_StateTransition_ApplyBlock[:0]
-	self.rlp_encoder_StateTransition_Apply.FlushToBytes(-1, &buf)
-	call_bytes_cb(buf, cb)
+	self.StateTransition.Commit(func(result state_transition.StateTransitionResult) {
+		self.rlp_encoder_StateTransition_Apply.Reset()
+		self.rlp_encoder_StateTransition_Apply.AppendAny(result)
+		buf := self.rlp_buf_StateTransition_ApplyBlock[:0]
+		self.rlp_encoder_StateTransition_Apply.FlushToBytes(-1, &buf)
+		call_bytes_cb(buf, cb)
+	})
 }
 
 type state_API_ptr = byte

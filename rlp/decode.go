@@ -27,6 +27,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
@@ -300,7 +302,13 @@ func decodeBigInt(s *Stream, val reflect.Value) error {
 	if len(b) > 0 && b[0] == 0 {
 		return wrapStreamError(ErrCanonInt, val.Type())
 	}
-	val.Interface().(*big.Int).SetBytes(b)
+	if i := val.Interface().(*big.Int); len(b) == 0 {
+		if i.Sign() != 0 {
+			i.Set(bigutil.Big0)
+		}
+	} else {
+		i.SetBytes(b)
+	}
 	return nil
 }
 

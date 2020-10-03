@@ -2,98 +2,87 @@ package dpos
 
 import (
 	"errors"
+	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/solidity_map"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 
-	"github.com/Taraxa-project/taraxa-evm/common/math"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-var ContractAddress = common.HexToAddress("0x00000000000000000000000000000000000000ff")
-var EligibleAddrSetAddress = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
-
-var field_balances = []byte{0}
+var ContractAddress = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ff"))
+var field_staking_balances = []byte{0}
 var field_deposits = []byte{1}
-var field_withdrawals = []byte{2}
+var field_eligible_count = []byte{2}
+var field_withdrawals_by_block = []byte{3}
 
 type Contract struct {
-	cfg                     Config
-	storage                 Storage
-	main_storage_helper     solidity_map.Map
-	eligible_addr_hashes    map[beneficiary_t_hash]state_common.TaraxaBalance
-	eligible_balances_dirty map[common.Address]state_common.TaraxaBalance
-	balances                BalanceMap
-	deposits                map[depositor_t]BalanceMap
-	curr_withdrawals        []PendingWithdrawal
+	cfg              Config
+	storage          Storage
+	staking_balances BalanceMap
+	deposits         DelegatedBalanceMap
+	eligible_count   uint64
+	curr_withdrawals DelegatedBalanceMap
 }
-type depositor_t = common.Address
+type benefactor_t = common.Address
 type beneficiary_t = common.Address
-type beneficiary_t_hash = common.Hash
+type BalanceMap = map[beneficiary_t]*big.Int
+type DelegatedBalanceMap = map[benefactor_t]BalanceMap
 type Transfer = struct {
-	Amount       state_common.TaraxaBalance
-	IsWithdrawal bool
+	Amount   *big.Int
+	Negative bool
 }
-type BalanceMap = map[beneficiary_t]state_common.TaraxaBalance
 type InboundTransfers = map[beneficiary_t]Transfer
-type OutboundTransfers = map[depositor_t]InboundTransfers
-type PendingWithdrawal = struct {
-	Depositor   depositor_t
-	Beneficiary beneficiary_t
-	Amount      state_common.TaraxaBalance
-}
 type GenesisConfig struct {
-	Transfers OutboundTransfers
+	Deposits DelegatedBalanceMap
 }
 type Storage interface {
-	SubBalance(*common.Address, state_common.TaraxaBalance) bool
+	SubBalance(*common.Address, *big.Int) bool
+	AddBalance(*common.Address, *big.Int)
 	Put(*common.Address, *common.Hash, []byte)
 	Get(*common.Address, *common.Hash, func([]byte))
-	ForEach(*common.Address, func(*common.Hash, []byte))
+	GetHistorical(types.BlockNum, *common.Address, *common.Hash, func([]byte))
 }
 
 func (self *Contract) Init(cfg Config, storage Storage) *Contract {
+	assert.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
 	self.cfg = cfg
 	self.storage = storage
-	self.main_storage_helper.Init(solidity_map.Storage{
-		Put: func(hash *common.Hash, bytes []byte) {
-			self.storage.Put(&EligibleAddrSetAddress, hash, bytes)
-		},
-		Get: func(hash *common.Hash, cb func([]byte)) {
-			self.storage.Get(&EligibleAddrSetAddress, hash, cb)
-		},
-	})
-	self.eligible_addr_hashes = make(map[beneficiary_t_hash]state_common.TaraxaBalance)
-	storage.ForEach(&EligibleAddrSetAddress, func(storage_key *common.Hash, val []byte) {
-		self.eligible_addr_hashes[*storage_key] = bin.DEC_b_endian_compact_64(val)
+	self.storage.Get(ContractAddress, stor_k(field_eligible_count), func(bytes []byte) {
+		self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
 	})
 	return self
 }
 
 func (self *Contract) GenesisInit(cfg GenesisConfig) error {
-	for depositor, transfers_in := range cfg.Transfers {
-		if err := self.run(depositor, transfers_in); err != nil {
+	for benefactor, benefactor_deposits := range cfg.Deposits {
+		transfers := make(map[beneficiary_t]Transfer, len(benefactor_deposits))
+		for k, v := range benefactor_deposits {
+			transfers[k] = Transfer{Amount: v}
+		}
+		if err := self.run(benefactor, transfers); err != nil {
 			return err
 		}
 	}
-	self.Commit()
+	self.Commit(0)
 	return nil
 }
 
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
-	registry(&ContractAddress, self)
+	registry(ContractAddress, self)
 }
 
 func (self *Contract) RequiredGas(ctx *vm.CallFrame, evm *vm.EVM) uint64 {
-	return uint64(len(ctx.Input)) * 20
+	return uint64(len(ctx.Input)) * 20 // TODO
 }
 
 func (self *Contract) Run(ctx *vm.CallFrame, env *vm.ExecutionEnvironment) ([]byte, error) {
@@ -110,69 +99,185 @@ func (self *Contract) Run(ctx *vm.CallFrame, env *vm.ExecutionEnvironment) ([]by
 	return nil, self.run(*ctx.CallerAccount.Address(), transfers)
 }
 
-func (self *Contract) run(depositor common.Address, transfers InboundTransfers) (err error) {
-	var deposit_total state_common.TaraxaBalance
+func (self *Contract) run(benefactor common.Address, transfers InboundTransfers) (err error) {
+	if len(transfers) == 0 {
+		return errors.New("no transfers")
+	}
+	if self.deposits == nil {
+		self.deposits = make(DelegatedBalanceMap)
+	}
+	benefactor_deposits := self.deposits[benefactor]
+	if benefactor_deposits == nil {
+		benefactor_deposits = make(BalanceMap)
+		self.deposits[benefactor] = benefactor_deposits
+	}
+	expenditure_total := bigutil.Big0
 	for beneficiary, transfer := range transfers {
-		if transfer.Amount == 0 {
+		if transfer.Amount.Sign() == 0 {
 			return errors.New("transfer amount is zero")
 		}
-		if transfer.IsWithdrawal {
-			deposit, present := self.deposits[depositor][beneficiary]
-			if !present {
-				self.main_storage_helper.Get(
-					func(bytes []byte) {
-						deposit = bin.DEC_b_endian_compact_64(bytes)
-					},
-					field_deposits, depositor[:], beneficiary[:])
-				self.deposits[depositor][beneficiary] = deposit
-			}
-			if deposit < transfer.Amount {
-				return errors.New("withdrawal exceeds deposit")
-			}
-		} else if math.MaxUint64-deposit_total < transfer.Amount {
-			return errors.New("total deposit value is impossibly large")
-		} else {
-			deposit_total += transfer.Amount
+		deposit_v := benefactor_deposits[beneficiary]
+		if deposit_v == nil {
+			deposit_v = bigutil.Big0
+			self.storage.Get(ContractAddress, stor_k(field_deposits, benefactor[:], beneficiary[:]), func(bytes []byte) {
+				deposit_v = bigutil.FromBytes(bytes)
+			})
+			benefactor_deposits[beneficiary] = deposit_v
+		}
+		if !transfer.Negative {
+			expenditure_total = new(big.Int).Add(expenditure_total, transfer.Amount)
+		} else if deposit_v.Cmp(transfer.Amount) < 0 {
+			return errors.New("withdrawal exceeds deposit value")
 		}
 	}
-	if !self.storage.SubBalance(&depositor, deposit_total) {
+	if !self.storage.SubBalance(&benefactor, expenditure_total) {
 		return errors.New("insufficient balance for the deposits")
 	}
 	for beneficiary, transfer := range transfers {
-		if transfer.IsWithdrawal {
-			self.deposits[depositor][beneficiary] -= transfer.Amount
-			self.curr_withdrawals = append(self.curr_withdrawals, PendingWithdrawal{depositor, beneficiary, transfer.Amount})
+		op := bigutil.Add
+		if transfer.Negative {
+			op = bigutil.USub
+			if self.curr_withdrawals == nil {
+				self.curr_withdrawals = make(DelegatedBalanceMap)
+			}
+			benefactor_withdrawals := self.curr_withdrawals[benefactor]
+			if benefactor_withdrawals == nil {
+				benefactor_withdrawals = make(BalanceMap)
+				self.curr_withdrawals[benefactor] = benefactor_withdrawals
+			}
+			benefactor_withdrawals[beneficiary] = bigutil.Add(benefactor_withdrawals[beneficiary], transfer.Amount)
 		} else {
-			self.deposits[depositor][beneficiary] += transfer.Amount
-			bal_old, present := self.balances[beneficiary]
-			if !present {
-				self.main_storage_helper.Get(
-					func(bytes []byte) {
-						bal_old = bin.DEC_b_endian_compact_64(bytes)
-					},
-					field_balances, beneficiary[:])
-			}
-			bal_new := bal_old + transfer.Amount
-			self.balances[beneficiary] = bal_new
-			self.main_storage_helper.Put(bin.ENC_b_endian_compact_64_1(bal_new), field_balances, beneficiary[:])
-			if bal_old < self.cfg.EligibilityBalanceThreshold && bal_new >= self.cfg.EligibilityBalanceThreshold {
-				self.eligible_balances_dirty[beneficiary] = bal_new
-			}
+			self.upd_staking_balance(beneficiary, transfer.Amount, false)
 		}
-		self.main_storage_helper.Put(bin.ENC_b_endian_compact_64_1(self.deposits[depositor][beneficiary]),
-			field_deposits, depositor[:], beneficiary[:])
+		deposit_v := op(benefactor_deposits[beneficiary], transfer.Amount)
+		benefactor_deposits[beneficiary] = deposit_v
+		self.storage.Put(ContractAddress, stor_k(field_deposits, benefactor[:], beneficiary[:]), deposit_v.Bytes())
 	}
 	return
 }
 
-func (self *Contract) Commit() {
-
+func (self *Contract) Commit(blk_n types.BlockNum) {
+	var moneyback_withdrawals DelegatedBalanceMap
+	if self.cfg.WithdrawalDelay == 0 {
+		moneyback_withdrawals = self.curr_withdrawals
+	} else {
+		if len(self.curr_withdrawals) != 0 {
+			self.storage.Put(
+				ContractAddress,
+				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
+				rlp.MustEncodeToBytes(self.curr_withdrawals))
+		}
+		if self.cfg.WithdrawalDelay < blk_n {
+			self.storage.Get(
+				ContractAddress,
+				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay)),
+				func(bytes []byte) {
+					moneyback_withdrawals = make(DelegatedBalanceMap)
+					rlp.DecodeBytes(bytes, &moneyback_withdrawals)
+				})
+		}
+	}
+	for benefactor, withdrawal_per_beneficiary := range moneyback_withdrawals {
+		val_total := bigutil.Big0
+		for _, val := range withdrawal_per_beneficiary {
+			val_total = bigutil.Add(val_total, val)
+		}
+		self.storage.AddBalance(&benefactor, val_total)
+	}
+	var withdrawals_to_apply DelegatedBalanceMap
+	if self.cfg.DepositDelay == 0 {
+		withdrawals_to_apply = moneyback_withdrawals
+	} else if delay_diff := self.cfg.WithdrawalDelay - self.cfg.DepositDelay; delay_diff == 0 {
+		withdrawals_to_apply = self.curr_withdrawals
+	} else if delay_diff < blk_n {
+		self.storage.Get(
+			ContractAddress,
+			stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
+			func(bytes []byte) {
+				withdrawals_to_apply = make(DelegatedBalanceMap)
+				rlp.DecodeBytes(bytes, &withdrawals_to_apply)
+			})
+	}
+	for _, withdrawal_per_beneficiary := range withdrawals_to_apply {
+		for beneficiary, val := range withdrawal_per_beneficiary {
+			self.upd_staking_balance(beneficiary, val, true)
+		}
+	}
+	self.storage.Put(
+		ContractAddress,
+		stor_k(field_eligible_count),
+		bin.ENC_b_endian_compact_64_1(self.eligible_count))
+	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
 }
 
-func (self *Contract) EligibleAddressCount() state_common.TaraxaBalance {
-	return state_common.TaraxaBalance(len(self.eligible_addr_hashes))
+func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
+	if self.staking_balances == nil {
+		self.staking_balances = make(BalanceMap)
+	}
+	beneficiary_bal := self.staking_balances[beneficiary]
+	if beneficiary_bal == nil {
+		beneficiary_bal = bigutil.Big0
+		self.storage.Get(
+			ContractAddress,
+			stor_k(field_staking_balances, beneficiary[:]),
+			func(bytes []byte) {
+				beneficiary_bal = bigutil.FromBytes(bytes)
+			})
+	}
+	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	if negative {
+		beneficiary_bal = bigutil.USub(beneficiary_bal, delta)
+	} else {
+		beneficiary_bal = bigutil.Add(beneficiary_bal, delta)
+	}
+	self.staking_balances[beneficiary] = beneficiary_bal
+	self.storage.Put(
+		ContractAddress,
+		stor_k(field_staking_balances, beneficiary[:]),
+		beneficiary_bal.Bytes())
+	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	if negative && was_eligible && !eligible_now {
+		self.eligible_count--
+	}
+	if !negative && !was_eligible && eligible_now {
+		self.eligible_count++
+	}
 }
 
-func (self *Contract) GetBalanceIfEligible(address *common.Address) state_common.TaraxaBalance {
-	return self.eligible_addr_hashes[keccak256.HashAndReturnByValue(address[:])]
+func (self *Contract) EligibleAddressCount(blk_n types.BlockNum) (ret uint64) {
+	self.storage.GetHistorical(
+		self.true_blk_n(blk_n),
+		ContractAddress,
+		stor_k(field_eligible_count),
+		func(bytes []byte) {
+			ret = bin.DEC_b_endian_compact_64(bytes)
+		})
+	return
+}
+
+func (self *Contract) IsEligible(blk_n types.BlockNum, address *common.Address) bool {
+	return self.GetStakingBalance(blk_n, address).Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+}
+
+func (self *Contract) GetStakingBalance(blk_n types.BlockNum, address *common.Address) (ret *big.Int) {
+	ret = bigutil.Big0
+	self.storage.GetHistorical(
+		self.true_blk_n(blk_n),
+		ContractAddress,
+		stor_k(field_staking_balances, address[:]),
+		func(bytes []byte) {
+			ret = bigutil.FromBytes(bytes)
+		})
+	return
+}
+
+func (self *Contract) true_blk_n(client_blk_n types.BlockNum) (ret uint64) {
+	if self.cfg.DepositDelay < client_blk_n {
+		ret = client_blk_n - self.cfg.DepositDelay
+	}
+	return
+}
+
+func stor_k(parts ...[]byte) *common.Hash {
+	return keccak256.Hash(parts...)
 }

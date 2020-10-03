@@ -5,8 +5,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -21,16 +19,15 @@ type EVMState struct {
 	reverts_original, reverts     []func()
 	logs                          []vm.LogRecord
 	refund                        uint64
-	version                       uint64
-	dirties                       *Dirties
+	dirties                       []*Account
 	bigconv                       bigconv.BigConv
 }
 type EVMStateAccountHeader struct {
-	host                 *EVMState
-	upd_version          uint64
-	read_in_curr_version bool
-	loaded_from_db       bool //TODO refactor into state machine
-	deleted              bool //TODO refactor into state machine
+	host            *EVMState
+	in_dirties      bool
+	in_curr_version bool
+	loaded_from_db  bool
+	deleted         bool
 }
 type Accounts = []*Account
 type CacheOpts struct {
@@ -46,7 +43,6 @@ func (self *EVMState) Init(in Input, cache_opts CacheOpts) {
 	self.accounts_in_curr_ver = self.accounts_in_curr_ver_original
 	self.reverts_original = make([]func(), 0, cache_opts.RevertLogSize)
 	self.reverts = self.reverts_original
-	self.version = 1
 }
 
 func (self *EVMState) GetAccount(addr *common.Address) vm.StateAccount {
@@ -55,8 +51,8 @@ func (self *EVMState) GetAccount(addr *common.Address) vm.StateAccount {
 
 func (self *EVMState) GetAccountConcrete(addr *common.Address) *Account {
 	acc, was_present := self.accounts.GetOrNew(addr)
-	if !acc.read_in_curr_version {
-		acc.read_in_curr_version = true
+	if !acc.in_curr_version {
+		acc.in_curr_version = true
 		self.accounts_in_curr_ver = append(self.accounts_in_curr_ver, acc)
 	}
 	if was_present {
@@ -122,31 +118,20 @@ func (self *EVMState) register_change(revert func()) {
 }
 
 func (self *EVMState) Checkpoint(sink Sink, eip158 bool) {
-	if self.dirties == nil {
-		self.dirties = new(Dirties).Init(0)
-	}
-	num_accs_to_clean := 0
-	for i, acc := range self.accounts_in_curr_ver {
-		acc.read_in_curr_version = false
+	for _, acc := range self.accounts_in_curr_ver {
+		acc.in_curr_version = false
 		if acc.deleted {
 			continue
 		}
-		if status := acc.flush(sink, eip158); status == updated {
-			acc.upd_version = self.version
-			self.dirties.append(acc)
-		} else if acc.deleted = status == deleted; acc.deleted || status == unmodified && acc.upd_version == 0 {
-			if status == unmodified || !acc.loaded_from_db {
-				if i != num_accs_to_clean {
-					self.accounts_in_curr_ver[num_accs_to_clean] = acc
-				}
-				num_accs_to_clean++
-			} else {
-				self.dirties.append(acc)
-			}
+		status := acc.flush(sink, eip158)
+		acc.deleted = status == deleted
+		if !acc.in_dirties && (status == updated || acc.deleted && acc.loaded_from_db) {
+			acc.in_dirties = true
+			self.dirties = append(self.dirties, acc)
 		}
-	}
-	for i := 0; i < num_accs_to_clean; i++ {
-		self.accounts_in_curr_ver[i].unload()
+		if !acc.in_dirties {
+			acc.unload()
+		}
 	}
 	bin.ZFill_2(
 		unsafe.Pointer(&self.accounts_in_curr_ver_original),
@@ -160,17 +145,15 @@ func (self *EVMState) Checkpoint(sink Sink, eip158 bool) {
 	self.reverts = self.reverts_original
 	self.logs = nil
 	self.refund = 0
-	self.version++
 }
 
-func (self *EVMState) Commit() (ret *Dirties) {
-	self.dirties.set_commit_version(self.version)
-	ret, self.dirties = self.dirties, nil
-	return
-}
-
-func (self *EVMState) Cleanup(b *Dirties) {
-	assert.Holds(self.dirties == nil, "cleanup is impossible with uncommitted checkpoints")
-	b.cleanup()
-	self.dirties = b
+func (self *EVMState) Commit() {
+	for _, acc := range self.dirties {
+		if !acc.deleted {
+			acc.sink.Commit()
+		}
+		acc.unload()
+	}
+	bin.ZFill_3(unsafe.Pointer(&self.dirties), unsafe.Sizeof(self.dirties[0]))
+	self.dirties = self.dirties[:0]
 }

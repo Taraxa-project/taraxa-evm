@@ -3,29 +3,31 @@ package state_dry_runner
 import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_historical"
 )
 
 type DryRunner struct {
-	db             state_historical.DB
+	db             state_db.DB
 	get_block_hash vm.GetHashFunc
-	exec_cfg       state_config.ExecutionConfig
+	exec_cfg       state_common.ExecutionConfig
 }
 
-func (self *DryRunner) Init(db state_historical.DB, get_block_hash vm.GetHashFunc, exec_cfg state_config.ExecutionConfig) {
+// TODO add dpos
+
+func (self *DryRunner) Init(db state_db.DB, get_block_hash vm.GetHashFunc, exec_cfg state_common.ExecutionConfig) {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.exec_cfg = exec_cfg
 }
 
-func (self *DryRunner) Apply(blk_num types.BlockNum, blk *vm.BlockWithoutNumber, trx *vm.Transaction, opts *vm.ExecutionOptions) (ret vm.ExecutionResult) {
+func (self *DryRunner) Apply(blk_num types.BlockNum, blk *vm.BlockWithoutNumber, trx *vm.Transaction, opts *vm.ExecutionOptions) vm.ExecutionResult {
 	if opts == nil {
 		opts = &self.exec_cfg.Options
 	}
-	blk_r, db_tx := self.db.ReadBlock(blk_num)
-	defer db_tx.NotifyDoneReading()
+	blk_r := state_db.BlockReader{self.db.ReadBlock(blk_num)}
+	defer blk_r.NotifyDone()
 	var evm_state state_evm.EVMState
 	evm_state.Init(blk_r, state_evm.CacheOpts{
 		AccountBufferSize: 32,

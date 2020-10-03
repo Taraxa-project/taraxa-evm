@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/big"
 	"os"
 	"os/exec"
+	"path"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -14,7 +16,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -34,16 +36,13 @@ import (
 )
 
 func main() {
-	var last_block_key = bin.BytesView("last_block")
-
 	const profiling = false
 	const disable_gc = profiling || false
+	const desired_num_trx_per_block = 40000
 
-	d, e1 := os.UserHomeDir()
+	usr_dir, e1 := os.UserHomeDir()
 	util.PanicIfNotNil(e1)
-
-	const desired_num_trx_per_block = 0
-	dest_data_dir := mkdirp(d + "/taraxa_evm_test")
+	dest_data_dir := mkdirp(usr_dir + "/taraxa_evm_test")
 
 	if disable_gc {
 		debug.SetGCPercent(-1)
@@ -63,8 +62,6 @@ func main() {
 		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
 	}
 
-	opts_w_default := gorocksdb.NewDefaultWriteOptions()
-	opts_r_default := gorocksdb.NewDefaultReadOptions()
 	blk_db_opts := gorocksdb.NewDefaultOptions()
 	blk_db_opts.SetErrorIfExists(false)
 	blk_db_opts.SetCreateIfMissing(true)
@@ -73,10 +70,7 @@ func main() {
 	blk_db_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
 	blk_db_opts.OptimizeForPointLookup(256)
 	blk_db_opts.SetMaxOpenFiles(32)
-	blk_db, e0 := gorocksdb.OpenDbForReadOnly(
-		blk_db_opts,
-		"/home/oleg/win10/ubuntu/blockchain",
-		false)
+	blk_db, e0 := gorocksdb.OpenDbForReadOnly(blk_db_opts, "/home/oleg/win10/ubuntu/blockchain", false)
 	util.PanicIfNotNil(e0)
 
 	type Transaction struct {
@@ -106,8 +100,9 @@ func main() {
 		StateRoot    common.Hash   `json:"stateRoot" gencodec:"required"`
 	}
 
+	rocksdb_opts_r_default := gorocksdb.NewDefaultReadOptions()
 	getBlockByNumber := func(block_num types.BlockNum) *BlockInfo {
-		block_json, err := blk_db.GetPinned(opts_r_default, bin.BytesView(fmt.Sprintf("%09d", block_num)))
+		block_json, err := blk_db.GetPinned(rocksdb_opts_r_default, bin.BytesView(fmt.Sprintf("%09d", block_num)))
 		util.PanicIfNotNil(err)
 		ret := new(BlockInfo)
 		util.PanicIfNotNil(json.Unmarshal(block_json.Data(), ret))
@@ -115,52 +110,25 @@ func main() {
 		return ret
 	}
 
-	statedb_opts := gorocksdb.NewDefaultOptions()
-	statedb_opts.SetErrorIfExists(false)
-	statedb_opts.SetCreateIfMissing(true)
-	statedb_opts.SetCreateIfMissingColumnFamilies(true)
-	statedb_opts.IncreaseParallelism(runtime.NumCPU())
-	statedb_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
-	const col_cnt = 1 + state_db_rocksdb.COL_COUNT
-	cfnames, cfopts := [col_cnt]string{"default"}, [col_cnt]*gorocksdb.Options{gorocksdb.NewDefaultOptions()}
-	for i := state_db_rocksdb.Column(1); i < col_cnt; i++ {
-		opts := gorocksdb.NewDefaultOptions()
-		switch i - 1 {
-		case state_db_rocksdb.COL_main_trie_value, state_db_rocksdb.COL_acc_trie_value:
-		default:
-			opts.OptimizeForPointLookup(512)
-		}
-		cfnames[i], cfopts[i] = strconv.Itoa(int(i)), opts
-	}
-	statedb_rocksdb, cols, err_1 := gorocksdb.OpenDbColumnFamilies(
-		statedb_opts,
-		mkdirp(dest_data_dir+"/state_db"),
-		cfnames[:],
-		cfopts[:])
-	util.PanicIfNotNil(err_1)
-	defer statedb_rocksdb.Close()
-	var state_db state_db_rocksdb.DB
-	var state_db_cols state_db_rocksdb.Columns
-	copy(state_db_cols[:], cols[1:])
-	state_db.Init(statedb_rocksdb, state_db_cols)
-
-	var last_blk_num types.BlockNum
+	last_blk_num_file := path.Join(dest_data_dir, "last_blk")
+	last_blk_num := read_last_block_n(last_blk_num_file)
+	is_genesis := last_blk_num == types.BlockNumberNIL
 	var last_root common.Hash
-	last_block_num_b, err := statedb_rocksdb.GetBytes(opts_r_default, last_block_key)
-	util.PanicIfNotNil(err)
-	is_genesis := len(last_block_num_b) == 0
-	if !is_genesis {
-		last_blk_num = bin.DEC_b_endian_64(last_block_num_b)
+	if is_genesis {
+		last_blk_num = 0
+	} else {
 		last_root = getBlockByNumber(last_blk_num).StateRoot
 	}
 
 	SUT := new(state_transition.StateTransition).Init(
-		&state_db,
+		new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
+			Path: mkdirp(dest_data_dir + "/state_db"),
+		}),
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		state_config.ChainConfig{
-			Execution: state_config.ExecutionConfig{
+		state_common.ChainConfig{
+			Execution: state_common.ExecutionConfig{
 				ETHForks: *params.MainnetChainConfig,
 			},
 		},
@@ -181,14 +149,9 @@ func main() {
 	)
 
 	if is_genesis {
-		batch := gorocksdb.NewWriteBatch()
-		state_db.BatchBegin(batch)
 		root := SUT.GenesisInit(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
-		batch.Put(last_block_key, bin.ENC_b_endian_64(0))
-		state_db.BatchEnd()
-		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
-		state_db.Refresh()
+		write_last_block_n(last_blk_num_file, 0)
 	}
 
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
@@ -206,19 +169,16 @@ func main() {
 				break
 			}
 		}
-		batch := gorocksdb.NewWriteBatch()
-		state_db.BatchBegin(batch)
 		fmt.Println("blocks:", block_num_from, "-", last_blk_num, "tx_count:", tx_count)
 		now := time.Now()
 		for _, b := range block_buf {
 			SUT.BeginBlock((*vm.BlockWithoutNumber)(unsafe.Pointer(&b.VmBlock)))
 			for i := range b.Transactions {
-				SUT.SubmitTransaction((*vm.Transaction)(unsafe.Pointer(&b.Transactions[i])))
+				SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&b.Transactions[i])))
 			}
 			SUT.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
 		}
-		result := SUT.CommitSync()
-		assert.EQ(result.StateRoot.Hex(), block_buf[len(block_buf)-1].StateRoot.Hex())
+		assert.EQ(SUT.Commit().Hex(), block_buf[len(block_buf)-1].StateRoot.Hex())
 		//return
 		tps := float64(tx_count) / time.Now().Sub(now).Seconds()
 		tps_sum += tps
@@ -230,11 +190,7 @@ func main() {
 			tps_max = tps
 		}
 		fmt.Println("TPS current:", tps, "avg:", tps_sum/float64(tps_cnt), "min:", tps_min, "max:", tps_max)
-		state_db.BatchEnd()
-		batch.Put(last_block_key, bin.ENC_b_endian_64(last_blk_num))
-		util.PanicIfNotNil(statedb_rocksdb.Write(opts_w_default, batch))
-		batch.Destroy()
-		state_db.Refresh()
+		write_last_block_n(last_blk_num_file, last_blk_num)
 
 		if disable_gc {
 			if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
@@ -256,4 +212,29 @@ func main() {
 func mkdirp(path string) string {
 	util.PanicIfNotNil(exec.Command("mkdir", "-p", path).Run())
 	return path
+}
+
+func write_file(fname string, val []byte) {
+	util.PanicIfNotNil(ioutil.WriteFile(fname, val, 0644))
+}
+
+func read_file(fname string) []byte {
+	ret, err := ioutil.ReadFile(fname)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	util.PanicIfNotNil(err)
+	return ret
+}
+
+func read_last_block_n(fname string) types.BlockNum {
+	bytes := read_file(fname)
+	if len(bytes) == 0 {
+		return types.BlockNumberNIL
+	}
+	return bin.DEC_b_endian_64(bytes)
+}
+
+func write_last_block_n(fname string, n types.BlockNum) {
+	write_file(fname, bin.ENC_b_endian_64(n))
 }
