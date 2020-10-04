@@ -6,8 +6,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -26,12 +24,14 @@ var field_eligible_count = []byte{2}
 var field_withdrawals_by_block = []byte{3}
 
 type Contract struct {
-	cfg              Config
-	storage          Storage
-	staking_balances BalanceMap
-	deposits         DelegatedBalanceMap
-	eligible_count   uint64
-	curr_withdrawals DelegatedBalanceMap
+	cfg                        Config
+	storage                    Storage
+	staking_balances           BalanceMap
+	deposits                   DelegatedBalanceMap
+	eligible_count             uint64
+	eligible_count_initialized bool
+	eligible_count_dirty       bool
+	curr_withdrawals           DelegatedBalanceMap
 }
 type benefactor_t = common.Address
 type beneficiary_t = common.Address
@@ -42,29 +42,21 @@ type Transfer = struct {
 	Negative bool
 }
 type InboundTransfers = map[beneficiary_t]Transfer
-type GenesisConfig struct {
-	Deposits DelegatedBalanceMap
-}
 type Storage interface {
 	SubBalance(*common.Address, *big.Int) bool
 	AddBalance(*common.Address, *big.Int)
 	Put(*common.Address, *common.Hash, []byte)
 	Get(*common.Address, *common.Hash, func([]byte))
-	GetHistorical(types.BlockNum, *common.Address, *common.Hash, func([]byte))
 }
 
-func (self *Contract) Init(cfg Config, storage Storage) *Contract {
-	assert.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
+func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	self.cfg = cfg
 	self.storage = storage
-	self.storage.Get(ContractAddress, stor_k(field_eligible_count), func(bytes []byte) {
-		self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
-	})
 	return self
 }
 
-func (self *Contract) GenesisInit(cfg GenesisConfig) error {
-	for benefactor, benefactor_deposits := range cfg.Deposits {
+func (self *Contract) ApplyGenesis() error {
+	for benefactor, benefactor_deposits := range self.cfg.GenesisState {
 		transfers := make(map[beneficiary_t]Transfer, len(benefactor_deposits))
 		for k, v := range benefactor_deposits {
 			transfers[k] = Transfer{Amount: v}
@@ -203,10 +195,13 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 			self.upd_staking_balance(beneficiary, val, true)
 		}
 	}
-	self.storage.Put(
-		ContractAddress,
-		stor_k(field_eligible_count),
-		bin.ENC_b_endian_compact_64_1(self.eligible_count))
+	if self.eligible_count_dirty {
+		self.eligible_count_dirty = false
+		self.storage.Put(
+			ContractAddress,
+			stor_k(field_eligible_count),
+			bin.ENC_b_endian_compact_64_1(self.eligible_count))
+	}
 	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
 }
 
@@ -236,46 +231,28 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		stor_k(field_staking_balances, beneficiary[:]),
 		beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	eligible_count_change := 0
 	if negative && was_eligible && !eligible_now {
-		self.eligible_count--
+		eligible_count_change = -1
 	}
 	if !negative && !was_eligible && eligible_now {
+		eligible_count_change = 1
+	}
+	if eligible_count_change == 0 {
+		return
+	}
+	self.eligible_count_dirty = true
+	if !self.eligible_count_initialized {
+		self.eligible_count_initialized = true
+		self.storage.Get(ContractAddress, stor_k(field_eligible_count), func(bytes []byte) {
+			self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
+		})
+	}
+	if eligible_count_change == 1 {
 		self.eligible_count++
+	} else {
+		self.eligible_count--
 	}
-}
-
-func (self *Contract) EligibleAddressCount(blk_n types.BlockNum) (ret uint64) {
-	self.storage.GetHistorical(
-		self.true_blk_n(blk_n),
-		ContractAddress,
-		stor_k(field_eligible_count),
-		func(bytes []byte) {
-			ret = bin.DEC_b_endian_compact_64(bytes)
-		})
-	return
-}
-
-func (self *Contract) IsEligible(blk_n types.BlockNum, address *common.Address) bool {
-	return self.GetStakingBalance(blk_n, address).Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
-}
-
-func (self *Contract) GetStakingBalance(blk_n types.BlockNum, address *common.Address) (ret *big.Int) {
-	ret = bigutil.Big0
-	self.storage.GetHistorical(
-		self.true_blk_n(blk_n),
-		ContractAddress,
-		stor_k(field_staking_balances, address[:]),
-		func(bytes []byte) {
-			ret = bigutil.FromBytes(bytes)
-		})
-	return
-}
-
-func (self *Contract) true_blk_n(client_blk_n types.BlockNum) (ret uint64) {
-	if self.cfg.DepositDelay < client_blk_n {
-		ret = client_blk_n - self.cfg.DepositDelay
-	}
-	return
 }
 
 func stor_k(parts ...[]byte) *common.Hash {

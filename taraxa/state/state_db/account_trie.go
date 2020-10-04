@@ -3,11 +3,8 @@ package state_db
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
-
-var AccountTrieReader = trie.Reader{AccountTrieSchema{}}
 
 type AccountTrieSchema struct{}
 
@@ -29,38 +26,38 @@ func (self acc_storage_trie_value) EncodeForTrie() (enc_storage, enc_hash []byte
 	return
 }
 
-type AccountTrieReadTxn struct {
+type AccountTrieInputAdapter struct {
 	Addr *common.Address
-	Tx   ReadTx
+	Reader
 }
 
-func (self AccountTrieReadTxn) GetValue(key *common.Hash, cb func(v []byte)) {
-	self.Tx.Get(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), cb)
+func (self AccountTrieInputAdapter) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Get(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), cb)
 }
 
-func (self AccountTrieReadTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
-	self.Tx.Get(COL_acc_trie_node, node_hash, cb)
+func (self AccountTrieInputAdapter) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Get(COL_acc_trie_node, node_hash, cb)
 }
 
-type AccountTrieWriteTxn struct {
+type AccountTrieIOAdapter struct {
 	Addr *common.Address
-	Tx   WriteTx
+	ReadWriter
 }
 
-func (self AccountTrieWriteTxn) GetValue(key *common.Hash, cb func(v []byte)) {
-	self.Tx.Get(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), cb)
+func (self AccountTrieIOAdapter) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Get(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), cb)
 }
 
-func (self AccountTrieWriteTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
-	self.Tx.Get(COL_acc_trie_node, node_hash, cb)
+func (self AccountTrieIOAdapter) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Get(COL_acc_trie_node, node_hash, cb)
 }
 
-func (self AccountTrieWriteTxn) PutValue(key *common.Hash, v []byte) {
-	self.Tx.Put(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), v)
+func (self AccountTrieIOAdapter) PutValue(key *common.Hash, v []byte) {
+	self.Put(COL_acc_trie_value, acc_trie_db_key(self.Addr, key), v)
 }
 
-func (self AccountTrieWriteTxn) PutNode(node_hash *common.Hash, node []byte) {
-	self.Tx.Put(COL_acc_trie_node, node_hash, node)
+func (self AccountTrieIOAdapter) PutNode(node_hash *common.Hash, node []byte) {
+	self.Put(COL_acc_trie_node, node_hash, node)
 }
 
 func acc_trie_db_key(addr *common.Address, key *common.Hash) *common.Hash {

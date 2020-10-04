@@ -34,7 +34,7 @@ func (self *Writer) Init(schema Schema, root_hash *common.Hash, cache_opts Write
 	return self
 }
 
-func (self *Writer) Commit(db_tx WriteTxn) *common.Hash {
+func (self *Writer) Commit(db_tx IO) *common.Hash {
 	if self.root == nil {
 		return nil
 	}
@@ -47,7 +47,7 @@ func (self *Writer) Commit(db_tx WriteTxn) *common.Hash {
 }
 
 // TODO parallel
-func (self *Writer) commit(db_tx WriteTxn, ctx *commit_context, full_nodes_above byte, key_prefix []byte, n node) node {
+func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte, key_prefix []byte, n node) node {
 	is_root := len(key_prefix) == 0
 	switch n := n.(type) {
 	case *node_hash:
@@ -132,15 +132,15 @@ func (self *Writer) commit(db_tx WriteTxn, ctx *commit_context, full_nodes_above
 	panic("impossible")
 }
 
-func (self *Writer) Put(db_tx WriteTxn, k *common.Hash, v Value) {
+func (self *Writer) Put(db_tx IO, k *common.Hash, v Value) {
 	self.write(db_tx, k, value_node{v})
 }
 
-func (self *Writer) Delete(db_tx WriteTxn, k *common.Hash) {
+func (self *Writer) Delete(db_tx IO, k *common.Hash) {
 	self.write(db_tx, k, nil_val_node)
 }
 
-func (self *Writer) write(db_tx WriteTxn, k *common.Hash, v value_node) {
+func (self *Writer) write(db_tx IO, k *common.Hash, v value_node) {
 	keybytes_to_hex(k[:], self.kbuf_0[:])
 	if v != nil_val_node {
 		self.root = self.mpt_insert(db_tx, self.root, 0, v)
@@ -156,7 +156,7 @@ func (self *Writer) write(db_tx WriteTxn, k *common.Hash, v value_node) {
 }
 
 // TODO maybe dirty checking is worthwhile
-func (self *Writer) mpt_insert(db_tx ReadTxn, n node, keypos int, value value_node) node {
+func (self *Writer) mpt_insert(db_tx Input, n node, keypos int, value value_node) node {
 	switch n := n.(type) {
 	case *short_node:
 		n.hash = nil
@@ -203,7 +203,7 @@ func (self *Writer) mpt_insert(db_tx ReadTxn, n node, keypos int, value value_no
 // TODO maybe panic/recover harms performance
 var mpt_del_not_found = errors.New("key not found")
 
-func (self *Writer) mpt_del(db_tx ReadTxn, n node, keypos int) node {
+func (self *Writer) mpt_del(db_tx Input, n node, keypos int) node {
 	switch n := n.(type) {
 	case *short_node:
 		matchlen := prefixLen(self.kbuf_0[keypos:], n.key_part)
@@ -260,7 +260,7 @@ func (self *Writer) mpt_del(db_tx ReadTxn, n node, keypos int) node {
 	panic("impossible")
 }
 
-func (self *Writer) shift(db_tx ReadTxn, n *short_node, new_prefix []byte, pivot byte, new_suffix []byte, up bool) node {
+func (self *Writer) shift(db_tx Input, n *short_node, new_prefix []byte, pivot byte, new_suffix []byte, up bool) node {
 	if n.val == nil_val_node {
 		hex_key := append(append(append(self.kbuf_1[:0], new_prefix...), pivot), new_suffix...)
 		n.val = self.resolve_val_n_by_hex_k(db_tx, hex_key)
@@ -281,6 +281,6 @@ func (self *Writer) shift(db_tx ReadTxn, n *short_node, new_prefix []byte, pivot
 	return n
 }
 
-func (self *Writer) resolve(db_tx ReadTxn, hash *node_hash, key_prefix_base []byte, key_prefix_rest ...byte) node {
+func (self *Writer) resolve(db_tx Input, hash *node_hash, key_prefix_base []byte, key_prefix_rest ...byte) node {
 	return self.Reader.resolve(db_tx, hash, append(append(self.kbuf_1[:0], key_prefix_base...), key_prefix_rest...))
 }

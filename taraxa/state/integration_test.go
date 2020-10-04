@@ -31,21 +31,21 @@ func TestEthMainnetSmoke(t *testing.T) {
 	mkdirp(dest_data_dir)
 	defer os.RemoveAll(dest_data_dir)
 	blocks := data.Parse_eth_mainnet_blocks_0_300000()
+	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
+		Path: dest_data_dir,
+	})
+	defer statedb.Close()
 	SUT := new(state_transition.StateTransition).Init(
-		new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-			Path: dest_data_dir,
-		}),
+		statedb.GetLatestState(),
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(blocks[num].Hash[:])
 		},
-		state_common.ChainConfig{
-			Execution: state_common.ExecutionConfig{
-				ETHForks: *params.MainnetChainConfig,
-			},
-		},
-		0,
 		nil,
-		state_transition.StateTransitionOpts{
+		state_common.ExecutionConfig{
+			ETHForks: *params.MainnetChainConfig,
+		},
+		core.MainnetGenesisBalances(),
+		state_transition.Opts{
 			TrieWriters: state_transition.TrieWriterOpts{
 				MainTrieWriterOpts: trie.WriterCacheOpts{
 					FullNodeLevelsToCache: 5,
@@ -58,8 +58,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 			ExpectedMaxNumTrxPerBlock: 500,
 		},
 	)
-	root := SUT.GenesisInit(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
-	assert.EQ(root.Hex(), blocks[0].StateRoot.Hex())
+	assert.EQ(statedb.GetLatestState().GetCommittedDescriptor().StateRoot.Hex(), blocks[0].StateRoot.Hex())
 	progress_bar := progressbar.Default(int64(len(blocks)))
 	defer progress_bar.Finish()
 	for blk_num := 1; blk_num < len(blocks); blk_num++ {

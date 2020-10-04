@@ -252,7 +252,7 @@ const (
 	deleted
 )
 
-func (self *Account) flush(out Sink, eip158 bool) acc_dirty_status {
+func (self *Account) flush(db_writer DBWriter, eip158 bool) acc_dirty_status {
 	if !self.IsNotNIL() {
 		return unmodified
 	}
@@ -262,7 +262,7 @@ func (self *Account) flush(out Sink, eip158 bool) acc_dirty_status {
 		return unmodified
 	}
 	if self.suicided || eip158 && self.IsEIP161Empty() {
-		out.Delete(&self.addr)
+		db_writer.Delete(&self.addr)
 		self.set_NIL()
 		return deleted
 	}
@@ -270,7 +270,7 @@ func (self *Account) flush(out Sink, eip158 bool) acc_dirty_status {
 		return unmodified
 	}
 	if self.sink == nil {
-		self.sink = out.StartMutation(self.Address())
+		self.sink = db_writer.StartMutation(self.Address())
 	}
 	self.sink.Update(self.AccountChange)
 	self.CodeDirty = false

@@ -3,8 +3,6 @@ package state_transition
 import (
 	"runtime"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
@@ -20,7 +18,7 @@ import (
 type TrieSink struct {
 	thread_main_trie_write     goroutines.SingleThreadExecutor
 	threads_account_trie_write goroutines.SequentialTaskGroupExecutor
-	db_tx                      state_db.WriteTx
+	io                         state_db.ReadWriter
 	acc_tr_writer_opts         trie.WriterCacheOpts
 	main_trie_writer           trie.Writer
 }
@@ -34,7 +32,7 @@ type TrieWriterOpts struct {
 }
 
 func (self *TrieSink) Init(state_root *common.Hash, opts TrieSinkOpts) *TrieSink {
-	if state_root != nil && (*state_root == state_common.EmptyRLPListHash || *state_root == common.ZeroHash) {
+	if state_common.IsEmptyStateRoot(state_root) {
 		state_root = nil
 	}
 	self.main_trie_writer.Init(state_db.MainTrieSchema{}, state_root, opts.TrieWriters.MainTrieWriterOpts)
@@ -44,9 +42,8 @@ func (self *TrieSink) Init(state_root *common.Hash, opts TrieSinkOpts) *TrieSink
 	return self
 }
 
-func (self *TrieSink) SetTransaction(db_tx state_db.WriteTx) {
-	self.thread_main_trie_write.Join()
-	self.db_tx = db_tx
+func (self *TrieSink) SetIO(io state_db.ReadWriter) {
+	self.io = io
 }
 
 func (self *TrieSink) StartMutation(addr *common.Address) state_evm.AccountMutation {
@@ -54,8 +51,9 @@ func (self *TrieSink) StartMutation(addr *common.Address) state_evm.AccountMutat
 }
 
 func (self *TrieSink) Delete(addr *common.Address) {
+	io := self.io
 	self.thread_main_trie_write.Submit(func() {
-		self.main_trie_writer.Delete(state_db.MainTrieWriteTxn{self.db_tx}, keccak256.Hash(addr[:]))
+		self.main_trie_writer.Delete(state_db.MainTrieIOAdapter{io}, keccak256.Hash(addr[:]))
 	})
 }
 
@@ -71,13 +69,14 @@ type TrieSinkAccountMutation struct {
 }
 
 func (self *TrieSinkAccountMutation) Update(upd state_evm.AccountChange) {
+	io := self.host.io
 	if upd.CodeDirty {
-		self.host.db_tx.Put(state_db.COL_code, upd.CodeHash, upd.Code)
+		io.Put(state_db.COL_code, upd.CodeHash, upd.Code)
 	}
 	if !self.pending {
 		self.pending = true
 		self.host.thread_main_trie_write.Submit(func() {
-			self.host.main_trie_writer.Put(state_db.MainTrieWriteTxn{self.host.db_tx}, keccak256.Hash(self.addr[:]), self)
+			self.host.main_trie_writer.Put(state_db.MainTrieIOAdapter{io}, keccak256.Hash(self.addr[:]), self)
 		})
 	}
 	self.thread.Submit(func() {
@@ -90,19 +89,19 @@ func (self *TrieSinkAccountMutation) Update(upd state_evm.AccountChange) {
 				Init(state_db.AccountTrieSchema{}, upd.StorageRootHash, self.host.acc_tr_writer_opts)
 		}
 		var big_conv bigconv.BigConv
-		txn := state_db.AccountTrieWriteTxn{self.addr, self.host.db_tx}
+		trie_io := state_db.AccountTrieIOAdapter{self.addr, io}
 		for k, v := range upd.StorageDirty {
 			if k_h := keccak256.Hash(big_conv.ToHash(k.Int())[:]); v.Sign() == 0 {
-				self.trie_writer.Delete(txn, k_h)
+				self.trie_writer.Delete(trie_io, k_h)
 			} else {
-				self.trie_writer.Put(txn, k_h, state_db.NewAccStorageTrieValue(v.Bytes()))
+				self.trie_writer.Put(trie_io, k_h, state_db.NewAccStorageTrieValue(v.Bytes()))
 			}
 		}
 		for k, v := range upd.RawStorageDirty {
 			if k_h := keccak256.Hash(k[:]); len(v) == 0 {
-				self.trie_writer.Delete(txn, k_h)
+				self.trie_writer.Delete(trie_io, k_h)
 			} else {
-				self.trie_writer.Put(txn, k_h, state_db.NewAccStorageTrieValue(v))
+				self.trie_writer.Put(trie_io, k_h, state_db.NewAccStorageTrieValue(v))
 			}
 		}
 	})
@@ -113,9 +112,10 @@ func (self *TrieSinkAccountMutation) Commit() {
 		return
 	}
 	self.pending = false
+	io := self.host.io
 	self.thread.Submit(func() {
 		if self.trie_writer != nil {
-			self.acc.StorageRootHash = self.trie_writer.Commit(state_db.AccountTrieWriteTxn{self.addr, self.host.db_tx})
+			self.acc.StorageRootHash = self.trie_writer.Commit(state_db.AccountTrieIOAdapter{self.addr, io})
 		}
 		self.enc_storage, self.enc_hash = self.acc.EncodeForTrie()
 	})
@@ -126,14 +126,13 @@ func (self *TrieSinkAccountMutation) EncodeForTrie() (r0, r1 []byte) {
 	return self.enc_storage, self.enc_hash
 }
 
-func (self *TrieSink) Commit() (state_root *common.Hash) {
+func (self *TrieSink) CommitSync() (state_root *common.Hash) {
+	io := self.io
 	self.thread_main_trie_write.Submit(func() {
-		if state_root = self.main_trie_writer.Commit(state_db.MainTrieWriteTxn{self.db_tx}); state_root == nil {
+		if state_root = self.main_trie_writer.Commit(state_db.MainTrieIOAdapter{io}); state_root == nil {
 			state_root = &state_common.EmptyRLPListHash
 		}
 	})
 	self.thread_main_trie_write.Join()
-	util.PanicIfNotNil(self.db_tx.Commit()) // TODO move out of here, this should be async
-	self.db_tx = nil
 	return
 }

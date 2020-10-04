@@ -44,6 +44,8 @@ type PrecompiledContract interface {
 
 type Precompiles [255]PrecompiledContract
 
+var PrecompiledContractAddrPrefix = make([]byte, common.AddressLength-1)
+
 func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) {
 	last_byte := address[common.AddressLength-1]
 	if last_byte == 0 {
@@ -64,8 +66,6 @@ func (self *Precompiles) Put(address *common.Address, contract PrecompiledContra
 	assert.Holds(self[pos] == nil)
 	self[pos] = contract
 }
-
-var PrecompiledContractAddrPrefix = make([]byte, common.AddressLength-1)
 
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
 // contracts used in the Frontier and Homestead releases.

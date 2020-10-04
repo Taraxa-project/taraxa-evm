@@ -6,8 +6,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/util_rlp"
 
@@ -19,8 +17,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
-
-var MainTrieReader = trie.Reader{MainTrieSchema{}}
 
 type MainTrieSchema struct{}
 
@@ -143,34 +139,30 @@ var acc_encoder_pool = sync.Pool{New: func() interface{} {
 	return ret
 }}
 
-type MainTrieReadTxn struct {
-	Tx ReadTx
+type MainTrieInputAdapter struct{ Reader }
+
+func (self MainTrieInputAdapter) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Get(COL_main_trie_value, key, cb)
 }
 
-func (self MainTrieReadTxn) GetValue(key *common.Hash, cb func(v []byte)) {
-	self.Tx.Get(COL_main_trie_value, key, cb)
+func (self MainTrieInputAdapter) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Get(COL_main_trie_node, node_hash, cb)
 }
 
-func (self MainTrieReadTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
-	self.Tx.Get(COL_main_trie_node, node_hash, cb)
+type MainTrieIOAdapter struct{ ReadWriter }
+
+func (self MainTrieIOAdapter) GetValue(key *common.Hash, cb func(v []byte)) {
+	self.Get(COL_main_trie_value, key, cb)
 }
 
-type MainTrieWriteTxn struct {
-	Tx WriteTx
+func (self MainTrieIOAdapter) GetNode(node_hash *common.Hash, cb func([]byte)) {
+	self.Get(COL_main_trie_node, node_hash, cb)
 }
 
-func (self MainTrieWriteTxn) GetValue(key *common.Hash, cb func(v []byte)) {
-	self.Tx.Get(COL_main_trie_value, key, cb)
+func (self MainTrieIOAdapter) PutValue(key *common.Hash, v []byte) {
+	self.Put(COL_main_trie_value, key, v)
 }
 
-func (self MainTrieWriteTxn) GetNode(node_hash *common.Hash, cb func([]byte)) {
-	self.Tx.Get(COL_main_trie_node, node_hash, cb)
-}
-
-func (self MainTrieWriteTxn) PutValue(key *common.Hash, v []byte) {
-	self.Tx.Put(COL_main_trie_value, key, v)
-}
-
-func (self MainTrieWriteTxn) PutNode(node_hash *common.Hash, node []byte) {
-	self.Tx.Put(COL_main_trie_node, node_hash, node)
+func (self MainTrieIOAdapter) PutNode(node_hash *common.Hash, node []byte) {
+	self.Put(COL_main_trie_node, node_hash, node)
 }

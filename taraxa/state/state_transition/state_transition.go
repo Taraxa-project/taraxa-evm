@@ -1,13 +1,11 @@
 package state_transition
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/core/types"
-
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-
-	"github.com/Taraxa-project/taraxa-evm/core"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
@@ -21,93 +19,81 @@ import (
 // TODO memory leaks??
 type StateTransition struct {
 	exec_cfg          state_common.ExecutionConfig
-	db                state_db.DB
-	dpos_contract     *dpos.Contract
-	curr_blk_num      types.BlockNum
-	evm               vm.EVM
-	last_block_reader state_db.BlockReader
+	state             state_db.LatestState
+	pending_blk_state state_db.PendingBlockState
 	evm_state         state_evm.EVMState
+	evm               vm.EVM
 	trie_sink         TrieSink
+	dpos_contract     *dpos.Contract
 }
-
-type StateTransitionOpts struct {
+type Opts struct {
 	TrieWriters               TrieWriterOpts
 	ExpectedMaxNumTrxPerBlock uint32
 }
 
 func (self *StateTransition) Init(
-	db state_db.DB,
+	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
-	chain_cfg state_common.ChainConfig,
-	curr_blk_num types.BlockNum, // TODO use types.BlockNumberNIL instead of 0
-	curr_state_root *common.Hash,
-	opts StateTransitionOpts,
+	dpos_api *dpos.API,
+	exec_cfg state_common.ExecutionConfig,
+	genesis_balances core.BalanceMap,
+	opts Opts,
 ) *StateTransition {
-	self.db = db
-	self.exec_cfg = chain_cfg.Execution
-	self.curr_blk_num = curr_blk_num
-	self.last_block_reader = state_db.BlockReader{db.ReadBlock(self.curr_blk_num)}
-	defer self.last_block_reader.NotifyDone()
+	self.exec_cfg = exec_cfg
+	self.state = state
 	dirty_accs_per_block := uint32(util.CeilPow2(int(opts.ExpectedMaxNumTrxPerBlock * 2)))
 	accs_per_block := dirty_accs_per_block * 2
-	self.evm_state.Init(&self.last_block_reader, state_evm.CacheOpts{
+	self.evm_state.Init(state_evm.CacheOpts{
 		AccountBufferSize: accs_per_block * 2,
 		RevertLogSize:     4 * 64,
 	})
-	self.evm.Init(vm.Config{
+	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		U256PoolSize:        vm.StackLimit,
 		NumStacksToPrealloc: vm.StackLimit,
 		StackPrealloc:       vm.StackLimit,
 		MemPoolSize:         32 * 1024 * 1024,
 	})
-	self.evm.SetGetHash(get_block_hash)
-	self.evm.SetState(&self.evm_state)
-	self.trie_sink.Init(curr_state_root, TrieSinkOpts{
+	state_desc := state.GetCommittedDescriptor()
+	self.trie_sink.Init(&state_desc.StateRoot, TrieSinkOpts{
 		TrieWriters:              opts.TrieWriters,
 		NumDirtyAccountsToBuffer: dirty_accs_per_block,
 	})
-	if chain_cfg.DPOS != nil {
-		self.dpos_contract = new(dpos.Contract).Init(*chain_cfg.DPOS, dpos_storage_adapter{self})
+	if dpos_api != nil {
+		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
+	}
+	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
+		self.begin_block()
+		assert.Holds(self.pending_blk_state.GetNumber() == 0)
+		for addr, balance := range genesis_balances {
+			self.evm_state.GetAccount(&addr).AddBalance(balance)
+		}
+		if self.dpos_contract != nil {
+			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
+		}
+		self.evm_state_checkpoint()
+		self.Commit()
 	}
 	return self
 }
 
-type GenesisConfig struct {
-	Balances core.BalanceMap
-	DPOS     *dpos.GenesisConfig
-}
-
-func (self *StateTransition) GenesisInit(cfg GenesisConfig) *common.Hash {
-	self.begin_block()
-	for addr, balance := range cfg.Balances {
-		self.evm_state.GetAccount(&addr).AddBalance(balance)
-	}
-	if self.dpos_contract != nil {
-		util.PanicIfNotNil(self.dpos_contract.GenesisInit(*cfg.DPOS))
-	}
-	self.evm_state_checkpoint()
-	return self.Commit()
-}
-
 func (self *StateTransition) begin_block() {
-	db_tx := self.db.WriteBlock(self.curr_blk_num)
-	self.last_block_reader.Tx = db_tx
-	self.trie_sink.SetTransaction(db_tx)
+	self.pending_blk_state = self.state.BeginPendingBlock()
+	self.evm_state.SetInput(state_db.ExtendedReader{self.pending_blk_state})
+	self.trie_sink.SetIO(self.pending_blk_state)
 }
 
 func (self *StateTransition) evm_state_checkpoint() {
 	self.evm_state.Checkpoint(&self.trie_sink, self.evm.Rules.IsEIP158)
 }
 
-func (self *StateTransition) BeginBlock(blk *vm.BlockWithoutNumber) {
-	self.curr_blk_num++
+func (self *StateTransition) BeginBlock(blk *vm.BlockInfo) {
 	self.begin_block()
-	self.evm.SetBlock(self.curr_blk_num, blk)
-	precompiles_changed := self.evm.SetRules(self.exec_cfg.ETHForks.Rules(self.curr_blk_num))
-	if self.dpos_contract != nil && precompiles_changed {
+	blk_n := self.pending_blk_state.GetNumber()
+	rules_changed := self.evm.SetBlock(blk_n, blk, self.exec_cfg.ETHForks.Rules(blk_n))
+	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.exec_cfg.ETHForks.IsDAOFork(self.curr_blk_num) {
+	if self.exec_cfg.ETHForks.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
 	}
@@ -120,22 +106,27 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
-	defer self.last_block_reader.NotifyDone()
+	blk_n := self.pending_blk_state.GetNumber()
 	if self.dpos_contract != nil {
-		self.dpos_contract.Commit(self.curr_blk_num)
+		self.dpos_contract.Commit(blk_n)
 		self.evm_state_checkpoint()
 	}
 	if !self.exec_cfg.DisableBlockRewards {
 		ethash.AccumulateRewards(
 			self.evm.Rules,
-			ethash.BlockNumAndCoinbase{self.curr_blk_num, self.evm.Block.Author},
+			ethash.BlockNumAndCoinbase{blk_n, self.evm.Block.Author},
 			uncles,
 			&self.evm_state)
 		self.evm_state_checkpoint()
 	}
+	self.pending_blk_state = nil
 }
 
-func (self *StateTransition) Commit() *common.Hash {
+func (self *StateTransition) Commit() (state_root *common.Hash) {
 	self.evm_state.Commit()
-	return self.trie_sink.Commit()
+	self.evm_state.SetInput(nil)
+	state_root = self.trie_sink.CommitSync()
+	self.trie_sink.SetIO(nil)
+	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
+	return
 }

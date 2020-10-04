@@ -7,21 +7,19 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 )
 
-type ChainConfig struct {
-	Execution ExecutionConfig
-	DPOS      *dpos.Config
-}
-type ExecutionConfig struct {
+type ExecutionConfig = struct {
 	DisableBlockRewards bool
 	ETHForks            params.ChainConfig
-	Options             vm.ExecutionOptions
+	Options             vm.ExecutionOpts
 }
-
 type UncleBlock = ethash.BlockNumAndCoinbase
 
 var EmptyRLPListHash = func() common.Hash {
 	return crypto.Keccak256Hash(rlp.MustEncodeToBytes([]byte(nil)))
 }()
+
+func IsEmptyStateRoot(state_root *common.Hash) bool {
+	return state_root == nil || *state_root == EmptyRLPListHash || *state_root == common.ZeroHash
+}

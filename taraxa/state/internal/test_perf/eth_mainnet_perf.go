@@ -128,13 +128,13 @@ func main() {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
 		state_common.ChainConfig{
-			Execution: state_common.ExecutionConfig{
+			ExecutionConfig: state_common.ExecutionConfig{
 				ETHForks: *params.MainnetChainConfig,
 			},
 		},
 		last_blk_num,
 		&last_root,
-		state_transition.StateTransitionOpts{
+		state_transition.Opts{
 			TrieWriters: state_transition.TrieWriterOpts{
 				MainTrieWriterOpts: trie.WriterCacheOpts{
 					FullNodeLevelsToCache: 16,
@@ -149,7 +149,7 @@ func main() {
 	)
 
 	if is_genesis {
-		root := SUT.GenesisInit(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
+		root := SUT.apply_genesis(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
 		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
 		write_last_block_n(last_blk_num_file, 0)
 	}
@@ -172,7 +172,7 @@ func main() {
 		fmt.Println("blocks:", block_num_from, "-", last_blk_num, "tx_count:", tx_count)
 		now := time.Now()
 		for _, b := range block_buf {
-			SUT.BeginBlock((*vm.BlockWithoutNumber)(unsafe.Pointer(&b.VmBlock)))
+			SUT.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
 			for i := range b.Transactions {
 				SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&b.Transactions[i])))
 			}

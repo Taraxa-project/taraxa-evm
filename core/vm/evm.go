@@ -62,15 +62,14 @@ type EVM struct {
 }
 type ExecutionEnvironment struct {
 	GetHash           GetHashFunc
-	BlockNumber       types.BlockNum // Provides information for NUMBER
-	Block             BlockWithoutNumber
-	State             State
+	Block             Block
 	Trx               *Transaction
-	Depth             uint16
+	State             State
 	Rules             Rules
 	rules_initialized bool
+	Depth             uint16
 }
-type Config = struct {
+type Opts = struct {
 	U256PoolSize        uint32
 	NumStacksToPrealloc uint16
 	StackPrealloc       uint16
@@ -80,7 +79,11 @@ type GetHashFunc = func(types.BlockNum) *big.Int
 type Rules struct {
 	IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg bool
 }
-type BlockWithoutNumber struct {
+type Block struct {
+	Number types.BlockNum
+	BlockInfo
+}
+type BlockInfo struct {
 	Author     common.Address // Provides information for COINBASE
 	GasLimit   uint64         // Provides information for GASLIMIT
 	Time       uint64         // Provides information for TIME
@@ -95,7 +98,7 @@ type Transaction struct {
 	Gas      uint64
 	Input    []byte
 }
-type ExecutionOptions struct {
+type ExecutionOpts struct {
 	DisableNonceCheck, DisableGasFee bool
 }
 type ExecutionResult struct {
@@ -107,31 +110,22 @@ type ExecutionResult struct {
 	ConsensusErr    util.ErrorString
 }
 
-func (self *EVM) Init(cfg Config) *EVM {
-	assert.Holds(cfg.NumStacksToPrealloc <= StackLimit)
-	assert.Holds(cfg.StackPrealloc <= StackLimit)
-	self.mem_pool.buf = make([]byte, cfg.MemPoolSize)
-	self.int_pool.Init(int(cfg.U256PoolSize))
-	self.stack_prealloc = make([]Stack, cfg.NumStacksToPrealloc)
+func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
+	assert.Holds(opts.NumStacksToPrealloc <= StackLimit)
+	assert.Holds(opts.StackPrealloc <= StackLimit)
+	self.GetHash = get_hash
+	self.State = state
+	self.mem_pool.buf = make([]byte, opts.MemPoolSize)
+	self.int_pool.Init(int(opts.U256PoolSize))
+	self.stack_prealloc = make([]Stack, opts.NumStacksToPrealloc)
 	for i := range self.stack_prealloc {
-		self.stack_prealloc[i].Init(int(cfg.StackPrealloc))
+		self.stack_prealloc[i].Init(int(opts.StackPrealloc))
 	}
 	return self
 }
 
-func (self *EVM) SetGetHash(get_hash GetHashFunc) {
-	self.GetHash = get_hash
-}
-
-func (self *EVM) SetState(state State) {
-	self.State = state
-}
-
-func (self *EVM) SetBlock(blk_num types.BlockNum, blk *BlockWithoutNumber) {
-	self.BlockNumber, self.Block = blk_num, *blk
-}
-
-func (self *EVM) SetRules(rules Rules) (precompiles_changed bool) {
+func (self *EVM) SetBlock(blk_num types.BlockNum, blk_info *BlockInfo, rules Rules) (rules_changed bool) {
+	self.Block.Number, self.Block.BlockInfo = blk_num, *blk_info
 	if self.rules_initialized {
 		if self.Rules == rules {
 			return false
@@ -173,7 +167,7 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(trx *Transaction, opts ExecutionOptions) (ret ExecutionResult) {
+func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
 	self.Trx = trx
 	defer func() {
 		self.Trx = nil

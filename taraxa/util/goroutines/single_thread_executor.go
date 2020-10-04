@@ -2,22 +2,22 @@ package goroutines
 
 import (
 	"sync"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 )
 
 type SingleThreadExecutor struct {
-	tasks chan func()
+	tasks  chan func()
+	closed bool
 }
 
 func (self *SingleThreadExecutor) Init(buffer_size uint32) *SingleThreadExecutor {
 	self.tasks = make(chan func(), buffer_size)
 	go func() {
-		for {
-			t, ok := <-self.tasks
-			if !ok {
-				return
-			}
-			t()
+		for !self.closed {
+			(<-self.tasks)()
 		}
+		assert.Holds(len(self.tasks) == 0)
 	}()
 	return self
 }
@@ -33,7 +33,12 @@ func (self *SingleThreadExecutor) Join() {
 	m.Lock()
 }
 
-func (self *SingleThreadExecutor) Close() {
-	// TODO
-	panic("")
+func (self *SingleThreadExecutor) JoinAndClose() {
+	var m sync.Mutex
+	m.Lock()
+	self.Submit(func() {
+		self.closed = true
+		m.Unlock()
+	})
+	m.Lock()
 }

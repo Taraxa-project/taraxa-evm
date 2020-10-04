@@ -35,14 +35,17 @@ type CacheOpts struct {
 	RevertLogSize     uint32
 }
 
-func (self *EVMState) Init(in Input, cache_opts CacheOpts) {
-	self.in = in
+func (self *EVMState) Init(cache_opts CacheOpts) {
 	// TODO think about better config
 	self.accounts.Init(AccountMapOptions{cache_opts.AccountBufferSize, 4})
 	self.accounts_in_curr_ver_original = make(Accounts, 0, cache_opts.AccountBufferSize/8)
 	self.accounts_in_curr_ver = self.accounts_in_curr_ver_original
 	self.reverts_original = make([]func(), 0, cache_opts.RevertLogSize)
 	self.reverts = self.reverts_original
+}
+
+func (self *EVMState) SetInput(in Input) {
+	self.in = in
 }
 
 func (self *EVMState) GetAccount(addr *common.Address) vm.StateAccount {
@@ -65,6 +68,10 @@ func (self *EVMState) GetAccountConcrete(addr *common.Address) *Account {
 		acc.loaded_from_db = true
 	})
 	return acc
+}
+
+func (self *EVMState) GetAccountStorageFromDB(addr *common.Address, k *common.Hash, cb func([]byte)) {
+	self.in.GetAccountStorage(addr, k, cb)
 }
 
 func (self *EVMState) AddLog(log vm.LogRecord) {
@@ -117,13 +124,13 @@ func (self *EVMState) register_change(revert func()) {
 	self.reverts = append(self.reverts, revert)
 }
 
-func (self *EVMState) Checkpoint(sink Sink, eip158 bool) {
+func (self *EVMState) Checkpoint(db_writer DBWriter, eip158 bool) {
 	for _, acc := range self.accounts_in_curr_ver {
 		acc.in_curr_version = false
 		if acc.deleted {
 			continue
 		}
-		status := acc.flush(sink, eip158)
+		status := acc.flush(db_writer, eip158)
 		acc.deleted = status == deleted
 		if !acc.in_dirties && (status == updated || acc.deleted && acc.loaded_from_db) {
 			acc.in_dirties = true

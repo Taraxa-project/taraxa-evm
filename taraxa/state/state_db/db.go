@@ -16,16 +16,32 @@ const (
 	COL_COUNT
 )
 
+// TODO a wrapper with common functionality. Delegate only the most low-level stuff to these interfaces
 type DB interface {
-	ReadBlock(types.BlockNum) ReadTx
-	WriteBlock(types.BlockNum) WriteTx
+	ReadOnlyDB
+	GetLatestState() LatestState
 }
-type ReadTx interface {
+type ReadOnlyDB interface {
+	GetBlockState(types.BlockNum) Reader
+}
+type LatestState interface {
+	GetCommittedDescriptor() StateDescriptor
+	BeginPendingBlock() PendingBlockState
+	Commit(state_root *common.Hash) error
+}
+type Reader interface {
 	Get(Column, *common.Hash, func([]byte))
-	NotifyDoneReading()
 }
-type WriteTx interface {
-	ReadTx
+type ReadWriter interface {
+	Reader
 	Put(Column, *common.Hash, []byte)
-	Commit() error
+}
+type PendingBlockState interface {
+	ReadWriter
+	GetNumber() types.BlockNum
+}
+
+type StateDescriptor struct {
+	BlockNum  types.BlockNum
+	StateRoot common.Hash
 }

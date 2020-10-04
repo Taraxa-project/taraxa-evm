@@ -544,7 +544,7 @@ func opGasprice(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) (_ []byte, _ error) {
 	if num := stack.pop(); num.IsUint64() {
 		num_64 := num.Uint64()
-		if evm.BlockNumber-257 < num_64 && num_64 < evm.BlockNumber {
+		if evm.Block.Number-257 < num_64 && num_64 < evm.Block.Number {
 			stack.push(evm.GetHash(num_64))
 			return
 		}
@@ -564,7 +564,7 @@ func opTimestamp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 }
 
 func opNumber(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.BlockNumber)))
+	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.Block.Number)))
 	return nil, nil
 }
 

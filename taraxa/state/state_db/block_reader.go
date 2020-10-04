@@ -6,31 +6,24 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
-type BlockReader struct {
-	Tx ReadTx
-}
+type ExtendedReader struct{ Reader }
 
-func (self *BlockReader) NotifyDone() {
-	self.Tx.NotifyDoneReading()
-	self.Tx = nil
-}
-
-func (self BlockReader) GetCode(hash *common.Hash) (ret []byte) {
-	self.Tx.Get(COL_code, hash, func(bytes []byte) {
+func (self ExtendedReader) GetCode(hash *common.Hash) (ret []byte) {
+	self.Get(COL_code, hash, func(bytes []byte) {
 		ret = common.CopyBytes(bytes)
 	})
 	return
 }
 
-func (self BlockReader) GetAccountStorage(addr *common.Address, key *common.Hash, cb func([]byte)) {
-	AccountTrieReadTxn{addr, self.Tx}.GetValue(keccak256.Hash(key[:]), cb)
+func (self ExtendedReader) GetAccountStorage(addr *common.Address, key *common.Hash, cb func([]byte)) {
+	AccountTrieInputAdapter{addr, self}.GetValue(keccak256.Hash(key[:]), cb)
 }
 
-func (self BlockReader) GetRawAccount(addr *common.Address, cb func([]byte)) {
-	MainTrieReadTxn{self.Tx}.GetValue(keccak256.Hash(addr[:]), cb)
+func (self ExtendedReader) GetRawAccount(addr *common.Address, cb func([]byte)) {
+	MainTrieInputAdapter{self}.GetValue(keccak256.Hash(addr[:]), cb)
 }
 
-func (self BlockReader) GetCodeByAddress(addr *common.Address) (ret []byte) {
+func (self ExtendedReader) GetCodeByAddress(addr *common.Address) (ret []byte) {
 	self.GetRawAccount(addr, func(acc []byte) {
 		if code_hash := CodeHash(acc); code_hash != nil {
 			ret = self.GetCode(code_hash)
@@ -39,14 +32,14 @@ func (self BlockReader) GetCodeByAddress(addr *common.Address) (ret []byte) {
 	return
 }
 
-func (self BlockReader) ForEachStorage(addr *common.Address, f func(*common.Hash, []byte)) {
+func (self ExtendedReader) ForEachStorage(addr *common.Address, f func(*common.Hash, []byte)) {
 	self.GetRawAccount(addr, func(acc []byte) {
 		storage_root := StorageRoot(acc)
 		if storage_root == nil {
 			return
 		}
-		AccountTrieReader.ForEach(
-			AccountTrieReadTxn{addr, self.Tx},
+		trie.Reader{AccountTrieSchema{}}.ForEach(
+			AccountTrieInputAdapter{addr, self},
 			storage_root,
 			true,
 			func(hash *common.Hash, val trie.Value) {
@@ -61,9 +54,9 @@ type Proof struct {
 	StorageProofs []trie.Proof
 }
 
-func (self BlockReader) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
-	ret.AccountProof = MainTrieReader.Prove(
-		MainTrieReadTxn{self.Tx},
+func (self ExtendedReader) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
+	ret.AccountProof = trie.Reader{MainTrieSchema{}}.Prove(
+		MainTrieInputAdapter{self},
 		state_root,
 		keccak256.Hash(addr[:]))
 	if len(ret.AccountProof.Value) == 0 || len(keys) == 0 {
@@ -74,9 +67,9 @@ func (self BlockReader) Prove(state_root *common.Hash, addr *common.Address, key
 	if storage_root == nil {
 		return
 	}
-	acc_txn := AccountTrieReadTxn{addr, self.Tx}
+	acc_txn := AccountTrieInputAdapter{addr, self}
 	for i := 0; i < len(keys); i++ {
-		ret.StorageProofs[i] = AccountTrieReader.Prove(acc_txn, storage_root, keccak256.Hash(keys[i][:]))
+		ret.StorageProofs[i] = trie.Reader{AccountTrieSchema{}}.Prove(acc_txn, storage_root, keccak256.Hash(keys[i][:]))
 	}
 	return
 }

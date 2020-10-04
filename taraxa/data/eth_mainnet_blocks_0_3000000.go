@@ -9,7 +9,7 @@ import (
 func Parse_eth_mainnet_blocks_0_300000() (ret []struct {
 	Hash         common.Hash
 	StateRoot    common.Hash
-	EVMBlock     vm.BlockWithoutNumber
+	EVMBlock     vm.BlockInfo
 	Transactions []vm.Transaction
 	UncleBlocks  []state_common.UncleBlock
 }) {

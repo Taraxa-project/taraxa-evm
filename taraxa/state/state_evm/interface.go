@@ -1,9 +1,8 @@
 package state_evm
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -25,7 +24,7 @@ type Input interface {
 	GetRawAccount(*common.Address, func([]byte))
 	GetAccountStorage(*common.Address, *common.Hash, func([]byte))
 }
-type Sink interface {
+type DBWriter interface {
 	StartMutation(*common.Address) AccountMutation
 	Delete(*common.Address)
 }
