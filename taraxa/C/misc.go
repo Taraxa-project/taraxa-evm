@@ -12,23 +12,28 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
-//export taraxa_evm_SetGCPercent
-func taraxa_evm_SetGCPercent(pct C.int) {
+//export go_set_gc_percent
+func go_set_gc_percent(pct C.int) {
 	debug.SetGCPercent(int(pct))
 }
 
-//export taraxa_evm_GC
-func taraxa_evm_GC() {
+//export go_gc
+func go_gc() {
 	runtime.GC()
 }
 
-//export taraxa_evm_keccak256_InitPool
-func taraxa_evm_keccak256_InitPool(size C.uint64_t) {
+//export go_gc_async
+func go_gc_async() {
+	go runtime.GC()
+}
+
+//export taraxa_evm_keccak256_init_pool
+func taraxa_evm_keccak256_init_pool(size C.uint64_t) {
 	keccak256.InitPool(uint64(size))
 }
 
-//export taraxa_evm_MainnetGenesisBalances
-func taraxa_evm_MainnetGenesisBalances(cb C.taraxa_evm_BytesCallback) {
+//export taraxa_evm_mainnet_genesis_balances
+func taraxa_evm_mainnet_genesis_balances(cb C.taraxa_evm_BytesCallback) {
 	call_bytes_cb(hexutil.MustDecode(core.MainnetAllocData), cb)
 }
 

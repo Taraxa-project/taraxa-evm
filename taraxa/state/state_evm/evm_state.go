@@ -17,9 +17,10 @@ type EVMState struct {
 	accounts_in_curr_ver_original Accounts
 	accounts_in_curr_ver          Accounts
 	reverts_original, reverts     []func()
+	dirties_original              Accounts
+	dirties                       Accounts
 	logs                          []vm.LogRecord
 	refund                        uint64
-	dirties                       []*Account
 	bigconv                       bigconv.BigConv
 }
 type EVMStateAccountHeader struct {
@@ -30,18 +31,18 @@ type EVMStateAccountHeader struct {
 	deleted         bool
 }
 type Accounts = []*Account
-type CacheOpts struct {
-	AccountBufferSize uint32
-	RevertLogSize     uint32
+type Opts struct {
+	NumTransactionsToBuffer uint32
 }
 
-func (self *EVMState) Init(cache_opts CacheOpts) {
-	// TODO think about better config
-	self.accounts.Init(AccountMapOptions{cache_opts.AccountBufferSize, 4})
-	self.accounts_in_curr_ver_original = make(Accounts, 0, cache_opts.AccountBufferSize/8)
+func (self *EVMState) Init(opts Opts) {
+	self.accounts.Init(AccountMapOptions{opts.NumTransactionsToBuffer * 32, 4})
+	self.accounts_in_curr_ver_original = make(Accounts, 0, 256)
 	self.accounts_in_curr_ver = self.accounts_in_curr_ver_original
-	self.reverts_original = make([]func(), 0, cache_opts.RevertLogSize)
+	self.reverts_original = make([]func(), 0, 1024) // 8KB
 	self.reverts = self.reverts_original
+	self.dirties_original = make(Accounts, 0, opts.NumTransactionsToBuffer*16)
+	self.dirties = self.dirties_original
 }
 
 func (self *EVMState) SetInput(in Input) {
@@ -124,7 +125,7 @@ func (self *EVMState) register_change(revert func()) {
 	self.reverts = append(self.reverts, revert)
 }
 
-func (self *EVMState) Checkpoint(db_writer DBWriter, eip158 bool) {
+func (self *EVMState) CommitTransaction(db_writer Output, eip158 bool) {
 	for _, acc := range self.accounts_in_curr_ver {
 		acc.in_curr_version = false
 		if acc.deleted {
@@ -161,6 +162,9 @@ func (self *EVMState) Commit() {
 		}
 		acc.unload()
 	}
-	bin.ZFill_3(unsafe.Pointer(&self.dirties), unsafe.Sizeof(self.dirties[0]))
-	self.dirties = self.dirties[:0]
+	bin.ZFill_2(
+		unsafe.Pointer(&self.dirties_original),
+		len(self.dirties),
+		unsafe.Sizeof(self.dirties[0]))
+	self.dirties = self.dirties_original
 }

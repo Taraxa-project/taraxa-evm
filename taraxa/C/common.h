@@ -11,14 +11,13 @@
     } name; \
     inline out_t name##Apply(name fn, in_t arg) { return fn.Apply(fn.Receiver, arg); } \
 
-typedef uint64_t taraxa_evm_BlockNum;
 typedef SLICE(uint8_t) taraxa_evm_Bytes;
 typedef struct {
     uint8_t Val[32];
 } taraxa_evm_Hash;
 
 FUNCTION(taraxa_evm_BytesCallback, taraxa_evm_Bytes, void);
-FUNCTION(taraxa_evm_GetBlockHash, taraxa_evm_BlockNum, taraxa_evm_Hash);
+FUNCTION(taraxa_evm_GetBlockHash, uint64_t, taraxa_evm_Hash);
 
 #undef SLICE
 #undef FUNCTION

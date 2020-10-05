@@ -38,8 +38,8 @@ import (
 // requires a deterministic gas count based on the input size of the Run method of the
 // contract.
 type PrecompiledContract interface {
-	RequiredGas(ctx *CallFrame, evm *EVM) uint64
-	Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error)
+	RequiredGas(ctx CallFrame, evm *EVM) uint64
+	Run(ctx CallFrame, evm *EVM) ([]byte, error)
 }
 
 type Precompiles [255]PrecompiledContract
@@ -92,11 +92,11 @@ var PrecompiledContractsByzantium = Precompiles{
 // ECRECOVER implemented as a native contract.
 type ecrecover struct{}
 
-func (c ecrecover) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c ecrecover) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return EcrecoverGas
 }
 
-func (c ecrecover) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c ecrecover) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	const ecRecoverInputLength = 128
 	input := ctx.Input
 	input = common.RightPadBytes(input, ecRecoverInputLength)
@@ -129,10 +129,10 @@ type sha256hash struct{}
 //
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
-func (c sha256hash) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c sha256hash) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return uint64(len(ctx.Input)+31)/32*Sha256PerWordGas + Sha256BaseGas
 }
-func (c sha256hash) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c sha256hash) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	h := sha256.Sum256(ctx.Input)
 	return h[:], nil
 }
@@ -144,10 +144,10 @@ type ripemd160hash struct{}
 //
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
-func (c ripemd160hash) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c ripemd160hash) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return uint64(len(ctx.Input)+31)/32*Ripemd160PerWordGas + Ripemd160BaseGas
 }
-func (c ripemd160hash) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c ripemd160hash) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	ripemd := ripemd160.New()
 	ripemd.Write(ctx.Input)
 	return common.LeftPadBytes(ripemd.Sum(nil), 32), nil
@@ -160,10 +160,10 @@ type dataCopy struct{}
 //
 // This method does not require any overflow checking as the input size gas costs
 // required for anything significant is so high it's impossible to pay for.
-func (c dataCopy) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c dataCopy) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return uint64(len(ctx.Input)+31)/32*IdentityPerWordGas + IdentityBaseGas
 }
-func (c dataCopy) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c dataCopy) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	return ctx.Input, nil
 }
 
@@ -185,7 +185,7 @@ var (
 )
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
-func (c bigModExp) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c bigModExp) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	input := ctx.Input
 	var (
 		baseLen = new(big.Int).SetBytes(getData(input, 0, 32))
@@ -245,7 +245,7 @@ func (c bigModExp) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
 	return gas.Uint64()
 }
 
-func (c bigModExp) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c bigModExp) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	input := ctx.Input
 	var (
 		baseLen = new(big.Int).SetBytes(getData(input, 0, 32)).Uint64()
@@ -298,11 +298,11 @@ func newTwistPoint(blob []byte) (*bn256.G2, error) {
 type bn256Add struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
-func (c bn256Add) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c bn256Add) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return Bn256AddGas
 }
 
-func (c bn256Add) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c bn256Add) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	input := ctx.Input
 	x, err := newCurvePoint(getData(input, 0, 64))
 	if err != nil {
@@ -321,11 +321,11 @@ func (c bn256Add) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error)
 type bn256ScalarMul struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
-func (c bn256ScalarMul) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c bn256ScalarMul) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return Bn256ScalarMulGas
 }
 
-func (c bn256ScalarMul) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c bn256ScalarMul) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	input := ctx.Input
 	p, err := newCurvePoint(getData(input, 0, 64))
 	if err != nil {
@@ -351,11 +351,11 @@ var (
 type bn256Pairing struct{}
 
 // RequiredGas returns the gas required to execute the pre-compiled contract.
-func (c bn256Pairing) RequiredGas(ctx *CallFrame, evm *EVM) uint64 {
+func (c bn256Pairing) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
 	return Bn256PairingBaseGas + uint64(len(ctx.Input)/192)*Bn256PairingPerPointGas
 }
 
-func (c bn256Pairing) Run(ctx *CallFrame, env *ExecutionEnvironment) ([]byte, error) {
+func (c bn256Pairing) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	input := ctx.Input
 	// Handle some corner cases cheaply
 	if len(input)%192 > 0 {

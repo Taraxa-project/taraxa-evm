@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/Taraxa-project/taraxa-evm/dbg"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 
@@ -42,16 +44,16 @@ func (self *DB) Init(opts Opts) *DB {
 	self.db = db
 	copy(self.cf_handles[:], cf_handles[1:])
 	self.reset_itr_pools()
-	self.maintenance_task_executor.Init(512) // TODO good parameters
+	self.maintenance_task_executor.Init(512) // 4KB
 	self.latest_state.Init(self)
 	return self
 }
 
 func (self *DB) Close() {
 	defer util.LockUnlock(&self.close_mu)()
-	defer self.db.Close()
-	defer self.latest_state.Close()
+	self.latest_state.Close()
 	self.maintenance_task_executor.JoinAndClose()
+	self.db.Close()
 	self.closed = true
 }
 
@@ -75,6 +77,9 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 		itr_pool = &self.col_main_trie_value_itr_pool
 	}
 	if itr_pool != nil {
+		if dbg.Debug {
+			dbg.Noop()
+		}
 		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
 		itr := itr_pool.Get().(*gorocksdb.Iterator)
 		defer itr_pool.Put(itr)

@@ -69,7 +69,7 @@ func (self *Contract) ValidJumpdest(evm *EVM, dest *big.Int) bool {
 	}
 	analysis := self.code_jumpdest_analysis
 	if cached := analysis != nil; !cached {
-		if analysis, cached = evm.AnalyzeJumpdests(self.code); !cached {
+		if analysis, cached = evm.analyze_jumpdests(self.code); !cached {
 			self.code_jumpdest_analysis = analysis
 		}
 	}

@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"math/big"
 	"os"
-	"os/exec"
 	"path"
 	"runtime"
 	"runtime/debug"
@@ -15,6 +15,10 @@ import (
 	"strconv"
 	"time"
 	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
+
+	"github.com/Taraxa-project/taraxa-evm/dbg"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
@@ -36,29 +40,23 @@ import (
 )
 
 func main() {
-	const profiling = false
-	const disable_gc = profiling || false
-	const desired_num_trx_per_block = 40000
+	const profiling = true
+	const desired_num_trx_per_block = 10000
+	//const desired_num_trx_per_block = 0
 
 	usr_dir, e1 := os.UserHomeDir()
 	util.PanicIfNotNil(e1)
-	dest_data_dir := mkdirp(usr_dir + "/taraxa_evm_test")
+	dest_data_dir := mkdir_all(usr_dir, "taraxa_evm_test")
 
-	if disable_gc {
-		debug.SetGCPercent(-1)
-	}
-	var max_heap_size uint64
-	var mem_stats runtime.MemStats
-	profile_basedir := mkdirp(dest_data_dir + "/profiles/")
-	util.PanicIfNotNil(exec.Command("mkdir", "-p", profile_basedir).Run())
-	util.PanicIfNotNil(os.MkdirAll(profile_basedir, os.ModePerm))
+	profile_basedir := mkdir_all(dest_data_dir, "profiles")
 	new_prof_file := func(time time.Time, kind string) *os.File {
-		ret, err := os.Create(profile_basedir + strconv.FormatInt(time.Unix(), 10) + "_" + kind + ".prof")
+		ret, err := os.Create(path.Join(profile_basedir, strconv.FormatInt(time.Unix(), 10)+"_"+kind+".prof"))
 		util.PanicIfNotNil(err)
 		return ret
 	}
 	last_profile_snapshot_time := time.Now()
 	if profiling {
+		debug.SetGCPercent(-1)
 		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
 	}
 
@@ -72,6 +70,7 @@ func main() {
 	blk_db_opts.SetMaxOpenFiles(32)
 	blk_db, e0 := gorocksdb.OpenDbForReadOnly(blk_db_opts, "/home/oleg/win10/ubuntu/blockchain", false)
 	util.PanicIfNotNil(e0)
+	defer blk_db.Close()
 
 	type Transaction struct {
 		From     common.Address  `json:"from" gencodec:"required"`
@@ -81,6 +80,20 @@ func main() {
 		Value    *hexutil.Big    `json:"value" gencodec:"required"`
 		Gas      hexutil.Uint64  `json:"gas" gencodec:"required"`
 		Input    hexutil.Bytes   `json:"input" gencodec:"required"`
+	}
+	type Log struct {
+		Address common.Address `json:"address"  gencodec:"required"`
+		Topics  []common.Hash  `json:"topics"  gencodec:"required"`
+		Data    hexutil.Bytes  `json:"data"  gencodec:"required"`
+	}
+	type Receipt struct {
+		ContractAddress *common.Address `json:"contractAddress"`
+		GasUsed         hexutil.Uint64  `json:"gasUsed"  gencodec:"required"`
+		Logs            []Log           `json:"logs"  gencodec:"required"`
+	}
+	type TransactionAndReceipt struct {
+		Transaction
+		Receipt Receipt `json:"receipt"  gencodec:"required"`
 	}
 	type UncleBlock struct {
 		Number hexutil.Uint64 `json:"number"  gencodec:"required"`
@@ -94,10 +107,10 @@ func main() {
 	}
 	type BlockInfo struct {
 		VmBlock
-		UncleBlocks  []UncleBlock  `json:"uncleBlocks"  gencodec:"required"`
-		Transactions []Transaction `json:"transactions"  gencodec:"required"`
-		Hash         common.Hash   `json:"hash" gencodec:"required"`
-		StateRoot    common.Hash   `json:"stateRoot" gencodec:"required"`
+		UncleBlocks  []UncleBlock            `json:"uncleBlocks"  gencodec:"required"`
+		Transactions []TransactionAndReceipt `json:"transactions"  gencodec:"required"`
+		Hash         common.Hash             `json:"hash" gencodec:"required"`
+		StateRoot    common.Hash             `json:"stateRoot" gencodec:"required"`
 	}
 
 	rocksdb_opts_r_default := gorocksdb.NewDefaultReadOptions()
@@ -110,55 +123,42 @@ func main() {
 		return ret
 	}
 
-	last_blk_num_file := path.Join(dest_data_dir, "last_blk")
-	last_blk_num := read_last_block_n(last_blk_num_file)
-	is_genesis := last_blk_num == types.BlockNumberNIL
-	var last_root common.Hash
-	if is_genesis {
-		last_blk_num = 0
-	} else {
-		last_root = getBlockByNumber(last_blk_num).StateRoot
-	}
+	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
+		Path: mkdir_all(dest_data_dir, "state_db"),
+	})
+	defer statedb.Close()
 
+	latest_state := statedb.GetLatestState()
 	SUT := new(state_transition.StateTransition).Init(
-		new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-			Path: mkdirp(dest_data_dir + "/state_db"),
-		}),
+		latest_state,
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		state_common.ChainConfig{
-			ExecutionConfig: state_common.ExecutionConfig{
-				ETHForks: *params.MainnetChainConfig,
-			},
+		nil,
+		state_common.ExecutionConfig{
+			ETHForks: *params.MainnetChainConfig,
 		},
-		last_blk_num,
-		&last_root,
+		core.MainnetGenesisBalances(),
 		state_transition.Opts{
-			TrieWriters: state_transition.TrieWriterOpts{
-				MainTrieWriterOpts: trie.WriterCacheOpts{
-					FullNodeLevelsToCache: 16,
-					ExpectedDepth:         trie.MaxDepth,
-				},
-				AccTrieWriterOpts: trie.WriterCacheOpts{
-					ExpectedDepth: 20,
+			EVMState: state_evm.Opts{
+				NumTransactionsToBuffer: desired_num_trx_per_block + 1,
+			},
+			Trie: state_transition.TrieSinkOpts{
+				MainTrie: trie.WriterOpts{
+					FullNodeLevelsToCache: 4,
 				},
 			},
-			ExpectedMaxNumTrxPerBlock: 80000,
 		},
 	)
+	defer SUT.Close()
 
-	if is_genesis {
-		root := SUT.apply_genesis(state_transition.GenesisConfig{Balances: core.MainnetGenesisBalances()})
-		assert.EQ(root.Hex(), getBlockByNumber(0).StateRoot.Hex())
-		write_last_block_n(last_blk_num_file, 0)
-	}
-
+	last_committed_state_desc := latest_state.GetCommittedDescriptor()
+	last_blk_num := last_committed_state_desc.BlockNum
+	assert.EQ(getBlockByNumber(last_blk_num).StateRoot.Hex(), last_committed_state_desc.StateRoot.Hex())
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
-	var block_buf []*BlockInfo
 	for {
-		block_buf = block_buf[:0]
-		block_num_from := last_blk_num + 1
+		blk_num_since := last_blk_num + 1
+		var block_buf []*BlockInfo
 		tx_count := 0
 		for {
 			last_blk_num++
@@ -169,18 +169,44 @@ func main() {
 				break
 			}
 		}
-		fmt.Println("blocks:", block_num_from, "-", last_blk_num, "tx_count:", tx_count)
-		now := time.Now()
-		for _, b := range block_buf {
+		fmt.Println("blocks:", blk_num_since, "-", last_blk_num, "tx_count:", tx_count)
+		time_before_execution := time.Now()
+		for i, b := range block_buf {
+			blk_n := blk_num_since + uint64(i)
 			SUT.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
-			for i := range b.Transactions {
-				SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&b.Transactions[i])))
+			for j, trx_and_receipt := range b.Transactions {
+				//dbg.Debug = blk_n == 4172710
+				if dbg.Debug {
+					fmt.Println("trx", j)
+				}
+				res := SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
+				dbg.Noop(i, j, blk_n, res)
+				//fmt.Println(blk_n, j)
+				receipt := trx_and_receipt.Receipt
+				assert.EQ(uint64(receipt.GasUsed), res.GasUsed)
+				assert.EQ(len(receipt.Logs), len(res.Logs))
+				for i, log := range receipt.Logs {
+					actual_log := res.Logs[i]
+					assert.EQ(log.Address, actual_log.Address)
+					assert.Holds(bytes.Equal(log.Data, actual_log.Data))
+					assert.EQ(len(log.Topics), len(actual_log.Topics))
+					for i, topic := range log.Topics {
+						assert.EQ(topic, actual_log.Topics[i])
+					}
+				}
+				if receipt.ContractAddress == nil {
+					assert.EQ(common.ZeroAddress, res.NewContractAddr)
+				} else {
+					assert.EQ(*receipt.ContractAddress, res.NewContractAddr)
+				}
 			}
 			SUT.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
 		}
-		assert.EQ(SUT.Commit().Hex(), block_buf[len(block_buf)-1].StateRoot.Hex())
+		state_root := SUT.PrepareCommit()
+		assert.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())
 		//return
-		tps := float64(tx_count) / time.Now().Sub(now).Seconds()
+		SUT.Commit()
+		tps := float64(tx_count) / time.Now().Sub(time_before_execution).Seconds()
 		tps_sum += tps
 		tps_cnt++
 		if tps < tps_min {
@@ -190,27 +216,24 @@ func main() {
 			tps_max = tps
 		}
 		fmt.Println("TPS current:", tps, "avg:", tps_sum/float64(tps_cnt), "min:", tps_min, "max:", tps_max)
-		write_last_block_n(last_blk_num_file, last_blk_num)
-
-		if disable_gc {
-			if runtime.ReadMemStats(&mem_stats); mem_stats.HeapAlloc > max_heap_size {
-				fmt.Println("gc...")
-				runtime.GC()
-				if profiling {
-					pprof.StopCPUProfile()
-					util.PanicIfNotNil(pprof.WriteHeapProfile(new_prof_file(last_profile_snapshot_time, "heap")))
-					last_profile_snapshot_time = time.Now()
-					util.PanicIfNotNil(pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu")))
-				}
-				runtime.ReadMemStats(&mem_stats)
-				max_heap_size = mem_stats.HeapAlloc * 4
-			}
+		if profiling {
+			pprof.StopCPUProfile()
+			fmt.Println("gc...")
+			runtime.GC()
+			util.PanicIfNotNil(pprof.WriteHeapProfile(new_prof_file(last_profile_snapshot_time, "heap")))
+			last_profile_snapshot_time = time.Now()
+			util.PanicIfNotNil(pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu")))
+		} else {
+			fmt.Println("gc...")
+			runtime.GC()
 		}
+		debug.FreeOSMemory()
 	}
 }
 
-func mkdirp(path string) string {
-	util.PanicIfNotNil(exec.Command("mkdir", "-p", path).Run())
+func mkdir_all(path_segments ...string) string {
+	path := path.Join(path_segments...)
+	util.PanicIfNotNil(os.MkdirAll(path, os.ModePerm))
 	return path
 }
 
@@ -225,16 +248,4 @@ func read_file(fname string) []byte {
 	}
 	util.PanicIfNotNil(err)
 	return ret
-}
-
-func read_last_block_n(fname string) types.BlockNum {
-	bytes := read_file(fname)
-	if len(bytes) == 0 {
-		return types.BlockNumberNIL
-	}
-	return bin.DEC_b_endian_64(bytes)
-}
-
-func write_last_block_n(fname string, n types.BlockNum) {
-	write_file(fname, bin.ENC_b_endian_64(n))
 }

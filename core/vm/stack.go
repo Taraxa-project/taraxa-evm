@@ -19,24 +19,35 @@ package vm
 import (
 	"fmt"
 	"math/big"
+	"unsafe"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 // stack is an object for basic stack operations. Items popped to the stack are
 // expected to be changed and modified. stack does not take care of adding newly
 // initialised objects.
 type Stack struct {
-	desired_cap int
-	data        []*big.Int
+	data_original []*big.Int
+	data          []*big.Int
 }
 
 func (self *Stack) Init(desired_cap int) *Stack {
-	self.desired_cap = desired_cap
-	self.data = make([]*big.Int, 0, desired_cap)
+	if desired_cap != 0 {
+		self.data_original = make([]*big.Int, 0, desired_cap)
+	}
+	self.data = self.data_original
 	return self
 }
 
 func (self *Stack) reset() {
-	self.data = self.data[:0:self.desired_cap]
+	if cap(self.data_original) != 0 {
+		bin.ZFill_2(
+			unsafe.Pointer(&self.data_original),
+			len(self.data),
+			unsafe.Sizeof(self.data_original[0]))
+	}
+	self.data = self.data_original
 }
 
 func (st *Stack) push(d *big.Int) {

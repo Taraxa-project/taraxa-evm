@@ -27,7 +27,7 @@ type ReadOnlyDB interface {
 type LatestState interface {
 	GetCommittedDescriptor() StateDescriptor
 	BeginPendingBlock() PendingBlockState
-	Commit(state_root *common.Hash) error
+	Commit(state_root common.Hash) error
 }
 type Reader interface {
 	Get(Column, *common.Hash, func([]byte))

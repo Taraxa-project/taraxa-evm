@@ -32,37 +32,36 @@ func (self *API) NewContract(storage Storage) *Contract {
 	return new(Contract).init(self.cfg, storage)
 }
 
-type AccountStorageByBlock = func(types.BlockNum, *common.Address, *common.Hash, func([]byte))
-
-func (self *API) EligibleAddressCount(blk_n types.BlockNum, get_storage AccountStorageByBlock) (ret uint64) {
-	get_storage(self.true_blk_n(blk_n),
-		ContractAddress,
-		stor_k(field_eligible_count),
-		func(bytes []byte) {
-			ret = bin.DEC_b_endian_compact_64(bytes)
-		})
-	return
-}
-
-func (self *API) IsEligible(blk_n types.BlockNum, address *common.Address, get_storage AccountStorageByBlock) bool {
-	return self.GetStakingBalance(blk_n, address, get_storage).Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
-}
-
-func (self *API) GetStakingBalance(blk_n types.BlockNum, addr *common.Address, get_storage AccountStorageByBlock) (ret *big.Int) {
-	ret = bigutil.Big0
-	get_storage(
-		self.true_blk_n(blk_n),
-		ContractAddress,
-		stor_k(field_staking_balances, addr[:]),
-		func(bytes []byte) {
-			ret = bigutil.FromBytes(bytes)
-		})
-	return
-}
-
-func (self *API) true_blk_n(client_blk_n types.BlockNum) (ret uint64) {
-	if self.cfg.DepositDelay < client_blk_n {
-		ret = client_blk_n - self.cfg.DepositDelay
+func (self *API) NewReader(blk_n types.BlockNum, backend_factory func(types.BlockNum) AccountStorageReader) Reader {
+	if self.cfg.DepositDelay < blk_n {
+		blk_n -= self.cfg.DepositDelay
 	}
+	return Reader{&self.cfg, backend_factory(blk_n)}
+}
+
+type Reader struct {
+	cfg     *Config
+	backend AccountStorageReader
+}
+type AccountStorageReader interface {
+	GetAccountStorage(addr *common.Address, key *common.Hash, cb func([]byte))
+}
+
+func (self Reader) EligibleAddressCount() (ret uint64) {
+	self.backend.GetAccountStorage(contract_address, stor_k(field_eligible_count), func(bytes []byte) {
+		ret = bin.DEC_b_endian_compact_64(bytes)
+	})
+	return
+}
+
+func (self Reader) IsEligible(address *common.Address) bool {
+	return self.GetStakingBalance(address).Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+}
+
+func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
+	ret = bigutil.Big0
+	self.backend.GetAccountStorage(contract_address, stor_k(field_staking_balances, addr[:]), func(bytes []byte) {
+		ret = bigutil.FromBytes(bytes)
+	})
 	return
 }

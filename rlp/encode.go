@@ -157,7 +157,11 @@ func (self *Encoder) ResizeReset(string_buf_cap, list_buf_cap int) {
 	self.lhsize = 0
 }
 
-func (self *Encoder) ListsCount() int {
+func (self *Encoder) BufferSizes() (strbuf_size, listbuf_size int) {
+	return len(self.str), len(self.lheads)
+}
+
+func (self *Encoder) ListsCap() int {
 	return cap(self.lheads)
 }
 

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -8,7 +9,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_dry_runner"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 )
 
 type API struct {
@@ -20,10 +23,12 @@ type API struct {
 type ChainConfig struct {
 	ExecutionConfig state_common.ExecutionConfig
 	GenesisBalances core.BalanceMap
-	DPOS            *dpos.Config
+	DPOS            *dpos.Config `rlp:"nil"`
 }
 type Opts struct {
-	StateTransition state_transition.Opts
+	// TODO have single "perm-gen size" config property to derive all preallocation sizes
+	ExpectedMaxTrxPerBlock        uint32
+	MainTrieFullNodeLevelsToCache byte
 }
 
 func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts Opts) *API {
@@ -36,11 +41,50 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 		self.dpos,
 		chain_cfg.ExecutionConfig,
 		chain_cfg.GenesisBalances,
-		opts.StateTransition)
+		state_transition.Opts{
+			EVMState: state_evm.Opts{
+				NumTransactionsToBuffer: opts.ExpectedMaxTrxPerBlock,
+			},
+			Trie: state_transition.TrieSinkOpts{
+				MainTrie: trie.WriterOpts{
+					FullNodeLevelsToCache: opts.MainTrieFullNodeLevelsToCache,
+				},
+			},
+		})
 	self.dry_runner.Init(db, get_block_hash, self.dpos, chain_cfg.ExecutionConfig)
 	return self
 }
 
+func (self *API) Close() {
+	self.state_transition.Close()
+}
+
+type StateTransition interface {
+	BeginBlock(*vm.BlockInfo)
+	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
+	EndBlock([]state_common.UncleBlock)
+	PrepareCommit() (state_root common.Hash)
+	Commit() (state_root common.Hash)
+}
+
+func (self *API) GetStateTransition() StateTransition {
+	return &self.state_transition
+}
+
+func (self *API) GetCommittedStateDescriptor() state_db.StateDescriptor {
+	return self.db.GetLatestState().GetCommittedDescriptor()
+}
+
+func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction, opts *vm.ExecutionOpts) vm.ExecutionResult {
+	return self.dry_runner.Apply(blk, trx, opts)
+}
+
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 	return state_db.ExtendedReader{self.db.GetBlockState(blk_n)}
+}
+
+func (self *API) QueryDPOS(blk_n types.BlockNum) dpos.Reader {
+	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.AccountStorageReader {
+		return self.ReadBlock(blk_n)
+	})
 }

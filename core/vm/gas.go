@@ -188,7 +188,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	// The legacy gas metering only takes into consideration the current state
 	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
 	// OR Constantinople is not active
-	if evm.Rules.IsPetersburg || !evm.Rules.IsConstantinople {
+	if evm.rules.IsPetersburg || !evm.rules.IsConstantinople {
 		// This checks for 3 scenario's and calculates gas accordingly:
 		//
 		// 1. From a zero-value address to a non-zero value         (NEW VALUE)
@@ -198,7 +198,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 		case current.Sign() == 0 && y.Sign() != 0: // 0 => non 0
 			return SstoreSetGas, nil
 		case current.Sign() != 0 && y.Sign() == 0: // non 0 => 0
-			evm.State.AddRefund(SstoreRefundGas)
+			evm.state.AddRefund(SstoreRefundGas)
 			return SstoreClearGas, nil
 		default: // non 0 => non 0 (or 0 => 0)
 			return SstoreResetGas, nil
@@ -227,22 +227,22 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 			return NetSstoreInitGas, nil
 		}
 		if y.Sign() == 0 { // delete slot (2.1.2b)
-			evm.State.AddRefund(NetSstoreClearRefund)
+			evm.state.AddRefund(NetSstoreClearRefund)
 		}
 		return NetSstoreCleanGas, nil // write existing slot (2.1.2)
 	}
 	if original.Sign() != 0 {
 		if current.Sign() == 0 { // recreate slot (2.2.1.1)
-			evm.State.SubRefund(NetSstoreClearRefund)
+			evm.state.SubRefund(NetSstoreClearRefund)
 		} else if y.Sign() == 0 { // delete slot (2.2.1.2)
-			evm.State.AddRefund(NetSstoreClearRefund)
+			evm.state.AddRefund(NetSstoreClearRefund)
 		}
 	}
 	if original.Cmp(y) == 0 {
 		if original.Sign() == 0 { // reset to original inexistent slot (2.2.2.1)
-			evm.State.AddRefund(NetSstoreResetClearRefund)
+			evm.state.AddRefund(NetSstoreResetClearRefund)
 		} else { // reset to original existing slot (2.2.2.2)
-			evm.State.AddRefund(NetSstoreResetRefund)
+			evm.state.AddRefund(NetSstoreResetRefund)
 		}
 	}
 	return NetSstoreDirtyGas, nil
@@ -458,7 +458,7 @@ func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 		transfersValue = stack.Back(2).Sign() != 0
 		acc            = evm.get_account(stack.Back(1))
 	)
-	if evm.Rules.IsEIP158 {
+	if evm.rules.IsEIP158 {
 		if transfersValue && acc.IsEIP161Empty() {
 			gas += CallNewAccountGas
 		}
@@ -522,10 +522,10 @@ func gasRevert(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 func gasSuicide(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
-	if evm.Rules.IsEIP150 {
+	if evm.rules.IsEIP150 {
 		gas = evm.gas_table.Suicide
 		new_acc := evm.get_account(stack.Back(0))
-		if evm.Rules.IsEIP158 {
+		if evm.rules.IsEIP158 {
 			if new_acc.IsEIP161Empty() && contract.Account.GetBalance().Sign() != 0 {
 				gas += evm.gas_table.CreateBySuicide
 			}
@@ -535,7 +535,7 @@ func gasSuicide(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	}
 
 	if !contract.Account.HasSuicided() {
-		evm.State.AddRefund(SuicideRefundGas)
+		evm.state.AddRefund(SuicideRefundGas)
 	}
 	return gas, nil
 }

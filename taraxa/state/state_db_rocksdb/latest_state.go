@@ -26,7 +26,7 @@ type latest_state struct {
 func (self *latest_state) Init(db *DB) *latest_state {
 	self.DB = db
 	self.batch = gorocksdb.NewWriteBatch()
-	self.writer_thread.Init(512) // TODO good parameters
+	self.writer_thread.Init(1024) // 8KB
 	self.committed_blk_n = self.GetCommittedDescriptor().BlockNum
 	self.pending_blk_n = self.committed_blk_n
 	return self
@@ -77,7 +77,7 @@ func (self *pending_block_state) GetNumber() types.BlockNum {
 	return self.blk_n
 }
 
-func (self *latest_state) Commit(state_root *common.Hash) (err error) {
+func (self *latest_state) Commit(state_root common.Hash) (err error) {
 	self.blk_num_mu.Lock()
 	committed_blk_n := self.pending_blk_n
 	self.committed_blk_n = committed_blk_n
@@ -85,7 +85,7 @@ func (self *latest_state) Commit(state_root *common.Hash) (err error) {
 	self.writer_thread.Submit(func() {
 		self.batch.Put(last_committed_desc_key, rlp.MustEncodeToBytes(state_db.StateDescriptor{
 			BlockNum:  committed_blk_n,
-			StateRoot: *state_root,
+			StateRoot: state_root,
 		}))
 		err = self.db.Write(opts_w, self.batch)
 		self.batch.Clear()

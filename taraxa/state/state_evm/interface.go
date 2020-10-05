@@ -24,7 +24,7 @@ type Input interface {
 	GetRawAccount(*common.Address, func([]byte))
 	GetAccountStorage(*common.Address, *common.Hash, func([]byte))
 }
-type DBWriter interface {
+type Output interface {
 	StartMutation(*common.Address) AccountMutation
 	Delete(*common.Address)
 }

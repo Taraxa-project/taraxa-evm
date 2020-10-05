@@ -33,9 +33,8 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 		opts = &self.exec_cfg.Options
 	}
 	var evm_state state_evm.EVMState
-	evm_state.Init(state_evm.CacheOpts{
-		AccountBufferSize: 32,
-		RevertLogSize:     16,
+	evm_state.Init(state_evm.Opts{
+		NumTransactionsToBuffer: 1,
 	})
 	evm_state.SetInput(state_db.ExtendedReader{self.db.GetBlockState(blk.Number)})
 	var evm vm.EVM

@@ -17,7 +17,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-var ContractAddress = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ff"))
+var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ff"))
 var field_staking_balances = []byte{0}
 var field_deposits = []byte{1}
 var field_eligible_count = []byte{2}
@@ -70,18 +70,18 @@ func (self *Contract) ApplyGenesis() error {
 }
 
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
-	registry(ContractAddress, self)
+	registry(contract_address, self)
 }
 
-func (self *Contract) RequiredGas(ctx *vm.CallFrame, evm *vm.EVM) uint64 {
+func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	return uint64(len(ctx.Input)) * 20 // TODO
 }
 
-func (self *Contract) Run(ctx *vm.CallFrame, env *vm.ExecutionEnvironment) ([]byte, error) {
+func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if ctx.Value.Sign() != 0 {
 		return nil, errors.New("call value must be zero")
 	}
-	if env.Depth != 1 {
+	if evm.GetDepth() != 1 {
 		return nil, errors.New("only top-level calls are allowed")
 	}
 	var transfers InboundTransfers
@@ -111,7 +111,7 @@ func (self *Contract) run(benefactor common.Address, transfers InboundTransfers)
 		deposit_v := benefactor_deposits[beneficiary]
 		if deposit_v == nil {
 			deposit_v = bigutil.Big0
-			self.storage.Get(ContractAddress, stor_k(field_deposits, benefactor[:], beneficiary[:]), func(bytes []byte) {
+			self.storage.Get(contract_address, stor_k(field_deposits, benefactor[:], beneficiary[:]), func(bytes []byte) {
 				deposit_v = bigutil.FromBytes(bytes)
 			})
 			benefactor_deposits[beneficiary] = deposit_v
@@ -143,7 +143,7 @@ func (self *Contract) run(benefactor common.Address, transfers InboundTransfers)
 		}
 		deposit_v := op(benefactor_deposits[beneficiary], transfer.Amount)
 		benefactor_deposits[beneficiary] = deposit_v
-		self.storage.Put(ContractAddress, stor_k(field_deposits, benefactor[:], beneficiary[:]), deposit_v.Bytes())
+		self.storage.Put(contract_address, stor_k(field_deposits, benefactor[:], beneficiary[:]), deposit_v.Bytes())
 	}
 	return
 }
@@ -155,13 +155,13 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 	} else {
 		if len(self.curr_withdrawals) != 0 {
 			self.storage.Put(
-				ContractAddress,
+				contract_address,
 				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
 				rlp.MustEncodeToBytes(self.curr_withdrawals))
 		}
 		if self.cfg.WithdrawalDelay < blk_n {
 			self.storage.Get(
-				ContractAddress,
+				contract_address,
 				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay)),
 				func(bytes []byte) {
 					moneyback_withdrawals = make(DelegatedBalanceMap)
@@ -183,7 +183,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		withdrawals_to_apply = self.curr_withdrawals
 	} else if delay_diff < blk_n {
 		self.storage.Get(
-			ContractAddress,
+			contract_address,
 			stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
 			func(bytes []byte) {
 				withdrawals_to_apply = make(DelegatedBalanceMap)
@@ -198,7 +198,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 	if self.eligible_count_dirty {
 		self.eligible_count_dirty = false
 		self.storage.Put(
-			ContractAddress,
+			contract_address,
 			stor_k(field_eligible_count),
 			bin.ENC_b_endian_compact_64_1(self.eligible_count))
 	}
@@ -213,7 +213,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	if beneficiary_bal == nil {
 		beneficiary_bal = bigutil.Big0
 		self.storage.Get(
-			ContractAddress,
+			contract_address,
 			stor_k(field_staking_balances, beneficiary[:]),
 			func(bytes []byte) {
 				beneficiary_bal = bigutil.FromBytes(bytes)
@@ -227,7 +227,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	}
 	self.staking_balances[beneficiary] = beneficiary_bal
 	self.storage.Put(
-		ContractAddress,
+		contract_address,
 		stor_k(field_staking_balances, beneficiary[:]),
 		beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
@@ -244,7 +244,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	self.eligible_count_dirty = true
 	if !self.eligible_count_initialized {
 		self.eligible_count_initialized = true
-		self.storage.Get(ContractAddress, stor_k(field_eligible_count), func(bytes []byte) {
+		self.storage.Get(contract_address, stor_k(field_eligible_count), func(bytes []byte) {
 			self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
 		})
 	}

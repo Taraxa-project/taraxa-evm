@@ -401,7 +401,7 @@ func opBalance(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 }
 
 func opOrigin(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(evm.Trx.From.Big())
+	stack.push(evm.trx.From.Big())
 	return nil, nil
 }
 
@@ -537,15 +537,15 @@ func opExtCodeHash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 }
 
 func opGasprice(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(evm.int_pool.get().Set(evm.Trx.GasPrice))
+	stack.push(evm.int_pool.get().Set(evm.trx.GasPrice))
 	return nil, nil
 }
 
 func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) (_ []byte, _ error) {
 	if num := stack.pop(); num.IsUint64() {
 		num_64 := num.Uint64()
-		if evm.Block.Number-257 < num_64 && num_64 < evm.Block.Number {
-			stack.push(evm.GetHash(num_64))
+		if evm.block.Number-257 < num_64 && num_64 < evm.block.Number {
+			stack.push(evm.get_hash(num_64))
 			return
 		}
 	}
@@ -554,27 +554,27 @@ func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 }
 
 func opCoinbase(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(evm.Block.Author.Big())
+	stack.push(evm.block.Author.Big())
 	return nil, nil
 }
 
 func opTimestamp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.Block.Time)))
+	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.block.Time)))
 	return nil, nil
 }
 
 func opNumber(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.Block.Number)))
+	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.block.Number)))
 	return nil, nil
 }
 
 func opDifficulty(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(math.U256(evm.int_pool.get().Set(evm.Block.Difficulty)))
+	stack.push(math.U256(evm.int_pool.get().Set(evm.block.Difficulty)))
 	return nil, nil
 }
 
 func opGasLimit(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.Block.GasLimit)))
+	stack.push(math.U256(evm.int_pool.get().SetUint64(evm.block.GasLimit)))
 	return nil, nil
 }
 
@@ -676,7 +676,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 		input        = memory.Get(offset.Int64(), size.Int64())
 		gas          = contract.Gas
 	)
-	if evm.Rules.IsEIP150 {
+	if evm.rules.IsEIP150 {
 		gas -= gas / 64
 	}
 
@@ -686,7 +686,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
-	if evm.Rules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
+	if evm.rules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
 		stack.push(evm.int_pool.getZero())
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
 		stack.push(evm.int_pool.getZero())
@@ -870,7 +870,7 @@ func makeLog(size int) executionFunc {
 			topics[i].SetBytes(stack.pop().Bytes())
 		}
 		data := memory.Get(mStart.Int64(), mSize.Int64())
-		evm.State.AddLog(LogRecord{*contract.Account.Address(), topics, data})
+		evm.state.AddLog(LogRecord{*contract.Account.Address(), topics, data})
 		evm.int_pool.put(mStart, mSize)
 		return nil, nil
 	}

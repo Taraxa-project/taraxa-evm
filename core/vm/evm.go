@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/dbg"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
@@ -43,16 +45,22 @@ import (
 // specific errors should ever be performed. The interpreter makes
 // sure that any errors generated are to be considered faulty code.
 type EVM struct {
-	ExecutionEnvironment
-	precompiles     Precompiles
-	instruction_set InstructionSet
-	gas_table       GasTable
+	get_hash          GetHashFunc
+	state             State
+	block             Block
+	rules             Rules
+	rules_initialized bool
+	precompiles       Precompiles
+	instruction_set   InstructionSet
+	gas_table         GasTable
+	trx               *Transaction
+	depth             uint16
 	// tech stuff
-	stack_prealloc []Stack
-	mem_pool       MemoryPool
-	int_pool       int_pool
-	bigconv        bigconv.BigConv
-	jumpdests      map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
+	preallocated_stacks []Stack
+	mem_pool            MemoryPool
+	int_pool            int_pool
+	bigconv             bigconv.BigConv
+	jumpdests           map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
 	// call_gas_tmp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
@@ -60,20 +68,11 @@ type EVM struct {
 	read_only    bool   // Whether to throw on stateful modifications
 	last_retval  []byte // Last CALL's return data for subsequent reuse
 }
-type ExecutionEnvironment struct {
-	GetHash           GetHashFunc
-	Block             Block
-	Trx               *Transaction
-	State             State
-	Rules             Rules
-	rules_initialized bool
-	Depth             uint16
-}
 type Opts = struct {
-	U256PoolSize        uint32
-	NumStacksToPrealloc uint16
-	StackPrealloc       uint16
-	MemPoolSize         uint64
+	U256PoolSize           uint32
+	NumStacksToPreallocate uint16
+	PreallocatedStackSize  uint16
+	PreallocatedMem        uint64
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
 type Rules struct {
@@ -102,7 +101,7 @@ type ExecutionOpts struct {
 	DisableNonceCheck, DisableGasFee bool
 }
 type ExecutionResult struct {
-	CodeRet         []byte
+	CodeRetval      []byte
 	NewContractAddr common.Address
 	Logs            []LogRecord
 	GasUsed         uint64
@@ -111,23 +110,35 @@ type ExecutionResult struct {
 }
 
 func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
-	assert.Holds(opts.NumStacksToPrealloc <= StackLimit)
-	assert.Holds(opts.StackPrealloc <= StackLimit)
-	self.GetHash = get_hash
-	self.State = state
-	self.mem_pool.buf = make([]byte, opts.MemPoolSize)
+	assert.Holds(opts.NumStacksToPreallocate <= StackLimit)
+	assert.Holds(opts.PreallocatedStackSize <= StackLimit)
+	self.get_hash = get_hash
+	self.state = state
+	self.mem_pool.buf = make([]byte, opts.PreallocatedMem)
 	self.int_pool.Init(int(opts.U256PoolSize))
-	self.stack_prealloc = make([]Stack, opts.NumStacksToPrealloc)
-	for i := range self.stack_prealloc {
-		self.stack_prealloc[i].Init(int(opts.StackPrealloc))
+	self.preallocated_stacks = make([]Stack, opts.NumStacksToPreallocate)
+	for i := range self.preallocated_stacks {
+		self.preallocated_stacks[i].Init(int(opts.PreallocatedStackSize))
 	}
 	return self
 }
 
+func (self *EVM) GetRules() Rules {
+	return self.rules
+}
+
+func (self *EVM) GetDepth() uint16 {
+	return self.depth
+}
+
+func (self *EVM) GetBlock() Block {
+	return self.block
+}
+
 func (self *EVM) SetBlock(blk_num types.BlockNum, blk_info *BlockInfo, rules Rules) (rules_changed bool) {
-	self.Block.Number, self.Block.BlockInfo = blk_num, *blk_info
+	self.block.Number, self.block.BlockInfo = blk_num, *blk_info
 	if self.rules_initialized {
-		if self.Rules == rules {
+		if self.rules == rules {
 			return false
 		}
 	} else {
@@ -159,7 +170,7 @@ func (self *EVM) SetBlock(blk_num types.BlockNum, blk_info *BlockInfo, rules Rul
 		self.instruction_set = frontierInstructionSet
 		self.gas_table = GasTableHomestead
 	}
-	self.Rules = rules
+	self.rules = rules
 	return true
 }
 
@@ -168,34 +179,32 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 }
 
 func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
-	self.Trx = trx
-	defer func() {
-		self.Trx = nil
-		self.jumpdests = nil
-	}()
-	caller := self.State.GetAccount(&trx.From)
+	self.trx = trx
+	defer func() { self.trx, self.jumpdests = nil, nil }()
+	caller := self.state.GetAccount(&trx.From)
 	if !opts.DisableNonceCheck {
-		if nonce := caller.GetNonce(); nonce < self.Trx.Nonce {
+		if nonce := caller.GetNonce(); nonce < self.trx.Nonce {
 			ret.ConsensusErr = ErrNonceTooHigh
 			return
-		} else if nonce > self.Trx.Nonce {
+		} else if nonce > self.trx.Nonce {
 			ret.ConsensusErr = ErrNonceTooLow
 			return
 		}
 	}
-	gas_cap, gas_price, gas_fee := uint64(math.MaxUint64), bigutil.Big0, bigutil.Big0
+	gas_cap, gas_price, gas_fee := uint64(math.MaxUint64/2), bigutil.Big0, bigutil.Big0
 	if !opts.DisableGasFee {
-		gas_cap, gas_price = self.Trx.Gas, self.Trx.GasPrice
+		gas_cap, gas_price = self.trx.Gas, self.trx.GasPrice
 		gas_fee = new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	}
 	gas_left := gas_cap
-	contract_creation := self.Trx.To == nil
+	contract_creation := self.trx.To == nil
 	if !opts.DisableGasFee {
 		if !BalanceGTE(caller, gas_fee) {
 			ret.ConsensusErr = ErrInsufficientBalanceForGas
 			return
 		}
-		gas_intrinsic, err := IntrinsicGas(self.Trx.Input, contract_creation, self.Rules.IsHomestead)
+		caller.SubBalance(gas_fee)
+		gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
 		if err != nil {
 			ret.ConsensusErr = util.ErrorString(err.Error())
 			return
@@ -205,33 +214,30 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 			return
 		}
 		gas_left -= gas_intrinsic
-		if !BalanceGTE(caller, new(big.Int).Add(gas_fee, self.Trx.Value)) {
-			ret.ConsensusErr = ErrInsufficientBalanceForTransfer
-			return
-		}
-		caller.SubBalance(gas_fee)
-	} else if !BalanceGTE(caller, self.Trx.Value) {
-		ret.ConsensusErr = ErrInsufficientBalanceForTransfer
-		return
 	}
-	var code_err error
+	var err error
 	if contract_creation {
-		ret.CodeRet, ret.NewContractAddr, gas_left, code_err =
-			self.create_1(caller, self.Trx.Input, gas_left, self.Trx.Value)
+		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
-		acc_to := self.State.GetAccount(self.Trx.To)
+		acc_to := self.state.GetAccount(self.trx.To)
 		caller.IncrementNonce()
-		ret.CodeRet, gas_left, code_err = self.call(caller, acc_to, self.Trx.Input, gas_left, self.Trx.Value)
+		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
-	if code_err != nil {
-		ret.CodeErr = util.ErrorString(code_err.Error())
+	if err != nil {
+		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
+			ret.ConsensusErr = err_str
+			return
+		} else {
+			ret.CodeErr = err_str
+		}
 	}
-	gas_left += util.Min_u64(self.State.GetRefund(), (gas_cap-gas_left)/2)
+	gas_left += util.Min_u64(self.state.GetRefund(), (gas_cap-gas_left)/2)
 	ret.GasUsed = gas_cap - gas_left
+	ret.Logs = self.state.GetLogs()
 	if !opts.DisableGasFee {
 		// Return ETH for remaining gas, exchanged at the original rate.
 		caller.AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(gas_left), gas_price))
-		self.State.GetAccount(&self.Block.Author).
+		self.state.GetAccount(&self.block.Author).
 			AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(ret.GasUsed), gas_price))
 	}
 	return
@@ -261,23 +267,23 @@ func (self *EVM) create(
 	ret []byte, gas_left uint64, err error) {
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
-	if self.Depth > CallCreateDepth {
+	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	if self.Depth != 0 && !BalanceGTE(caller, value) {
+	if !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
 	// TODO This should go after the state snapshot, but this is how it works in ETH
 	caller.IncrementNonce()
-	new_acc := self.State.GetAccount(address)
+	new_acc := self.state.GetAccount(address)
 	// Ensure there's no existing contract already at the designated address
 	if new_acc.GetNonce() != 0 || new_acc.GetCodeSize() != 0 {
 		// TODO this also should check if new acc balance is zero, but this is how it works in ETH
 		return nil, 0, ErrContractAddressCollision
 	}
 	// create a new account on the state
-	snapshot := self.State.Snapshot()
-	if self.Rules.IsEIP158 {
+	snapshot := self.state.Snapshot()
+	if self.rules.IsEIP158 {
 		new_acc.IncrementNonce()
 	}
 	self.transfer(caller, new_acc, value)
@@ -287,7 +293,7 @@ func (self *EVM) create(
 	contract := NewContract(CallFrame{caller, new_acc, nil, gas, value}, code)
 	ret, err = self.run(&contract, false)
 	// check whether the max code size has been exceeded
-	maxCodeSizeExceeded := self.Rules.IsEIP158 && len(ret) > MaxCodeSize
+	maxCodeSizeExceeded := self.rules.IsEIP158 && len(ret) > MaxCodeSize
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled
@@ -303,8 +309,8 @@ func (self *EVM) create(
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
-	if maxCodeSizeExceeded || (err != nil && (self.Rules.IsHomestead || err != ErrCodeStoreOutOfGas)) {
-		self.State.RevertToSnapshot(snapshot)
+	if maxCodeSizeExceeded || (err != nil && (self.rules.IsHomestead || err != ErrCodeStoreOutOfGas)) {
+		self.state.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
@@ -323,17 +329,17 @@ func (self *EVM) create(
 // execution error or failed value transfer.
 func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, gas_left uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
-	if self.Depth > CallCreateDepth {
+	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
 	if value.Sign() == 0 {
-		if self.Rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+		if self.rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			return nil, gas, nil
 		}
-	} else if self.Depth != 0 && !BalanceGTE(caller, value) {
+	} else if !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
-	snapshot := self.State.Snapshot()
+	snapshot := self.state.Snapshot()
 	self.transfer(caller, callee, value)
 	return self.call_end(CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
 }
@@ -341,9 +347,9 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
 	gas_left = frame.Gas
 	if precompiled := self.precompiles.Get(code_owner.Address()); precompiled != nil {
-		if gas_required := precompiled.RequiredGas(&frame, self); gas_required <= gas_left {
+		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
-			ret, err = precompiled.Run(&frame, &self.ExecutionEnvironment)
+			ret, err = precompiled.Run(frame, self)
 		} else {
 			err = ErrOutOfGas
 		}
@@ -353,7 +359,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		gas_left = contract.Gas
 	}
 	if err != nil {
-		self.State.RevertToSnapshot(snapshot)
+		self.state.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			gas_left = 0
 		}
@@ -370,14 +376,14 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 // code with the caller as context.
 func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
-	if self.Depth > CallCreateDepth {
+	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
 	if !BalanceGTE(caller.Account, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
-	return self.call_end(CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.State.Snapshot(), false)
+	return self.call_end(CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
 }
 
 // call_delegate executes the contract associated with the addr with the given input
@@ -387,10 +393,10 @@ func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, 
 // code with the caller as context and the caller is set to the caller of the caller.
 func (self *EVM) call_delegate(caller *Contract, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
-	if self.Depth > CallCreateDepth {
+	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	return self.call_end(CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.State.Snapshot(), false)
+	return self.call_end(CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
 }
 
 // StaticCall executes the contract associated with the addr with the given input
@@ -399,14 +405,14 @@ func (self *EVM) call_delegate(caller *Contract, callee StateAccount, input []by
 // instead of performing the modifications.
 func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
-	if self.Depth > CallCreateDepth {
+	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
 	// We do an AddBalance of zero here, just in order to trigger a touch.
 	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
-	snapshot := self.State.Snapshot()
+	snapshot := self.state.Snapshot()
 	callee.AddBalance(bigutil.Big0)
 	return self.call_end(CallFrame{caller.Account, callee, input, gas, bigutil.Big0}, callee, snapshot, true)
 }
@@ -422,8 +428,8 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 	mem.Init(&self.mem_pool)
 	defer mem.Release()
 	var stack *Stack
-	if self.Depth < uint16(len(self.stack_prealloc)) {
-		stack = &self.stack_prealloc[self.Depth]
+	if self.depth < uint16(len(self.preallocated_stacks)) {
+		stack = &self.preallocated_stacks[self.depth]
 		defer stack.reset()
 	} else {
 		stack = new(Stack).Init(StackLimit)
@@ -431,8 +437,8 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 	// Reclaim the stack as an int pool when the execution stops
 	defer func() { self.int_pool.put(stack.data...) }()
 	// Increment the call depth which is restricted to 1024
-	self.Depth++
-	defer func() { self.Depth-- }()
+	self.depth++
+	defer func() { self.depth-- }()
 	// Make sure the read_only is only set if we aren't in read_only yet.
 	// This makes also sure that the read_only flag isn't removed for child calls.
 	if readOnly && !self.read_only {
@@ -467,7 +473,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 			return nil, err
 		}
 		// If the operation is valid, enforce and write restrictions
-		if self.Rules.IsByzantium {
+		if self.rules.IsByzantium {
 			if self.read_only {
 				// If the interpreter is operating in readonly mode, make sure no
 				// state-modifying operation is performed. The 3rd stack item
@@ -502,6 +508,11 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		if memorySize > 0 {
 			mem.Resize(memorySize)
 		}
+		if dbg.Debug {
+			fmt.Println("pc:", pc, "op:", op)
+			stack.Print()
+			mem.Print()
+		}
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, &mem, stack)
 		// if the operation clears the return data (e.g. it has returning data)
@@ -523,7 +534,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 	return nil, nil
 }
 
-func (self *EVM) AnalyzeJumpdests(code CodeAndHash) (analysis bitvec, cached bool) {
+func (self *EVM) analyze_jumpdests(code CodeAndHash) (analysis bitvec, cached bool) {
 	if cached = code.CodeHash != nil; cached {
 		if present := self.jumpdests != nil; !present {
 			// TODO preallocate
@@ -545,5 +556,5 @@ func (self *EVM) transfer(from, to StateAccount, amount *big.Int) {
 }
 
 func (self *EVM) get_account(addr_as_big *big.Int) StateAccount {
-	return self.State.GetAccount(self.bigconv.ToAddr(addr_as_big))
+	return self.state.GetAccount(self.bigconv.ToAddr(addr_as_big))
 }

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
+
 	"github.com/schollz/progressbar/v3"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
@@ -46,16 +48,14 @@ func TestEthMainnetSmoke(t *testing.T) {
 		},
 		core.MainnetGenesisBalances(),
 		state_transition.Opts{
-			TrieWriters: state_transition.TrieWriterOpts{
-				MainTrieWriterOpts: trie.WriterCacheOpts{
-					FullNodeLevelsToCache: 5,
-					ExpectedDepth:         trie.MaxDepth,
-				},
-				AccTrieWriterOpts: trie.WriterCacheOpts{
-					ExpectedDepth: 16,
+			EVMState: state_evm.Opts{
+				NumTransactionsToBuffer: 300,
+			},
+			Trie: state_transition.TrieSinkOpts{
+				MainTrie: trie.WriterOpts{
+					FullNodeLevelsToCache: 4,
 				},
 			},
-			ExpectedMaxNumTrxPerBlock: 500,
 		},
 	)
 	assert.EQ(statedb.GetLatestState().GetCommittedDescriptor().StateRoot.Hex(), blocks[0].StateRoot.Hex())

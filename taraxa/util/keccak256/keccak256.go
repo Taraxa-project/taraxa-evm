@@ -87,7 +87,7 @@ func GetHasherFromPool() (ret *Hasher) {
 	if hashers == nil {
 		pool_init_mu.Lock()
 		if hashers == nil {
-			init_pool(uint64(runtime.NumCPU()) * 512)
+			init_pool(uint64(runtime.NumCPU()) * 1024) // 0.5 * num_cpu MB
 		}
 		pool_init_mu.Unlock()
 	}

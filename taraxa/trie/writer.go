@@ -12,25 +12,22 @@ import (
 type Writer struct {
 	Reader
 	root       node
-	cache_opts WriterCacheOpts
 	kbuf_0     hex_key
 	kbuf_1     hex_key
-	commit_ctx *commit_context
+	commit_ctx commit_context
+	opts       WriterOpts
 }
-type WriterCacheOpts struct {
+type WriterOpts struct {
 	FullNodeLevelsToCache byte
-	ExpectedDepth         byte
 }
 
-func (self *Writer) Init(schema Schema, root_hash *common.Hash, cache_opts WriterCacheOpts) *Writer {
-	assert.Holds(cache_opts.FullNodeLevelsToCache <= MaxDepth)
-	assert.Holds(cache_opts.ExpectedDepth <= MaxDepth)
+func (self *Writer) Init(schema Schema, root_hash *common.Hash, opts WriterOpts) *Writer {
+	assert.Holds(opts.FullNodeLevelsToCache <= MaxDepth)
 	self.Schema = schema
 	if root_hash != nil {
 		self.root = (*node_hash)(root_hash)
 	}
-	self.cache_opts = cache_opts
-	self.commit_ctx = get_commit_ctx(cache_opts.ExpectedDepth)
+	self.opts = opts
 	return self
 }
 
@@ -41,8 +38,8 @@ func (self *Writer) Commit(db_tx IO) *common.Hash {
 	if h := self.root.get_hash(); h != nil {
 		return h.common_hash()
 	}
-	defer self.commit_ctx.Reset()
-	self.root = self.commit(db_tx, self.commit_ctx, 0, self.kbuf_0[:0], self.root)
+	self.commit_ctx.Reset()
+	self.root = self.commit(db_tx, &self.commit_ctx, 0, self.kbuf_0[:0], self.root)
 	return self.root.get_hash().common_hash()
 }
 
@@ -100,7 +97,7 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 		if n.hash != nil {
 			ctx.enc_hash.AppendString(n.hash[:])
 			ctx.enc_storage.AppendString(n.hash[:])
-			if self.cache_opts.FullNodeLevelsToCache <= full_nodes_above {
+			if self.opts.FullNodeLevelsToCache <= full_nodes_above {
 				return n.hash
 			}
 			return n
@@ -123,7 +120,7 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 				ctx.enc_storage.RevertToListStart(storage_list_start)
 				ctx.enc_storage.AppendString(n.hash[:])
 			}
-			if self.cache_opts.FullNodeLevelsToCache <= full_nodes_above {
+			if self.opts.FullNodeLevelsToCache <= full_nodes_above {
 				return n.hash
 			}
 		}

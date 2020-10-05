@@ -6,10 +6,9 @@ package main
 import "C"
 import (
 	"math/big"
+	"runtime/debug"
 	"sync"
 	"unsafe"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -20,25 +19,19 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
-	"github.com/tecbot/gorocksdb"
 )
 
 type state_API struct {
+	state.API
 	db                                state_db_rocksdb.DB
 	get_blk_hash_C                    C.taraxa_evm_GetBlockHash
-	params_StateTransition_ApplyBlock struct {
-		BatchPtr     uintptr
-		EVMBlock     vm.BlockInfo
-		Transactions []vm.Transaction
-		Uncles       []state_db.UncleBlock
+	transition_state_result_rlp_stats struct {
+		max_strbuf_size  int
+		max_listbuf_size int
 	}
-	rlp_buf_StateTransition_ApplyBlock []byte
-	rlp_encoder_StateTransition_Apply  rlp.Encoder
-	state.API
 }
 
 func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
@@ -47,39 +40,26 @@ func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
 	return new(big.Int).SetBytes(bin.AnyBytes2(unsafe.Pointer(&hash_c.Val), common.HashLength))
 }
 
-//export taraxa_evm_state_API_New
-func taraxa_evm_state_API_New(
+//export taraxa_evm_state_api_new
+func taraxa_evm_state_api_new(
 	params_enc C.taraxa_evm_Bytes,
 	cb_err C.taraxa_evm_BytesCallback,
 ) C.taraxa_evm_state_API_ptr {
 	defer handle_err(cb_err)
 	var params struct {
-		RocksDBPtr                 uintptr
-		RocksDBColumnFamilyHandles [state_db_rocksdb.COL_COUNT]uintptr
-		GetBlockHash               uintptr
-		ChainConfig                state_common.ChainConfig
-		CurrBlkNum                 types.BlockNum
-		CurrStateRoot              common.Hash
-		StateTransitionCacheOpts   state_transition.Opts
+		DBPath       string
+		GetBlockHash uintptr
+		ChainConfig  state.ChainConfig
+		Opts         state.Opts
 	}
 	dec_rlp(params_enc, &params)
 	self := new(state_API)
-	rocksdb := gorocksdb.NewDBFromNative(unsafe.Pointer(params.RocksDBPtr))
-	var columns state_db_rocksdb.CFHandles
-	for i, ptr := range params.RocksDBColumnFamilyHandles {
-		columns[i] = gorocksdb.NewNativeColumnFamilyHandle1(unsafe.Pointer(ptr))
-	}
-	self.db.Init(rocksdb, columns)
+	self.db.Init(state_db_rocksdb.Opts{
+		Path: params.DBPath,
+	})
 	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
-	self.API.Init(&self.db, self.blk_hash,
-		params.ChainConfig, params.CurrBlkNum, &params.CurrStateRoot, params.StateTransitionCacheOpts)
-	self.params_StateTransition_ApplyBlock.Transactions =
-		make([]vm.Transaction, 0, params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock)
-	self.rlp_buf_StateTransition_ApplyBlock =
-		make([]byte, 0, params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*1024)
-	self.rlp_encoder_StateTransition_Apply.ResizeReset(
-		cap(self.rlp_buf_StateTransition_ApplyBlock),
-		int(params.StateTransitionCacheOpts.ExpectedMaxNumTrxPerBlock*128))
+	self.Init(&self.db, self.blk_hash, params.ChainConfig, params.Opts)
+
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	lastpos := len(state_API_available_ptrs) - 1
 	assert.Holds(lastpos >= 0)
@@ -90,18 +70,32 @@ func taraxa_evm_state_API_New(
 	return C.taraxa_evm_state_API_ptr(ptr)
 }
 
-//export taraxa_evm_state_API_Free
-func taraxa_evm_state_API_Free(
+//export taraxa_evm_state_api_free
+func taraxa_evm_state_api_free(
 	ptr C.taraxa_evm_state_API_ptr,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
+	self := state_API_instances[ptr]
+	self.Close()
+	self.db.Close()
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	state_API_instances[ptr], state_API_available_ptrs = nil, append(state_API_available_ptrs, state_API_ptr(ptr))
 }
 
-//export taraxa_evm_state_API_Historical_Prove
-func taraxa_evm_state_API_Historical_Prove(
+//export taraxa_evm_state_api_get_last_committed_state_descriptor
+func taraxa_evm_state_api_get_last_committed_state_descriptor(
+	ptr C.taraxa_evm_state_API_ptr,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	ret := state_API_instances[ptr].GetCommittedStateDescriptor()
+	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_api_prove
+func taraxa_evm_state_api_prove(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -115,15 +109,12 @@ func taraxa_evm_state_API_Historical_Prove(
 		Keys      []common.Hash
 	}
 	dec_rlp(params_enc, &params)
-	self := state_API_instances[state_API_ptr(ptr)]
-	blk, txn := self.Historical.ReadBlock(params.BlkNum)
-	defer txn.NotifyDoneReading()
-	ret := blk.Prove(&params.StateRoot, &params.Addr, params.Keys...)
+	ret := state_API_instances[ptr].ReadBlock(params.BlkNum).Prove(&params.StateRoot, &params.Addr, params.Keys...)
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_API_Historical_GetAccount
-func taraxa_evm_state_API_Historical_GetAccount(
+//export taraxa_evm_state_api_get_account
+func taraxa_evm_state_api_get_account(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -135,16 +126,13 @@ func taraxa_evm_state_API_Historical_GetAccount(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	self := state_API_instances[state_API_ptr(ptr)]
-	blk, txn := self.Historical.ReadBlock(params.BlkNum)
-	defer txn.NotifyDoneReading()
-	blk.GetRawAccount(&params.Addr, func(bytes []byte) {
+	state_API_instances[ptr].ReadBlock(params.BlkNum).GetRawAccount(&params.Addr, func(bytes []byte) {
 		call_bytes_cb(bytes, cb)
 	})
 }
 
-//export taraxa_evm_state_API_Historical_GetAccountStorage
-func taraxa_evm_state_API_Historical_GetAccountStorage(
+//export taraxa_evm_state_api_get_account_storage
+func taraxa_evm_state_api_get_account_storage(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -157,16 +145,13 @@ func taraxa_evm_state_API_Historical_GetAccountStorage(
 		Key    common.Hash
 	}
 	dec_rlp(params_enc, &params)
-	self := state_API_instances[state_API_ptr(ptr)]
-	blk, txn := self.Historical.ReadBlock(params.BlkNum)
-	defer txn.NotifyDoneReading()
-	blk.GetAccountStorage(&params.Addr, &params.Key, func(bytes []byte) {
+	state_API_instances[ptr].ReadBlock(params.BlkNum).GetAccountStorage(&params.Addr, &params.Key, func(bytes []byte) {
 		call_bytes_cb(bytes, cb)
 	})
 }
 
-//export taraxa_evm_state_API_Historical_GetCodeByAddress
-func taraxa_evm_state_API_Historical_GetCodeByAddress(
+//export taraxa_evm_state_api_get_code_by_address
+func taraxa_evm_state_api_get_code_by_address(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -178,16 +163,12 @@ func taraxa_evm_state_API_Historical_GetCodeByAddress(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	self := state_API_instances[state_API_ptr(ptr)]
-	blk, txn := self.Historical.ReadBlock(params.BlkNum)
-	defer txn.NotifyDoneReading()
-	ret := blk.GetCodeByAddress(&params.Addr)
-	defer ret.Free()
-	call_bytes_cb(ret.Value(), cb)
+	ret := state_API_instances[ptr].ReadBlock(params.BlkNum).GetCodeByAddress(&params.Addr)
+	call_bytes_cb(ret, cb)
 }
 
-//export taraxa_evm_state_API_DryRunner_Apply
-func taraxa_evm_state_API_DryRunner_Apply(
+//export taraxa_evm_state_api_dry_run_transaction
+func taraxa_evm_state_api_dry_run_transaction(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -195,44 +176,92 @@ func taraxa_evm_state_API_DryRunner_Apply(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		BlkNum types.BlockNum
-		Blk    vm.BlockInfo
-		Trx    vm.Transaction
-		Opts   *vm.ExecutionOpts `rlp:"nil"`
+		Blk  vm.Block
+		Trx  vm.Transaction
+		Opts *vm.ExecutionOpts `rlp:"nil"`
 	}
 	dec_rlp(params_enc, &params)
-	self := state_API_instances[state_API_ptr(ptr)]
-	ret := self.dry_runner.Apply(params.BlkNum, &params.Blk, &params.Trx, params.Opts)
+	ret := state_API_instances[ptr].DryRunTransaction(&params.Blk, &params.Trx, params.Opts)
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_API_StateTransition_Apply
-func taraxa_evm_state_API_StateTransition_Apply(
+//export taraxa_evm_state_api_transition_state
+func taraxa_evm_state_api_transition_state(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	self := state_API_instances[state_API_ptr(ptr)]
-	params := &self.params_StateTransition_ApplyBlock
-	params.Transactions = params.Transactions[:0]
-	params.Uncles = params.Uncles[:0]
-	dec_rlp(params_enc, params)
-	self.db.SetBatch(gorocksdb.NewNativeWriteBatch1(unsafe.Pointer(params.BatchPtr)))
-	defer self.db.BatchEnd()
-	self.state_transition.BeginBlock(&params.EVMBlock)
-	for i := range self.params_StateTransition_ApplyBlock.Transactions {
-		self.state_transition.ExecuteTransaction(&self.params_StateTransition_ApplyBlock.Transactions[i])
+	self := state_API_instances[ptr]
+	st := self.GetStateTransition()
+	var enc rlp.Encoder
+	enc.ResizeReset(
+		self.transition_state_result_rlp_stats.max_strbuf_size,
+		self.transition_state_result_rlp_stats.max_listbuf_size)
+	result := enc.ListStart()
+	params_left, params_curr := rlp.MustSplitList(c_bytes_to_go(params_enc))
+	params_curr, params_left = rlp.MustSplitList(params_left)
+	var block_info vm.BlockInfo
+	rlp.MustDecodeBytes(params_curr, &block_info)
+	st.BeginBlock(&block_info)
+	params_curr, params_left = rlp.MustSplitList(params_left)
+	execution_results := enc.ListStart()
+	for curr, left := []byte(nil), params_curr; len(left) != 0; {
+		curr, left = rlp.MustSplitList(left)
+		var trx vm.Transaction
+		rlp.MustDecodeBytes(curr, &trx)
+		res := st.ExecuteTransaction(&trx)
+		enc.AppendAny(&res)
 	}
-	self.state_transition.EndBlock(self.params_StateTransition_ApplyBlock.Uncles)
-	self.state_transition.Commit(func(result state_transition.StateTransitionResult) {
-		self.rlp_encoder_StateTransition_Apply.Reset()
-		self.rlp_encoder_StateTransition_Apply.AppendAny(result)
-		buf := self.rlp_buf_StateTransition_ApplyBlock[:0]
-		self.rlp_encoder_StateTransition_Apply.FlushToBytes(-1, &buf)
-		call_bytes_cb(buf, cb)
-	})
+	enc.ListEnd(execution_results)
+	params_curr, params_left = rlp.MustSplitList(params_left)
+	var uncles []state_common.UncleBlock
+	rlp.MustDecodeBytes(params_curr, &uncles)
+	st.EndBlock(uncles)
+	state_root := st.PrepareCommit()
+	enc.AppendAny(&state_root)
+	enc.ListEnd(result)
+	strbuf_size, listbuf_size := enc.BufferSizes()
+	self.transition_state_result_rlp_stats.max_strbuf_size, self.transition_state_result_rlp_stats.max_listbuf_size =
+		util.Max(self.transition_state_result_rlp_stats.max_strbuf_size, strbuf_size),
+		util.Max(self.transition_state_result_rlp_stats.max_listbuf_size, listbuf_size)
+	call_bytes_cb(enc.ToBytes(-1), cb)
+	go debug.FreeOSMemory()
+}
+
+//export taraxa_evm_state_api_transition_state_commit
+func taraxa_evm_state_api_transition_state_commit(
+	ptr C.taraxa_evm_state_API_ptr,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	state_API_instances[ptr].GetStateTransition().Commit()
+}
+
+//export taraxa_evm_state_api_dpos_is_eligible
+func taraxa_evm_state_api_dpos_is_eligible(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) bool {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	return state_API_instances[ptr].QueryDPOS(params.BlkNum).IsEligible(&params.Addr)
+}
+
+//export taraxa_evm_state_api_dpos_eligible_count
+func taraxa_evm_state_api_dpos_eligible_count(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb_err C.taraxa_evm_BytesCallback,
+) uint64 {
+	defer handle_err(cb_err)
+	return state_API_instances[ptr].QueryDPOS(blk_n).EligibleAddressCount()
 }
 
 type state_API_ptr = byte
