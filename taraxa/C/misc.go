@@ -6,9 +6,10 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
 	"github.com/Taraxa-project/taraxa-evm/core"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -33,8 +34,8 @@ func taraxa_evm_keccak256_init_pool(size C.uint64_t) {
 }
 
 //export taraxa_evm_mainnet_genesis_balances
-func taraxa_evm_mainnet_genesis_balances(cb C.taraxa_evm_BytesCallback) {
-	call_bytes_cb(hexutil.MustDecode(core.MainnetAllocData), cb)
+func taraxa_evm_mainnet_genesis_balances() C.taraxa_evm_Bytes {
+	return go_bytes_to_c(bin.BytesView(core.MainnetAllocData))
 }
 
 func main() {

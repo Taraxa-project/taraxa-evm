@@ -16,9 +16,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -29,8 +27,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -38,8 +34,8 @@ import (
 )
 
 func main() {
-	const profiling = true
-	const desired_num_trx_per_block = 10000
+	const profiling = false
+	const desired_num_trx_per_block = 20000
 	//const desired_num_trx_per_block = 0
 
 	usr_dir, e1 := os.UserHomeDir()
@@ -125,32 +121,24 @@ func main() {
 		Path: mkdir_all(dest_data_dir, "state_db"),
 	})
 	defer statedb.Close()
-
-	latest_state := statedb.GetLatestState()
-	SUT := new(state_transition.StateTransition).Init(
-		latest_state,
+	api := new(state.API).Init(
+		statedb,
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		nil,
-		state_common.ExecutionConfig{
-			ETHForks: *params.MainnetChainConfig,
+		state.ChainConfig{
+			ETHChainConfig:  *params.MainnetChainConfig,
+			GenesisBalances: core.MainnetGenesisBalances(),
 		},
-		core.MainnetGenesisBalances(),
-		state_transition.Opts{
-			EVMState: state_evm.Opts{
-				NumTransactionsToBuffer: desired_num_trx_per_block + 1,
-			},
-			Trie: state_transition.TrieSinkOpts{
-				MainTrie: trie.WriterOpts{
-					FullNodeLevelsToCache: 4,
-				},
-			},
+		state.Opts{
+			ExpectedMaxTrxPerBlock:        desired_num_trx_per_block + 1,
+			MainTrieFullNodeLevelsToCache: 4,
 		},
 	)
-	defer SUT.Close()
+	defer api.Close()
+	st := api.GetStateTransition()
 
-	last_committed_state_desc := latest_state.GetCommittedDescriptor()
+	last_committed_state_desc := statedb.GetLatestState().GetCommittedDescriptor()
 	last_blk_num := last_committed_state_desc.BlockNum
 	assert.EQ(getBlockByNumber(last_blk_num).StateRoot.Hex(), last_committed_state_desc.StateRoot.Hex())
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
@@ -170,9 +158,9 @@ func main() {
 		fmt.Println("blocks:", blk_num_since, "-", last_blk_num, "tx_count:", tx_count)
 		time_before_execution := time.Now()
 		for _, b := range block_buf {
-			SUT.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
+			st.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
 			for _, trx_and_receipt := range b.Transactions {
-				res := SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
+				res := st.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
 				receipt := trx_and_receipt.Receipt
 				assert.EQ(uint64(receipt.GasUsed), res.GasUsed)
 				assert.EQ(len(receipt.Logs), len(res.Logs))
@@ -191,12 +179,12 @@ func main() {
 					assert.EQ(*receipt.ContractAddress, res.NewContractAddr)
 				}
 			}
-			SUT.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
+			st.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
 		}
-		state_root := SUT.PrepareCommit()
+		state_root := st.PrepareCommit()
 		assert.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())
 		//return
-		SUT.Commit()
+		st.Commit()
 		tps := float64(tx_count) / time.Now().Sub(time_before_execution).Seconds()
 		tps_sum += tps
 		tps_cnt++

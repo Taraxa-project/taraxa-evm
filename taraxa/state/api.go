@@ -5,6 +5,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
@@ -21,9 +22,11 @@ type API struct {
 	dpos             *dpos.API
 }
 type ChainConfig struct {
-	ExecutionConfig state_common.ExecutionConfig
-	GenesisBalances core.BalanceMap
-	DPOS            *dpos.Config `rlp:"nil"`
+	ETHChainConfig      params.ChainConfig
+	DisableBlockRewards bool
+	ExecutionOptions    vm.ExecutionOpts
+	GenesisBalances     core.BalanceMap
+	DPOS                *dpos.Config `rlp:"nil"`
 }
 type Opts struct {
 	// TODO have single "perm-gen size" config property to derive all preallocation sizes
@@ -39,8 +42,12 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 		db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		chain_cfg.ExecutionConfig,
-		chain_cfg.GenesisBalances,
+		state_transition.ChainConfig{
+			ETHChainConfig:      chain_cfg.ETHChainConfig,
+			DisableBlockRewards: chain_cfg.DisableBlockRewards,
+			ExecutionOptions:    chain_cfg.ExecutionOptions,
+			GenesisBalances:     chain_cfg.GenesisBalances,
+		},
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
 				NumTransactionsToBuffer: opts.ExpectedMaxTrxPerBlock,
@@ -51,7 +58,10 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 				},
 			},
 		})
-	self.dry_runner.Init(db, get_block_hash, self.dpos, chain_cfg.ExecutionConfig)
+	self.dry_runner.Init(db, get_block_hash, self.dpos, state_dry_runner.ChainConfig{
+		ETHChainConfig:   chain_cfg.ETHChainConfig,
+		ExecutionOptions: chain_cfg.ExecutionOptions,
+	})
 	return self
 }
 

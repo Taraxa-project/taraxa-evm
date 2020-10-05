@@ -17,8 +17,8 @@ type API struct {
 }
 type Config = struct {
 	EligibilityBalanceThreshold *big.Int
-	WithdrawalDelay             types.BlockNum
 	DepositDelay                types.BlockNum
+	WithdrawalDelay             types.BlockNum
 	GenesisState                DelegatedBalanceMap
 }
 

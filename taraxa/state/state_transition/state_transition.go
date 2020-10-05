@@ -2,6 +2,7 @@ package state_transition
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 
@@ -18,7 +19,7 @@ import (
 
 // TODO memory leaks??
 type StateTransition struct {
-	exec_cfg           state_common.ExecutionConfig
+	chain_cfg          ChainConfig
 	state              state_db.LatestState
 	pending_blk_state  state_db.PendingBlockState
 	evm_state          state_evm.EVMState
@@ -26,6 +27,12 @@ type StateTransition struct {
 	trie_sink          TrieSink
 	pending_state_root common.Hash
 	dpos_contract      *dpos.Contract
+}
+type ChainConfig struct {
+	ETHChainConfig      params.ChainConfig
+	DisableBlockRewards bool
+	ExecutionOptions    vm.ExecutionOpts
+	GenesisBalances     core.BalanceMap
 }
 type Opts struct {
 	EVMState state_evm.Opts
@@ -36,11 +43,10 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	exec_cfg state_common.ExecutionConfig,
-	genesis_balances core.BalanceMap,
+	chain_cfg ChainConfig,
 	opts Opts,
 ) *StateTransition {
-	self.exec_cfg = exec_cfg
+	self.chain_cfg = chain_cfg
 	self.state = state
 	self.evm_state.Init(opts.EVMState)
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
@@ -58,7 +64,7 @@ func (self *StateTransition) Init(
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
 		assert.Holds(self.pending_blk_state.GetNumber() == 0)
-		for addr, balance := range genesis_balances {
+		for addr, balance := range self.chain_cfg.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
 		if self.dpos_contract != nil {
@@ -87,18 +93,18 @@ func (self *StateTransition) evm_state_checkpoint() {
 func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
-	rules_changed := self.evm.SetBlock(blk_n, blk_info, self.exec_cfg.ETHForks.Rules(blk_n))
+	rules_changed := self.evm.SetBlock(blk_n, blk_info, self.chain_cfg.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.exec_cfg.ETHForks.IsDAOFork(blk_n) {
+	if self.chain_cfg.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
 	}
 }
 
 func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret = self.evm.Main(trx, self.exec_cfg.Options)
+	ret = self.evm.Main(trx, self.chain_cfg.ExecutionOptions)
 	self.evm_state_checkpoint()
 	return
 }
@@ -108,7 +114,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
 		self.evm_state_checkpoint()
 	}
-	if !self.exec_cfg.DisableBlockRewards {
+	if !self.chain_cfg.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
 		ethash.AccumulateRewards(
 			self.evm.GetRules(),
