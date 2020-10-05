@@ -35,11 +35,12 @@ type Opts struct {
 }
 
 func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts Opts) *API {
+	self.db = db
 	if chain_cfg.DPOS != nil {
 		self.dpos = new(dpos.API).Init(*chain_cfg.DPOS)
 	}
 	self.state_transition.Init(
-		db.GetLatestState(),
+		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
 		state_transition.ChainConfig{
@@ -58,7 +59,7 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 				},
 			},
 		})
-	self.dry_runner.Init(db, get_block_hash, self.dpos, state_dry_runner.ChainConfig{
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, state_dry_runner.ChainConfig{
 		ETHChainConfig:   chain_cfg.ETHChainConfig,
 		ExecutionOptions: chain_cfg.ExecutionOptions,
 	})
