@@ -1,10 +1,7 @@
 package state_transition
 
 import (
-	"fmt"
 	"runtime"
-
-	"github.com/Taraxa-project/taraxa-evm/dbg"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
@@ -56,9 +53,6 @@ func (self *TrieSink) StartMutation(addr *common.Address) state_evm.AccountMutat
 }
 
 func (self *TrieSink) Delete(addr *common.Address) {
-	if dbg.Debug {
-		fmt.Println("del", addr.Hex())
-	}
 	io := self.io
 	self.thread_main_trie_write.Submit(func() {
 		self.main_trie_writer.Delete(state_db.MainTrieIOAdapter{io}, keccak256.Hash(addr[:]))
@@ -77,9 +71,6 @@ type TrieSinkAccountMutation struct {
 }
 
 func (self *TrieSinkAccountMutation) Update(upd state_evm.AccountChange) {
-	if dbg.Debug {
-		fmt.Println("upd", self.addr.Hex(), dbg.JSON(upd))
-	}
 	io := self.host.io
 	if upd.CodeDirty {
 		io.Put(state_db.COL_code, upd.CodeHash, upd.Code)

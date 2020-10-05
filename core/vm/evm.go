@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/dbg"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
@@ -507,11 +505,6 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		}
 		if memorySize > 0 {
 			mem.Resize(memorySize)
-		}
-		if dbg.Debug {
-			fmt.Println("pc:", pc, "op:", op)
-			stack.Print()
-			mem.Print()
 		}
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, &mem, stack)

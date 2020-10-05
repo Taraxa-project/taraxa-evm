@@ -18,8 +18,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 
-	"github.com/Taraxa-project/taraxa-evm/dbg"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -171,17 +169,10 @@ func main() {
 		}
 		fmt.Println("blocks:", blk_num_since, "-", last_blk_num, "tx_count:", tx_count)
 		time_before_execution := time.Now()
-		for i, b := range block_buf {
-			blk_n := blk_num_since + uint64(i)
+		for _, b := range block_buf {
 			SUT.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
-			for j, trx_and_receipt := range b.Transactions {
-				//dbg.Debug = blk_n == 4172710
-				if dbg.Debug {
-					fmt.Println("trx", j)
-				}
+			for _, trx_and_receipt := range b.Transactions {
 				res := SUT.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
-				dbg.Noop(i, j, blk_n, res)
-				//fmt.Println(blk_n, j)
 				receipt := trx_and_receipt.Receipt
 				assert.EQ(uint64(receipt.GasUsed), res.GasUsed)
 				assert.EQ(len(receipt.Logs), len(res.Logs))

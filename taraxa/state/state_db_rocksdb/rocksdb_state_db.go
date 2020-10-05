@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Taraxa-project/taraxa-evm/dbg"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 
@@ -77,9 +75,6 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 		itr_pool = &self.col_main_trie_value_itr_pool
 	}
 	if itr_pool != nil {
-		if dbg.Debug {
-			dbg.Noop()
-		}
 		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
 		itr := itr_pool.Get().(*gorocksdb.Iterator)
 		defer itr_pool.Put(itr)

@@ -1,7 +1,6 @@
 package state_evm
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/dbg"
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -89,9 +88,6 @@ func (self *Account) GetCodeSize() uint64 {
 }
 
 func (self *Account) GetState(key *big.Int) (ret *big.Int) {
-	if dbg.Debug {
-		dbg.Noop()
-	}
 	if !self.IsNotNIL() {
 		return bigutil.Big0
 	}
