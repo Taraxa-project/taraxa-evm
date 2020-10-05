@@ -17,7 +17,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
@@ -26,12 +25,8 @@ import (
 
 type state_API struct {
 	state.API
-	db                                state_db_rocksdb.DB
-	get_blk_hash_C                    C.taraxa_evm_GetBlockHash
-	transition_state_result_rlp_stats struct {
-		max_strbuf_size  int
-		max_listbuf_size int
-	}
+	db             state_db_rocksdb.DB
+	get_blk_hash_C C.taraxa_evm_GetBlockHash
 }
 
 func (self *state_API) blk_hash(num types.BlockNum) *big.Int {
@@ -193,40 +188,25 @@ func taraxa_evm_state_api_transition_state(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
+	var params struct {
+		Blk    vm.BlockInfo
+		Trxs   []vm.Transaction
+		Uncles []state_common.UncleBlock
+	}
+	dec_rlp(params_enc, &params)
+	var retval struct {
+		ExecutionResults []vm.ExecutionResult
+		StateRoot        common.Hash
+	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
-	var enc rlp.Encoder
-	enc.ResizeReset(
-		self.transition_state_result_rlp_stats.max_strbuf_size,
-		self.transition_state_result_rlp_stats.max_listbuf_size)
-	result := enc.ListStart()
-	params_left, params_curr := rlp.MustSplitList(c_bytes_to_go(params_enc))
-	params_curr, params_left = rlp.MustSplitList(params_left)
-	var block_info vm.BlockInfo
-	rlp.MustDecodeBytes(params_curr, &block_info)
-	st.BeginBlock(&block_info)
-	params_curr, params_left = rlp.MustSplitList(params_left)
-	execution_results := enc.ListStart()
-	for curr, left := []byte(nil), params_curr; len(left) != 0; {
-		curr, left = rlp.MustSplitList(left)
-		var trx vm.Transaction
-		rlp.MustDecodeBytes(curr, &trx)
-		res := st.ExecuteTransaction(&trx)
-		enc.AppendAny(&res)
+	st.BeginBlock(&params.Blk)
+	for i := range params.Trxs {
+		retval.ExecutionResults = append(retval.ExecutionResults, st.ExecuteTransaction(&params.Trxs[i]))
 	}
-	enc.ListEnd(execution_results)
-	params_curr, params_left = rlp.MustSplitList(params_left)
-	var uncles []state_common.UncleBlock
-	rlp.MustDecodeBytes(params_curr, &uncles)
-	st.EndBlock(uncles)
-	state_root := st.PrepareCommit()
-	enc.AppendAny(&state_root)
-	enc.ListEnd(result)
-	strbuf_size, listbuf_size := enc.BufferSizes()
-	self.transition_state_result_rlp_stats.max_strbuf_size, self.transition_state_result_rlp_stats.max_listbuf_size =
-		util.Max(self.transition_state_result_rlp_stats.max_strbuf_size, strbuf_size),
-		util.Max(self.transition_state_result_rlp_stats.max_listbuf_size, listbuf_size)
-	call_bytes_cb(enc.ToBytes(-1), cb)
+	st.EndBlock(params.Uncles)
+	retval.StateRoot = st.PrepareCommit()
+	enc_rlp(&retval, cb)
 	go debug.FreeOSMemory()
 }
 

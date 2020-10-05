@@ -46,7 +46,7 @@ func MustSplit(b []byte) (k Kind, content, rest []byte) {
 	return
 }
 
-func MustSplitSring(b []byte) (content, rest []byte) {
+func MustSplitString(b []byte) (content, rest []byte) {
 	var err error
 	content, rest, err = SplitString(b)
 	util.PanicIfNotNil(err)

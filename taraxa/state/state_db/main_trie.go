@@ -63,17 +63,17 @@ type Account struct {
 
 func (self *Account) DecodeStorageRepr(enc_storage []byte) {
 	rest, tmp := rlp.MustSplitList(enc_storage)
-	tmp, rest = rlp.MustSplitSring(rest)
+	tmp, rest = rlp.MustSplitString(rest)
 	self.Nonce = bin.DEC_b_endian_compact_64(tmp)
-	tmp, rest = rlp.MustSplitSring(rest)
+	tmp, rest = rlp.MustSplitString(rest)
 	self.Balance = bigutil.FromBytes(tmp)
-	if tmp, rest = rlp.MustSplitSring(rest); len(tmp) != 0 {
+	if tmp, rest = rlp.MustSplitString(rest); len(tmp) != 0 {
 		self.StorageRootHash = new(common.Hash).SetBytes(tmp)
 	}
-	if tmp, rest = rlp.MustSplitSring(rest); len(tmp) != 0 {
+	if tmp, rest = rlp.MustSplitString(rest); len(tmp) != 0 {
 		self.CodeHash = new(common.Hash).SetBytes(tmp)
 	}
-	tmp, rest = rlp.MustSplitSring(rest)
+	tmp, rest = rlp.MustSplitString(rest)
 	self.CodeSize = bin.DEC_b_endian_compact_64(tmp)
 }
 
