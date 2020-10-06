@@ -36,6 +36,9 @@ type Opts struct {
 }
 
 func (self *EVMState) Init(opts Opts) {
+	if opts.NumTransactionsToBuffer == 0 {
+		opts.NumTransactionsToBuffer = 1
+	}
 	self.accounts.Init(AccountMapOptions{opts.NumTransactionsToBuffer * 32, 4})
 	self.accounts_in_curr_ver_original = make(Accounts, 0, 256)
 	self.accounts_in_curr_ver = self.accounts_in_curr_ver_original
