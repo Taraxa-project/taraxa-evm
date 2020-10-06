@@ -171,12 +171,13 @@ func taraxa_evm_state_api_dry_run_transaction(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		Blk  vm.Block
-		Trx  vm.Transaction
-		Opts *vm.ExecutionOpts `rlp:"nil"`
+		BlkNum types.BlockNum
+		Blk    vm.BlockInfo
+		Trx    vm.Transaction
+		Opts   *vm.ExecutionOpts `rlp:"nil"`
 	}
 	dec_rlp(params_enc, &params)
-	ret := state_API_instances[ptr].DryRunTransaction(&params.Blk, &params.Trx, params.Opts)
+	ret := state_API_instances[ptr].DryRunTransaction(&vm.Block{params.BlkNum, params.Blk}, &params.Trx, params.Opts)
 	enc_rlp(&ret, cb)
 }
 

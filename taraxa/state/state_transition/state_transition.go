@@ -93,7 +93,7 @@ func (self *StateTransition) evm_state_checkpoint() {
 func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
-	rules_changed := self.evm.SetBlock(blk_n, blk_info, self.chain_cfg.ETHChainConfig.Rules(blk_n))
+	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_cfg.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}

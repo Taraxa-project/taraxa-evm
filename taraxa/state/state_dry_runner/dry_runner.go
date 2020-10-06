@@ -43,7 +43,7 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	evm_state.SetInput(state_db.ExtendedReader{self.db.GetBlockState(blk.Number)})
 	var evm vm.EVM
 	evm.Init(self.get_block_hash, &evm_state, vm.Opts{})
-	evm.SetBlock(blk.Number, &blk.BlockInfo, self.chain_cfg.ETHChainConfig.Rules(blk.Number))
+	evm.SetBlock(blk, self.chain_cfg.ETHChainConfig.Rules(blk.Number))
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}

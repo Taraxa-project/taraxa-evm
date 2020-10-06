@@ -133,8 +133,8 @@ func (self *EVM) GetBlock() Block {
 	return self.block
 }
 
-func (self *EVM) SetBlock(blk_num types.BlockNum, blk_info *BlockInfo, rules Rules) (rules_changed bool) {
-	self.block.Number, self.block.BlockInfo = blk_num, *blk_info
+func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
+	self.block = *blk
 	if self.rules_initialized {
 		if self.rules == rules {
 			return false
