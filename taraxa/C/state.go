@@ -10,6 +10,8 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
@@ -243,6 +245,12 @@ func taraxa_evm_state_api_dpos_eligible_count(
 ) uint64 {
 	defer handle_err(cb_err)
 	return state_API_instances[ptr].QueryDPOS(blk_n).EligibleAddressCount()
+}
+
+//export taraxa_evm_state_api_dpos_contract_addr
+func taraxa_evm_state_api_dpos_contract_addr() (ret C.taraxa_evm_Addr) {
+	*(*common.Address)(unsafe.Pointer(&ret.Val)) = dpos.ContractAddress()
+	return
 }
 
 type state_API_ptr = byte

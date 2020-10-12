@@ -18,6 +18,7 @@ import (
 )
 
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ff"))
+
 var field_staking_balances = []byte{0}
 var field_deposits = []byte{1}
 var field_eligible_count = []byte{2}
@@ -70,7 +71,8 @@ func (self *Contract) ApplyGenesis() error {
 }
 
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
-	registry(contract_address, self)
+	defensive_copy := *contract_address
+	registry(&defensive_copy, self)
 }
 
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {

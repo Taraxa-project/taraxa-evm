@@ -17,7 +17,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
-// TODO memory leaks??
 type StateTransition struct {
 	chain_cfg          ChainConfig
 	state              state_db.LatestState
@@ -73,6 +72,7 @@ func (self *StateTransition) Init(
 		self.evm_state_checkpoint()
 		self.Commit()
 	}
+	self.chain_cfg.GenesisBalances = nil
 	return self
 }
 

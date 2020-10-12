@@ -65,3 +65,7 @@ func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	})
 	return
 }
+
+func ContractAddress() common.Address {
+	return *contract_address
+}
