@@ -83,7 +83,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if ctx.Value.Sign() != 0 {
 		return nil, errors.New("call value must be zero")
 	}
-	if evm.GetDepth() != 1 {
+	if evm.GetDepth() != 0 {
 		return nil, errors.New("only top-level calls are allowed")
 	}
 	var transfers InboundTransfers
