@@ -21,7 +21,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
@@ -59,9 +59,9 @@ func taraxa_evm_state_api_new(
 
 	defer util.LockUnlock(&state_API_alloc_mu)()
 	lastpos := len(state_API_available_ptrs) - 1
-	assert.Holds(lastpos >= 0)
+	asserts.Holds(lastpos >= 0)
 	ptr := state_API_available_ptrs[lastpos]
-	assert.Holds(state_API_instances[ptr] == nil)
+	asserts.Holds(state_API_instances[ptr] == nil)
 	state_API_available_ptrs = state_API_available_ptrs[:lastpos]
 	state_API_instances[ptr] = self
 	return C.taraxa_evm_state_API_ptr(ptr)

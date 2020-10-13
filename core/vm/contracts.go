@@ -22,7 +22,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -59,11 +59,11 @@ func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) 
 }
 
 func (self *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
-	assert.Holds(bytes.Compare(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) == 0)
+	asserts.Holds(bytes.Compare(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) == 0)
 	last_addr_byte := address[common.AddressLength-1]
-	assert.Holds(last_addr_byte != 0)
+	asserts.Holds(last_addr_byte != 0)
 	pos := last_addr_byte - 1
-	assert.Holds(self[pos] == nil)
+	asserts.Holds(self[pos] == nil)
 	self[pos] = contract
 }
 

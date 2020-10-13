@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 const WordSize = int(unsafe.Sizeof(big.Word(0)))
@@ -59,7 +59,7 @@ func Add(x, y *big.Int) *big.Int {
 func USub(x, y *big.Int) *big.Int {
 	if x == nil || x.Sign() == 0 {
 		ret := ZeroIfNIL(y)
-		assert.Holds(ret.Sign() == 0)
+		asserts.Holds(ret.Sign() == 0)
 		return ret
 	}
 	if y == nil || y.Sign() == 0 {

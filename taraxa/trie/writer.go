@@ -5,7 +5,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
@@ -22,7 +22,7 @@ type WriterOpts struct {
 }
 
 func (self *Writer) Init(schema Schema, root_hash *common.Hash, opts WriterOpts) *Writer {
-	assert.Holds(opts.FullNodeLevelsToCache <= MaxDepth)
+	asserts.Holds(opts.FullNodeLevelsToCache <= MaxDepth)
 	self.Schema = schema
 	if root_hash != nil {
 		self.root = (*node_hash)(root_hash)
@@ -75,7 +75,7 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 				}
 				ctx.enc_hash.AppendString(val.enc_hash)
 			} else {
-				assert.Holds(n.hash != nil)
+				asserts.Holds(n.hash != nil)
 			}
 		} else {
 			n.val = self.commit(db_tx, ctx, full_nodes_above, append(key_prefix, n.key_part...), n.val)

@@ -1,8 +1,9 @@
 package state_evm
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"math/big"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -21,7 +22,7 @@ type RawStorage = map[common.Hash][]byte
 
 type Input interface {
 	GetCode(*common.Hash) []byte
-	GetRawAccount(*common.Address, func([]byte))
+	GetAccount(addr *common.Address, cb func(state_db.Account))
 	GetAccountStorage(*common.Address, *common.Hash, func([]byte))
 }
 type Output interface {

@@ -30,3 +30,7 @@ func (self EVMStateStorage) Put(address *common.Address, k *common.Hash, v []byt
 func (self EVMStateStorage) Get(address *common.Address, k *common.Hash, cb func([]byte)) {
 	self.GetAccountStorageFromDB(address, k, cb)
 }
+
+func (self EVMStateStorage) IncrementNonce(address *common.Address) {
+	self.GetAccountConcrete(address).IncrementNonce()
+}

@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type AccountMap struct {
@@ -36,8 +36,8 @@ type AccountMapOptions = struct {
 const AccountMapBucketBaseSize = 3
 
 func (self *AccountMap) Init(opts AccountMapOptions) *AccountMap {
-	assert.Holds(opts.NumBuckets > 0)
-	assert.Holds(opts.BucketOverflowDesiredCapacity > 0)
+	asserts.Holds(opts.NumBuckets > 0)
+	asserts.Holds(opts.BucketOverflowDesiredCapacity > 0)
 	self.hasher_seed = rand_uintptr() | 1
 	self.log2_buckets_count = uint32(math.Ceil(math.Log2(float64(opts.NumBuckets))))
 	self.buckets = make([]AccountMapBucket, 1<<self.log2_buckets_count)

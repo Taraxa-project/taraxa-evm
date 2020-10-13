@@ -4,6 +4,9 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
@@ -14,8 +17,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 type MainTrieSchema struct{}
@@ -61,20 +62,21 @@ type Account struct {
 	CodeSize        uint64
 }
 
-func (self *Account) DecodeStorageRepr(enc_storage []byte) {
+func DecodeAccountFromTrie(enc_storage []byte) (ret Account) {
 	rest, tmp := rlp.MustSplitList(enc_storage)
 	tmp, rest = rlp.MustSplitString(rest)
-	self.Nonce = bin.DEC_b_endian_compact_64(tmp)
+	ret.Nonce = bin.DEC_b_endian_compact_64(tmp)
 	tmp, rest = rlp.MustSplitString(rest)
-	self.Balance = bigutil.FromBytes(tmp)
+	ret.Balance = bigutil.FromBytes(tmp)
 	if tmp, rest = rlp.MustSplitString(rest); len(tmp) != 0 {
-		self.StorageRootHash = new(common.Hash).SetBytes(tmp)
+		ret.StorageRootHash = new(common.Hash).SetBytes(tmp)
 	}
 	if tmp, rest = rlp.MustSplitString(rest); len(tmp) != 0 {
-		self.CodeHash = new(common.Hash).SetBytes(tmp)
+		ret.CodeHash = new(common.Hash).SetBytes(tmp)
 	}
 	tmp, rest = rlp.MustSplitString(rest)
-	self.CodeSize = bin.DEC_b_endian_compact_64(tmp)
+	ret.CodeSize = bin.DEC_b_endian_compact_64(tmp)
+	return
 }
 
 func (self *Account) EncodeForTrie() (enc_storage, enc_hash []byte) {

@@ -16,6 +16,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/files"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -28,7 +30,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"github.com/tecbot/gorocksdb"
 )
@@ -40,9 +42,9 @@ func main() {
 
 	usr_dir, e1 := os.UserHomeDir()
 	util.PanicIfNotNil(e1)
-	dest_data_dir := mkdir_all(usr_dir, "taraxa_evm_test")
+	dest_data_dir := files.CreateDirectories(usr_dir, "taraxa_evm_test")
 
-	profile_basedir := mkdir_all(dest_data_dir, "profiles")
+	profile_basedir := files.CreateDirectories(dest_data_dir, "profiles")
 	new_prof_file := func(time time.Time, kind string) *os.File {
 		ret, err := os.Create(path.Join(profile_basedir, strconv.FormatInt(time.Unix(), 10)+"_"+kind+".prof"))
 		util.PanicIfNotNil(err)
@@ -118,7 +120,7 @@ func main() {
 	}
 
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-		Path: mkdir_all(dest_data_dir, "state_db"),
+		Path: files.CreateDirectories(dest_data_dir, "state_db"),
 	})
 	defer statedb.Close()
 	api := new(state.API).Init(
@@ -140,7 +142,7 @@ func main() {
 
 	last_committed_state_desc := statedb.GetLatestState().GetCommittedDescriptor()
 	last_blk_num := last_committed_state_desc.BlockNum
-	assert.EQ(getBlockByNumber(last_blk_num).StateRoot.Hex(), last_committed_state_desc.StateRoot.Hex())
+	asserts.EQ(getBlockByNumber(last_blk_num).StateRoot.Hex(), last_committed_state_desc.StateRoot.Hex())
 	tps_sum, tps_cnt, tps_min, tps_max := 0.0, 0, math.MaxFloat64, -1.0
 	for {
 		blk_num_since := last_blk_num + 1
@@ -162,27 +164,27 @@ func main() {
 			for _, trx_and_receipt := range b.Transactions {
 				res := st.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
 				receipt := trx_and_receipt.Receipt
-				assert.EQ(uint64(receipt.GasUsed), res.GasUsed)
-				assert.EQ(len(receipt.Logs), len(res.Logs))
+				asserts.EQ(uint64(receipt.GasUsed), res.GasUsed)
+				asserts.EQ(len(receipt.Logs), len(res.Logs))
 				for i, log := range receipt.Logs {
 					actual_log := res.Logs[i]
-					assert.EQ(log.Address, actual_log.Address)
-					assert.Holds(bytes.Equal(log.Data, actual_log.Data))
-					assert.EQ(len(log.Topics), len(actual_log.Topics))
+					asserts.EQ(log.Address, actual_log.Address)
+					asserts.Holds(bytes.Equal(log.Data, actual_log.Data))
+					asserts.EQ(len(log.Topics), len(actual_log.Topics))
 					for i, topic := range log.Topics {
-						assert.EQ(topic, actual_log.Topics[i])
+						asserts.EQ(topic, actual_log.Topics[i])
 					}
 				}
 				if receipt.ContractAddress == nil {
-					assert.EQ(common.ZeroAddress, res.NewContractAddr)
+					asserts.EQ(common.ZeroAddress, res.NewContractAddr)
 				} else {
-					assert.EQ(*receipt.ContractAddress, res.NewContractAddr)
+					asserts.EQ(*receipt.ContractAddress, res.NewContractAddr)
 				}
 			}
 			st.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
 		}
 		state_root := st.PrepareCommit()
-		assert.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())
+		asserts.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())
 		//return
 		st.Commit()
 		tps := float64(tx_count) / time.Now().Sub(time_before_execution).Seconds()
@@ -208,12 +210,6 @@ func main() {
 		}
 		debug.FreeOSMemory()
 	}
-}
-
-func mkdir_all(path_segments ...string) string {
-	path := path.Join(path_segments...)
-	util.PanicIfNotNil(os.MkdirAll(path, os.ModePerm))
-	return path
 }
 
 func write_file(fname string, val []byte) {

@@ -18,6 +18,7 @@ package rlp
 
 import (
 	"fmt"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"io"
 	"math"
 	"math/big"
@@ -25,7 +26,6 @@ import (
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
@@ -241,7 +241,7 @@ func (self *Encoder) Write(b []byte) (int, error) {
 }
 
 func (self *Encoder) AppendRaw(b ...byte) {
-	assert.Holds(math.MaxUint32-len(self.str) > len(b))
+	asserts.Holds(math.MaxUint32-len(self.str) > len(b))
 	self.str = append(self.str, b...)
 }
 

@@ -2,7 +2,7 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"hash/fnv"
 	"math"
@@ -48,19 +48,19 @@ func TestMap(t *testing.T) {
 	}
 	actual := make(TestMap1)
 	MustDecodeBytes(MustEncodeToBytes(expected), &actual)
-	assert.Holds(len(actual) == len(expected))
+	asserts.Holds(len(actual) == len(expected))
 	for k, expected := range expected {
 		actual := actual[k]
-		assert.Holds(expected.F0 == actual.F0)
-		assert.Holds(expected.F1 == actual.F1)
-		assert.Holds(len(expected.F2) == len(actual.F2))
+		asserts.Holds(expected.F0 == actual.F0)
+		asserts.Holds(expected.F1 == actual.F1)
+		asserts.Holds(len(expected.F2) == len(actual.F2))
 		for k, expected := range expected.F2 {
 			actual := actual.F2[k]
-			assert.Holds(len(expected) == len(actual))
+			asserts.Holds(len(expected) == len(actual))
 			for i, expected := range expected {
 				actual := actual[i]
-				assert.Holds(expected.F0 == actual.F0)
-				assert.Holds(expected.F1 == actual.F1)
+				asserts.Holds(expected.F0 == actual.F0)
+				asserts.Holds(expected.F1 == actual.F1)
 			}
 		}
 	}

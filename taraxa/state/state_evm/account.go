@@ -7,7 +7,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
@@ -189,7 +189,7 @@ func (self *Account) IncrementNonce() {
 
 func (self *Account) SetCode(code []byte) {
 	self.ensure_exists()
-	assert.Holds(self.CodeSize == 0)
+	asserts.Holds(self.CodeSize == 0)
 	code_size := len(code)
 	if code_size == 0 {
 		return
@@ -206,6 +206,7 @@ func (self *Account) SetStateRawIrreversibly(key *common.Hash, value []byte) {
 		self.RawStorageDirty = make(RawStorage)
 	}
 	self.RawStorageDirty[*key] = value
+	self.register_change(nil)
 }
 
 func (self *Account) Suicide(newAddr *common.Address) {
@@ -238,6 +239,9 @@ func (self *Account) ensure_exists() {
 
 func (self *Account) register_change(revert func()) {
 	self.mod_count++
+	if revert == nil {
+		return
+	}
 	self.host.register_change(func() {
 		self.mod_count--
 		revert()

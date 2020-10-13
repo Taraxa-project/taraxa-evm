@@ -39,7 +39,7 @@ type beneficiary_t = common.Address
 type BalanceMap = map[beneficiary_t]*big.Int
 type DelegatedBalanceMap = map[benefactor_t]BalanceMap
 type Transfer = struct {
-	Amount   *big.Int
+	Value    *big.Int
 	Negative bool
 }
 type InboundTransfers = map[beneficiary_t]Transfer
@@ -48,6 +48,7 @@ type Storage interface {
 	AddBalance(*common.Address, *big.Int)
 	Put(*common.Address, *common.Hash, []byte)
 	Get(*common.Address, *common.Hash, func([]byte))
+	IncrementNonce(address *common.Address)
 }
 
 func (self *Contract) init(cfg Config, storage Storage) *Contract {
@@ -60,12 +61,13 @@ func (self *Contract) ApplyGenesis() error {
 	for benefactor, benefactor_deposits := range self.cfg.GenesisState {
 		transfers := make(map[beneficiary_t]Transfer, len(benefactor_deposits))
 		for k, v := range benefactor_deposits {
-			transfers[k] = Transfer{Amount: v}
+			transfers[k] = Transfer{Value: v}
 		}
 		if err := self.run(benefactor, transfers); err != nil {
 			return err
 		}
 	}
+	self.storage.IncrementNonce(contract_address)
 	self.Commit(0)
 	return nil
 }
@@ -107,7 +109,7 @@ func (self *Contract) run(benefactor common.Address, transfers InboundTransfers)
 	}
 	expenditure_total := bigutil.Big0
 	for beneficiary, transfer := range transfers {
-		if transfer.Amount.Sign() == 0 {
+		if transfer.Value.Sign() == 0 {
 			return errors.New("transfer amount is zero")
 		}
 		deposit_v := benefactor_deposits[beneficiary]
@@ -119,8 +121,8 @@ func (self *Contract) run(benefactor common.Address, transfers InboundTransfers)
 			benefactor_deposits[beneficiary] = deposit_v
 		}
 		if !transfer.Negative {
-			expenditure_total = new(big.Int).Add(expenditure_total, transfer.Amount)
-		} else if deposit_v.Cmp(transfer.Amount) < 0 {
+			expenditure_total = new(big.Int).Add(expenditure_total, transfer.Value)
+		} else if deposit_v.Cmp(transfer.Value) < 0 {
 			return errors.New("withdrawal exceeds deposit value")
 		}
 	}
@@ -139,11 +141,11 @@ func (self *Contract) run(benefactor common.Address, transfers InboundTransfers)
 				benefactor_withdrawals = make(BalanceMap)
 				self.curr_withdrawals[benefactor] = benefactor_withdrawals
 			}
-			benefactor_withdrawals[beneficiary] = bigutil.Add(benefactor_withdrawals[beneficiary], transfer.Amount)
+			benefactor_withdrawals[beneficiary] = bigutil.Add(benefactor_withdrawals[beneficiary], transfer.Value)
 		} else {
-			self.upd_staking_balance(beneficiary, transfer.Amount, false)
+			self.upd_staking_balance(beneficiary, transfer.Value, false)
 		}
-		deposit_v := op(benefactor_deposits[beneficiary], transfer.Amount)
+		deposit_v := op(benefactor_deposits[beneficiary], transfer.Value)
 		benefactor_deposits[beneficiary] = deposit_v
 		self.storage.Put(contract_address, stor_k(field_deposits, benefactor[:], beneficiary[:]), deposit_v.Bytes())
 	}
@@ -234,10 +236,10 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	eligible_count_change := 0
-	if negative && was_eligible && !eligible_now {
+	if was_eligible && !eligible_now {
 		eligible_count_change = -1
 	}
-	if !negative && !was_eligible && eligible_now {
+	if !was_eligible && eligible_now {
 		eligible_count_change = 1
 	}
 	if eligible_count_change == 0 {

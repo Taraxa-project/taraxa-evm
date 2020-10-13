@@ -3,7 +3,7 @@ package goroutines
 import (
 	"sync"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type SingleThreadExecutor struct {
@@ -17,7 +17,7 @@ func (self *SingleThreadExecutor) Init(buffer_size uint32) *SingleThreadExecutor
 		for !self.closed {
 			(<-self.tasks)()
 		}
-		assert.Holds(len(self.tasks) == 0)
+		asserts.Holds(len(self.tasks) == 0)
 	}()
 	return self
 }

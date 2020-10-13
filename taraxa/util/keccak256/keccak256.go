@@ -10,7 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -126,7 +126,7 @@ func HashAndReturnByValue(bs ...[]byte) (ret common.Hash) {
 }
 
 func HashView(bytes []byte) (ret *common.Hash) {
-	if l := len(bytes); l != 0 && assert.Holds(l == common.HashLength) {
+	if l := len(bytes); l != 0 && asserts.Holds(l == common.HashLength) {
 		ret = (*common.Hash)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&bytes)).Data))
 	}
 	return

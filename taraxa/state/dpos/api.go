@@ -3,7 +3,7 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
@@ -23,7 +23,7 @@ type Config = struct {
 }
 
 func (self *API) Init(cfg Config) *API {
-	assert.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
+	asserts.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
 	self.cfg = cfg
 	return self
 }
@@ -35,6 +35,8 @@ func (self *API) NewContract(storage Storage) *Contract {
 func (self *API) NewReader(blk_n types.BlockNum, backend_factory func(types.BlockNum) AccountStorageReader) Reader {
 	if self.cfg.DepositDelay < blk_n {
 		blk_n -= self.cfg.DepositDelay
+	} else {
+		blk_n = 0
 	}
 	return Reader{&self.cfg, backend_factory(blk_n)}
 }

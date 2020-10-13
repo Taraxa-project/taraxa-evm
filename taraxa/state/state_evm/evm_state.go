@@ -3,6 +3,8 @@ package state_evm
 import (
 	"unsafe"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -66,9 +68,8 @@ func (self *EVMState) GetAccountConcrete(addr *common.Address) *Account {
 		return acc
 	}
 	acc.host = self
-	self.in.GetRawAccount(addr, func(bytes []byte) {
-		acc.AccountBody = new(AccountBody)
-		acc.DecodeStorageRepr(bytes)
+	self.in.GetAccount(addr, func(db_acc state_db.Account) {
+		acc.AccountBody = &AccountBody{AccountChange: AccountChange{Account: db_acc}}
 		acc.loaded_from_db = true
 	})
 	return acc

@@ -22,7 +22,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
@@ -108,8 +108,8 @@ type ExecutionResult struct {
 }
 
 func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
-	assert.Holds(opts.NumStacksToPreallocate <= StackLimit)
-	assert.Holds(opts.PreallocatedStackSize <= StackLimit)
+	asserts.Holds(opts.NumStacksToPreallocate <= StackLimit)
+	asserts.Holds(opts.PreallocatedStackSize <= StackLimit)
 	self.get_hash = get_hash
 	self.state = state
 	self.mem_pool.buf = make([]byte, opts.PreallocatedMem)

@@ -4,7 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 
@@ -62,7 +62,7 @@ func (self *StateTransition) Init(
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
-		assert.Holds(self.pending_blk_state.GetNumber() == 0)
+		asserts.Holds(self.pending_blk_state.GetNumber() == 0)
 		for addr, balance := range self.chain_cfg.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}

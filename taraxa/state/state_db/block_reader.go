@@ -19,6 +19,12 @@ func (self ExtendedReader) GetAccountStorage(addr *common.Address, key *common.H
 	AccountTrieInputAdapter{addr, self}.GetValue(keccak256.Hash(key[:]), cb)
 }
 
+func (self ExtendedReader) GetAccount(addr *common.Address, cb func(Account)) {
+	self.GetRawAccount(addr, func(v []byte) {
+		cb(DecodeAccountFromTrie(v))
+	})
+}
+
 func (self ExtendedReader) GetRawAccount(addr *common.Address, cb func([]byte)) {
 	MainTrieInputAdapter{self}.GetValue(keccak256.Hash(addr[:]), cb)
 }

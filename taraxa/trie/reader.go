@@ -4,7 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -101,7 +101,7 @@ func (self Reader) resolve(db_tx Input, hash *node_hash, key_prefix []byte) (ret
 	db_tx.GetNode(hash.common_hash(), func(bytes []byte) {
 		ret, _ = self.dec_node(db_tx, key_prefix, hash, bytes)
 	})
-	assert.Holds(ret != nil)
+	asserts.Holds(ret != nil)
 	return
 }
 
@@ -152,7 +152,7 @@ func (self Reader) dec_short(db_tx Input, key_prefix []byte, db_hash *node_hash,
 			ret.hash = (*node_hash)(keccak256.HashView(content))
 			ret.val = nil_val_node
 		} else {
-			assert.Holds(0 < l && l <= self.MaxValueSizeToStoreInTrie())
+			asserts.Holds(0 < l && l <= self.MaxValueSizeToStoreInTrie())
 			ret.val = value_node{internal_value{content, self.ValueStorageToHashEncoding(content)}}
 		}
 		return ret
@@ -184,6 +184,6 @@ func (self Reader) resolve_val_n(db_tx Input, key *common.Hash) (ret value_node)
 		enc_storage = common.CopyBytes(enc_storage)
 		ret.val = internal_value{enc_storage, self.ValueStorageToHashEncoding(enc_storage)}
 	})
-	assert.Holds(ret.val != nil)
+	asserts.Holds(ret.val != nil)
 	return
 }
