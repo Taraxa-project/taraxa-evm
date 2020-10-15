@@ -157,15 +157,16 @@ func Byte(bigint *big.Int, padlength, n int) byte {
 
 // ReadBits encodes the absolute value of bigint as big-endian bytes. Callers must ensure
 // that buf has enough space. If buf is too short the result will be incomplete.
-func ReadBits(bigint *big.Int, buf []byte) {
-	i := len(buf)
+func ReadBits(bigint *big.Int, buf []byte) (left int) {
+	left = len(buf)
 	for _, d := range bigint.Bits() {
-		for j := 0; j < wordBytes && i > 0; j++ {
-			i--
-			buf[i] = byte(d)
+		for j := 0; j < wordBytes && left > 0; j++ {
+			left--
+			buf[left] = byte(d)
 			d >>= 8
 		}
 	}
+	return
 }
 
 // U256 encodes as a 256 bit two's complement number. This operation is destructive.

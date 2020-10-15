@@ -63,6 +63,13 @@ func Min(i, j int) int {
 	return j
 }
 
+func Min_u64(i, j uint64) uint64 {
+	if i < j {
+		return i
+	}
+	return j
+}
+
 func LockUnlock(l sync.Locker) func() {
 	l.Lock()
 	return l.Unlock

@@ -21,7 +21,7 @@ import (
 )
 
 func makeStackFunc(pop, push int) stackValidationFunc {
-	return func(stack *stack) error {
+	return func(stack *Stack) error {
 		if err := stack.require(pop); err != nil {
 			return err
 		}

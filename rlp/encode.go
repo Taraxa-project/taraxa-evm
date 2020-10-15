@@ -18,14 +18,15 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/assert"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"io"
 	"math"
 	"math/big"
 	"reflect"
 	"sync"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 const EmptyString = 0x80
@@ -81,8 +82,7 @@ type RLPEncodable interface {
 //
 // An interface value encodes as the value contained in the interface.
 //
-// Boolean values are not supported, nor are signed integers, floating
-// point numbers, maps, channels and functions.
+// Not supported: signed integers, floating point numbers, channels and functions.
 func Encode(w io.Writer, val interface{}) (err error) {
 	if outer, ok := w.(*Encoder); ok {
 		// Encode was called by some type's EncodeRLP.
@@ -157,7 +157,11 @@ func (self *Encoder) ResizeReset(string_buf_cap, list_buf_cap int) {
 	self.lhsize = 0
 }
 
-func (self *Encoder) ListsCount() int {
+func (self *Encoder) BufferSizes() (strbuf_size, listbuf_size int) {
+	return len(self.str), len(self.lheads)
+}
+
+func (self *Encoder) ListsCap() int {
 	return cap(self.lheads)
 }
 
@@ -213,20 +217,20 @@ func (self *Encoder) Flush(list_pos int, appender func(...byte)) {
 	appender(self.str[strpos:]...)
 }
 
-func (self *Encoder) FlushToBytes(list_pos int, buf *[]byte) {
-	self.Flush(list_pos, func(b ...byte) {
+func (self *Encoder) FlushToBytes(since_list_pos int, buf *[]byte) {
+	self.Flush(since_list_pos, func(b ...byte) {
 		*buf = append(*buf, b...)
 	})
 }
 
-func (self *Encoder) ToBytes(list_pos int) (ret []byte) {
+func (self *Encoder) ToBytes(since_list_pos int) (ret []byte) {
 	capacity := self.Size()
-	if list_pos != -1 {
-		lhead := self.lheads[list_pos]
+	if since_list_pos != -1 {
+		lhead := self.lheads[since_list_pos]
 		capacity -= (lhead.strpos + lhead.base_lhsize)
 	}
 	ret = make([]byte, 0, capacity)
-	self.FlushToBytes(list_pos, &ret)
+	self.FlushToBytes(since_list_pos, &ret)
 	return
 }
 
@@ -237,7 +241,7 @@ func (self *Encoder) Write(b []byte) (int, error) {
 }
 
 func (self *Encoder) AppendRaw(b ...byte) {
-	assert.Holds(math.MaxUint32-len(self.str) > len(b))
+	asserts.Holds(math.MaxUint32-len(self.str) > len(b))
 	self.str = append(self.str, b...)
 }
 
@@ -573,8 +577,12 @@ func makeMapWriter(typ reflect.Type) (writer, error) {
 		list_start := encoder.ListStart()
 		for i := value.MapRange(); i.Next(); {
 			list_start := encoder.ListStart()
-			util.PanicIfNotNil(k_type_info.writer(i.Key(), encoder))
-			util.PanicIfNotNil(v_type_info.writer(i.Value(), encoder))
+			if err := k_type_info.writer(i.Key(), encoder); err != nil {
+				return err
+			}
+			if err := v_type_info.writer(i.Value(), encoder); err != nil {
+				return err
+			}
 			encoder.ListEnd(list_start)
 		}
 		encoder.ListEnd(list_start)

@@ -17,9 +17,9 @@
 package vm
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"math/big"
+
+	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
@@ -108,7 +108,7 @@ func memoryGasCost(mem *Memory, newMemSize uint64) (uint64, error) {
 	newMemSizeWords := toWordSize(newMemSize)
 	newMemSize = newMemSizeWords * 32
 
-	if newMemSize > uint64(mem.Len()) {
+	if newMemSize > mem.Len() {
 		square := newMemSizeWords * newMemSizeWords
 		linCoef := newMemSizeWords * MemoryGas
 		quadCoef := square / QuadCoeffDiv
@@ -123,12 +123,12 @@ func memoryGasCost(mem *Memory, newMemSize uint64) (uint64, error) {
 }
 
 func constGasFunc(gas uint64) gasFunc {
-	return func(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 		return gas, nil
 	}
 }
 
-func gasCallDataCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCallDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -154,7 +154,7 @@ func gasCallDataCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, me
 	return gas, nil
 }
 
-func gasReturnDataCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasReturnDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -180,10 +180,10 @@ func gasReturnDataCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, 
 	return gas, nil
 }
 
-func gasSStore(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
 		y, x    = stack.Back(1), stack.Back(0)
-		current = evm.state.GetState(contract.Address(), common.BigToHash(x))
+		current = contract.Account.GetState(x)
 	)
 	// The legacy gas metering only takes into consideration the current state
 	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
@@ -221,7 +221,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySi
 	if current.Cmp(y) == 0 { // noop (1)
 		return NetSstoreNoopGas, nil
 	}
-	original := evm.state.GetCommittedState(contract.Address(), common.BigToHash(x))
+	original := contract.Account.GetCommittedState(x)
 	if original.Cmp(current) == 0 {
 		if original.Sign() == 0 { // create slot (2.1.1)
 			return NetSstoreInitGas, nil
@@ -249,7 +249,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySi
 }
 
 func makeGasLog(n uint64) gasFunc {
-	return func(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 		requestedSize, overflow := bigUint64(stack.Back(1))
 		if overflow {
 			return 0, errGasUintOverflow
@@ -278,7 +278,7 @@ func makeGasLog(n uint64) gasFunc {
 	}
 }
 
-func gasSha3(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasSha3(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -302,7 +302,7 @@ func gasSha3(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize
 	return gas, nil
 }
 
-func gasCodeCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCodeCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -326,7 +326,7 @@ func gasCodeCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, memory
 	return gas, nil
 }
 
-func gasExtCodeCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasExtCodeCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -352,11 +352,11 @@ func gasExtCodeCopy(evm *EVM, contract *Contract, stack *stack, mem *Memory, mem
 	return gas, nil
 }
 
-func gasExtCodeHash(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasExtCodeHash(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return evm.gas_table.ExtcodeHash, nil
 }
 
-func gasMLoad(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasMLoad(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -368,7 +368,7 @@ func gasMLoad(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySiz
 	return gas, nil
 }
 
-func gasMStore8(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasMStore8(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -380,7 +380,7 @@ func gasMStore8(evm *EVM, contract *Contract, stack *stack, mem *Memory, memoryS
 	return gas, nil
 }
 
-func gasMStore(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasMStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -392,7 +392,7 @@ func gasMStore(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySi
 	return gas, nil
 }
 
-func gasCreate(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCreate(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -404,7 +404,7 @@ func gasCreate(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySi
 	return gas, nil
 }
 
-func gasCreate2(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -427,19 +427,19 @@ func gasCreate2(evm *EVM, contract *Contract, stack *stack, mem *Memory, memoryS
 	return gas, nil
 }
 
-func gasBalance(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasBalance(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return evm.gas_table.Balance, nil
 }
 
-func gasExtCodeSize(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasExtCodeSize(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return evm.gas_table.ExtcodeSize, nil
 }
 
-func gasSLoad(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasSLoad(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return evm.gas_table.SLoad, nil
 }
 
-func gasExp(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasExp(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	expByteLen := uint64((stack.data[stack.len()-2].BitLen() + 7) / 8)
 
 	var (
@@ -452,17 +452,17 @@ func gasExp(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize 
 	return gas, nil
 }
 
-func gasCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
 		gas            = evm.gas_table.Calls
 		transfersValue = stack.Back(2).Sign() != 0
-		address        = common.BigToAddress(stack.Back(1))
+		acc            = evm.get_account(stack.Back(1))
 	)
 	if evm.rules.IsEIP158 {
-		if transfersValue && evm.state.Empty(address) {
+		if transfersValue && acc.IsEIP161Empty() {
 			gas += CallNewAccountGas
 		}
-	} else if !evm.state.Exist(address) {
+	} else if !acc.IsNotNIL() {
 		gas += CallNewAccountGas
 	}
 	if transfersValue {
@@ -487,7 +487,7 @@ func gasCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize
 	return gas, nil
 }
 
-func gasCallCode(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasCallCode(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas := evm.gas_table.Calls
 	if stack.Back(2).Sign() != 0 {
 		gas += CallValueTransferGas
@@ -511,36 +511,36 @@ func gasCallCode(evm *EVM, contract *Contract, stack *stack, mem *Memory, memory
 	return gas, nil
 }
 
-func gasReturn(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasReturn(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return memoryGasCost(mem, memorySize)
 }
 
-func gasRevert(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasRevert(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return memoryGasCost(mem, memorySize)
 }
 
-func gasSuicide(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasSuicide(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
 	if evm.rules.IsEIP150 {
 		gas = evm.gas_table.Suicide
-		var new_addr = common.BigToAddress(stack.Back(0))
+		new_acc := evm.get_account(stack.Back(0))
 		if evm.rules.IsEIP158 {
-			if evm.state.Empty(new_addr) && evm.state.HasBalance(contract.Address()) {
+			if new_acc.IsEIP161Empty() && contract.Account.GetBalance().Sign() != 0 {
 				gas += evm.gas_table.CreateBySuicide
 			}
-		} else if !evm.state.Exist(new_addr) {
+		} else if !new_acc.IsNotNIL() {
 			gas += evm.gas_table.CreateBySuicide
 		}
 	}
 
-	if !evm.state.HasSuicided(contract.Address()) {
+	if !contract.Account.HasSuicided() {
 		evm.state.AddRefund(SuicideRefundGas)
 	}
 	return gas, nil
 }
 
-func gasDelegateCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasDelegateCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -560,7 +560,7 @@ func gasDelegateCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, me
 	return gas, nil
 }
 
-func gasStaticCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasStaticCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
@@ -580,14 +580,14 @@ func gasStaticCall(evm *EVM, contract *Contract, stack *stack, mem *Memory, memo
 	return gas, nil
 }
 
-func gasPush(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasPush(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return GasFastestStep, nil
 }
 
-func gasSwap(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasSwap(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return GasFastestStep, nil
 }
 
-func gasDup(evm *EVM, contract *Contract, stack *stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasDup(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	return GasFastestStep, nil
 }

@@ -1,28 +1,35 @@
 package state_evm
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"math/big"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+
+	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
 type AccountChange struct {
-	state_common.Account
-	Code         []byte
-	CodeDirty    bool
-	BalanceDirty bool
-	StorageDirty AccountStorage
+	state_db.Account
+	StorageDirty    EVMStorage
+	RawStorageDirty RawStorage
+	Code            []byte
+	CodeDirty       bool
 }
-
-type AccountStorage = map[common.Hash]*big.Int
+type EVMStorage = map[bigutil.UnsignedStr]*big.Int
+type RawStorage = map[common.Hash][]byte
 
 type Input interface {
-	GetCode(code_hash *common.Hash) []byte
-	GetAccount(addr *common.Address) (state_common.Account, bool)
-	GetAccountStorage(addr *common.Address, key *common.Hash) *big.Int
+	GetCode(*common.Hash) []byte
+	GetAccount(addr *common.Address, cb func(state_db.Account))
+	GetAccountStorage(*common.Address, *common.Hash, func([]byte))
 }
-
 type Output interface {
-	OnAccountChanged(addr common.Address, change AccountChange)
-	OnAccountDeleted(addr common.Address)
+	StartMutation(*common.Address) AccountMutation
+	Delete(*common.Address)
+}
+type AccountMutation interface {
+	Update(AccountChange)
+	Commit()
 }

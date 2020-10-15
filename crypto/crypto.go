@@ -18,11 +18,14 @@ package crypto
 
 import (
 	"errors"
+	"math/big"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"golang.org/x/crypto/sha3"
-	"math/big"
 )
 
 var (
@@ -54,25 +57,22 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 }
 
 // CreateAddress creates an ethereum address given the bytes and the nonce
-func CreateAddress(b common.Address, nonce uint64) common.Address {
-	data := rlp.MustEncodeToBytes([]interface{}{b, nonce})
-	hash := keccak256.Hash(data)
-	ret := common.BytesToAddress(hash[12:])
-	return ret
+func CreateAddress(b *common.Address, nonce uint64) (ret common.Address) {
+	copy(ret[:], keccak256.Hash(rlp.MustEncodeToBytes([2]interface{}{b, nonce}))[12:])
+	return
 }
 
 // CreateAddress2 creates an ethereum address given the address bytes, initial
 // contract code hash and a salt.
-func CreateAddress2(b common.Address, salt [32]byte, inithash []byte) common.Address {
-	hash := keccak256.Hash([]byte{0xff}, b.Bytes(), salt[:], inithash)
-	ret := common.BytesToAddress(hash[12:])
-	return ret
+func CreateAddress2(b *common.Address, salt *common.Hash, inithash []byte) (ret common.Address) {
+	copy(ret[:], keccak256.Hash([]byte{0xff}, b.Bytes(), salt[:], inithash)[12:])
+	return
 }
 
 // ValidateSignatureValues verifies whether the signature values are valid with
 // the given chain rules. The v value is assumed to be either 0 or 1.
 func ValidateSignatureValues(v byte, r, s *big.Int, homestead bool) bool {
-	if r.Cmp(common.Big1) < 0 || s.Cmp(common.Big1) < 0 {
+	if r.Cmp(bigutil.Big1) < 0 || s.Cmp(bigutil.Big1) < 0 {
 		return false
 	}
 	// reject upper range of s values (ECDSA malleability)

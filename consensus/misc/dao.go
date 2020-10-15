@@ -18,24 +18,20 @@ package misc
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"math/big"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
-
-type DaoForkTarget interface {
-	GetBalance(common.Address) *big.Int
-	AddBalance(common.Address, *big.Int)
-	SubBalance(common.Address, *big.Int)
-}
 
 // ApplyDAOHardFork modifies the state database according to the DAO hard-fork
 // rules, transferring all balances of a set of DAO accounts to a single refund
 // contract.
-func ApplyDAOHardFork(db DaoForkTarget) {
+func ApplyDAOHardFork(db vm.State) {
 	// Move every DAO account and extra-balance account funds into the refund contract
+	refund_acc := db.GetAccount(&DAORefundContract)
 	for _, addr := range DAODrainList() {
-		bal := db.GetBalance(addr)
-		db.AddBalance(DAORefundContract, bal)
-		db.SubBalance(addr, bal)
+		acc := db.GetAccount(&addr)
+		bal := acc.GetBalance()
+		refund_acc.AddBalance(bal)
+		acc.SubBalance(bal)
 	}
 }
 

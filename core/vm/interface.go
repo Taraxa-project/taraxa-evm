@@ -24,37 +24,40 @@ import (
 
 // State is an EVM database for full state querying.
 type State interface {
-	GetBalance(common.Address) *big.Int
-	HasBalance(common.Address) bool
-	AssertBalanceGTE(common.Address, *big.Int) bool
-	GetNonce(common.Address) uint64
-	GetCodeHash(common.Address) common.Hash
-	GetCode(common.Address) []byte
-	GetCodeSize(common.Address) uint64
-	GetCommittedState(common.Address, common.Hash) *big.Int
-	GetState(common.Address, common.Hash) *big.Int
-	HasSuicided(common.Address) bool
-	// Exist reports whether the given account exists in state.
-	// Notably this should also return true for suicided accounts.
-	Exist(common.Address) bool
-	// Empty returns whether the given account is empty. Empty
-	// is defined according to EIP161 (balance = nonce = code = 0).
-	Empty(common.Address) bool
-
-	SetCode(common.Address, []byte)
-	AddBalance(common.Address, *big.Int)
-	SubBalance(common.Address, *big.Int)
-	IncrementNonce(common.Address)
-	SetState(common.Address, common.Hash, *big.Int)
-	Suicide(addr, newAddr common.Address)
-
+	GetAccount(*common.Address) StateAccount
 	AddLog(LogRecord)
 	GetLogs() []LogRecord
-
 	AddRefund(uint64)
 	SubRefund(uint64)
 	GetRefund() uint64
-
 	RevertToSnapshot(int)
 	Snapshot() int
+}
+
+type StateAccount interface {
+	Address() *common.Address
+	GetBalance() *big.Int
+	GetNonce() uint64
+	GetCodeHash() *common.Hash
+	GetCode() []byte
+	GetCodeSize() uint64
+	GetCommittedState(*big.Int) *big.Int
+	GetState(*big.Int) *big.Int
+	HasSuicided() bool
+	// Exist reports whether the given account exists in state.
+	// Notably this should also return true for suicided accounts.
+	IsNotNIL() bool
+	// Empty returns whether the given account is empty. Empty
+	// is defined according to EIP161 (balance = nonce = code = 0).
+	IsEIP161Empty() bool
+	SetCode([]byte)
+	AddBalance(*big.Int)
+	SubBalance(*big.Int)
+	IncrementNonce()
+	SetState(*big.Int, *big.Int)
+	Suicide(*common.Address)
+}
+
+func BalanceGTE(acc StateAccount, val *big.Int) bool {
+	return val.Sign() == 0 || acc.GetBalance().Cmp(val) >= 0
 }

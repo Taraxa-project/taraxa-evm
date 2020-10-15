@@ -2,237 +2,117 @@ package state_db_rocksdb
 
 import (
 	"bytes"
-	"encoding/binary"
+	"runtime"
+	"strconv"
+	"sync"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/goroutines"
 	"github.com/tecbot/gorocksdb"
-	"runtime"
-	"sync"
-	"unsafe"
 )
 
 type DB struct {
 	db                           *gorocksdb.DB
-	cols                         Columns
+	cf_handles                   [state_db.COL_COUNT]*gorocksdb.ColumnFamilyHandle
 	col_main_trie_value_itr_pool sync.Pool
 	col_acc_trie_value_itr_pool  sync.Pool
 	itr_pools_mu                 sync.RWMutex
-	maintenance_task_executor    util.SingleThreadExecutor
-	batch                        *gorocksdb.WriteBatch
-	batch_accessor               util.SingleThreadExecutor
+	latest_state                 latest_state
+	maintenance_task_executor    goroutines.SingleThreadExecutor
 	close_mu                     sync.RWMutex
 	closed                       bool
 }
+type Opts = struct {
+	Path string
+}
 
-type Columns = [COL_COUNT]*gorocksdb.ColumnFamilyHandle
-type Column = byte
-
-const (
-	COL_code Column = iota
-	COL_main_trie_node
-	COL_main_trie_value
-	COL_main_trie_value_latest
-	COL_acc_trie_node
-	COL_acc_trie_value
-	COL_acc_trie_value_latest
-	COL_COUNT
-)
-
-func (self *DB) Init(db *gorocksdb.DB, cols Columns) *DB {
+func (self *DB) Init(opts Opts) *DB {
+	const real_col_cnt = 1 + state_db.COL_COUNT
+	cfnames, cfopts := [real_col_cnt]string{"default"}, [real_col_cnt]*gorocksdb.Options{cf_opts_default}
+	for i := state_db.Column(1); i < real_col_cnt; i++ {
+		cfnames[i], cfopts[i] = strconv.Itoa(int(i)), cf_opts_default
+	}
+	db, cf_handles, err := gorocksdb.OpenDbColumnFamilies(db_opts, opts.Path, cfnames[:], cfopts[:])
+	util.PanicIfNotNil(err)
 	self.db = db
-	self.cols = cols
+	copy(self.cf_handles[:], cf_handles[1:])
 	self.reset_itr_pools()
+	self.maintenance_task_executor.Init(512) // 4KB
+	self.latest_state.Init(self)
 	return self
 }
 
 func (self *DB) Close() {
 	defer util.LockUnlock(&self.close_mu)()
-	self.maintenance_task_executor.Synchronize()
-	self.batch_accessor.Synchronize()
+	self.latest_state.Close()
+	self.maintenance_task_executor.JoinAndClose()
+	self.db.Close()
 	self.closed = true
 }
 
-func (self *DB) reset_itr_pools() {
-	self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(COL_main_trie_value)
-	self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(COL_acc_trie_value)
+func (self *DB) GetBlockState(num types.BlockNum) state_db.Reader {
+	return block_state_reader{self, num}
 }
 
-func (self *DB) TransactionBegin(batch *gorocksdb.WriteBatch) {
-	self.batch_accessor.Do(func() {
-		self.batch = batch
-	})
+type block_state_reader struct {
+	*DB
+	blk_n types.BlockNum
 }
 
-func (self *DB) TransactionEnd() {
-	self.batch_accessor.Do(func() {
-		self.batch = nil
-	})
-	self.batch_accessor.Synchronize()
-}
-
-func (self *DB) Refresh() {
-	defer util.LockUnlock(&self.itr_pools_mu)()
-	self.reset_itr_pools()
-}
-
-func (self *DB) PutCode(code_hash *common.Hash, code []byte) {
-	self.batch_accessor.Do(func() {
-		self.batch.PutCF(self.cols[COL_code], code_hash[:], code)
-	})
-}
-
-func (self *DB) DeleteCode(code_hash *common.Hash) {
-	self.batch_accessor.Do(func() {
-		self.batch.DeleteCF(self.cols[COL_code], code_hash[:])
-	})
-}
-
-func (self *DB) PutMainTrieNode(node_hash *common.Hash, node []byte) {
-	self.batch_accessor.Do(func() {
-		self.batch.PutCF(self.cols[COL_main_trie_node], node_hash[:], node)
-	})
-}
-
-func (self *DB) PutMainTrieValue(block_num types.BlockNum, addr_hash *common.Hash, v []byte) {
-	self.batch_accessor.Do(func() {
-		key := main_trie_val_key(block_num, addr_hash)
-		self.batch.PutCF(self.cols[COL_main_trie_value], bin.AnyBytes2(unsafe.Pointer(&key), len(key)), v)
-	})
-}
-
-func (self *DB) PutMainTrieValueLatest(addr_hash *common.Hash, v []byte) {
-	self.batch_accessor.Do(func() {
-		self.batch.PutCF(self.cols[COL_main_trie_value_latest], addr_hash[:], v)
-	})
-}
-
-func (self *DB) DeleteMainTrieValueLatest(addr_hash *common.Hash) {
-	self.batch_accessor.Do(func() {
-		self.batch.DeleteCF(self.cols[COL_main_trie_value_latest], addr_hash[:])
-	})
-}
-
-func (self *DB) PutAccountTrieNode(node_hash *common.Hash, node []byte) {
-	self.batch_accessor.Do(func() {
-		self.batch.PutCF(self.cols[COL_acc_trie_node], node_hash[:], node)
-	})
-}
-
-func (self *DB) PutAccountTrieValue(block_num types.BlockNum, addr *common.Address, key_hash *common.Hash, v []byte) {
-	self.batch_accessor.Do(func() {
-		key := acc_trie_val_key(block_num, addr, key_hash)
-		self.batch.PutCF(self.cols[COL_acc_trie_value], bin.AnyBytes2(unsafe.Pointer(&key), len(key)), v)
-	})
-}
-
-func (self *DB) PutAccountTrieValueLatest(addr *common.Address, key_hash *common.Hash, v []byte) {
-	self.batch_accessor.Do(func() {
-		key := acc_trie_val_latest_key(addr, key_hash)
-		self.batch.PutCF(self.cols[COL_acc_trie_value_latest], bin.AnyBytes2(unsafe.Pointer(&key), len(key)), v)
-	})
-}
-
-func (self *DB) DeleteAccountTrieValueLatest(addr *common.Address, key_hash *common.Hash) {
-	self.batch_accessor.Do(func() {
-		key := acc_trie_val_latest_key(addr, key_hash)
-		self.batch.DeleteCF(self.cols[COL_acc_trie_value_latest], bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
-	})
-}
-
-func (self *DB) GetCode(code_hash *common.Hash) (ret []byte) {
-	ret = self.get(self.cols[COL_code], code_hash[:])
-	return
-}
-
-func (self *DB) GetMainTrieNode(node_hash *common.Hash) (ret []byte) {
-	ret = self.get(self.cols[COL_main_trie_node], node_hash[:])
-	return
-}
-
-func (self *DB) GetMainTrieValue(block_num types.BlockNum, addr_hash *common.Hash) (ret []byte) {
-	key := main_trie_val_key(block_num, addr_hash)
-	ret = self.find_trie_value(&self.col_main_trie_value_itr_pool, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
-	return
-}
-
-func (self *DB) GetMainTrieValueLatest(addr_hash *common.Hash) (ret []byte) {
-	ret = self.get(self.cols[COL_main_trie_value_latest], addr_hash[:])
-	return
-}
-
-func (self *DB) GetAccountTrieNode(node_hash *common.Hash) (ret []byte) {
-	ret = self.get(self.cols[COL_acc_trie_node], node_hash[:])
-	return
-}
-
-func (self *DB) GetAccountTrieValue(block_num types.BlockNum, addr *common.Address, key_hash *common.Hash) (
-	ret []byte) {
-	key := acc_trie_val_key(block_num, addr, key_hash)
-	ret = self.find_trie_value(&self.col_acc_trie_value_itr_pool, bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
-	return
-}
-
-func (self *DB) GetAccountTrieValueLatest(addr *common.Address, key_hash *common.Hash) (ret []byte) {
-	key := acc_trie_val_latest_key(addr, key_hash)
-	ret = self.get(self.cols[COL_acc_trie_value_latest], bin.AnyBytes2(unsafe.Pointer(&key), len(key)))
-	return
-}
-
-func (self *DB) get(col *gorocksdb.ColumnFamilyHandle, k []byte) (ret []byte) {
-	handle, err := self.db.GetCFPinned(opts_r_default, col, k)
-	util.PanicIfNotNil(err)
-	ret = common.CopyBytes(handle.Data())
-	self.maintenance_task_executor.Do(handle.Destroy)
-	return
-}
-
-func (self *DB) find_trie_value(itr_pool *sync.Pool, key []byte) (ret []byte) {
-	defer util.LockUnlock(self.itr_pools_mu.RLocker())()
-	itr := itr_pool.Get().(*gorocksdb.Iterator)
-	defer itr_pool.Put(itr)
-	if itr.SeekForPrev(key); !itr.Valid() {
-		if err := itr.Err(); err != nil {
-			panic(err)
-		}
+func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func([]byte)) {
+	if self.blk_n == types.BlockNumberNIL {
 		return
 	}
-	k_slice := itr.Key()
-	if bytes.HasPrefix(k_slice.Data(), key[:len(key)-BlockNumberLength]) {
-		v_slice := itr.Value()
-		ret = common.CopyBytes(v_slice.Data())
-		self.maintenance_task_executor.Do(v_slice.Free)
+	var itr_pool *sync.Pool
+	if col == state_db.COL_acc_trie_value {
+		itr_pool = &self.col_acc_trie_value_itr_pool
+	} else if col == state_db.COL_main_trie_value {
+		itr_pool = &self.col_main_trie_value_itr_pool
 	}
-	self.maintenance_task_executor.Do(k_slice.Free)
-	return
+	if itr_pool != nil {
+		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
+		itr := itr_pool.Get().(*gorocksdb.Iterator)
+		defer itr_pool.Put(itr)
+		var k_versioned TrieValueKey
+		k_versioned.SetKey(k)
+		k_versioned.SetBlockNum(self.blk_n)
+		if itr.SeekForPrev(k_versioned[:]); !itr.Valid() {
+			if err := itr.Err(); err != nil {
+				panic(err)
+			}
+			return
+		}
+		k_slice := itr.Key()
+		if bytes.HasPrefix(k_slice.Data(), k[:]) {
+			v_slice := itr.Value()
+			if v := v_slice.Data(); len(v) != 0 {
+				cb(v)
+			}
+			self.maintenance_task_executor.Submit(v_slice.Free)
+		}
+		self.maintenance_task_executor.Submit(k_slice.Free)
+		return
+	}
+	v_slice, err := self.db.GetCF(opts_r, self.cf_handles[col], k[:])
+	util.PanicIfNotNil(err)
+	if v := v_slice.Data(); len(v) != 0 {
+		cb(v)
+	}
+	self.maintenance_task_executor.Submit(v_slice.Free)
 }
 
-func main_trie_val_key(block_num types.BlockNum, addr_hash *common.Hash) (
-	ret [common.HashLength + BlockNumberLength]byte) {
-	copy(ret[:], addr_hash[:])
-	binary.BigEndian.PutUint64(ret[common.HashLength:], block_num)
-	return
+func (self *DB) GetLatestState() state_db.LatestState {
+	return &self.latest_state
 }
 
-func acc_trie_val_key(block_num types.BlockNum, addr *common.Address, key_hash *common.Hash) (
-	ret [common.AddressLength + common.HashLength + BlockNumberLength]byte) {
-	copy(ret[:], addr[:])
-	copy(ret[common.AddressLength:], key_hash[:])
-	binary.BigEndian.PutUint64(ret[common.AddressLength+common.HashLength:], block_num)
-	return
-}
-
-func acc_trie_val_latest_key(addr *common.Address, key_hash *common.Hash) (
-	ret [common.AddressLength + common.HashLength]byte) {
-	copy(ret[:], addr[:])
-	copy(ret[common.AddressLength:], key_hash[:])
-	return
-}
-
-func (self *DB) trie_value_itr_pool(col Column) sync.Pool {
+func (self *DB) trie_value_itr_pool(col state_db.Column) sync.Pool {
 	return sync.Pool{New: func() interface{} {
-		ret := self.db.NewIteratorCF(opts_r_default_itr, self.cols[col])
+		ret := self.db.NewIteratorCF(opts_r_itr, self.cf_handles[col])
 		runtime.SetFinalizer(ret, func(itr *gorocksdb.Iterator) {
 			defer util.LockUnlock(self.close_mu.RLocker())()
 			if !self.closed {
@@ -243,18 +123,8 @@ func (self *DB) trie_value_itr_pool(col Column) sync.Pool {
 	}}
 }
 
-const BlockNumberLength = int(unsafe.Sizeof(types.BlockNum(0)))
-
-var opts_r_default_itr = func() *gorocksdb.ReadOptions {
-	ret := gorocksdb.NewDefaultReadOptions()
-	ret.SetVerifyChecksums(false)
-	ret.SetPrefixSameAsStart(true)
-	ret.SetFillCache(false)
-	return ret
-}()
-
-var opts_r_default = func() *gorocksdb.ReadOptions {
-	ret := gorocksdb.NewDefaultReadOptions()
-	ret.SetVerifyChecksums(false)
-	return ret
-}()
+func (self *DB) reset_itr_pools() {
+	defer util.LockUnlock(&self.itr_pools_mu)()
+	self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_main_trie_value)
+	self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_acc_trie_value)
+}

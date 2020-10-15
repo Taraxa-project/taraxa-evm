@@ -1,37 +1,46 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package vm
 
 import (
 	"fmt"
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
 
 // Memory implements a simple memory model for the ethereum virtual machine.
 type Memory struct {
+	pool        *MemoryPool
+	pool_offset int
+	using_pool  bool
 	store       []byte
 	lastGasCost uint64
 }
+type MemoryPool struct {
+	buf      []byte
+	reserved int
+}
 
-// NewMemory returns a new memory model.
-func NewMemory() *Memory {
-	return &Memory{}
+func (self *Memory) Init(pool *MemoryPool) *Memory {
+	self.pool = pool
+	self.pool_offset = pool.reserved
+	self.using_pool = true
+	return self
+}
+
+func (self *Memory) Release() {
+	self.release(nil)
+}
+
+func (self *Memory) release(move_to []byte) {
+	copy(move_to, self.store)
+	if self.using_pool {
+		self.using_pool = false
+		bin.ZFill_1(self.store)
+		self.pool.reserved = self.pool_offset
+	}
+	self.store = move_to
 }
 
 // Set sets offset + size to value
@@ -41,7 +50,7 @@ func (m *Memory) Set(offset, size uint64, value []byte) {
 	if size > 0 {
 		// length of store may never be less than offset + size.
 		// The store should be resized PRIOR to setting the memory
-		if offset+size > uint64(len(m.store)) {
+		if offset+size > m.Len() {
 			panic("invalid memory: store empty")
 		}
 		copy(m.store[offset:offset+size], value)
@@ -53,61 +62,43 @@ func (m *Memory) Set(offset, size uint64, value []byte) {
 func (m *Memory) Set32(offset uint64, val *big.Int) {
 	// length of store may never be less than offset + size.
 	// The store should be resized PRIOR to setting the memory
-	if offset+32 > uint64(len(m.store)) {
+	end := offset + 32
+	if end > m.Len() {
 		panic("invalid memory: store empty")
 	}
-	// Zero the memory area
-	copy(m.store[offset:offset+32], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
-	// Fill in relevant bits
-	math.ReadBits(val, m.store[offset:offset+32])
+	chunk := m.store[offset:end]
+	// Fill in relevant bits, zero the memory area
+	bin.ZFill_1(chunk[:math.ReadBits(val, chunk)])
 }
 
 // Resize resizes the memory to size
 func (m *Memory) Resize(size uint64) {
-	if uint64(m.Len()) < size {
-		resized := make([]byte, size)
-		copy(resized, m.store)
-		m.store = resized
+	if size <= m.Len() {
+		return
 	}
+	if m.using_pool {
+		pool_reserved := m.pool_offset + int(size)
+		if pool_reserved <= len(m.pool.buf) {
+			m.pool.reserved = pool_reserved
+			m.store = m.pool.buf[m.pool_offset:pool_reserved]
+			return
+		}
+	}
+	m.release(make([]byte, size))
 }
 
 // Get returns offset + size as a new slice
 func (m *Memory) Get(offset, size int64) (cpy []byte) {
-	if size == 0 {
-		return nil
-	}
-
-	if len(m.store) > int(offset) {
+	if size != 0 && len(m.store) > int(offset) {
 		cpy = make([]byte, size)
 		copy(cpy, m.store[offset:offset+size])
-
-		return
 	}
-
 	return
 }
 
-// GetPtr returns the offset + size
-func (m *Memory) GetPtr(offset, size int64) []byte {
-	if size == 0 {
-		return nil
-	}
-
-	if len(m.store) > int(offset) {
-		return m.store[offset : offset+size]
-	}
-
-	return nil
-}
-
 // Len returns the length of the backing slice
-func (m *Memory) Len() int {
-	return len(m.store)
-}
-
-// Data returns the backing slice
-func (m *Memory) Data() []byte {
-	return m.store
+func (m *Memory) Len() uint64 {
+	return uint64(len(m.store))
 }
 
 // Print dumps the content of the memory.
