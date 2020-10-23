@@ -103,7 +103,7 @@ type ExecutionResult struct {
 	NewContractAddr common.Address
 	Logs            []LogRecord
 	GasUsed         uint64
-	CodeErr         util.ErrorString
+	ExecutionErr    util.ErrorString
 	ConsensusErr    util.ErrorString
 }
 
@@ -226,10 +226,10 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 			ret.ConsensusErr = err_str
 			return
 		} else {
-			ret.CodeErr = err_str
+			ret.ExecutionErr = err_str
 		}
 	}
-	gas_left += util.Min_u64(self.state.GetRefund(), (gas_cap-gas_left)/2)
+	gas_left += util.MinU64(self.state.GetRefund(), (gas_cap-gas_left)/2)
 	ret.GasUsed = gas_cap - gas_left
 	ret.Logs = self.state.GetLogs()
 	if !opts.DisableGasFee {

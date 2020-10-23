@@ -36,7 +36,7 @@ var (
 type ChainConfig struct {
 	HomesteadBlock types.BlockNum `json:"homesteadBlock,omitempty"` // Homestead switch block (nil = no fork, 0 = already homestead)
 	DAOForkBlock   types.BlockNum `json:"daoForkBlock,omitempty"`   // TheDAO hard-fork switch block (nil = no fork)
-	// EIP150 implements the Gas price changes (https://github.com/ethereum/EIPs/issues/150)dfwe
+	// EIP150 implements the Gas price changes (https://github.com/ethereum/EIPs/issues/150)
 	EIP150Block         types.BlockNum `json:"eip150Block,omitempty"`         // EIP150 HF block (nil = no fork)
 	EIP158Block         types.BlockNum `json:"eip158Block,omitempty"`         // EIP158 HF block
 	ByzantiumBlock      types.BlockNum `json:"byzantiumBlock,omitempty"`      // Byzantium switch block (nil = no fork, 0 = already on byzantium)

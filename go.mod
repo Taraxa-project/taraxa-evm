@@ -8,6 +8,7 @@ require (
 	github.com/emicklei/dot v0.10.2
 	github.com/fjl/gencodec v0.0.0-20191126094850-e283372f291f // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/otiai10/copy v1.2.0
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.6.1
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c

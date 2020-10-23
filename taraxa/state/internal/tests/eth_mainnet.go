@@ -132,7 +132,7 @@ func main() {
 			ETHChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},
-		state.Opts{
+		state.APIOpts{
 			ExpectedMaxTrxPerBlock:        desired_num_trx_per_block + 1,
 			MainTrieFullNodeLevelsToCache: 4,
 		},
