@@ -19,14 +19,13 @@ import (
 )
 
 func TestEthMainnetSmoke(t *testing.T) {
-	ctx := tests.NewTestCtx(t)
-	defer ctx.Close()
-
-	blocks := data.Parse_eth_mainnet_blocks_0_300000()
+	tc := tests.NewTestCtx(t)
+	defer tc.Close()
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-		Path: ctx.DataDir(),
+		Path: tc.DataDir(),
 	})
 	defer statedb.Close()
+	blocks := data.Parse_eth_mainnet_blocks_0_300000()
 	SUT := new(API).Init(
 		statedb,
 		func(num types.BlockNum) *big.Int {
