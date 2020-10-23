@@ -1,12 +1,9 @@
 package tests
 
 import (
-	"encoding/binary"
 	"os"
 	"runtime"
 	"testing"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/stretchr/testify/assert"
 
@@ -46,8 +43,7 @@ func (self *TestCtx) DataDir() string {
 }
 
 func SimpleAddr(i int) (ret common.Address) {
-	asserts.Holds(i > 0)
-	binary.BigEndian.PutUint64(ret[:], uint64(i))
+	ret.SetBytes(bin.ENC_b_endian_compact_64_1(uint64(i)))
 	return
 }
 

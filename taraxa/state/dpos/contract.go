@@ -1,9 +1,8 @@
 package dpos
 
 import (
+	"errors"
 	"math/big"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
@@ -25,13 +24,6 @@ var field_deposits = []byte{1}
 var field_eligible_count = []byte{2}
 var field_withdrawals_by_block = []byte{3}
 
-var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
-var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
-var ErrInsufficientBalanceForDeposits = util.ErrorString("insufficient balance for the deposits")
-var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
-var ErrNoTransfers = util.ErrorString("no transfers")
-var ErrCallValueNonzero = util.ErrorString("call value must be zero")
-
 type Contract struct {
 	cfg                        Config
 	storage                    Storage
@@ -50,7 +42,7 @@ type Transfer = struct {
 	Value    *big.Int
 	Negative bool
 }
-type Transfers = map[beneficiary_t]Transfer
+type InboundTransfers = map[beneficiary_t]Transfer
 type Storage interface {
 	SubBalance(*common.Address, *big.Int) bool
 	AddBalance(*common.Address, *big.Int)
@@ -91,21 +83,21 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if ctx.Value.Sign() != 0 {
-		return nil, ErrCallValueNonzero
+		return nil, errors.New("call value must be zero")
 	}
 	if evm.GetDepth() != 0 {
-		return nil, ErrCallIsNotToplevel
+		return nil, errors.New("only top-level calls are allowed")
 	}
-	var transfers Transfers
+	var transfers InboundTransfers
 	if err := rlp.DecodeBytes(ctx.Input, &transfers); err != nil {
 		return nil, err
 	}
 	return nil, self.run(*ctx.CallerAccount.Address(), transfers)
 }
 
-func (self *Contract) run(benefactor common.Address, transfers Transfers) (err error) {
+func (self *Contract) run(benefactor common.Address, transfers InboundTransfers) (err error) {
 	if len(transfers) == 0 {
-		return ErrNoTransfers
+		return errors.New("no transfers")
 	}
 	if self.deposits == nil {
 		self.deposits = make(DelegatedBalanceMap)
@@ -118,7 +110,7 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 	expenditure_total := bigutil.Big0
 	for beneficiary, transfer := range transfers {
 		if transfer.Value.Sign() == 0 {
-			return ErrTransferAmountIsZero
+			return errors.New("transfer amount is zero")
 		}
 		deposit_v := benefactor_deposits[beneficiary]
 		if deposit_v == nil {
@@ -131,11 +123,11 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 		if !transfer.Negative {
 			expenditure_total = new(big.Int).Add(expenditure_total, transfer.Value)
 		} else if deposit_v.Cmp(transfer.Value) < 0 {
-			return ErrWithdrawalExceedsDeposit
+			return errors.New("withdrawal exceeds deposit value")
 		}
 	}
 	if !self.storage.SubBalance(&benefactor, expenditure_total) {
-		return ErrInsufficientBalanceForDeposits
+		return errors.New("insufficient balance for the deposits")
 	}
 	for beneficiary, transfer := range transfers {
 		op := bigutil.Add

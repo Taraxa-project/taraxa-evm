@@ -20,13 +20,6 @@ func IsReallyNil(value Any) bool {
 	return false
 }
 
-func MaxU64(x, y uint64) uint64 {
-	if x > y {
-		return x
-	}
-	return y
-}
-
 func Max(x, y int) int {
 	if x > y {
 		return x
@@ -70,7 +63,7 @@ func Min(i, j int) int {
 	return j
 }
 
-func MinU64(i, j uint64) uint64 {
+func Min_u64(i, j uint64) uint64 {
 	if i < j {
 		return i
 	}
