@@ -47,7 +47,7 @@ func taraxa_evm_state_api_new(
 		DBPath       string
 		GetBlockHash uintptr
 		ChainConfig  state.ChainConfig
-		Opts         state.Opts
+		Opts         state.APIOpts
 	}
 	dec_rlp(params_enc, &params)
 	self := new(state_API)

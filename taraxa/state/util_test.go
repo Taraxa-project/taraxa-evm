@@ -1,7 +1,6 @@
 package state
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -21,9 +20,5 @@ var base_taraxa_chain_cfg = ChainConfig{
 	GenesisBalances: make(core.BalanceMap),
 }
 
-var addr = tests.SimpleAddr
-
-func addr_p(i int) *common.Address {
-	ret := addr(i)
-	return &ret
-}
+var addr = tests.Addr
+var addr_p = tests.AddrP

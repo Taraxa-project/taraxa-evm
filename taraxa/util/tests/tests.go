@@ -45,10 +45,15 @@ func (self *TestCtx) DataDir() string {
 	return self.data_dir
 }
 
-func SimpleAddr(i int) (ret common.Address) {
+func Addr(i uint64) (ret common.Address) {
 	asserts.Holds(i > 0)
 	binary.BigEndian.PutUint64(ret[:], uint64(i))
 	return
+}
+
+func AddrP(i uint64) *common.Address {
+	ret := Addr(i)
+	return &ret
 }
 
 func Noop(...interface{}) {}

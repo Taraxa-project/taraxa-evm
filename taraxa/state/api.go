@@ -28,13 +28,13 @@ type ChainConfig struct {
 	GenesisBalances     core.BalanceMap
 	DPOS                *dpos.Config `rlp:"nil"`
 }
-type Opts struct {
+type APIOpts struct {
 	// TODO have single "perm-gen size" config property to derive all preallocation sizes
 	ExpectedMaxTrxPerBlock        uint32
 	MainTrieFullNodeLevelsToCache byte
 }
 
-func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts Opts) *API {
+func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts APIOpts) *API {
 	self.db = db
 	if chain_cfg.DPOS != nil {
 		self.dpos = new(dpos.API).Init(*chain_cfg.DPOS)

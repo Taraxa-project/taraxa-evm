@@ -81,3 +81,8 @@ func LockUnlock(l sync.Locker) func() {
 	l.Lock()
 	return l.Unlock
 }
+
+// a nice way to create a block of code with scope
+func Call(f func()) {
+	f()
+}

@@ -35,7 +35,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 			ETHChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},
-		Opts{
+		APIOpts{
 			ExpectedMaxTrxPerBlock:        300,
 			MainTrieFullNodeLevelsToCache: 4,
 		},

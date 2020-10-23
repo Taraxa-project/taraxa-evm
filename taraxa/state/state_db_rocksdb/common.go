@@ -40,7 +40,6 @@ var db_opts = func() *gorocksdb.Options {
 	ret.SetCreateIfMissingColumnFamilies(true)
 	ret.IncreaseParallelism(runtime.NumCPU())
 	ret.SetMaxFileOpeningThreads(runtime.NumCPU())
-	ret.SetMaxOpenFiles(128)
 	return ret
 }()
 var cf_opts_default = gorocksdb.NewDefaultOptions()

@@ -264,11 +264,9 @@ func TestDPOS(t *testing.T) {
 			defer statedb.Close()
 			SUT := new(API).Init(
 				statedb,
-				func(num types.BlockNum) *big.Int {
-					panic("unexpected")
-				},
+				func(num types.BlockNum) *big.Int { panic("unexpected") },
 				chain_cfg,
-				Opts{},
+				APIOpts{},
 			)
 			check_exp_dpos_state := func(blk_n types.BlockNum) {
 				assert_meta := "at block " + fmt.Sprint(blk_n)
