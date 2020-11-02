@@ -6,7 +6,6 @@ package main
 import "C"
 import (
 	"math/big"
-	"runtime/debug"
 	"sync"
 	"unsafe"
 
@@ -210,7 +209,6 @@ func taraxa_evm_state_api_transition_state(
 	st.EndBlock(params.Uncles)
 	retval.StateRoot = st.PrepareCommit()
 	enc_rlp(&retval, cb)
-	go debug.FreeOSMemory()
 }
 
 //export taraxa_evm_state_api_transition_state_commit

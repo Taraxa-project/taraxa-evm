@@ -30,7 +30,7 @@ type ChainConfig struct {
 }
 type APIOpts struct {
 	// TODO have single "perm-gen size" config property to derive all preallocation sizes
-	ExpectedMaxTrxPerBlock        uint32
+	ExpectedMaxTrxPerBlock        uint64
 	MainTrieFullNodeLevelsToCache byte
 }
 

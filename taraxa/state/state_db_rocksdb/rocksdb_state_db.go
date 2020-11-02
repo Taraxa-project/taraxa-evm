@@ -19,6 +19,9 @@ import (
 type DB struct {
 	db                           *gorocksdb.DB
 	cf_handles                   [state_db.COL_COUNT]*gorocksdb.ColumnFamilyHandle
+	opts_r                       *gorocksdb.ReadOptions
+	opts_r_itr                   *gorocksdb.ReadOptions
+	opts_w                       *gorocksdb.WriteOptions
 	col_main_trie_value_itr_pool sync.Pool
 	col_acc_trie_value_itr_pool  sync.Pool
 	itr_pools_mu                 sync.RWMutex
@@ -33,14 +36,39 @@ type Opts = struct {
 
 func (self *DB) Init(opts Opts) *DB {
 	const real_col_cnt = 1 + state_db.COL_COUNT
-	cfnames, cfopts := [real_col_cnt]string{"default"}, [real_col_cnt]*gorocksdb.Options{cf_opts_default}
+	db_opts := func() *gorocksdb.Options {
+		ret := gorocksdb.NewDefaultOptions()
+		ret.SetErrorIfExists(false)
+		ret.SetCreateIfMissing(true)
+		ret.SetCreateIfMissingColumnFamilies(true)
+		ret.IncreaseParallelism(runtime.NumCPU())
+		ret.SetMaxFileOpeningThreads(runtime.NumCPU())
+		return ret
+	}()
+	defer db_opts.Destroy()
+	cf_opts := gorocksdb.NewDefaultOptions()
+	defer cf_opts.Destroy()
+	cfnames, cfopts := [real_col_cnt]string{"default"}, [real_col_cnt]*gorocksdb.Options{cf_opts}
 	for i := state_db.Column(1); i < real_col_cnt; i++ {
-		cfnames[i], cfopts[i] = strconv.Itoa(int(i)), cf_opts_default
+		cfnames[i], cfopts[i] = strconv.Itoa(int(i)), cf_opts
 	}
 	db, cf_handles, err := gorocksdb.OpenDbColumnFamilies(db_opts, opts.Path, cfnames[:], cfopts[:])
 	util.PanicIfNotNil(err)
 	self.db = db
 	copy(self.cf_handles[:], cf_handles[1:])
+	self.opts_r = func() *gorocksdb.ReadOptions {
+		ret := gorocksdb.NewDefaultReadOptions()
+		ret.SetVerifyChecksums(false)
+		return ret
+	}()
+	self.opts_r_itr = func() *gorocksdb.ReadOptions {
+		ret := gorocksdb.NewDefaultReadOptions()
+		ret.SetVerifyChecksums(false)
+		ret.SetPrefixSameAsStart(true)
+		ret.SetFillCache(false)
+		return ret
+	}()
+	self.opts_w = gorocksdb.NewDefaultWriteOptions()
 	self.reset_itr_pools()
 	self.maintenance_task_executor.Init(512) // 4KB
 	self.latest_state.Init(self)
@@ -49,6 +77,9 @@ func (self *DB) Init(opts Opts) *DB {
 
 func (self *DB) Close() {
 	defer util.LockUnlock(&self.close_mu)()
+	defer self.opts_r.Destroy()
+	defer self.opts_r_itr.Destroy()
+	defer self.opts_w.Destroy()
 	self.latest_state.Close()
 	self.maintenance_task_executor.JoinAndClose()
 	self.db.Close()
@@ -98,7 +129,7 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 		self.maintenance_task_executor.Submit(k_slice.Free)
 		return
 	}
-	v_slice, err := self.db.GetCF(opts_r, self.cf_handles[col], k[:])
+	v_slice, err := self.db.GetCF(self.opts_r, self.cf_handles[col], k[:])
 	util.PanicIfNotNil(err)
 	if v := v_slice.Data(); len(v) != 0 {
 		cb(v)
@@ -112,7 +143,7 @@ func (self *DB) GetLatestState() state_db.LatestState {
 
 func (self *DB) trie_value_itr_pool(col state_db.Column) sync.Pool {
 	return sync.Pool{New: func() interface{} {
-		ret := self.db.NewIteratorCF(opts_r_itr, self.cf_handles[col])
+		ret := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[col])
 		runtime.SetFinalizer(ret, func(itr *gorocksdb.Iterator) {
 			defer util.LockUnlock(self.close_mu.RLocker())()
 			if !self.closed {

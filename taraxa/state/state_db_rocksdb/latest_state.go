@@ -38,7 +38,7 @@ func (self *latest_state) Close() {
 }
 
 func (self *latest_state) GetCommittedDescriptor() (ret state_db.StateDescriptor) {
-	v_slice, err := self.db.Get(opts_r, last_committed_desc_key)
+	v_slice, err := self.db.Get(self.opts_r, last_committed_desc_key)
 	util.PanicIfNotNil(err)
 	defer v_slice.Free()
 	ret.BlockNum = types.BlockNumberNIL
@@ -87,7 +87,7 @@ func (self *latest_state) Commit(state_root common.Hash) (err error) {
 			BlockNum:  committed_blk_n,
 			StateRoot: state_root,
 		}))
-		err = self.db.Write(opts_w, self.batch)
+		err = self.db.Write(self.opts_w, self.batch)
 		self.batch.Clear()
 		self.reset_itr_pools()
 	})

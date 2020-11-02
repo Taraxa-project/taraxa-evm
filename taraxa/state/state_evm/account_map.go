@@ -11,7 +11,7 @@ type AccountMap struct {
 	num_entries                      uint64
 	buckets                          []AccountMapBucket
 	log2_buckets_count               uint32
-	bucket_overflow_desired_capacity uint32
+	bucket_overflow_desired_capacity uint64
 	bucket_pos_last                  uintptr
 	hasher_seed                      uintptr
 }
@@ -29,8 +29,8 @@ type AccountMapKey = struct {
 	addr     common.Address
 }
 type AccountMapOptions = struct {
-	NumBuckets                    uint32
-	BucketOverflowDesiredCapacity uint32
+	NumBuckets                    uint64
+	BucketOverflowDesiredCapacity uint64
 }
 
 const AccountMapBucketBaseSize = 3

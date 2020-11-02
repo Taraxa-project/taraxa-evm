@@ -34,7 +34,7 @@ type EVMStateAccountHeader struct {
 }
 type Accounts = []*Account
 type Opts struct {
-	NumTransactionsToBuffer uint32
+	NumTransactionsToBuffer uint64
 }
 
 func (self *EVMState) Init(opts Opts) {
