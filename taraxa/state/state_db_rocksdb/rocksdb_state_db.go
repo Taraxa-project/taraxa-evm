@@ -75,6 +75,14 @@ func (self *DB) Init(opts Opts) *DB {
 	return self
 }
 
+func (self *DB) Snapshot(dir string, log_size_for_flush uint64) error {
+	c, err := self.db.NewCheckpoint()
+	if err != nil {
+		return err
+	}
+	return c.CreateCheckpoint(dir, log_size_for_flush)
+}
+
 func (self *DB) Close() {
 	defer util.LockUnlock(&self.close_mu)()
 	defer self.opts_r.Destroy()
