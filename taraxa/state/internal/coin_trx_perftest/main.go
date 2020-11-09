@@ -214,7 +214,9 @@ func main() {
 		action()
 		elapsed_per_stage[name] = time.Now().Sub(time_start).Seconds()
 	}
-	debug.SetGCPercent(-1)
+	if disable_gc {
+		debug.SetGCPercent(-1)
+	}
 	for ; test_blk_ordinal < num_test_blocks; test_blk_ordinal++ {
 		fmt.Println("running block #", test_blk_ordinal, "of", num_test_blocks, "...")
 
@@ -245,8 +247,12 @@ func main() {
 			st.Commit()
 		})
 
-		pprof.StopCPUProfile()
-		debug.FreeOSMemory()
+		if enable_profiling {
+			pprof.StopCPUProfile()
+		}
+		if disable_gc {
+			debug.FreeOSMemory()
+		}
 		if enable_profiling {
 			util.PanicIfNotNil(pprof.WriteHeapProfile(make_prof_file(test_blk_ordinal, "heap")))
 			util.PanicIfNotNil(pprof.StartCPUProfile(make_prof_file(test_blk_ordinal, "cpu")))
