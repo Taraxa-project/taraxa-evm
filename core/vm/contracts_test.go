@@ -18,7 +18,6 @@ package vm
 
 import (
 	"fmt"
-	"math/big"
 	"testing"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -337,12 +336,12 @@ var bn256PairingTests = []precompiledTest{
 }
 
 func testPrecompiled(addr string, test precompiledTest, t *testing.T) {
-	p := PrecompiledContractsByzantium[common.HexToAddress(addr)]
+	a := common.HexToAddress(addr)
+	p := PrecompiledContractsByzantium.Get(&a)
 	in := common.Hex2Bytes(test.input)
-	contract := NewContract(nil, Account(common.HexToAddress("1337")), new(big.Int), p.RequiredGas(&CallFrame{Input: in}, nil), in)
-	contract.precompiled = p
-	t.Run(fmt.Sprintf("%s-Gas=%d", test.name, contract.Gas), func(t *testing.T) {
-		if res, err := RunPrecompiledContract(contract, nil); err != nil {
+	frame := CallFrame{Input: in}
+	t.Run(fmt.Sprintf("%s-Gas=%d", test.name, p.RequiredGas(frame, nil)), func(t *testing.T) {
+		if res, err := p.Run(frame, nil); err != nil {
 			t.Error(err)
 		} else if common.Bytes2Hex(res) != test.expected {
 			t.Errorf("Expected %v, got %v", test.expected, common.Bytes2Hex(res))
@@ -354,24 +353,20 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 	if test.noBenchmark {
 		return
 	}
-	p := PrecompiledContractsByzantium[common.HexToAddress(addr)]
+	a := common.HexToAddress(addr)
+	p := PrecompiledContractsByzantium.Get(&a)
 	in := common.Hex2Bytes(test.input)
-	reqGas := p.RequiredGas(&CallFrame{Input: in}, nil)
-	contract := NewContract(nil, Account(common.HexToAddress("1337")), new(big.Int), reqGas, in)
-	contract.precompiled = p
+	frame := CallFrame{Input: in}
 
 	var (
-		res  []byte
-		err  error
-		data = make([]byte, len(in))
+		res []byte
+		err error
 	)
 
-	bench.Run(fmt.Sprintf("%s-Gas=%d", test.name, contract.Gas), func(bench *testing.B) {
+	bench.Run(fmt.Sprintf("%s-Gas=%d", test.name, p.RequiredGas(frame, nil)), func(bench *testing.B) {
 		bench.ResetTimer()
 		for i := 0; i < bench.N; i++ {
-			contract.Gas = reqGas
-			copy(data, in)
-			res, err = RunPrecompiledContract(contract, nil)
+			res, err = p.Run(frame, nil)
 		}
 		bench.StopTimer()
 		//Check if it is correct

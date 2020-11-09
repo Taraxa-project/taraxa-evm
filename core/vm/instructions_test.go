@@ -31,6 +31,10 @@ type twoOperandTest struct {
 	expected string
 }
 
+func newstack() *Stack {
+	return new(Stack).Init(0)
+}
+
 func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error)) {
 	var (
 		evm   EVM
@@ -38,7 +42,7 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 		pc    = uint64(0)
 	)
 
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	for i, test := range tests {
 		x := new(big.Int).SetBytes(common.Hex2Bytes(test.x))
 		shift := new(big.Int).SetBytes(common.Hex2Bytes(test.y))
@@ -67,7 +71,7 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 			}
 		}
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func TestByteOp(t *testing.T) {
@@ -76,7 +80,7 @@ func TestByteOp(t *testing.T) {
 		stack = newstack()
 	)
 
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	tests := []struct {
 		v        string
 		th       uint64
@@ -103,7 +107,7 @@ func TestByteOp(t *testing.T) {
 			t.Fatalf("Expected  [%v] %v:th byte to be %v, was %v.", test.v, test.th, test.expected, actual)
 		}
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func TestSHL(t *testing.T) {
@@ -209,7 +213,7 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contrac
 		stack = newstack()
 	)
 
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	// convert args
 	byteArgs := make([][]byte, len(args))
 	for i, arg := range args {
@@ -225,7 +229,7 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contrac
 		op(&pc, &evm, nil, nil, stack)
 		stack.pop()
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func BenchmarkOpAdd64(b *testing.B) {
@@ -436,6 +440,10 @@ func BenchmarkOpIsZero(b *testing.B) {
 	opBenchmark(b, opIszero, x)
 }
 
+func NewMemory() *Memory {
+	return new(Memory).Init(new(MemoryPool).Init(1024))
+}
+
 func TestOpMstore(t *testing.T) {
 	var (
 		evm   EVM
@@ -443,7 +451,7 @@ func TestOpMstore(t *testing.T) {
 		mem   = NewMemory()
 	)
 
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	mem.Resize(64)
 	pc := uint64(0)
 	v := "abcdef00000000000000abba000000000deaf000000c0de00100000000133700"
@@ -457,7 +465,7 @@ func TestOpMstore(t *testing.T) {
 	if common.Bytes2Hex(mem.Get(0, 32)) != "0000000000000000000000000000000000000000000000000000000000000001" {
 		t.Fatalf("Mstore failed to overwrite previous value")
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func BenchmarkOpMstore(bench *testing.B) {
@@ -467,7 +475,7 @@ func BenchmarkOpMstore(bench *testing.B) {
 		mem   = NewMemory()
 	)
 
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	mem.Resize(64)
 	pc := uint64(0)
 	memStart := big.NewInt(0)
@@ -478,7 +486,7 @@ func BenchmarkOpMstore(bench *testing.B) {
 		stack.pushN(value, memStart)
 		opMstore(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func BenchmarkOpSHA3(bench *testing.B) {
@@ -487,7 +495,7 @@ func BenchmarkOpSHA3(bench *testing.B) {
 		stack = newstack()
 		mem   = NewMemory()
 	)
-	evm.int_pool = poolOfIntPools.get()
+	evm.int_pool.Init(StackLimit)
 	mem.Resize(32)
 	pc := uint64(0)
 	start := big.NewInt(0)
@@ -497,7 +505,7 @@ func BenchmarkOpSHA3(bench *testing.B) {
 		stack.pushN(big.NewInt(32), start)
 		opSha3(&pc, &evm, nil, mem, stack)
 	}
-	poolOfIntPools.put(evm.int_pool)
+
 }
 
 func TestCreate2Addreses(t *testing.T) {

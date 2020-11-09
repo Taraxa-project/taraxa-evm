@@ -9,6 +9,16 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
 
+type MemoryPool struct {
+	buf      []byte
+	reserved int
+}
+
+func (self *MemoryPool) Init(capacity uint64) *MemoryPool {
+	self.buf = make([]byte, capacity)
+	return self
+}
+
 // Memory implements a simple memory model for the ethereum virtual machine.
 type Memory struct {
 	pool        *MemoryPool
@@ -16,10 +26,6 @@ type Memory struct {
 	using_pool  bool
 	store       []byte
 	lastGasCost uint64
-}
-type MemoryPool struct {
-	buf      []byte
-	reserved int
 }
 
 func (self *Memory) Init(pool *MemoryPool) *Memory {

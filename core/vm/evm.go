@@ -112,7 +112,7 @@ func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
 	asserts.Holds(opts.PreallocatedStackSize <= StackLimit)
 	self.get_hash = get_hash
 	self.state = state
-	self.mem_pool.buf = make([]byte, opts.PreallocatedMem)
+	self.mem_pool.Init(opts.PreallocatedMem)
 	self.int_pool.Init(int(opts.U256PoolSize))
 	self.preallocated_stacks = make([]Stack, opts.NumStacksToPreallocate)
 	for i := range self.preallocated_stacks {
