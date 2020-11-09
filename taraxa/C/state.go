@@ -245,6 +245,18 @@ func taraxa_evm_state_api_dpos_eligible_count(
 	return state_API_instances[ptr].QueryDPOS(blk_n).EligibleAddressCount()
 }
 
+//export taraxa_evm_state_api_db_snapshot
+func taraxa_evm_state_api_db_snapshot(
+	ptr C.taraxa_evm_state_API_ptr,
+	dir string,
+	log_size_for_flush uint64,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	db := &state_API_instances[ptr].db
+	util.PanicIfNotNil(db.Snapshot(dir, log_size_for_flush))
+}
+
 //export taraxa_evm_state_api_dpos_contract_addr
 func taraxa_evm_state_api_dpos_contract_addr() (ret C.taraxa_evm_Addr) {
 	*(*common.Address)(unsafe.Pointer(&ret.Val)) = dpos.ContractAddress()
