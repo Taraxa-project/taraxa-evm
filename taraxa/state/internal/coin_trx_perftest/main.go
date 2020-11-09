@@ -41,7 +41,7 @@ import (
 
 // Usage: `go run <this_file> ...arguments`. Also can be just compiled as usual via `go build` and run as executable.
 // Use `--help` argument to get the help.
-
+// TODO more workload profiles
 func main() {
 	flag.Usage = func() {
 		flag.PrintDefaults()
