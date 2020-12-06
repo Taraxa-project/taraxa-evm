@@ -110,9 +110,11 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 			if !with {
 				continue
 			}
-			storage := self.get_storage()
+			var storage *StorageReaderWrapper
 			if q.DepositInfoCorrespondsToStakingBalances {
 				storage = self.get_storage_past()
+			} else {
+				storage = self.get_storage()
 			}
 			storage.ListForEach(bin.Concat2(list_kind, addr[:]), func(addr_other_raw []byte) {
 				addr_other := common.BytesToAddress(addr_other_raw)
