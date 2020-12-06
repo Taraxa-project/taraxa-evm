@@ -19,6 +19,7 @@ import (
 )
 
 func TestEthMainnetSmoke(t *testing.T) {
+	t.Skip()
 	tc := tests.NewTestCtx(t)
 	defer tc.Close()
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{

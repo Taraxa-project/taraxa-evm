@@ -1,8 +1,10 @@
 package state_db
 
 import (
+	"fmt"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 type Column = byte
@@ -18,12 +20,20 @@ const (
 
 // TODO a wrapper with common functionality. Delegate only the most low-level stuff to these interfaces
 type DB interface {
-	ReadOnlyDB
+	GetBlockState(types.BlockNum) Reader
 	GetLatestState() LatestState
 }
-type ReadOnlyDB interface {
-	GetBlockState(types.BlockNum) Reader
+
+type ErrFutureBlock util.ErrorString
+
+func GetBlockState(db DB, blk_n types.BlockNum) ExtendedReader {
+	last_committed_blk_n := db.GetLatestState().GetCommittedDescriptor().BlockNum
+	if last_committed_blk_n < blk_n {
+		panic(ErrFutureBlock(fmt.Sprint("Requested blk num:", blk_n, ", last committed:", last_committed_blk_n)))
+	}
+	return ExtendedReader{db.GetBlockState(blk_n)}
 }
+
 type LatestState interface {
 	GetCommittedDescriptor() StateDescriptor
 	BeginPendingBlock() PendingBlockState

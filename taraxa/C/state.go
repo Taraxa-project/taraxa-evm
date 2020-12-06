@@ -232,7 +232,7 @@ func taraxa_evm_state_api_dpos_is_eligible(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	return state_API_instances[ptr].QueryDPOS(params.BlkNum).IsEligible(&params.Addr)
+	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
 }
 
 //export taraxa_evm_state_api_dpos_eligible_count
@@ -242,7 +242,7 @@ func taraxa_evm_state_api_dpos_eligible_count(
 	cb_err C.taraxa_evm_BytesCallback,
 ) uint64 {
 	defer handle_err(cb_err)
-	return state_API_instances[ptr].QueryDPOS(blk_n).EligibleAddressCount()
+	return state_API_instances[ptr].DPOSReader(blk_n).EligibleAddressCount()
 }
 
 //export taraxa_evm_state_api_db_snapshot

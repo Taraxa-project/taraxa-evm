@@ -9,7 +9,7 @@ import (
 )
 
 type DryRunner struct {
-	db             state_db.ReadOnlyDB
+	db             state_db.DB
 	get_block_hash vm.GetHashFunc
 	dpos_api       *dpos.API
 	chain_cfg      ChainConfig
@@ -20,7 +20,7 @@ type ChainConfig struct {
 }
 
 func (self *DryRunner) Init(
-	db state_db.ReadOnlyDB,
+	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
 	chain_cfg ChainConfig,
@@ -40,7 +40,7 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	evm_state.Init(state_evm.Opts{
 		NumTransactionsToBuffer: 1,
 	})
-	evm_state.SetInput(state_db.ExtendedReader{self.db.GetBlockState(blk.Number)})
+	evm_state.SetInput(state_db.GetBlockState(self.db, blk.Number))
 	var evm vm.EVM
 	evm.Init(self.get_block_hash, &evm_state, vm.Opts{})
 	evm.SetBlock(blk, self.chain_cfg.ETHChainConfig.Rules(blk.Number))

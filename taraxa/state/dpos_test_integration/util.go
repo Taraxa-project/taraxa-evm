@@ -1,14 +1,15 @@
-package state
+package dpos_test_integration
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 )
 
-var base_taraxa_chain_cfg = ChainConfig{
+var base_taraxa_chain_cfg = state.ChainConfig{
 	DisableBlockRewards: true,
 	ExecutionOptions: vm.ExecutionOpts{
 		DisableGasFee:     true,
@@ -19,6 +20,4 @@ var base_taraxa_chain_cfg = ChainConfig{
 	},
 	GenesisBalances: make(core.BalanceMap),
 }
-
-var addr = tests.Addr
-var addr_p = tests.AddrP
+var addr, addr_p = tests.Addr, tests.AddrP

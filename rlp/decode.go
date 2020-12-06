@@ -212,16 +212,12 @@ func makeDecoder(typ reflect.Type, tags tags) (dec decoder, err error) {
 		return decodeDecoderNoPtr, nil
 	case typ.AssignableTo(bigint_ptr_t):
 		return func(s *Stream, val reflect.Value) error {
-			if val.IsNil() {
-				val.Set(reflect.New(typ.Elem()))
-			}
+			val.Set(reflect.New(typ.Elem()))
 			return decodeBigInt(s, val)
 		}, nil
 	case typ.ConvertibleTo(bigint_ptr_t):
 		return func(s *Stream, val reflect.Value) error {
-			if val.IsNil() {
-				val.Set(reflect.New(typ.Elem()))
-			}
+			val.Set(reflect.New(typ.Elem()))
 			return decodeBigInt(s, val.Convert(bigint_ptr_t))
 		}, nil
 	case typ.AssignableTo(bigInt):

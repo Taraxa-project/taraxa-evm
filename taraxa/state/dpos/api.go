@@ -3,6 +3,8 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/rlp"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -11,6 +13,10 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 )
+
+func ContractAddress() common.Address {
+	return *contract_address
+}
 
 type API struct {
 	cfg Config
@@ -32,25 +38,38 @@ func (self *API) NewContract(storage Storage) *Contract {
 	return new(Contract).init(self.cfg, storage)
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, backend_factory func(types.BlockNum) AccountStorageReader) Reader {
-	if self.cfg.DepositDelay < blk_n {
-		blk_n -= self.cfg.DepositDelay
-	} else {
-		blk_n = 0
-	}
-	return Reader{&self.cfg, backend_factory(blk_n)}
+func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
+	return Reader{cfg: &self.cfg, blk_n: blk_n, storage_factory: storage_factory}
 }
 
 type Reader struct {
-	cfg     *Config
-	backend AccountStorageReader
+	cfg                     *Config
+	blk_n                   types.BlockNum
+	storage_factory         func(types.BlockNum) StorageReader
+	storage                 *StorageReaderWrapper
+	storage_staking_balance *StorageReaderWrapper
 }
-type AccountStorageReader interface {
-	GetAccountStorage(addr *common.Address, key *common.Hash, cb func([]byte))
+
+func (self *Reader) get_storage() *StorageReaderWrapper {
+	if self.storage == nil {
+		self.storage = new(StorageReaderWrapper).Init(self.storage_factory(self.blk_n))
+	}
+	return self.storage
+}
+
+func (self *Reader) get_storage_staking_balance() *StorageReaderWrapper {
+	if self.storage_staking_balance == nil {
+		var blk_n uint64
+		if self.cfg.DepositDelay < self.blk_n {
+			blk_n = self.blk_n - self.cfg.DepositDelay
+		}
+		self.storage_staking_balance = new(StorageReaderWrapper).Init(self.storage_factory(blk_n))
+	}
+	return self.storage_staking_balance
 }
 
 func (self Reader) EligibleAddressCount() (ret uint64) {
-	self.backend.GetAccountStorage(contract_address, stor_k(field_eligible_count), func(bytes []byte) {
+	self.get_storage_staking_balance().Get(stor_k_1(field_eligible_count), func(bytes []byte) {
 		ret = bin.DEC_b_endian_compact_64(bytes)
 	})
 	return
@@ -62,12 +81,75 @@ func (self Reader) IsEligible(address *common.Address) bool {
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = bigutil.Big0
-	self.backend.GetAccountStorage(contract_address, stor_k(field_staking_balances, addr[:]), func(bytes []byte) {
+	self.get_storage_staking_balance().Get(stor_k_1(field_staking_balances, addr[:]), func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
 	return
 }
 
-func ContractAddress() common.Address {
-	return *contract_address
+type Query struct {
+	WithEligibleCount bool
+	AccountQueries    map[common.Address]AccountQuery
+}
+type AccountQuery struct {
+	WithStakingBalance        bool
+	WithOutboundDeposits      bool
+	OutboundDepositsAddrsOnly bool
+	WithInboundDeposits       bool
+	InboundDepositsAddrsOnly  bool
+}
+type QueryResult struct {
+	EligibleCount       uint64
+	AccountQueryResults map[common.Address]*AccountQueryResult
+}
+type AccountQueryResult struct {
+	StakingBalance   *big.Int
+	IsEligible       bool
+	OutboundDeposits map[common.Address]*DepositValue
+	InboundDeposits  map[common.Address]*DepositValue
+}
+
+func (self Reader) Query(q *Query) (ret QueryResult) {
+	if q.WithEligibleCount {
+		ret.EligibleCount = self.EligibleAddressCount()
+	}
+	ret.AccountQueryResults = make(map[common.Address]*AccountQueryResult)
+	for addr, q := range q.AccountQueries {
+		res := new(AccountQueryResult)
+		ret.AccountQueryResults[addr] = res
+		if q.WithStakingBalance {
+			res.StakingBalance = self.GetStakingBalance(&addr)
+			res.IsEligible = self.cfg.EligibilityBalanceThreshold.Cmp(res.StakingBalance) <= 0
+		}
+		res.OutboundDeposits = make(map[common.Address]*DepositValue)
+		res.InboundDeposits = make(map[common.Address]*DepositValue)
+		for i := 0; i < 2; i++ {
+			with, addrs_only, res_map := q.WithOutboundDeposits, q.OutboundDepositsAddrsOnly, res.OutboundDeposits
+			list_kind := field_addrs_out
+			if i%2 == 1 {
+				with, addrs_only, res_map = q.WithInboundDeposits, q.InboundDepositsAddrsOnly, res.InboundDeposits
+				list_kind = field_addrs_in
+			}
+			if !with {
+				continue
+			}
+			self.get_storage().ListForEach(bin.Concat2(list_kind, addr[:]), func(addr_other_raw []byte) {
+				addr_other := common.BytesToAddress(addr_other_raw)
+				var val *DepositValue
+				if !addrs_only {
+					addr1, addr2 := &addr, &addr_other
+					if i%2 == 1 {
+						addr1, addr2 = addr2, addr1
+					}
+					self.get_storage().Get(stor_k_1(field_deposits, addr1[:], addr2[:]), func(bytes []byte) {
+						var deposit Deposit
+						rlp.MustDecodeBytes(bytes, &deposit)
+						val = &deposit.DepositValue
+					})
+				}
+				res_map[addr_other] = val
+			})
+		}
+	}
+	return
 }

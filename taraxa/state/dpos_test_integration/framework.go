@@ -1,10 +1,12 @@
-package state
+package dpos_test_integration
 
 import (
 	"fmt"
 	"math/big"
 	"strconv"
 	"testing"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -23,171 +25,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 )
 
-var dpos_test_specs = []func() Spec{
-	func() Spec {
-		return Spec{
-			GenesisBalances{
-				addr(1): 100000000,
-			},
-			DposCfg{
-				EligibilityBalanceThreshold: 1000,
-				DepositDelay:                2,
-				WithdrawalDelay:             4,
-				DposGenesisState: DposGenesisState{
-					addr(1): {
-						addr(1): 1000,
-					},
-				},
-			},
-			DposTransactions{
-				1: {
-					{
-						Benefactor: addr(1),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 1000},
-							addr(3): {Value: 1000 - 1},
-						},
-					},
-				},
-				2: {
-					{
-						Benefactor: addr(1),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 1000, Negative: true},
-							addr(3): {Value: 1},
-						},
-					},
-				},
-			},
-			ExpectedStates{
-				0: {
-					Balances{
-						addr(1): 100000000 - 1000,
-					},
-					EligibleSet{addr(1)},
-				},
-				1: {
-					Balances{
-						addr(1): 100000000 - 1000 - 1000 - (1000 - 1),
-					},
-					EligibleSet{addr(1)},
-				},
-				2: {
-					Balances{
-						addr(1): 100000000 - 1000 - 1000 - (1000 - 1) - 1,
-					},
-					EligibleSet{addr(1)},
-				},
-				3: {
-					Balances{
-						addr(1): 100000000 - 1000 - 1000 - (1000 - 1) - 1,
-					},
-					EligibleSet{addr(1), addr(2)},
-				},
-				4: {
-					Balances{
-						addr(1): 100000000 - 1000 - 1000 - (1000 - 1) - 1,
-					},
-					EligibleSet{addr(1), addr(2), addr(3)},
-				},
-				6: {
-					Balances{
-						addr(1): 100000000 - 1000 - 1000 - (1000 - 1) - 1 + 1,
-					},
-					EligibleSet{addr(1), addr(3)},
-				},
-			},
-		}
-	},
-	func() Spec {
-		return Spec{
-			GenesisBalances{
-				addr(1): 100000000,
-				addr(2): 1000,
-			},
-			DposCfg{
-				EligibilityBalanceThreshold: 1000,
-				DepositDelay:                0,
-				WithdrawalDelay:             0,
-				DposGenesisState: DposGenesisState{
-					addr(1): {
-						addr(1): 1000,
-						addr(2): 1000,
-						addr(3): 1000,
-					},
-				},
-			},
-			DposTransactions{
-				1: {
-					{
-						Benefactor: addr(1),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 1, Negative: true},
-							addr(3): {Value: 1, Negative: true},
-						},
-					},
-					{
-						Benefactor: addr(2),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 1},
-							addr(3): {Value: 1},
-						},
-					},
-				},
-				2: {
-					{
-						Benefactor: addr(3),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 33, Negative: true},
-							addr(3): {Value: 1, Negative: true},
-						},
-						ExpectedExecutionErr: dpos.ErrWithdrawalExceedsDeposit,
-					},
-				},
-				3: {
-					{
-						Benefactor: addr(1),
-						DposTransfers: DposTransfers{
-							addr(1): {Value: 1000, Negative: true},
-							addr(2): {Value: 1000 - 1, Negative: true},
-							addr(3): {Value: 1000 - 1, Negative: true},
-						},
-					},
-					{
-						Benefactor: addr(2),
-						DposTransfers: DposTransfers{
-							addr(2): {Value: 1, Negative: true},
-							addr(3): {Value: 1, Negative: true},
-						},
-					},
-				},
-			},
-			ExpectedStates{
-				0: {
-					Balances{
-						addr(1): 100000000 - 1000*3,
-					},
-					EligibleSet{addr(1), addr(2), addr(3)},
-				},
-				1: {
-					Balances{
-						addr(1): 100000000 - 1000*3 + 2,
-						addr(2): 1000 - 2,
-					},
-					EligibleSet{addr(1), addr(2), addr(3)},
-				},
-				3: {
-					Balances{
-						addr(1): 100000000,
-						addr(2): 1000,
-					},
-					EligibleSet{},
-				},
-			},
-		}
-	},
-}
-
 type DposTransfer = struct {
 	Value    uint64
 	Negative bool
@@ -200,9 +37,15 @@ type DposTransaction = struct {
 }
 type Balances = map[common.Address]uint64
 type EligibleSet = []common.Address
+type Deposits = map[common.Address]map[common.Address]DepositValue
+type DepositValue struct {
+	ValueNet               uint64
+	ValuePendingWithdrawal uint64
+}
 type ExpectedState struct {
-	Balances
-	EligibleSet
+	Balances    Balances
+	EligibleSet EligibleSet
+	Deposits    Deposits
 }
 type DposGenesisState = map[common.Address]Balances
 type DposCfg struct {
@@ -221,8 +64,8 @@ type Spec struct {
 	ExpectedStates
 }
 
-func TestDPOS(t *testing.T) {
-	for i, spec_factory := range dpos_test_specs {
+func run_specs(t *testing.T, specs []func() Spec) {
+	for i, spec_factory := range specs {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			tc := tests.NewTestCtx(t)
 			defer tc.Close()
@@ -237,6 +80,10 @@ func TestDPOS(t *testing.T) {
 			for i := types.BlockNum(1); i <= last_dpos_predictable_blk_n; i++ {
 				if _, present := spec.ExpectedStates[i]; !present {
 					spec.ExpectedStates[i] = spec.ExpectedStates[i-1]
+				}
+				if s := spec.ExpectedStates[i]; s.Deposits == nil {
+					s.Deposits = spec.ExpectedStates[i-1].Deposits
+					spec.ExpectedStates[i] = s
 				}
 			}
 
@@ -262,16 +109,16 @@ func TestDPOS(t *testing.T) {
 				Path: tc.DataDir(),
 			})
 			defer statedb.Close()
-			SUT := new(API).Init(
+			SUT := new(state.API).Init(
 				statedb,
 				func(num types.BlockNum) *big.Int { panic("unexpected") },
 				chain_cfg,
-				APIOpts{},
+				state.APIOpts{},
 			)
-			check_exp_dpos_state := func(blk_n types.BlockNum) {
+			check_eligible_set := func(blk_n types.BlockNum) {
 				assert_meta := "at block " + fmt.Sprint(blk_n)
 				exp_st := spec.ExpectedStates[blk_n]
-				dpos_reader := SUT.QueryDPOS(blk_n)
+				dpos_reader := SUT.DPOSReader(blk_n)
 				tc.Assert.Equal(uint64(len(exp_st.EligibleSet)), dpos_reader.EligibleAddressCount(), assert_meta)
 				for _, addr := range exp_st.EligibleSet {
 					tc.Assert.True(dpos_reader.IsEligible(&addr), assert_meta)
@@ -289,8 +136,66 @@ func TestDPOS(t *testing.T) {
 					tc.Assert.True(bal_actual.IsUint64(), assert_meta)
 					tc.Assert.Equal(bal_expected, bal_actual.Uint64(), assert_meta)
 				}
-				check_exp_dpos_state(blk_n)
-				check_exp_dpos_state(blk_n + spec.DposCfg.DepositDelay)
+				q := dpos.Query{
+					AccountQueries: make(map[common.Address]dpos.AccountQuery),
+				}
+				acc_q := dpos.AccountQuery{
+					WithOutboundDeposits: true,
+					WithInboundDeposits:  true,
+				}
+				for benefactor, m := range exp_st.Deposits {
+					q.AccountQueries[benefactor] = acc_q
+					for beneficiary := range m {
+						q.AccountQueries[beneficiary] = acc_q
+					}
+				}
+				q_res := SUT.DPOSReader(blk_n).Query(&q)
+				for i := 0; i < 2; i++ {
+					exp_deposits := exp_st.Deposits
+					if i%2 == 1 {
+						exp_deposits = make(Deposits)
+						for benefactor, outbound_deposits := range exp_st.Deposits {
+							for beneficiary, deposit := range outbound_deposits {
+								m := exp_deposits[beneficiary]
+								if m == nil {
+									m = make(map[common.Address]DepositValue)
+									exp_deposits[beneficiary] = m
+								}
+								m[benefactor] = deposit
+							}
+						}
+					}
+					for addr1, deposits_by_addr1_expected := range exp_deposits {
+						addr1_q_res := q_res.AccountQueryResults[addr1]
+						deposits_by_addr1_actual := addr1_q_res.OutboundDeposits
+						if i%2 == 1 {
+							deposits_by_addr1_actual = addr1_q_res.InboundDeposits
+						}
+						tc.Assert.Equal(len(deposits_by_addr1_expected), len(deposits_by_addr1_actual), assert_meta)
+						for addr2, deposit_expected := range deposits_by_addr1_expected {
+							deposit_actual := deposits_by_addr1_actual[addr2]
+							tc.Assert.Equal(deposit_expected.ValueNet, deposit_actual.ValueNet.Uint64(), assert_meta)
+							tc.Assert.Equal(
+								deposit_expected.ValuePendingWithdrawal,
+								deposit_actual.ValuePendingWithdrawal.Uint64(),
+								assert_meta)
+						}
+					}
+				}
+				for benefactor, outbound_deposits_exp := range exp_st.Deposits {
+					benefactor_q_res := q_res.AccountQueryResults[benefactor]
+					tc.Assert.Equal(len(benefactor_q_res.OutboundDeposits), len(outbound_deposits_exp), assert_meta)
+					for beneficiary, deposit_expected := range outbound_deposits_exp {
+						deposit_actual := benefactor_q_res.OutboundDeposits[beneficiary]
+						tc.Assert.Equal(deposit_expected.ValueNet, deposit_actual.ValueNet.Uint64(), assert_meta)
+						tc.Assert.Equal(
+							deposit_expected.ValuePendingWithdrawal,
+							deposit_actual.ValuePendingWithdrawal.Uint64(),
+							assert_meta)
+					}
+				}
+				check_eligible_set(blk_n)
+				check_eligible_set(blk_n + spec.DposCfg.DepositDelay)
 			}
 			check_exp_state(0)
 			st := SUT.GetStateTransition()

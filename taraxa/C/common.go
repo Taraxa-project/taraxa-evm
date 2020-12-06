@@ -4,8 +4,8 @@ package main
 import "C"
 import (
 	"fmt"
+	"path"
 	"reflect"
-	"runtime/debug"
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -37,11 +37,7 @@ func enc_rlp(in interface{}, out C.taraxa_evm_BytesCallback) {
 
 func handle_err(cb C.taraxa_evm_BytesCallback) {
 	if issue := recover(); issue != nil {
-		msg := "\n" +
-			"=== Error. Message:\n" +
-			fmt.Sprint(issue) + "\n" +
-			"=== backtrace:\n" +
-			bin.StringView(debug.Stack())
-		call_bytes_cb(bin.BytesView(msg), cb)
+		typ := reflect.TypeOf(issue)
+		call_bytes_cb(bin.BytesView(path.Join(typ.PkgPath(), typ.Name())+": "+fmt.Sprint(issue)), cb)
 	}
 }

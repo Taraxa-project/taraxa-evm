@@ -16,19 +16,25 @@ var last_committed_desc_key = []byte("last_committed_descriptor")
 
 type latest_state struct {
 	*DB
-	batch           *gorocksdb.WriteBatch
-	writer_thread   goroutines.SingleThreadExecutor
-	committed_blk_n types.BlockNum
-	pending_blk_n   types.BlockNum
-	blk_num_mu      sync.Mutex
+	batch         *gorocksdb.WriteBatch
+	writer_thread goroutines.SingleThreadExecutor
+	state_desc    state_db.StateDescriptor
+	pending_blk_n types.BlockNum
+	state_desc_mu sync.RWMutex
 }
 
 func (self *latest_state) Init(db *DB) *latest_state {
 	self.DB = db
 	self.batch = gorocksdb.NewWriteBatch()
 	self.writer_thread.Init(1024) // 8KB
-	self.committed_blk_n = self.GetCommittedDescriptor().BlockNum
-	self.pending_blk_n = self.committed_blk_n
+	state_desc_raw, err := self.db.Get(self.opts_r, last_committed_desc_key)
+	util.PanicIfNotNil(err)
+	defer state_desc_raw.Free()
+	self.state_desc.BlockNum = types.BlockNumberNIL
+	if v := state_desc_raw.Data(); len(v) != 0 {
+		rlp.MustDecodeBytes(v, &self.state_desc)
+	}
+	self.pending_blk_n = self.state_desc.BlockNum
 	return self
 }
 
@@ -38,22 +44,16 @@ func (self *latest_state) Close() {
 }
 
 func (self *latest_state) GetCommittedDescriptor() (ret state_db.StateDescriptor) {
-	v_slice, err := self.db.Get(self.opts_r, last_committed_desc_key)
-	util.PanicIfNotNil(err)
-	defer v_slice.Free()
-	ret.BlockNum = types.BlockNumberNIL
-	if v := v_slice.Data(); len(v) != 0 {
-		rlp.MustDecodeBytes(v, &ret)
-	}
-	return
+	defer util.LockUnlock(self.state_desc_mu.RLocker())()
+	return self.state_desc
 }
 
 func (self *latest_state) BeginPendingBlock() state_db.PendingBlockState {
-	defer util.LockUnlock(&self.blk_num_mu)()
+	defer util.LockUnlock(&self.state_desc_mu)()
 	self.pending_blk_n++
 	var keybuf TrieValueKey
 	keybuf.SetBlockNum(self.pending_blk_n)
-	return &pending_block_state{block_state_reader{self.DB, self.committed_blk_n}, self.pending_blk_n, keybuf}
+	return &pending_block_state{block_state_reader{self.DB, self.state_desc.BlockNum}, self.pending_blk_n, keybuf}
 }
 
 type pending_block_state struct {
@@ -78,18 +78,16 @@ func (self *pending_block_state) GetNumber() types.BlockNum {
 }
 
 func (self *latest_state) Commit(state_root common.Hash) (err error) {
-	self.blk_num_mu.Lock()
-	committed_blk_n := self.pending_blk_n
-	self.committed_blk_n = committed_blk_n
-	self.blk_num_mu.Unlock()
+	state_desc := &state_db.StateDescriptor{BlockNum: self.pending_blk_n, StateRoot: state_root}
 	self.writer_thread.Submit(func() {
-		self.batch.Put(last_committed_desc_key, rlp.MustEncodeToBytes(state_db.StateDescriptor{
-			BlockNum:  committed_blk_n,
-			StateRoot: state_root,
-		}))
-		err = self.db.Write(self.opts_w, self.batch)
+		self.batch.Put(last_committed_desc_key, rlp.MustEncodeToBytes(state_desc))
+		if err = self.db.Write(self.opts_w, self.batch); err == nil {
+			self.state_desc_mu.Lock()
+			self.state_desc = *state_desc
+			self.state_desc_mu.Unlock()
+			self.reset_itr_pools()
+		}
 		self.batch.Clear()
-		self.reset_itr_pools()
 	})
 	self.writer_thread.Join() // TODO completely async
 	return
