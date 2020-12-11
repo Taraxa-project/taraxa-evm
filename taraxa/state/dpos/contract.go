@@ -114,9 +114,6 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 	if len(transfers) == 0 {
 		return ErrNoTransfers
 	}
-	if self.deposits == nil {
-		self.deposits = make(map[common.Hash]*Deposit)
-	}
 	expenditure_total := bigutil.Big0
 	for beneficiary, transfer := range transfers {
 		if transfer.Value.Sign() == 0 {
@@ -304,11 +301,17 @@ func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (de
 		deposit = new(Deposit)
 		rlp.MustDecodeBytes(bytes, deposit)
 	})
+	if self.deposits == nil {
+		self.deposits = make(map[common.Hash]*Deposit)
+	}
 	self.deposits[key] = deposit
 	return
 }
 
 func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
 	self.storage.Put(key, rlp.MustEncodeToBytes(&deposit))
+	if self.deposits == nil {
+		self.deposits = make(map[common.Hash]*Deposit)
+	}
 	self.deposits[*key] = deposit
 }
