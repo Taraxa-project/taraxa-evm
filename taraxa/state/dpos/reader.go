@@ -33,7 +33,7 @@ func (self *Reader) get_storage() *StorageReaderWrapper {
 	return self.storage
 }
 
-func (self *Reader) get_storage_past() *StorageReaderWrapper {
+func (self *Reader) get_storage_deposit_delay_ago() *StorageReaderWrapper {
 	if self.storage_past == nil {
 		var blk_n uint64
 		if self.cfg.DepositDelay < self.blk_n {
@@ -45,7 +45,7 @@ func (self *Reader) get_storage_past() *StorageReaderWrapper {
 }
 
 func (self Reader) EligibleAddressCount() (ret uint64) {
-	self.get_storage_past().Get(stor_k_1(field_eligible_count), func(bytes []byte) {
+	self.get_storage_deposit_delay_ago().Get(stor_k_1(field_eligible_count), func(bytes []byte) {
 		ret = bin.DEC_b_endian_compact_64(bytes)
 	})
 	return
@@ -57,7 +57,7 @@ func (self Reader) IsEligible(address *common.Address) bool {
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = bigutil.Big0
-	self.get_storage_past().Get(stor_k_1(field_staking_balances, addr[:]), func(bytes []byte) {
+	self.get_storage_deposit_delay_ago().Get(stor_k_1(field_staking_balances, addr[:]), func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
 	return
@@ -112,7 +112,7 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 			}
 			var storage *StorageReaderWrapper
 			if q.DepositInfoCorrespondsToStakingBalances {
-				storage = self.get_storage_past()
+				storage = self.get_storage_deposit_delay_ago()
 			} else {
 				storage = self.get_storage()
 			}

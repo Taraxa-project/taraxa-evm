@@ -235,6 +235,38 @@ func taraxa_evm_state_api_dpos_is_eligible(
 	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
 }
 
+//export taraxa_evm_state_api_dpos_get_staking_balance
+func taraxa_evm_state_api_dpos_get_staking_balance(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetStakingBalance(&params.Addr).Bytes(), cb)
+}
+
+//export taraxa_evm_state_api_dpos_query
+func taraxa_evm_state_api_dpos_query(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Q      dpos.Query
+	}
+	dec_rlp(params_enc, &params)
+	enc_rlp(state_API_instances[ptr].DPOSReader(params.BlkNum).Query(&params.Q), cb)
+}
+
 //export taraxa_evm_state_api_dpos_eligible_count
 func taraxa_evm_state_api_dpos_eligible_count(
 	ptr C.taraxa_evm_state_API_ptr,
