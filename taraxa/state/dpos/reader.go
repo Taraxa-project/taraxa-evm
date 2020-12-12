@@ -130,9 +130,7 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 						deposit_v = deposit.DepositValue
 					})
 				}
-				if !deposit_v.IsZero() {
-					res_map[addr_other] = deposit_v
-				}
+				res_map[addr_other] = deposit_v
 			})
 		}
 	}
