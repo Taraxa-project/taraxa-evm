@@ -76,30 +76,30 @@ type AccountQuery struct {
 	InboundDepositsAddrsOnly                bool
 }
 type QueryResult struct {
-	EligibleCount       uint64
-	AccountQueryResults map[common.Address]*AccountQueryResult
+	EligibleCount  uint64
+	AccountResults map[common.Address]*AccountQueryResult
 }
 type AccountQueryResult struct {
 	StakingBalance   *big.Int
 	IsEligible       bool
-	OutboundDeposits map[common.Address]*DepositValue
-	InboundDeposits  map[common.Address]*DepositValue
+	OutboundDeposits map[common.Address]DepositValue
+	InboundDeposits  map[common.Address]DepositValue
 }
 
 func (self Reader) Query(q *Query) (ret QueryResult) {
 	if q.WithEligibleCount {
 		ret.EligibleCount = self.EligibleAddressCount()
 	}
-	ret.AccountQueryResults = make(map[common.Address]*AccountQueryResult)
+	ret.AccountResults = make(map[common.Address]*AccountQueryResult)
 	for addr, q := range q.AccountQueries {
 		res := new(AccountQueryResult)
-		ret.AccountQueryResults[addr] = res
+		ret.AccountResults[addr] = res
 		if q.WithStakingBalance {
 			res.StakingBalance = self.GetStakingBalance(&addr)
 			res.IsEligible = self.cfg.EligibilityBalanceThreshold.Cmp(res.StakingBalance) <= 0
 		}
-		res.OutboundDeposits = make(map[common.Address]*DepositValue)
-		res.InboundDeposits = make(map[common.Address]*DepositValue)
+		res.OutboundDeposits = make(map[common.Address]DepositValue)
+		res.InboundDeposits = make(map[common.Address]DepositValue)
 		for i := 0; i < 2; i++ {
 			with, addrs_only, res_map := q.WithOutboundDeposits, q.OutboundDepositsAddrsOnly, res.OutboundDeposits
 			list_kind := field_addrs_out
@@ -118,7 +118,7 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 			}
 			storage.ListForEach(bin.Concat2(list_kind, addr[:]), func(addr_other_raw []byte) {
 				addr_other := common.BytesToAddress(addr_other_raw)
-				var val *DepositValue
+				var deposit_v DepositValue
 				if !addrs_only {
 					addr1, addr2 := &addr, &addr_other
 					if i%2 == 1 {
@@ -127,10 +127,10 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 					storage.Get(stor_k_1(field_deposits, addr1[:], addr2[:]), func(bytes []byte) {
 						var deposit Deposit
 						rlp.MustDecodeBytes(bytes, &deposit)
-						val = &deposit.DepositValue
+						deposit_v = deposit.DepositValue
 					})
 				}
-				res_map[addr_other] = val
+				res_map[addr_other] = deposit_v
 			})
 		}
 	}

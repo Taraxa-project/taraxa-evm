@@ -166,7 +166,7 @@ func run_specs(t *testing.T, specs []func() Spec) {
 						}
 					}
 					for addr1, deposits_by_addr1_expected := range exp_deposits {
-						addr1_q_res := q_res.AccountQueryResults[addr1]
+						addr1_q_res := q_res.AccountResults[addr1]
 						deposits_by_addr1_actual := addr1_q_res.OutboundDeposits
 						if i%2 == 1 {
 							deposits_by_addr1_actual = addr1_q_res.InboundDeposits
@@ -183,7 +183,7 @@ func run_specs(t *testing.T, specs []func() Spec) {
 					}
 				}
 				for benefactor, outbound_deposits_exp := range exp_st.Deposits {
-					benefactor_q_res := q_res.AccountQueryResults[benefactor]
+					benefactor_q_res := q_res.AccountResults[benefactor]
 					tc.Assert.Equal(len(benefactor_q_res.OutboundDeposits), len(outbound_deposits_exp), assert_meta)
 					for beneficiary, deposit_expected := range outbound_deposits_exp {
 						deposit_actual := benefactor_q_res.OutboundDeposits[beneficiary]
