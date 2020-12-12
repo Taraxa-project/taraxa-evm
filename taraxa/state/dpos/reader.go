@@ -52,7 +52,7 @@ func (self Reader) EligibleAddressCount() (ret uint64) {
 }
 
 func (self Reader) IsEligible(address *common.Address) bool {
-	return self.GetStakingBalance(address).Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	return 0 <= self.GetStakingBalance(address).Cmp(self.cfg.EligibilityBalanceThreshold)
 }
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
@@ -96,7 +96,7 @@ func (self Reader) Query(q *Query) (ret QueryResult) {
 		ret.AccountResults[addr] = res
 		if q.WithStakingBalance {
 			res.StakingBalance = self.GetStakingBalance(&addr)
-			res.IsEligible = self.cfg.EligibilityBalanceThreshold.Cmp(res.StakingBalance) <= 0
+			res.IsEligible = 0 <= res.StakingBalance.Cmp(self.cfg.EligibilityBalanceThreshold)
 		}
 		res.OutboundDeposits = make(map[common.Address]DepositValue)
 		res.InboundDeposits = make(map[common.Address]DepositValue)
