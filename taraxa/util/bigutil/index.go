@@ -39,6 +39,10 @@ func FromBytes(bytes []byte) *big.Int {
 	}
 }
 
+func IsZero(x *big.Int) bool {
+	return x == nil || x.Sign() == 0
+}
+
 func ZeroIfNIL(x *big.Int) *big.Int {
 	if x == nil {
 		return Big0
@@ -46,26 +50,32 @@ func ZeroIfNIL(x *big.Int) *big.Int {
 	return x
 }
 
-func Add(x, y *big.Int) *big.Int {
-	if x == nil || x.Sign() == 0 {
-		return ZeroIfNIL(y)
+func Add(x, y *big.Int) (ret *big.Int) {
+	if IsZero(x) {
+		ret = ZeroIfNIL(y)
+		asserts.Holds(ret.Sign() >= 0)
+	} else if IsZero(y) {
+		ret = ZeroIfNIL(x)
+		asserts.Holds(ret.Sign() >= 0)
+	} else {
+		asserts.Holds(x.Sign() >= 0 && y.Sign() >= 0)
+		ret = new(big.Int).Add(x, y)
 	}
-	if y == nil || y.Sign() == 0 {
-		return ZeroIfNIL(x)
-	}
-	return new(big.Int).Add(x, y)
+	return
 }
 
-func USub(x, y *big.Int) *big.Int {
-	if x == nil || x.Sign() == 0 {
-		ret := ZeroIfNIL(y)
+func USub(x, y *big.Int) (ret *big.Int) {
+	if IsZero(x) {
+		ret = ZeroIfNIL(y)
 		asserts.Holds(ret.Sign() == 0)
-		return ret
+	} else if IsZero(y) {
+		ret = ZeroIfNIL(x)
+		asserts.Holds(ret.Sign() >= 0)
+	} else {
+		asserts.Holds(x.Sign() >= 0 && y.Sign() >= 0)
+		ret = new(big.Int).Sub(x, y)
 	}
-	if y == nil || y.Sign() == 0 {
-		return ZeroIfNIL(x)
-	}
-	return new(big.Int).Sub(x, y)
+	return
 }
 
 type UnsignedBytes []byte

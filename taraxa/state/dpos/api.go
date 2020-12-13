@@ -20,7 +20,7 @@ type Config = struct {
 	EligibilityBalanceThreshold *big.Int
 	DepositDelay                types.BlockNum
 	WithdrawalDelay             types.BlockNum
-	GenesisState                DelegatedBalanceMap
+	GenesisState                Addr2Addr2Balance
 }
 
 func (self *API) Init(cfg Config) *API {

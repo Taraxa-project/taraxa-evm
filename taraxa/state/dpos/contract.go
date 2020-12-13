@@ -35,35 +35,39 @@ var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 type Contract struct {
 	cfg                        Config
 	storage                    StorageWrapper
-	staking_balances           BalanceMap
+	staking_balances           Addr2Balance
 	deposits                   map[common.Hash]*Deposit
 	eligible_count             uint64
 	eligible_count_initialized bool
 	eligible_count_dirty       bool
-	curr_withdrawals           DelegatedBalanceMap
+	curr_withdrawals           Addr2Addr2Balance
 }
-type benefactor_t = common.Address
-type beneficiary_t = common.Address
-type BalanceMap = map[beneficiary_t]*big.Int
-type DelegatedBalanceMap = map[benefactor_t]BalanceMap
+type Addr2Balance = map[common.Address]*big.Int
+type Addr2Addr2Balance = map[common.Address]Addr2Balance
 type Transfer = struct {
 	Value    *big.Int
 	Negative bool
 }
-type Transfers = map[beneficiary_t]Transfer
+type Transfers = map[common.Address]Transfer
 
 type Deposit struct {
-	AddrsInPos  uint64
-	AddrsOutPos uint64
-	DepositValue
-}
-type DepositValue struct {
 	ValueNet               *big.Int
 	ValuePendingWithdrawal *big.Int
+	AddrsInPos             uint64
+	AddrsOutPos            uint64
 }
 
-func (self *DepositValue) IsZero() bool {
-	return self.ValueNet.Sign() == 0 && self.ValuePendingWithdrawal.Sign() == 0
+func (self *Deposit) Init() *Deposit {
+	self.ValueNet, self.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
+	return self
+}
+
+func (self *Deposit) Total() *big.Int {
+	return bigutil.Add(self.ValueNet, self.ValuePendingWithdrawal)
+}
+
+func (self *Deposit) IsZero() bool {
+	return bigutil.IsZero(self.ValueNet) && bigutil.IsZero(self.ValuePendingWithdrawal)
 }
 
 func (self *Contract) init(cfg Config, storage Storage) *Contract {
@@ -74,7 +78,7 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 
 func (self *Contract) ApplyGenesis() error {
 	for benefactor, benefactor_deposits := range self.cfg.GenesisState {
-		transfers := make(map[beneficiary_t]Transfer, len(benefactor_deposits))
+		transfers := make(map[common.Address]Transfer, len(benefactor_deposits))
 		for k, v := range benefactor_deposits {
 			transfers[k] = Transfer{Value: v}
 		}
@@ -134,18 +138,17 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 	for beneficiary, transfer := range transfers {
 		deposit, deposit_k := self.deposits_get(benefactor[:], beneficiary[:])
 		if deposit == nil {
-			deposit = new(Deposit)
-			deposit.ValueNet, deposit.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
+			deposit = new(Deposit).Init()
 		}
 		op := bigutil.Add
 		if transfer.Negative {
 			op = bigutil.USub
 			if self.curr_withdrawals == nil {
-				self.curr_withdrawals = make(DelegatedBalanceMap)
+				self.curr_withdrawals = make(Addr2Addr2Balance)
 			}
 			benefactor_withdrawals := self.curr_withdrawals[benefactor]
 			if benefactor_withdrawals == nil {
-				benefactor_withdrawals = make(BalanceMap)
+				benefactor_withdrawals = make(Addr2Balance)
 				self.curr_withdrawals[benefactor] = benefactor_withdrawals
 			}
 			benefactor_withdrawals[beneficiary] = bigutil.Add(benefactor_withdrawals[beneficiary], transfer.Value)
@@ -169,7 +172,7 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 
 func (self *Contract) Commit(blk_n types.BlockNum) {
 	defer self.storage.ClearCache()
-	var moneyback_withdrawals DelegatedBalanceMap
+	var moneyback_withdrawals Addr2Addr2Balance
 	if self.cfg.WithdrawalDelay == 0 {
 		moneyback_withdrawals = self.curr_withdrawals
 	} else {
@@ -179,12 +182,12 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 				rlp.MustEncodeToBytes(self.curr_withdrawals))
 		}
 		if self.cfg.WithdrawalDelay < blk_n {
-			self.storage.Get(
-				stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay)),
-				func(bytes []byte) {
-					moneyback_withdrawals = make(DelegatedBalanceMap)
-					rlp.MustDecodeBytes(bytes, &moneyback_withdrawals)
-				})
+			k := stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay))
+			self.storage.Get(k, func(bytes []byte) {
+				moneyback_withdrawals = make(Addr2Addr2Balance)
+				rlp.MustDecodeBytes(bytes, &moneyback_withdrawals)
+			})
+			self.storage.Put(k, nil)
 		}
 	}
 	for benefactor, withdrawal_per_beneficiary := range moneyback_withdrawals {
@@ -194,7 +197,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		}
 		self.storage.AddBalance(&benefactor, val_total)
 	}
-	var withdrawals_to_apply DelegatedBalanceMap
+	var withdrawals_to_apply Addr2Addr2Balance
 	if self.cfg.DepositDelay == 0 {
 		withdrawals_to_apply = moneyback_withdrawals
 	} else if delay_diff := self.cfg.WithdrawalDelay - self.cfg.DepositDelay; delay_diff == 0 {
@@ -203,7 +206,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		self.storage.Get(
 			stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
 			func(bytes []byte) {
-				withdrawals_to_apply = make(DelegatedBalanceMap)
+				withdrawals_to_apply = make(Addr2Addr2Balance)
 				rlp.MustDecodeBytes(bytes, &withdrawals_to_apply)
 			})
 	}
@@ -249,7 +252,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 
 func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
 	if self.staking_balances == nil {
-		self.staking_balances = make(BalanceMap)
+		self.staking_balances = make(Addr2Balance)
 	}
 	beneficiary_bal := self.staking_balances[beneficiary]
 	if beneficiary_bal == nil {

@@ -1,4 +1,4 @@
-package dpos_test_integration
+package test_integration
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
