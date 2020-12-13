@@ -38,9 +38,9 @@ type Balances = map[common.Address]uint64
 type EligibleSet = []common.Address
 type Deposits = map[common.Address]map[common.Address]uint64
 type ExpectedState struct {
-	Balances    Balances
-	EligibleSet EligibleSet
-	Deposits    Deposits
+	Balances         Balances
+	EligibleSet      EligibleSet
+	OutboundDeposits Deposits
 }
 type DposGenesisState = map[common.Address]Balances
 type DposCfg struct {
@@ -82,8 +82,8 @@ func (self *Spec) run(t *testing.T) {
 		if s.EligibleSet == nil {
 			s.EligibleSet = s_prev.EligibleSet
 		}
-		if s.Deposits == nil {
-			s.Deposits = s_prev.Deposits
+		if s.OutboundDeposits == nil {
+			s.OutboundDeposits = s_prev.OutboundDeposits
 		}
 		self.ExpectedStates[i] = s
 	}
@@ -117,41 +117,54 @@ func (self *Spec) run(t *testing.T) {
 		state.APIOpts{},
 	)
 	check_dpos_exp_state := func(blk_n types.BlockNum) {
-		assert_meta := "at block " + fmt.Sprint(blk_n)
 		exp_st := self.ExpectedStates[blk_n]
 		dpos_reader := SUT.DPOSReader(blk_n)
-		tc.Assert.Equal(uint64(len(exp_st.EligibleSet)), dpos_reader.EligibleAddressCount(), assert_meta)
-		for _, addr := range exp_st.EligibleSet {
-			tc.Assert.True(dpos_reader.IsEligible(&addr), assert_meta)
-		}
 		q := dpos.Query{
-			AccountQueries: make(map[common.Address]dpos.AccountQuery),
+			WithEligibleCount: true,
+			AccountQueries:    make(map[common.Address]dpos.AccountQuery),
 		}
 		acc_q := dpos.AccountQuery{
+			WithStakingBalance:   true,
 			WithOutboundDeposits: true,
 			WithInboundDeposits:  true,
 		}
-		for benefactor, m := range exp_st.Deposits {
+		for benefactor, m := range exp_st.OutboundDeposits {
 			q.AccountQueries[benefactor] = acc_q
 			for beneficiary := range m {
 				q.AccountQueries[beneficiary] = acc_q
 			}
 		}
 		q_res := dpos_reader.Query(&q)
-		for i := 0; i < 2; i++ {
-			exp_deposits := exp_st.Deposits
-			if i%2 == 1 {
-				exp_deposits = make(Deposits)
-				for benefactor, outbound_deposits := range exp_st.Deposits {
-					for beneficiary, deposit := range outbound_deposits {
-						m := exp_deposits[beneficiary]
-						if m == nil {
-							m = make(map[common.Address]uint64)
-							exp_deposits[beneficiary] = m
-						}
-						m[benefactor] = deposit
-					}
+		assert_meta := "at block " + fmt.Sprint(blk_n)
+		tc.Assert.Equal(uint64(len(exp_st.EligibleSet)), dpos_reader.EligibleAddressCount(), assert_meta)
+		tc.Assert.Equal(uint64(len(exp_st.EligibleSet)), q_res.EligibleCount, assert_meta)
+		for _, addr := range exp_st.EligibleSet {
+			tc.Assert.True(dpos_reader.IsEligible(&addr), assert_meta)
+			tc.Assert.True(q_res.AccountResults[addr].IsEligible, assert_meta)
+		}
+		exp_deposits_inbound := make(Deposits)
+		for benefactor, outbound_deposits := range exp_st.OutboundDeposits {
+			for beneficiary, deposit := range outbound_deposits {
+				m := exp_deposits_inbound[beneficiary]
+				if m == nil {
+					m = make(map[common.Address]uint64)
+					exp_deposits_inbound[beneficiary] = m
 				}
+				m[benefactor] = deposit
+			}
+		}
+		for addr, deposits := range exp_deposits_inbound {
+			var total uint64
+			for _, val := range deposits {
+				total += val
+			}
+			tc.Assert.Equal(total, dpos_reader.GetStakingBalance(&addr).Uint64(), assert_meta)
+			tc.Assert.Equal(total, q_res.AccountResults[addr].StakingBalance.Uint64(), assert_meta)
+		}
+		for i := 0; i < 2; i++ {
+			exp_deposits := exp_st.OutboundDeposits
+			if i%2 == 1 {
+				exp_deposits = exp_deposits_inbound
 			}
 			for addr1, deposits_by_addr1_expected := range exp_deposits {
 				addr1_q_res := q_res.AccountResults[addr1]
