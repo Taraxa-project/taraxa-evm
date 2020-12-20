@@ -27,7 +27,7 @@ func (self EVMStateStorage) Put(address *common.Address, k *common.Hash, v []byt
 	self.GetAccountConcrete(address).SetStateRawIrreversibly(k, v)
 }
 
-func (self EVMStateStorage) Get(address *common.Address, k *common.Hash, cb func([]byte)) {
+func (self EVMStateStorage) GetAccountStorage(address *common.Address, k *common.Hash, cb func([]byte)) {
 	self.GetAccountStorageFromDB(address, k, cb)
 }
 

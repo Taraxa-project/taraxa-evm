@@ -11,8 +11,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -24,6 +22,8 @@ var field_staking_balances = []byte{0}
 var field_deposits = []byte{1}
 var field_eligible_count = []byte{2}
 var field_withdrawals_by_block = []byte{3}
+var field_addrs_in = []byte{4}
+var field_addrs_out = []byte{5}
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
 var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
@@ -34,40 +34,51 @@ var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 
 type Contract struct {
 	cfg                        Config
-	storage                    Storage
-	staking_balances           BalanceMap
-	deposits                   DelegatedBalanceMap
+	storage                    StorageWrapper
+	staking_balances           Addr2Balance
+	deposits                   map[common.Hash]*Deposit
 	eligible_count             uint64
 	eligible_count_initialized bool
 	eligible_count_dirty       bool
-	curr_withdrawals           DelegatedBalanceMap
+	curr_withdrawals           Addr2Addr2Balance
 }
-type benefactor_t = common.Address
-type beneficiary_t = common.Address
-type BalanceMap = map[beneficiary_t]*big.Int
-type DelegatedBalanceMap = map[benefactor_t]BalanceMap
+type Addr2Balance = map[common.Address]*big.Int
+type Addr2Addr2Balance = map[common.Address]Addr2Balance
 type Transfer = struct {
 	Value    *big.Int
 	Negative bool
 }
-type Transfers = map[beneficiary_t]Transfer
-type Storage interface {
-	SubBalance(*common.Address, *big.Int) bool
-	AddBalance(*common.Address, *big.Int)
-	Put(*common.Address, *common.Hash, []byte)
-	Get(*common.Address, *common.Hash, func([]byte))
-	IncrementNonce(address *common.Address)
+type Transfers = map[common.Address]Transfer
+
+type Deposit struct {
+	ValueNet               *big.Int
+	ValuePendingWithdrawal *big.Int
+	AddrsInPos             uint64
+	AddrsOutPos            uint64
+}
+
+func (self *Deposit) Init() *Deposit {
+	self.ValueNet, self.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
+	return self
+}
+
+func (self *Deposit) Total() *big.Int {
+	return bigutil.Add(self.ValueNet, self.ValuePendingWithdrawal)
+}
+
+func (self *Deposit) IsZero() bool {
+	return bigutil.IsZero(self.ValueNet) && bigutil.IsZero(self.ValuePendingWithdrawal)
 }
 
 func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	self.cfg = cfg
-	self.storage = storage
+	self.storage.Init(storage)
 	return self
 }
 
 func (self *Contract) ApplyGenesis() error {
 	for benefactor, benefactor_deposits := range self.cfg.GenesisState {
-		transfers := make(map[beneficiary_t]Transfer, len(benefactor_deposits))
+		transfers := make(map[common.Address]Transfer, len(benefactor_deposits))
 		for k, v := range benefactor_deposits {
 			transfers[k] = Transfer{Value: v}
 		}
@@ -107,78 +118,76 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 	if len(transfers) == 0 {
 		return ErrNoTransfers
 	}
-	if self.deposits == nil {
-		self.deposits = make(DelegatedBalanceMap)
-	}
-	benefactor_deposits := self.deposits[benefactor]
-	if benefactor_deposits == nil {
-		benefactor_deposits = make(BalanceMap)
-		self.deposits[benefactor] = benefactor_deposits
-	}
 	expenditure_total := bigutil.Big0
 	for beneficiary, transfer := range transfers {
 		if transfer.Value.Sign() == 0 {
 			return ErrTransferAmountIsZero
 		}
-		deposit_v := benefactor_deposits[beneficiary]
-		if deposit_v == nil {
-			deposit_v = bigutil.Big0
-			self.storage.Get(contract_address, stor_k(field_deposits, benefactor[:], beneficiary[:]), func(bytes []byte) {
-				deposit_v = bigutil.FromBytes(bytes)
-			})
-			benefactor_deposits[beneficiary] = deposit_v
-		}
 		if !transfer.Negative {
-			expenditure_total = new(big.Int).Add(expenditure_total, transfer.Value)
-		} else if deposit_v.Cmp(transfer.Value) < 0 {
-			return ErrWithdrawalExceedsDeposit
+			expenditure_total = bigutil.Add(expenditure_total, transfer.Value)
+		} else {
+			deposit, _ := self.deposits_get(benefactor[:], beneficiary[:])
+			if deposit == nil || deposit.ValueNet.Cmp(transfer.Value) < 0 {
+				return ErrWithdrawalExceedsDeposit
+			}
 		}
 	}
 	if !self.storage.SubBalance(&benefactor, expenditure_total) {
 		return ErrInsufficientBalanceForDeposits
 	}
 	for beneficiary, transfer := range transfers {
+		deposit, deposit_k := self.deposits_get(benefactor[:], beneficiary[:])
+		if deposit == nil {
+			deposit = new(Deposit).Init()
+		}
 		op := bigutil.Add
 		if transfer.Negative {
 			op = bigutil.USub
 			if self.curr_withdrawals == nil {
-				self.curr_withdrawals = make(DelegatedBalanceMap)
+				self.curr_withdrawals = make(Addr2Addr2Balance)
 			}
 			benefactor_withdrawals := self.curr_withdrawals[benefactor]
 			if benefactor_withdrawals == nil {
-				benefactor_withdrawals = make(BalanceMap)
+				benefactor_withdrawals = make(Addr2Balance)
 				self.curr_withdrawals[benefactor] = benefactor_withdrawals
 			}
 			benefactor_withdrawals[beneficiary] = bigutil.Add(benefactor_withdrawals[beneficiary], transfer.Value)
+			deposit.ValuePendingWithdrawal = bigutil.Add(deposit.ValuePendingWithdrawal, transfer.Value)
 		} else {
 			self.upd_staking_balance(beneficiary, transfer.Value, false)
+			if deposit.IsZero() {
+				deposit.AddrsOutPos = self.storage.ListAppend(
+					bin.Concat2(field_addrs_out, benefactor[:]),
+					common.CopyBytes(beneficiary[:]))
+				deposit.AddrsInPos = self.storage.ListAppend(
+					bin.Concat2(field_addrs_in, beneficiary[:]),
+					common.CopyBytes(benefactor[:]))
+			}
 		}
-		deposit_v := op(benefactor_deposits[beneficiary], transfer.Value)
-		benefactor_deposits[beneficiary] = deposit_v
-		self.storage.Put(contract_address, stor_k(field_deposits, benefactor[:], beneficiary[:]), deposit_v.Bytes())
+		deposit.ValueNet = op(deposit.ValueNet, transfer.Value)
+		self.deposits_put(&deposit_k, deposit)
 	}
 	return
 }
 
 func (self *Contract) Commit(blk_n types.BlockNum) {
-	var moneyback_withdrawals DelegatedBalanceMap
+	defer self.storage.ClearCache()
+	var moneyback_withdrawals Addr2Addr2Balance
 	if self.cfg.WithdrawalDelay == 0 {
 		moneyback_withdrawals = self.curr_withdrawals
 	} else {
 		if len(self.curr_withdrawals) != 0 {
 			self.storage.Put(
-				contract_address,
-				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
+				stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
 				rlp.MustEncodeToBytes(self.curr_withdrawals))
 		}
 		if self.cfg.WithdrawalDelay < blk_n {
-			self.storage.Get(
-				contract_address,
-				stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay)),
-				func(bytes []byte) {
-					moneyback_withdrawals = make(DelegatedBalanceMap)
-					rlp.DecodeBytes(bytes, &moneyback_withdrawals)
-				})
+			k := stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay))
+			self.storage.Get(k, func(bytes []byte) {
+				moneyback_withdrawals = make(Addr2Addr2Balance)
+				rlp.MustDecodeBytes(bytes, &moneyback_withdrawals)
+			})
+			self.storage.Put(k, nil)
 		}
 	}
 	for benefactor, withdrawal_per_beneficiary := range moneyback_withdrawals {
@@ -188,48 +197,69 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		}
 		self.storage.AddBalance(&benefactor, val_total)
 	}
-	var withdrawals_to_apply DelegatedBalanceMap
+	var withdrawals_to_apply Addr2Addr2Balance
 	if self.cfg.DepositDelay == 0 {
 		withdrawals_to_apply = moneyback_withdrawals
 	} else if delay_diff := self.cfg.WithdrawalDelay - self.cfg.DepositDelay; delay_diff == 0 {
 		withdrawals_to_apply = self.curr_withdrawals
 	} else if delay_diff < blk_n {
 		self.storage.Get(
-			contract_address,
-			stor_k(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
+			stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
 			func(bytes []byte) {
-				withdrawals_to_apply = make(DelegatedBalanceMap)
-				rlp.DecodeBytes(bytes, &withdrawals_to_apply)
+				withdrawals_to_apply = make(Addr2Addr2Balance)
+				rlp.MustDecodeBytes(bytes, &withdrawals_to_apply)
 			})
 	}
-	for _, withdrawal_per_beneficiary := range withdrawals_to_apply {
+	for benefactor, withdrawal_per_beneficiary := range withdrawals_to_apply {
 		for beneficiary, val := range withdrawal_per_beneficiary {
 			self.upd_staking_balance(beneficiary, val, true)
+			deposit, deposit_k := self.deposits_get(benefactor[:], beneficiary[:])
+			deposit.ValuePendingWithdrawal = bigutil.USub(deposit.ValuePendingWithdrawal, val)
+			if !deposit.IsZero() {
+				self.deposits_put(&deposit_k, deposit)
+				continue
+			}
+			for i := 0; i < 2; i++ {
+				list_kind, list_owner, pos := field_addrs_out, benefactor[:], deposit.AddrsOutPos
+				if i%2 == 1 {
+					list_kind, list_owner, pos = field_addrs_in, beneficiary[:], deposit.AddrsInPos
+				}
+				moved_addr := self.storage.ListRemove(bin.Concat2(list_kind, list_owner), pos)
+				if moved_addr == nil {
+					continue
+				}
+				addr1, addr2 := list_owner, moved_addr
+				if i%2 == 1 {
+					addr1, addr2 = addr2, addr1
+				}
+				deposit, deposit_k := self.deposits_get(addr1, addr2)
+				if i%2 == 0 {
+					deposit.AddrsOutPos = pos
+				} else {
+					deposit.AddrsInPos = pos
+				}
+				self.deposits_put(&deposit_k, deposit)
+			}
+			self.deposits_put(&deposit_k, nil)
 		}
 	}
 	if self.eligible_count_dirty {
 		self.eligible_count_dirty = false
-		self.storage.Put(
-			contract_address,
-			stor_k(field_eligible_count),
-			bin.ENC_b_endian_compact_64_1(self.eligible_count))
+		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
 	}
 	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
 }
 
 func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
 	if self.staking_balances == nil {
-		self.staking_balances = make(BalanceMap)
+		self.staking_balances = make(Addr2Balance)
 	}
 	beneficiary_bal := self.staking_balances[beneficiary]
 	if beneficiary_bal == nil {
 		beneficiary_bal = bigutil.Big0
-		self.storage.Get(
-			contract_address,
-			stor_k(field_staking_balances, beneficiary[:]),
-			func(bytes []byte) {
-				beneficiary_bal = bigutil.FromBytes(bytes)
-			})
+		self.storage.Get(stor_k_1(field_staking_balances, beneficiary[:]), func(bytes []byte) {
+			beneficiary_bal = bigutil.FromBytes(bytes)
+		})
 	}
 	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	if negative {
@@ -238,10 +268,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.Add(beneficiary_bal, delta)
 	}
 	self.staking_balances[beneficiary] = beneficiary_bal
-	self.storage.Put(
-		contract_address,
-		stor_k(field_staking_balances, beneficiary[:]),
-		beneficiary_bal.Bytes())
+	self.storage.Put(stor_k_1(field_staking_balances, beneficiary[:]), beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	eligible_count_change := 0
 	if was_eligible && !eligible_now {
@@ -256,7 +283,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	self.eligible_count_dirty = true
 	if !self.eligible_count_initialized {
 		self.eligible_count_initialized = true
-		self.storage.Get(contract_address, stor_k(field_eligible_count), func(bytes []byte) {
+		self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
 			self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
 		})
 	}
@@ -267,6 +294,27 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	}
 }
 
-func stor_k(parts ...[]byte) *common.Hash {
-	return keccak256.Hash(parts...)
+func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (deposit *Deposit, key common.Hash) {
+	key = stor_k_2(field_deposits, benefactor_addr, beneficiary_addr)
+	if val, ok := self.deposits[key]; ok {
+		deposit = val
+		return
+	}
+	self.storage.Get(&key, func(bytes []byte) {
+		deposit = new(Deposit)
+		rlp.MustDecodeBytes(bytes, deposit)
+	})
+	if self.deposits == nil {
+		self.deposits = make(map[common.Hash]*Deposit)
+	}
+	self.deposits[key] = deposit
+	return
+}
+
+func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
+	self.storage.Put(key, rlp.MustEncodeToBytes(&deposit))
+	if self.deposits == nil {
+		self.deposits = make(map[common.Hash]*Deposit)
+	}
+	self.deposits[*key] = deposit
 }

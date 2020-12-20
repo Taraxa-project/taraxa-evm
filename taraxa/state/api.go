@@ -91,11 +91,11 @@ func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction, opts *vm.
 }
 
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
-	return state_db.ExtendedReader{self.db.GetBlockState(blk_n)}
+	return state_db.GetBlockState(self.db, blk_n)
 }
 
-func (self *API) QueryDPOS(blk_n types.BlockNum) dpos.Reader {
-	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.AccountStorageReader {
+func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
+	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

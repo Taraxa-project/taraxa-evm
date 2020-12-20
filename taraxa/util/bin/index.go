@@ -36,6 +36,18 @@ func Concat(s1 []byte, s2 ...byte) (ret []byte) {
 	return
 }
 
+func Concat2(bs ...[]byte) (ret []byte) {
+	l := 0
+	for _, b := range bs {
+		l += len(b)
+	}
+	ret = make([]byte, 0, l)
+	for _, b := range bs {
+		ret = append(ret, b...)
+	}
+	return
+}
+
 func ENC_b_endian_64(v uint64) []byte {
 	return []byte{
 		byte(v >> 56),

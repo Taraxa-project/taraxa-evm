@@ -38,6 +38,11 @@ func taraxa_evm_mainnet_genesis_balances() C.taraxa_evm_Bytes {
 	return go_bytes_to_c(bin.BytesView(core.MainnetAllocData))
 }
 
+//export taraxa_evm_traceback
+func taraxa_evm_traceback(cb C.taraxa_evm_BytesCallback) {
+	call_bytes_cb(debug.Stack(), cb)
+}
+
 func main() {
 
 }
