@@ -16,9 +16,7 @@ import (
 
 var last_committed_desc_key = []byte("last_committed_descriptor")
 
-var most_recent_trie_value_views_status_key = []byte("use_most_recent_trie_value_views")
-
-//var most_recent_trie_value_views_status_key = []byte("most_recent_trie_value_views_status")
+var most_recent_trie_value_views_status_key = []byte("most_recent_trie_value_views_status")
 
 type latest_state struct {
 	*DB
