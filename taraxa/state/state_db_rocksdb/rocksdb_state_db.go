@@ -67,7 +67,6 @@ func (self *DB) Init(opts Opts) *DB {
 		if col := i - 1; col == col_main_trie_value_latest || col == col_acc_trie_value_latest {
 			cf_opts.SetAllowConcurrentMemtableWrites(false)
 			cf_opts.OptimizeForPointLookup(300)
-			cf_opts.SetMaxOpenFiles(2000)
 		}
 		cfnames[i], cfopts[i] = strconv.Itoa(int(i)), cf_opts
 	}
