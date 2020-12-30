@@ -3,6 +3,8 @@ package state_db_rocksdb
 import (
 	"sync"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -14,6 +16,8 @@ import (
 
 var last_committed_desc_key = []byte("last_committed_descriptor")
 
+var most_recent_trie_value_views_status_key = []byte("most_recent_trie_value_views_status")
+
 type latest_state struct {
 	*DB
 	batch         *gorocksdb.WriteBatch
@@ -21,10 +25,12 @@ type latest_state struct {
 	state_desc    state_db.StateDescriptor
 	pending_blk_n types.BlockNum
 	state_desc_mu sync.RWMutex
+	opts_w        *gorocksdb.WriteOptions
 }
 
 func (self *latest_state) Init(db *DB) *latest_state {
 	self.DB = db
+	self.opts_w = gorocksdb.NewDefaultWriteOptions()
 	self.batch = gorocksdb.NewWriteBatch()
 	self.writer_thread.Init(1024) // 8KB
 	state_desc_raw, err := self.db.Get(self.opts_r, last_committed_desc_key)
@@ -35,12 +41,40 @@ func (self *latest_state) Init(db *DB) *latest_state {
 		rlp.MustDecodeBytes(v, &self.state_desc)
 	}
 	self.pending_blk_n = self.state_desc.BlockNum
+	util.Call(func() {
+		s, err := self.db.Get(self.opts_r, most_recent_trie_value_views_status_key)
+		util.PanicIfNotNil(err)
+		defer s.Free()
+		status := string(s.Data())
+		status_before := status
+		const err_not_supported = "This database doesn't anymore support the most recent trie value views feature"
+		if len(status) != 0 {
+			if status == "disabling" {
+				util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_main_trie_value_latest]))
+				util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_acc_trie_value_latest]))
+				status = "disabled"
+			}
+			if (status == "enabled") != !self.opts.DisableMostRecentTrieValueViews {
+				asserts.Holds(self.opts.DisableMostRecentTrieValueViews, err_not_supported)
+				status = "disabling"
+			}
+		} else if !self.opts.DisableMostRecentTrieValueViews {
+			asserts.Holds(self.state_desc.BlockNum == types.BlockNumberNIL, err_not_supported)
+			status = "enabled"
+		} else {
+			status = "disabled"
+		}
+		if status_before != status {
+			self.batch.Put(most_recent_trie_value_views_status_key, []byte(status))
+		}
+	})
 	return self
 }
 
 func (self *latest_state) Close() {
 	self.writer_thread.JoinAndClose()
 	self.batch.Destroy()
+	self.opts_w.Destroy()
 }
 
 func (self *latest_state) GetCommittedDescriptor() (ret state_db.StateDescriptor) {
@@ -62,13 +96,32 @@ type pending_block_state struct {
 	trie_value_key_buf TrieValueKey
 }
 
+func (self *pending_block_state) Get(col state_db.Column, k *common.Hash, cb func([]byte)) {
+	if !self.opts.DisableMostRecentTrieValueViews {
+		if col == state_db.COL_acc_trie_value {
+			col = col_acc_trie_value_latest
+		} else if col == state_db.COL_main_trie_value {
+			col = col_main_trie_value_latest
+		}
+	}
+	self.block_state_reader.Get(col, k, cb)
+}
+
 func (self *pending_block_state) Put(col state_db.Column, k *common.Hash, v []byte) {
 	self.latest_state.writer_thread.Submit(func() {
-		if col == state_db.COL_acc_trie_value || col == state_db.COL_main_trie_value {
-			self.trie_value_key_buf.SetKey(k)
-			self.latest_state.batch.PutCF(self.cf_handles[col], self.trie_value_key_buf[:], v)
-		} else {
+		if col != state_db.COL_acc_trie_value && col != state_db.COL_main_trie_value {
 			self.latest_state.batch.PutCF(self.cf_handles[col], k[:], v)
+			return
+		}
+		self.trie_value_key_buf.SetKey(k)
+		self.latest_state.batch.PutCF(self.cf_handles[col], self.trie_value_key_buf[:], v)
+		if self.opts.DisableMostRecentTrieValueViews {
+			return
+		}
+		if col == state_db.COL_acc_trie_value {
+			self.latest_state.batch.PutCF(self.cf_handles[col_acc_trie_value_latest], k[:], v)
+		} else if col == state_db.COL_main_trie_value {
+			self.latest_state.batch.PutCF(self.cf_handles[col_main_trie_value_latest], k[:], v)
 		}
 	})
 }

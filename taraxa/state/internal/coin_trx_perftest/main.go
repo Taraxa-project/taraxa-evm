@@ -85,6 +85,9 @@ func main() {
 	var purge_testdb bool
 	flag.BoolVar(&purge_testdb, "purge_testdb", false, ""+
 		"Whether to clean the test state db. Implies <purge_stats>. (default false)")
+	var disable_most_recent_trie_value_views bool
+	flag.BoolVar(&disable_most_recent_trie_value_views, "disable_most_recent_trie_value_views", false, ""+
+		"Whether to disable the use of most recent trie value views (default false)")
 
 	flag.Parse()
 	asserts.Holds(uint64(num_addrs)%num_prepare_blocks == 0)
@@ -102,7 +105,8 @@ func main() {
 	rocksdb_opts_w_default := gorocksdb.NewDefaultWriteOptions()
 	statedb_prep_path := files.Path(output_dir, "statedb_prep")
 	statedb_prep := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-		Path: statedb_prep_path,
+		Path:                            statedb_prep_path,
+		DisableMostRecentTrieValueViews: disable_most_recent_trie_value_views,
 	})
 	root_genesis_bal := new(big.Int).Set(bigutil.MaxU256)
 	OpenStateAPI := func(db state_db.DB) *state.API {
@@ -168,7 +172,8 @@ func main() {
 		fmt.Println("done")
 	}
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
-		Path: statedb_path,
+		Path:                            statedb_path,
+		DisableMostRecentTrieValueViews: disable_most_recent_trie_value_views,
 	})
 	defer statedb.Close()
 

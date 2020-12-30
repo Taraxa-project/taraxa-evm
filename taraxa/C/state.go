@@ -43,16 +43,14 @@ func taraxa_evm_state_api_new(
 ) C.taraxa_evm_state_API_ptr {
 	defer handle_err(cb_err)
 	var params struct {
-		DBPath       string
 		GetBlockHash uintptr
 		ChainConfig  state.ChainConfig
 		Opts         state.APIOpts
+		OptsDB       state_db_rocksdb.Opts
 	}
 	dec_rlp(params_enc, &params)
 	self := new(state_API)
-	self.db.Init(state_db_rocksdb.Opts{
-		Path: params.DBPath,
-	})
+	self.db.Init(params.OptsDB)
 	self.get_blk_hash_C = *(*C.taraxa_evm_GetBlockHash)(unsafe.Pointer(params.GetBlockHash))
 	self.Init(&self.db, self.blk_hash, params.ChainConfig, params.Opts)
 
