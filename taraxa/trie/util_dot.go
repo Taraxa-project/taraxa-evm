@@ -2,10 +2,11 @@ package trie
 
 import (
 	"fmt"
-	"github.com/emicklei/dot"
 	"math/rand"
 	"reflect"
 	"strconv"
+
+	"github.com/emicklei/dot"
 )
 
 func dot_draw_level(g *dot.Graph, n node) {

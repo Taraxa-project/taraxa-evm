@@ -17,9 +17,10 @@
 package rlp
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"io"
 	"reflect"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
 // RawValue represents an encoded RLP value and can be used to delay

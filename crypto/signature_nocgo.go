@@ -20,6 +20,7 @@ package crypto
 
 import (
 	"crypto/ecdsa"
+
 	"github.com/btcsuite/btcd/btcec"
 )
 

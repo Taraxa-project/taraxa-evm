@@ -18,12 +18,13 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"io"
 	"math"
 	"math/big"
 	"reflect"
 	"sync"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"

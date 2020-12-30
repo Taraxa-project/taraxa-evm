@@ -22,11 +22,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 )
 
 var versionRegexp = regexp.MustCompile(`([0-9]+)\.([0-9]+)\.([0-9]+)`)

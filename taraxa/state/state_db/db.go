@@ -2,6 +2,7 @@ package state_db
 
 import (
 	"fmt"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"

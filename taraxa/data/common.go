@@ -1,10 +1,11 @@
 package data
 
 import (
+	"os"
+
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/files"
-	"os"
 )
 
 var this_dir = files.ThisDirRelPath()

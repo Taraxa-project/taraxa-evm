@@ -2,12 +2,13 @@ package rlp
 
 import (
 	"fmt"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"hash/fnv"
 	"math"
 	"math/rand"
 	"testing"
+
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 func TestMap(t *testing.T) {
