@@ -160,7 +160,7 @@ func main() {
 		fmt.Println("blocks:", blk_num_since, "-", last_blk_num, "tx_count:", tx_count)
 		time_before_execution := time.Now()
 		for _, b := range block_buf {
-			st.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)), nil)
+			st.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
 			for _, trx_and_receipt := range b.Transactions {
 				res := st.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
 				receipt := trx_and_receipt.Receipt
@@ -181,7 +181,7 @@ func main() {
 					asserts.EQ(*receipt.ContractAddress, res.NewContractAddr)
 				}
 			}
-			st.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)))
+			st.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)), nil, nil)
 		}
 		state_root := st.PrepareCommit()
 		asserts.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())

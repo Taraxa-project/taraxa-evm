@@ -114,10 +114,11 @@ func main() {
 			db,
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			state.ChainConfig{
-				DisableBlockRewards: true,
 				ExecutionOptions: vm.ExecutionOpts{
-					DisableGasFee:     false,
-					DisableNonceCheck: true,
+					DisableGasFee:       false,
+					DisableNonceCheck:   true,
+					DisableBlockRewards: true,
+					DisableStatsRewards: true,
 				},
 				ETHChainConfig: params.ChainConfig{
 					DAOForkBlock: types.BlockNumberNIL,
@@ -142,7 +143,7 @@ func main() {
 	target_bal_per_addr := new(big.Int).Div(root_genesis_bal, new(big.Int).SetUint64(uint64(num_addrs)))
 	for blk_n, batch_size := state_desc.BlockNum, uint64(0); blk_n < num_prepare_blocks; blk_n++ {
 		fmt.Println("preparation block #", blk_n, "of", num_prepare_blocks)
-		st.BeginBlock(evm_blk_info, nil)
+		st.BeginBlock(evm_blk_info)
 		for j := uint64(0); j < addr_per_blk; j++ {
 			st.ExecuteTransaction(&vm.Transaction{
 				From:     tests.Addr(1),
@@ -153,7 +154,7 @@ func main() {
 			})
 			batch_size++
 		}
-		st.EndBlock(nil,)
+		st.EndBlock(nil, nil, nil)
 		if batch_size >= prepare_trx_batch_size || blk_n == num_prepare_blocks-1 {
 			st.Commit()
 			batch_size = 0
@@ -230,7 +231,7 @@ func main() {
 		}
 
 		with_timer("execution", func() {
-			st.BeginBlock(evm_blk_info, nil)
+			st.BeginBlock(evm_blk_info)
 			for i := uint64(0); i < test_trx_batch_size; i++ {
 				from := tests.Addr(uint64(2 + rand.Int63n(int64(num_addrs))))
 				to := tests.Addr(uint64(2 + rand.Int63n(int64(num_addrs))))
@@ -243,7 +244,7 @@ func main() {
 				}
 				st.ExecuteTransaction(&trx)
 			}
-			st.EndBlock(nil)
+			st.EndBlock(nil, nil, nil)
 		})
 		with_timer("trie_commit", func() {
 			st.PrepareCommit()
