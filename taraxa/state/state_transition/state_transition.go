@@ -11,7 +11,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
@@ -102,15 +103,12 @@ func (self *StateTransition) evm_state_checkpoint() {
 	self.evm_state.CommitTransaction(&self.trie_sink, self.evm.GetRules().IsEIP158)
 }
 
-func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo, rewards map[common.Address]*big.Int) {
+func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
-	}
-	if self.dpos_contract != nil {
-		self.dpos_contract.BeginBlockCall(rewards)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
@@ -118,20 +116,33 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo, rewards map[comm
 	}
 }
 
-func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret = self.evm.Main(trx, self.chain_config.ExecutionOptions)
+func (self *StateTransition) ExecuteTransaction(tx *vm.Transaction) (ret vm.ExecutionResult) {
+	ret = self.evm.Main(tx, self.chain_config.ExecutionOptions)
 	self.evm_state_checkpoint()
 	return
 }
 
-func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
+func (self *StateTransition) GetChainConfig() (ret *chain_config.ChainConfig) {
+	ret = self.chain_config
+	return
+}
+
+func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
 	if !self.chain_config.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
-		ethash.AccumulateRewards(
-			self.evm.GetRules(),
-			ethash.BlockNumAndCoinbase{evm_block.Number, evm_block.Author},
-			uncles,
-			&self.evm_state)
+
+		if self.chain_config.ExecutionOptions.DisableStatsRewards {
+			ethash.AccumulateRewards(
+				self.evm.GetRules(),
+				ethash.BlockNumAndCoinbase{evm_block.Number, evm_block.Author},
+				uncles,
+				&self.evm_state)
+		} else {
+			if self.dpos_contract == nil {
+				panic("Stats rewards enabled but no dpos contract registered")
+			}
+			self.dpos_contract.DistributeRewards(rewardsStats, feesRewards)
+		}
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
@@ -160,4 +171,8 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 		self.dpos_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
 	}
 	return
+}
+
+func (self *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *big.Int) {
+	self.evm_state.GetAccount(account).AddBalance(tx_fee)
 }

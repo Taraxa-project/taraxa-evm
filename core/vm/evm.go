@@ -96,7 +96,7 @@ type Transaction struct {
 	Input    []byte
 }
 type ExecutionOpts struct {
-	DisableNonceCheck, DisableGasFee, EnableNonceSkipping bool
+	DisableNonceCheck, DisableGasFee, EnableNonceSkipping, DisableStatsRewards bool
 }
 type ExecutionResult struct {
 	CodeRetval      []byte
@@ -176,12 +176,13 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
-	self.trx = trx
+func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+	self.trx = tx
+
 	defer func() { self.trx, self.jumpdests = nil, nil }()
-	caller := self.state.GetAccount(&trx.From)
+	caller := self.state.GetAccount(&self.trx.From)
 	if !opts.DisableNonceCheck {
-		nonce := caller.GetNonce();
+		nonce := caller.GetNonce()
 		if !opts.EnableNonceSkipping {
 			if nonce.Cmp(self.trx.Nonce) < 0 {
 				ret.ConsensusErr = ErrNonceTooHigh
@@ -239,8 +240,6 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	if !opts.DisableGasFee {
 		// Return ETH for remaining gas, exchanged at the original rate.
 		caller.AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(gas_left), gas_price))
-		self.state.GetAccount(&self.block.Author).
-			AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(ret.GasUsed), gas_price))
 	}
 	return
 }

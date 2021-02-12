@@ -58,7 +58,7 @@ func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	self.validators_list.Init(self.storage, validators_list_field)
 }
 
-//Check if correct account is trying to access validator object
+// Checks if correct account is trying to access validator object
 func (self *Validators) CheckValidatorOwner(owner, validator *common.Address) bool {
 	key := stor_k_1(self.validator_owner_field, validator[:])
 	var saved_addr common.Address

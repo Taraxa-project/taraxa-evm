@@ -5,12 +5,14 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
+	"fmt"
 	"math/big"
 	"sync"
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -205,22 +207,54 @@ func taraxa_evm_state_api_transition_state(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		Blk    vm.BlockInfo
-		Trxs   []vm.Transaction
-		Uncles []state_common.UncleBlock
+		Blk           vm.BlockInfo
+		Txs           []vm.Transaction
+		TxsValidators []common.Address // Transactions stats: tx hash -> validator that included it as first in his block
+		Uncles        []state_common.UncleBlock
+		Rewards_stats rewards_stats.RewardsStats
 	}
 	dec_rlp(params_enc, &params)
+
 	var retval struct {
 		ExecutionResults []vm.ExecutionResult
 		StateRoot        common.Hash
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
-	st.BeginBlock(&params.Blk, nil)
-	for i := range params.Trxs {
-		retval.ExecutionResults = append(retval.ExecutionResults, st.ExecuteTransaction(&params.Trxs[i]))
+
+	disabled_stats_rewards := st.GetChainConfig().ExecutionOptions.DisableStatsRewards
+	if !disabled_stats_rewards && len(params.Txs) != len(params.TxsValidators) {
+		errorString := fmt.Sprintf("Number of txs (%d) != number of txs validators (%d)", len(params.Txs), len(params.TxsValidators))
+		panic(errorString)
 	}
-	st.EndBlock(params.Uncles)
+
+	// What rewards should be distributed to which accounts
+	feesRewards := dpos.NewFeesRewards()
+
+	st.BeginBlock(&params.Blk)
+
+	for i := range params.Txs {
+		tx := &params.Txs[i]
+		txResult := st.ExecuteTransaction(tx)
+
+		// Process tx fees only if enabled
+		if !st.GetChainConfig().ExecutionOptions.DisableGasFee {
+			txFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.GasUsed), tx.GasPrice)
+
+			// Rewards stats are not enabled - just add fee to the block author balance
+			// TODO: once there is a stabilized version - remove this flag and use only dpos contract
+			if disabled_stats_rewards {
+				st.AddTxFeeToBalance(&params.Blk.Author, txFee)
+			} else {
+				// Reward dag block author, who included specified tx as first
+				feesRewards.AddTxFeeReward(params.TxsValidators[i], txFee)
+			}
+		}
+
+		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
+	}
+
+	st.EndBlock(params.Uncles, &params.Rewards_stats, &feesRewards)
 	retval.StateRoot = st.PrepareCommit()
 	enc_rlp(&retval, cb)
 }

@@ -108,7 +108,7 @@ func (self *DposTest) init(t *tests.TestCtx) {
 
 func (self *DposTest) execute(from common.Address, value uint64, input []byte) vm.ExecutionResult {
 	self.blk_n++
-	self.st.BeginBlock(&vm.BlockInfo{}, nil)
+	self.st.BeginBlock(&vm.BlockInfo{})
 
 	res := self.st.ExecuteTransaction(&vm.Transaction{
 		Value: new(big.Int).SetUint64(value),
@@ -117,15 +117,15 @@ func (self *DposTest) execute(from common.Address, value uint64, input []byte) v
 		Input: input,
 	})
 
-	self.st.EndBlock(nil)
+	self.st.EndBlock(nil, nil, nil)
 	self.st.Commit()
 	return res
 }
 
 func (self *DposTest) AddRewards(rewards map[common.Address]*big.Int) {
 	self.blk_n++
-	self.st.BeginBlock(&vm.BlockInfo{}, rewards)
-	self.st.EndBlock(nil)
+	self.st.BeginBlock(&vm.BlockInfo{})
+	self.st.EndBlock(nil, nil, nil)
 	self.st.Commit()
 }
 
