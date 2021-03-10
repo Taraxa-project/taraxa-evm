@@ -31,6 +31,7 @@ var ErrInsufficientBalanceForDeposits = util.ErrorString("insufficient balance f
 var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
 var ErrNoTransfers = util.ErrorString("no transfers")
 var ErrCallValueNonzero = util.ErrorString("call value must be zero")
+var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 type Contract struct {
 	cfg                        Config
@@ -48,7 +49,11 @@ type Transfer = struct {
 	Value    *big.Int
 	Negative bool
 }
-type Transfers = map[common.Address]Transfer
+type BeneficiaryAndTransfer struct {
+	Beneficiary common.Address
+	Transfer    Transfer
+}
+type Transfers = []BeneficiaryAndTransfer
 
 type Deposit struct {
 	ValueNet               *big.Int
@@ -77,12 +82,15 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 }
 
 func (self *Contract) ApplyGenesis() error {
-	for benefactor, benefactor_deposits := range self.cfg.GenesisState {
-		transfers := make(map[common.Address]Transfer, len(benefactor_deposits))
-		for k, v := range benefactor_deposits {
-			transfers[k] = Transfer{Value: v}
+	for _, entry := range self.cfg.GenesisState {
+		transfers := make([]BeneficiaryAndTransfer, len(entry.Transfers))
+		for i, v := range entry.Transfers {
+			transfers[i] = BeneficiaryAndTransfer{
+				Beneficiary: v.Beneficiary,
+				Transfer:    Transfer{Value: v.Value},
+			}
 		}
-		if err := self.run(benefactor, transfers); err != nil {
+		if err := self.run(entry.Benefactor, transfers); err != nil {
 			return err
 		}
 	}
@@ -119,15 +127,20 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 		return ErrNoTransfers
 	}
 	expenditure_total := bigutil.Big0
-	for beneficiary, transfer := range transfers {
-		if transfer.Value.Sign() == 0 {
+	unique_beneficiaries := make(map[common.Address]bool, len(transfers))
+	for _, t := range transfers {
+		if unique_beneficiaries[t.Beneficiary] {
+			return ErrDuplicateBeneficiary
+		}
+		unique_beneficiaries[t.Beneficiary] = true
+		if t.Transfer.Value.Sign() == 0 {
 			return ErrTransferAmountIsZero
 		}
-		if !transfer.Negative {
-			expenditure_total = bigutil.Add(expenditure_total, transfer.Value)
+		if !t.Transfer.Negative {
+			expenditure_total = bigutil.Add(expenditure_total, t.Transfer.Value)
 		} else {
-			deposit, _ := self.deposits_get(benefactor[:], beneficiary[:])
-			if deposit == nil || deposit.ValueNet.Cmp(transfer.Value) < 0 {
+			deposit, _ := self.deposits_get(benefactor[:], t.Beneficiary[:])
+			if deposit == nil || deposit.ValueNet.Cmp(t.Transfer.Value) < 0 {
 				return ErrWithdrawalExceedsDeposit
 			}
 		}
@@ -135,7 +148,8 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 	if !self.storage.SubBalance(&benefactor, expenditure_total) {
 		return ErrInsufficientBalanceForDeposits
 	}
-	for beneficiary, transfer := range transfers {
+	for _, t := range transfers {
+		beneficiary, transfer := t.Beneficiary, t.Transfer
 		deposit, deposit_k := self.deposits_get(benefactor[:], beneficiary[:])
 		if deposit == nil {
 			deposit = new(Deposit).Init()

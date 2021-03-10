@@ -97,13 +97,15 @@ func (self *Spec) run(t *testing.T) {
 	chain_cfg.DPOS.DepositDelay = self.DposCfg.DepositDelay
 	chain_cfg.DPOS.EligibilityBalanceThreshold = new(big.Int).SetInt64(int64(
 		self.DposCfg.EligibilityBalanceThreshold))
-	chain_cfg.DPOS.GenesisState = make(dpos.Addr2Addr2Balance)
 	for k, v := range self.DposCfg.DposGenesisState {
-		v_mapped := make(dpos.Addr2Balance)
+		entry := dpos.GenesisStateEntry{Benefactor: k}
 		for k1, v1 := range v {
-			v_mapped[k1] = new(big.Int).SetInt64(int64(v1))
+			entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{
+				Beneficiary: k1,
+				Value:       new(big.Int).SetInt64(int64(v1)),
+			})
 		}
-		chain_cfg.DPOS.GenesisState[k] = v_mapped
+		chain_cfg.DPOS.GenesisState = append(chain_cfg.DPOS.GenesisState, entry)
 	}
 
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
