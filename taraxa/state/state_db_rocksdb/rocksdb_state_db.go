@@ -2,6 +2,7 @@ package state_db_rocksdb
 
 import (
 	"bytes"
+	"fmt"
 	"runtime"
 	"strconv"
 	"sync"
@@ -114,6 +115,7 @@ func (self *DB) Close() {
 		cf.Destroy()
 	}
 	self.cf_handle_default.Destroy()
+	fmt.Println("DBG")
 	self.db.Close()
 	self.closed = true
 }
