@@ -108,6 +108,9 @@ func (self *DB) Close() {
 	defer self.opts_r_itr.Destroy()
 	self.latest_state.Close()
 	self.maintenance_task_executor.JoinAndClose()
+	for _, cf := range self.cf_handles {
+		cf.Destroy()
+	}
 	self.db.Close()
 	self.closed = true
 }
