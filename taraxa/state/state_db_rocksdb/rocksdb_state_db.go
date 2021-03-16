@@ -18,6 +18,7 @@ import (
 
 type DB struct {
 	db                           *gorocksdb.DB
+	cf_handle_default            *gorocksdb.ColumnFamilyHandle
 	cf_handles                   [col_COUNT]*gorocksdb.ColumnFamilyHandle
 	opts_r                       *gorocksdb.ReadOptions
 	opts_r_itr                   *gorocksdb.ReadOptions
@@ -75,6 +76,7 @@ func (self *DB) Init(opts Opts) *DB {
 	db, cf_handles, err := gorocksdb.OpenDbColumnFamilies(db_opts, opts.Path, cfnames[:], cfopts[:])
 	util.PanicIfNotNil(err)
 	self.db = db
+	self.cf_handle_default = cf_handles[0]
 	copy(self.cf_handles[:], cf_handles[1:])
 	self.opts_r = func() *gorocksdb.ReadOptions {
 		ret := gorocksdb.NewDefaultReadOptions()
@@ -111,6 +113,7 @@ func (self *DB) Close() {
 	for _, cf := range self.cf_handles {
 		cf.Destroy()
 	}
+	self.cf_handle_default.Destroy()
 	self.db.Close()
 	self.closed = true
 }
