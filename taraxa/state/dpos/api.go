@@ -20,7 +20,15 @@ type Config = struct {
 	EligibilityBalanceThreshold *big.Int
 	DepositDelay                types.BlockNum
 	WithdrawalDelay             types.BlockNum
-	GenesisState                Addr2Addr2Balance
+	GenesisState                []GenesisStateEntry
+}
+type GenesisStateEntry = struct {
+	Benefactor common.Address
+	Transfers  []GenesisTransfer
+}
+type GenesisTransfer = struct {
+	Beneficiary common.Address
+	Value       *big.Int
 }
 
 func (self *API) Init(cfg Config) *API {

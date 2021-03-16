@@ -46,26 +46,23 @@ func (self *latest_state) Init(db *DB) *latest_state {
 		util.PanicIfNotNil(err)
 		defer s.Free()
 		status := string(s.Data())
-		status_before := status
 		const err_not_supported = "This database doesn't anymore support the most recent trie value views feature"
-		if len(status) != 0 {
-			if status == "disabling" {
-				util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_main_trie_value_latest]))
-				util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_acc_trie_value_latest]))
-				status = "disabled"
+		if len(status) == 0 {
+			if self.opts.DisableMostRecentTrieValueViews {
+				self.db.Put(self.opts_w, most_recent_trie_value_views_status_key, []byte("disabled"))
+			} else {
+				asserts.Holds(self.state_desc.BlockNum == types.BlockNumberNIL, err_not_supported)
+				self.db.Put(self.opts_w, most_recent_trie_value_views_status_key, []byte("enabled"))
 			}
-			if (status == "enabled") != !self.opts.DisableMostRecentTrieValueViews {
-				asserts.Holds(self.opts.DisableMostRecentTrieValueViews, err_not_supported)
-				status = "disabling"
-			}
-		} else if !self.opts.DisableMostRecentTrieValueViews {
-			asserts.Holds(self.state_desc.BlockNum == types.BlockNumberNIL, err_not_supported)
-			status = "enabled"
-		} else {
-			status = "disabled"
+		} else if (status == "enabled") != !self.opts.DisableMostRecentTrieValueViews {
+			asserts.Holds(self.opts.DisableMostRecentTrieValueViews, err_not_supported)
+			status = "disabling"
+			self.db.Put(self.opts_w, most_recent_trie_value_views_status_key, []byte(status))
 		}
-		if status_before != status {
-			self.batch.Put(most_recent_trie_value_views_status_key, []byte(status))
+		if status == "disabling" {
+			util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_main_trie_value_latest]))
+			util.PanicIfNotNil(self.db.DropColumnFamily(self.cf_handles[col_acc_trie_value_latest]))
+			self.db.Put(self.opts_w, most_recent_trie_value_views_status_key, []byte("disabled"))
 		}
 	})
 	return self

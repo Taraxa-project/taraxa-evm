@@ -49,6 +49,7 @@ func (self *StorageReaderWrapper) Get(k *common.Hash, cb func([]byte)) {
 		if self.cache == nil {
 			self.cache = make(map[common.Hash][]byte)
 		}
+		bytes = common.CopyBytes(bytes)
 		self.cache[*k] = bytes
 		cb(bytes)
 	})
