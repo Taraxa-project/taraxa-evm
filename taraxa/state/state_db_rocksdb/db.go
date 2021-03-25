@@ -89,7 +89,7 @@ func (self *DB) Init(opts Opts) *DB {
 		ret.SetFillCache(false)
 		return ret
 	}()
-	self.maintenance_task_executor.Init(2, 1024) // 8KB
+	self.maintenance_task_executor.Init(1, 1024) // 8KB
 	for _, col := range versioned_read_columns {
 		col := col
 		self.versioned_read_pools[col] = new(util.Pool).Init(uint(1.5*float64(runtime.NumCPU())), func() util.PoolItem {
