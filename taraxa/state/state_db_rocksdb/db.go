@@ -2,7 +2,6 @@ package state_db_rocksdb
 
 import (
 	"bytes"
-	"fmt"
 	"runtime"
 	"strconv"
 	"sync"
@@ -18,19 +17,16 @@ import (
 )
 
 type DB struct {
-	db                           *gorocksdb.DB
-	cf_handle_default            *gorocksdb.ColumnFamilyHandle
-	cf_handles                   [col_COUNT]*gorocksdb.ColumnFamilyHandle
-	opts_r                       *gorocksdb.ReadOptions
-	opts_r_itr                   *gorocksdb.ReadOptions
-	col_main_trie_value_itr_pool sync.Pool
-	col_acc_trie_value_itr_pool  sync.Pool
-	itr_pools_mu                 sync.RWMutex
-	latest_state                 latest_state
-	maintenance_task_executor    goroutines.SingleThreadExecutor
-	close_mu                     sync.RWMutex
-	closed                       bool
-	opts                         Opts
+	db                        *gorocksdb.DB
+	cf_handle_default         *gorocksdb.ColumnFamilyHandle
+	cf_handles                [col_COUNT]*gorocksdb.ColumnFamilyHandle
+	opts_r                    *gorocksdb.ReadOptions
+	opts_r_itr                *gorocksdb.ReadOptions
+	versioned_read_pools      [col_COUNT]*util.Pool
+	latest_state              LatestState
+	maintenance_task_executor goroutines.GoroutineGroup
+	close_mu                  sync.RWMutex
+	opts                      Opts
 }
 
 const (
@@ -38,6 +34,8 @@ const (
 	col_acc_trie_value_latest
 	col_COUNT
 )
+
+var versioned_read_columns = []state_db.Column{state_db.COL_acc_trie_value, state_db.COL_main_trie_value}
 
 type Opts = struct {
 	Path                            string
@@ -91,8 +89,15 @@ func (self *DB) Init(opts Opts) *DB {
 		ret.SetFillCache(false)
 		return ret
 	}()
-	self.reset_itr_pools()
-	self.maintenance_task_executor.Init(512) // 4KB
+	self.maintenance_task_executor.Init(2, 1024) // 8KB
+	for _, col := range versioned_read_columns {
+		col := col
+		self.versioned_read_pools[col] = new(util.Pool).Init(uint(1.5*float64(runtime.NumCPU())), func() util.PoolItem {
+			return &VersionedReadContext{
+				itr: self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[col]),
+			}
+		})
+	}
 	self.latest_state.Init(self)
 	return self
 }
@@ -106,18 +111,16 @@ func (self *DB) Snapshot(dir string, log_size_for_flush uint64) error {
 }
 
 func (self *DB) Close() {
-	defer util.LockUnlock(&self.close_mu)()
-	defer self.opts_r.Destroy()
-	defer self.opts_r_itr.Destroy()
 	self.latest_state.Close()
+	self.invalidate_versioned_read_pools()
 	self.maintenance_task_executor.JoinAndClose()
+	self.opts_r.Destroy()
+	self.opts_r_itr.Destroy()
 	for _, cf := range self.cf_handles {
 		cf.Destroy()
 	}
 	self.cf_handle_default.Destroy()
-	fmt.Println("DBG")
 	self.db.Close()
-	self.closed = true
 }
 
 func (self *DB) GetBlockState(num types.BlockNum) state_db.Reader {
@@ -133,21 +136,14 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 	if self.blk_n == types.BlockNumberNIL {
 		return
 	}
-	var itr_pool *sync.Pool
-	if col == state_db.COL_acc_trie_value {
-		itr_pool = &self.col_acc_trie_value_itr_pool
-	} else if col == state_db.COL_main_trie_value {
-		itr_pool = &self.col_main_trie_value_itr_pool
-	}
-	if itr_pool != nil {
-		panic("no")
-		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
-		itr := itr_pool.Get().(*gorocksdb.Iterator)
-		defer itr_pool.Put(itr)
-		var k_versioned TrieValueKey
-		k_versioned.SetKey(k)
-		k_versioned.SetBlockNum(self.blk_n)
-		if itr.SeekForPrev(k_versioned[:]); !itr.Valid() {
+	if versioned_read_pool := self.versioned_read_pools[col]; versioned_read_pool != nil {
+		pool_handle := versioned_read_pool.Get()
+		defer versioned_read_pool.Return(pool_handle)
+		ctx := pool_handle.Get().(*VersionedReadContext)
+		ctx.key_buffer.SetKey(k)
+		ctx.key_buffer.SetVersion(self.blk_n)
+		itr := ctx.itr
+		if itr.SeekForPrev(ctx.key_buffer[:]); !itr.Valid() {
 			if err := itr.Err(); err != nil {
 				panic(err)
 			}
@@ -176,21 +172,8 @@ func (self *DB) GetLatestState() state_db.LatestState {
 	return &self.latest_state
 }
 
-func (self *DB) trie_value_itr_pool(col state_db.Column) sync.Pool {
-	return sync.Pool{New: func() interface{} {
-		ret := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[col])
-		runtime.SetFinalizer(ret, func(itr *gorocksdb.Iterator) {
-			defer util.LockUnlock(self.close_mu.RLocker())()
-			if !self.closed {
-				itr.Close()
-			}
-		})
-		return ret
-	}}
-}
-
-func (self *DB) reset_itr_pools() {
-	defer util.LockUnlock(&self.itr_pools_mu)()
-	//self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_main_trie_value)
-	//self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_acc_trie_value)
+func (self *DB) invalidate_versioned_read_pools() {
+	for _, col := range versioned_read_columns {
+		self.maintenance_task_executor.Submit(self.versioned_read_pools[col].Invalidate())
+	}
 }

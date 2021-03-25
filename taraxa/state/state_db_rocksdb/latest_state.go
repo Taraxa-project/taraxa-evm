@@ -18,21 +18,21 @@ var last_committed_desc_key = []byte("last_committed_descriptor")
 
 var most_recent_trie_value_views_status_key = []byte("most_recent_trie_value_views_status")
 
-type latest_state struct {
+type LatestState struct {
 	*DB
 	batch         *gorocksdb.WriteBatch
-	writer_thread goroutines.SingleThreadExecutor
+	writer_thread goroutines.GoroutineGroup
 	state_desc    state_db.StateDescriptor
 	pending_blk_n types.BlockNum
 	state_desc_mu sync.RWMutex
 	opts_w        *gorocksdb.WriteOptions
 }
 
-func (self *latest_state) Init(db *DB) *latest_state {
+func (self *LatestState) Init(db *DB) *LatestState {
 	self.DB = db
 	self.opts_w = gorocksdb.NewDefaultWriteOptions()
 	self.batch = gorocksdb.NewWriteBatch()
-	self.writer_thread.Init(1024) // 8KB
+	self.writer_thread.InitSingle(1024) // 8KB
 	state_desc_raw, err := self.db.Get(self.opts_r, last_committed_desc_key)
 	util.PanicIfNotNil(err)
 	defer state_desc_raw.Free()
@@ -68,32 +68,32 @@ func (self *latest_state) Init(db *DB) *latest_state {
 	return self
 }
 
-func (self *latest_state) Close() {
+func (self *LatestState) Close() {
 	self.writer_thread.JoinAndClose()
 	self.batch.Destroy()
 	self.opts_w.Destroy()
 }
 
-func (self *latest_state) GetCommittedDescriptor() (ret state_db.StateDescriptor) {
+func (self *LatestState) GetCommittedDescriptor() (ret state_db.StateDescriptor) {
 	defer util.LockUnlock(self.state_desc_mu.RLocker())()
 	return self.state_desc
 }
 
-func (self *latest_state) BeginPendingBlock() state_db.PendingBlockState {
+func (self *LatestState) BeginPendingBlock() state_db.PendingBlockState {
 	defer util.LockUnlock(&self.state_desc_mu)()
 	self.pending_blk_n++
-	var keybuf TrieValueKey
-	keybuf.SetBlockNum(self.pending_blk_n)
-	return &pending_block_state{block_state_reader{self.DB, self.state_desc.BlockNum}, self.pending_blk_n, keybuf}
+	var keybuf VersionedKey
+	keybuf.SetVersion(self.pending_blk_n)
+	return &PendingBlockState{block_state_reader{self.DB, self.state_desc.BlockNum}, self.pending_blk_n, keybuf}
 }
 
-type pending_block_state struct {
+type PendingBlockState struct {
 	block_state_reader
 	blk_n              types.BlockNum
-	trie_value_key_buf TrieValueKey
+	trie_value_key_buf VersionedKey
 }
 
-func (self *pending_block_state) Get(col state_db.Column, k *common.Hash, cb func([]byte)) {
+func (self *PendingBlockState) Get(col state_db.Column, k *common.Hash, cb func([]byte)) {
 	if !self.opts.DisableMostRecentTrieValueViews {
 		if col == state_db.COL_acc_trie_value {
 			col = col_acc_trie_value_latest
@@ -104,7 +104,7 @@ func (self *pending_block_state) Get(col state_db.Column, k *common.Hash, cb fun
 	self.block_state_reader.Get(col, k, cb)
 }
 
-func (self *pending_block_state) Put(col state_db.Column, k *common.Hash, v []byte) {
+func (self *PendingBlockState) Put(col state_db.Column, k *common.Hash, v []byte) {
 	self.latest_state.writer_thread.Submit(func() {
 		if col != state_db.COL_acc_trie_value && col != state_db.COL_main_trie_value {
 			self.latest_state.batch.PutCF(self.cf_handles[col], k[:], v)
@@ -123,22 +123,23 @@ func (self *pending_block_state) Put(col state_db.Column, k *common.Hash, v []by
 	})
 }
 
-func (self *pending_block_state) GetNumber() types.BlockNum {
+func (self *PendingBlockState) GetNumber() types.BlockNum {
 	return self.blk_n
 }
 
-func (self *latest_state) Commit(state_root common.Hash) (err error) {
+func (self *LatestState) Commit(state_root common.Hash) (err error) {
 	state_desc := &state_db.StateDescriptor{BlockNum: self.pending_blk_n, StateRoot: state_root}
 	self.writer_thread.Submit(func() {
 		self.batch.Put(last_committed_desc_key, rlp.MustEncodeToBytes(state_desc))
-		if err = self.db.Write(self.opts_w, self.batch); err == nil {
-			self.state_desc_mu.Lock()
-			self.state_desc = *state_desc
-			self.state_desc_mu.Unlock()
-			self.reset_itr_pools()
+		if err = self.db.Write(self.opts_w, self.batch); err != nil {
+			return
 		}
-		self.batch.Clear()
+		self.state_desc_mu.Lock()
+		self.state_desc = *state_desc
+		self.state_desc_mu.Unlock()
+		self.invalidate_versioned_read_pools()
 	})
 	self.writer_thread.Join() // TODO completely async
+	self.writer_thread.Submit(self.batch.Clear)
 	return
 }
