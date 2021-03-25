@@ -137,9 +137,12 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 		return
 	}
 	if versioned_read_pool := self.versioned_read_pools[col]; versioned_read_pool != nil {
-		pool_handle := versioned_read_pool.Get()
-		defer versioned_read_pool.Return(pool_handle)
-		ctx := pool_handle.Get().(*VersionedReadContext)
+		//pool_handle := versioned_read_pool.Get()
+		//defer versioned_read_pool.Return(pool_handle)
+		ctx := &VersionedReadContext{
+			itr: self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[col]),
+		}
+		defer ctx.itr.Close()
 		ctx.key_buffer.SetKey(k)
 		ctx.key_buffer.SetVersion(self.blk_n)
 		itr := ctx.itr
