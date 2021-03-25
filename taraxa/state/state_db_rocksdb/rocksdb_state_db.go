@@ -140,6 +140,7 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 		itr_pool = &self.col_main_trie_value_itr_pool
 	}
 	if itr_pool != nil {
+		panic("no")
 		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
 		itr := itr_pool.Get().(*gorocksdb.Iterator)
 		defer itr_pool.Put(itr)
@@ -190,6 +191,6 @@ func (self *DB) trie_value_itr_pool(col state_db.Column) sync.Pool {
 
 func (self *DB) reset_itr_pools() {
 	defer util.LockUnlock(&self.itr_pools_mu)()
-	self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_main_trie_value)
-	self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_acc_trie_value)
+	//self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_main_trie_value)
+	//self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_acc_trie_value)
 }
