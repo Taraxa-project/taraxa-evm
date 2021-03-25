@@ -135,7 +135,6 @@ func (self *latest_state) Commit(state_root common.Hash) (err error) {
 			self.state_desc_mu.Lock()
 			self.state_desc = *state_desc
 			self.state_desc_mu.Unlock()
-			self.reset_itr_pools()
 		}
 		self.batch.Clear()
 	})

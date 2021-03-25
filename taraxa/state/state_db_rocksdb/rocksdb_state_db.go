@@ -17,19 +17,17 @@ import (
 )
 
 type DB struct {
-	db                           *gorocksdb.DB
-	cf_handle_default            *gorocksdb.ColumnFamilyHandle
-	cf_handles                   [col_COUNT]*gorocksdb.ColumnFamilyHandle
-	opts_r                       *gorocksdb.ReadOptions
-	opts_r_itr                   *gorocksdb.ReadOptions
-	col_main_trie_value_itr_pool sync.Pool
-	col_acc_trie_value_itr_pool  sync.Pool
-	itr_pools_mu                 sync.RWMutex
-	latest_state                 latest_state
-	maintenance_task_executor    goroutines.SingleThreadExecutor
-	close_mu                     sync.RWMutex
-	closed                       bool
-	opts                         Opts
+	db                        *gorocksdb.DB
+	cf_handle_default         *gorocksdb.ColumnFamilyHandle
+	cf_handles                [col_COUNT]*gorocksdb.ColumnFamilyHandle
+	opts_r                    *gorocksdb.ReadOptions
+	opts_r_itr                *gorocksdb.ReadOptions
+	itr_pools_mu              sync.RWMutex
+	latest_state              latest_state
+	maintenance_task_executor goroutines.SingleThreadExecutor
+	close_mu                  sync.RWMutex
+	closed                    bool
+	opts                      Opts
 }
 
 const (
@@ -90,7 +88,6 @@ func (self *DB) Init(opts Opts) *DB {
 		ret.SetFillCache(false)
 		return ret
 	}()
-	self.reset_itr_pools()
 	self.maintenance_task_executor.Init(512) // 4KB
 	self.latest_state.Init(self)
 	return self
@@ -131,16 +128,10 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 	if self.blk_n == types.BlockNumberNIL {
 		return
 	}
-	var itr_pool *sync.Pool
-	if col == state_db.COL_acc_trie_value {
-		itr_pool = &self.col_acc_trie_value_itr_pool
-	} else if col == state_db.COL_main_trie_value {
-		itr_pool = &self.col_main_trie_value_itr_pool
-	}
-	if itr_pool != nil {
+	if col == state_db.COL_acc_trie_value || col == state_db.COL_main_trie_value {
 		defer util.LockUnlock(self.itr_pools_mu.RLocker())()
-		itr := itr_pool.Get().(*gorocksdb.Iterator)
-		defer itr_pool.Put(itr)
+		itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[col])
+		defer itr.Close()
 		var k_versioned TrieValueKey
 		k_versioned.SetKey(k)
 		k_versioned.SetBlockNum(self.blk_n)
@@ -184,10 +175,4 @@ func (self *DB) trie_value_itr_pool(col state_db.Column) sync.Pool {
 		})
 		return ret
 	}}
-}
-
-func (self *DB) reset_itr_pools() {
-	defer util.LockUnlock(&self.itr_pools_mu)()
-	self.col_main_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_main_trie_value)
-	self.col_acc_trie_value_itr_pool = self.trie_value_itr_pool(state_db.COL_acc_trie_value)
 }
