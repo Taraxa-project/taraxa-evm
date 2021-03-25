@@ -134,10 +134,10 @@ func (self *LatestState) Commit(state_root common.Hash) (err error) {
 		if err = self.db.Write(self.opts_w, self.batch); err != nil {
 			return
 		}
+		self.invalidate_versioned_read_pools()
 		self.state_desc_mu.Lock()
 		self.state_desc = *state_desc
 		self.state_desc_mu.Unlock()
-		self.invalidate_versioned_read_pools()
 	})
 	self.writer_thread.Join() // TODO completely async
 	self.writer_thread.Submit(self.batch.Clear)
