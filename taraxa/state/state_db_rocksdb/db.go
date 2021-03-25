@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"runtime"
 	"strconv"
-	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -25,7 +24,6 @@ type DB struct {
 	versioned_read_pools      [col_COUNT]*util.Pool
 	latest_state              LatestState
 	maintenance_task_executor goroutines.GoroutineGroup
-	close_mu                  sync.RWMutex
 	opts                      Opts
 }
 
