@@ -16,7 +16,7 @@ import (
 )
 
 type TrieSink struct {
-	thread_main_trie_write     goroutines.SingleThreadExecutor
+	thread_main_trie_write     goroutines.GoroutineGroup
 	threads_account_trie_write goroutines.SequentialTaskGroupExecutor
 	io                         state_db.ReadWriter
 	main_trie_writer           trie.Writer
@@ -30,7 +30,7 @@ func (self *TrieSink) Init(state_root *common.Hash, opts TrieSinkOpts) *TrieSink
 		state_root = nil
 	}
 	self.main_trie_writer.Init(state_db.MainTrieSchema{}, state_root, opts.MainTrie)
-	self.thread_main_trie_write.Init(1024)                       // 8KB
+	self.thread_main_trie_write.InitSingle(1024)                 // 8KB
 	self.threads_account_trie_write.Init(1024, runtime.NumCPU()) // 8KB
 	return self
 }
