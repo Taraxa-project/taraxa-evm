@@ -31,6 +31,7 @@ type LatestState struct {
 func (self *LatestState) Init(db *DB) *LatestState {
 	self.DB = db
 	self.opts_w = gorocksdb.NewDefaultWriteOptions()
+	self.opts_w.SetSync(true)
 	self.batch = gorocksdb.NewWriteBatch()
 	self.writer_thread.InitSingle(1024) // 8KB
 	state_desc_raw, err := self.db.Get(self.opts_r, last_committed_desc_key)
