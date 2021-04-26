@@ -326,7 +326,11 @@ func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (de
 }
 
 func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
-	self.storage.Put(key, rlp.MustEncodeToBytes(&deposit))
+	if deposit != nil {
+		self.storage.Put(key, rlp.MustEncodeToBytes(deposit))
+	} else {
+		self.storage.Put(key, nil)
+	}
 	if self.deposits == nil {
 		self.deposits = make(map[common.Hash]*Deposit)
 	}

@@ -12,8 +12,8 @@ func MustEncode(obj interface{}) []byte {
 	return bs
 }
 
-func MustEncodePretty(obj interface{}, indent string) []byte {
-	bs, err := json.MarshalIndent(obj, "", indent)
+func MustEncodePretty(obj interface{}) []byte {
+	bs, err := json.MarshalIndent(obj, "", "    ")
 	util.PanicIfNotNil(err)
 	return bs
 }

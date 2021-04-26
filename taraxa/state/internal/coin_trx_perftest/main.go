@@ -287,7 +287,7 @@ func main() {
 			stage_stats.Mean = stage_stats.Cumulative / float64(test_blk_ordinal+1)
 			delete(data_points, name)
 		}
-		stats_json := jsonutil.MustEncodePretty(stats, "    ")
+		stats_json := jsonutil.MustEncodePretty(stats)
 		stats_db.Put(rocksdb_opts_w_default, bin.ENC_b_endian_64(test_blk_ordinal), stats_json)
 		fmt.Println("stats:", bin.StringView(stats_json))
 		_, err := stats_file.Write(append(jsonutil.MustEncode(stats), '\n'))
