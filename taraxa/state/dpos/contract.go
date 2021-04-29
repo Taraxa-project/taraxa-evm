@@ -72,7 +72,7 @@ type Deposit struct {
 func ElligibleVotes(x, y *big.Int) (ret uint64) {
 	ret = 0
 	for x.Cmp(y) > 0 {
-		x = bigutil.USub(y)
+		x = bigutil.USub(x, y)
 		ret++
 	}
 	return
