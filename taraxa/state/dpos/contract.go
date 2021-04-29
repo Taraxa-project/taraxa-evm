@@ -69,7 +69,7 @@ type Deposit struct {
 
 // Returns the number of times y can be subtracted from x
 // and remain positive
-func ElligibleVotes(x, y *big.Int) (ret uint64) {
+func EligibleVotes(x, y *big.Int) (ret uint64) {
 	ret = 0
 	for x.Cmp(y) > 0 {
 		x = bigutil.USub(x, y)
@@ -311,7 +311,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	self.storage.Put(stor_k_1(field_staking_balances, beneficiary[:]), beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	eligible_count_change := 0
-	eligible_vote_count_change := ElligibleVotes(beneficiary_bal, self.cfg.EligibilityBalanceThreshold) - ElligibleVotes(prev_beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	eligible_vote_count_change := EligibleVotes(beneficiary_bal, self.cfg.EligibilityBalanceThreshold) - EligibleVotes(prev_beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
 	if was_eligible && !eligible_now {
 		eligible_count_change = -1
 		self.amount_delegated = bigutil.USub(self.amount_delegated, prev_beneficiary_bal)
