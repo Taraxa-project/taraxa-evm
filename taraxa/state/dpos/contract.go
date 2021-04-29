@@ -24,7 +24,8 @@ var field_eligible_count = []byte{2}
 var field_withdrawals_by_block = []byte{3}
 var field_addrs_in = []byte{4}
 var field_addrs_out = []byte{5}
-var field_amount_delegated = []byte{6}
+var field_eligible_vote_count = []byte{6}
+var field_amount_delegated = []byte{7}
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
 var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
@@ -42,6 +43,7 @@ type Contract struct {
 	amount_delegated              *big.Int
 	amount_delegated_initialized  bool
 	eligible_count                uint64
+	eligible_vote_count           uint64
 	eligible_count_initialized    bool
 	eligible_count_dirty          bool
 	curr_withdrawals              Addr2Addr2Balance
@@ -64,6 +66,18 @@ type Deposit struct {
 	AddrsInPos             uint64
 	AddrsOutPos            uint64
 }
+
+// Returns the number of times y can be subtracted from x
+// and remain positive
+func ElligibleVotes(x, y *big.Int) (ret uint64) {
+	ret = 0
+	for x.Cmp(y) > 0 {
+		x = bigutil.USub(y)
+		ret++
+	}
+	return
+}
+
 
 func (self *Deposit) Init() *Deposit {
 	self.ValueNet, self.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
@@ -263,6 +277,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 	if self.eligible_count_dirty {
 		self.eligible_count_dirty = false
 		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
+		self.storage.Put(stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))	
 	}
 	self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
@@ -296,6 +311,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	self.storage.Put(stor_k_1(field_staking_balances, beneficiary[:]), beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	eligible_count_change := 0
+	eligible_vote_count_change := ElligibleVotes(beneficiary_bal, self.cfg.EligibilityBalanceThreshold) - ElligibleVotes(prev_beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
 	if was_eligible && !eligible_now {
 		eligible_count_change = -1
 		self.amount_delegated = bigutil.USub(self.amount_delegated, prev_beneficiary_bal)
@@ -310,6 +326,8 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		} else {
 			self.amount_delegated = bigutil.Add(self.amount_delegated, delta)
 		}
+	}
+	if eligible_count_change == 0 && eligible_vote_count_change == 0 {
 		return
 	}
 	self.eligible_count_dirty = true
@@ -318,12 +336,16 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
 			self.eligible_count = bin.DEC_b_endian_compact_64(bytes)
 		})
+		self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+			self.eligible_vote_count = bin.DEC_b_endian_compact_64(bytes)
+		})
 	}
 	if eligible_count_change == 1 {
 		self.eligible_count++
-	} else {
+	} else if eligible_count_change == -1 {
 		self.eligible_count--
 	}
+	self.eligible_vote_count += eligible_vote_count_change
 }
 
 func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (deposit *Deposit, key common.Hash) {
