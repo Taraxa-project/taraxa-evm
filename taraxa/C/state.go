@@ -249,6 +249,17 @@ func taraxa_evm_state_api_dpos_get_staking_balance(
 	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetStakingBalance(&params.Addr).Bytes(), cb)
 }
 
+//export taraxa_evm_state_api_dpos_total_amount_delegated
+func taraxa_evm_state_api_dpos_total_amount_delegated(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).TotalAmountDelegated().Bytes(), cb)
+}
+
 //export taraxa_evm_state_api_dpos_query
 func taraxa_evm_state_api_dpos_query(
 	ptr C.taraxa_evm_state_API_ptr,

@@ -24,6 +24,7 @@ var field_eligible_count = []byte{2}
 var field_withdrawals_by_block = []byte{3}
 var field_addrs_in = []byte{4}
 var field_addrs_out = []byte{5}
+var field_amount_delegated = []byte{6}
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
 var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
@@ -34,14 +35,16 @@ var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 type Contract struct {
-	cfg                        Config
-	storage                    StorageWrapper
-	staking_balances           Addr2Balance
-	deposits                   map[common.Hash]*Deposit
-	eligible_count             uint64
-	eligible_count_initialized bool
-	eligible_count_dirty       bool
-	curr_withdrawals           Addr2Addr2Balance
+	cfg                           Config
+	storage                       StorageWrapper
+	staking_balances              Addr2Balance
+	deposits                      map[common.Hash]*Deposit
+	amount_delegated              *big.Int
+	amount_delegated_initialized  bool
+	eligible_count                uint64
+	eligible_count_initialized    bool
+	eligible_count_dirty          bool
+	curr_withdrawals              Addr2Addr2Balance
 }
 type Addr2Balance = map[common.Address]*big.Int
 type Addr2Addr2Balance = map[common.Address]Addr2Balance
@@ -261,14 +264,22 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		self.eligible_count_dirty = false
 		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
 	}
+	self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
 }
 
 func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
+	if !self.amount_delegated_initialized {
+		self.amount_delegated_initialized = true
+		self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+			self.amount_delegated = bigutil.FromBytes(bytes)
+		})
+	}
 	if self.staking_balances == nil {
 		self.staking_balances = make(Addr2Balance)
 	}
 	beneficiary_bal := self.staking_balances[beneficiary]
+	prev_beneficiary_bal := beneficiary_bal
 	if beneficiary_bal == nil {
 		beneficiary_bal = bigutil.Big0
 		self.storage.Get(stor_k_1(field_staking_balances, beneficiary[:]), func(bytes []byte) {
@@ -287,11 +298,18 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	eligible_count_change := 0
 	if was_eligible && !eligible_now {
 		eligible_count_change = -1
+		self.amount_delegated = bigutil.USub(self.amount_delegated, prev_beneficiary_bal)
 	}
 	if !was_eligible && eligible_now {
 		eligible_count_change = 1
+		self.amount_delegated = bigutil.Add(self.amount_delegated, beneficiary_bal)
 	}
 	if eligible_count_change == 0 {
+		if negative {
+			self.amount_delegated = bigutil.USub(self.amount_delegated, delta)
+		} else {
+			self.amount_delegated = bigutil.Add(self.amount_delegated, delta)
+		}
 		return
 	}
 	self.eligible_count_dirty = true
