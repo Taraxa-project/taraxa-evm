@@ -26,6 +26,7 @@ var field_addrs_in = []byte{4}
 var field_addrs_out = []byte{5}
 var field_eligible_vote_count = []byte{6}
 var field_amount_delegated = []byte{7}
+var field_vote_balances = []byte{8}
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
 var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
@@ -44,6 +45,7 @@ type Contract struct {
 	amount_delegated_initialized  bool
 	eligible_count                uint64
 	eligible_vote_count           uint64
+	eligible_vote_balances		  map[common.Address]uint64
 	eligible_count_initialized    bool
 	eligible_count_dirty          bool
 	curr_withdrawals              Addr2Addr2Balance
@@ -282,7 +284,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		self.storage.Put(stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))	
 	}
 	self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
-	self.staking_balances, self.deposits, self.curr_withdrawals = nil, nil, nil
+	self.staking_balances, self.deposits, self.curr_withdrawals, self.eligible_vote_balances = nil, nil, nil, nil
 }
 
 func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
@@ -294,6 +296,9 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	}
 	if self.staking_balances == nil {
 		self.staking_balances = make(Addr2Balance)
+	}
+	if self.eligible_vote_balances == nil {
+		self.eligible_vote_balances = make(map[common.Address]uint64)
 	}
 	beneficiary_bal := self.staking_balances[beneficiary]
 	if beneficiary_bal == nil {
@@ -313,10 +318,15 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	}
 	self.staking_balances[beneficiary] = beneficiary_bal
 	self.storage.Put(stor_k_1(field_staking_balances, beneficiary[:]), beneficiary_bal.Bytes())
+	
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	eligible_count_change := 0
+	
 	new_vote_count := EligibleVotes(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
 	prev_vote_count := EligibleVotes(prev_beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	self.eligible_vote_balances[beneficiary] = new_vote_count
+	self.storage.Put(stor_k_1(field_vote_balances, beneficiary[:]), bin.ENC_b_endian_compact_64_1(new_vote_count))
+
 	if was_eligible && !eligible_now {
 		eligible_count_change = -1
 		self.amount_delegated = bigutil.USub(self.amount_delegated, prev_beneficiary_bal)

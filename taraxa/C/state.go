@@ -296,6 +296,21 @@ func taraxa_evm_state_api_dpos_eligible_vote_count(
 	return state_API_instances[ptr].DPOSReader(blk_n).EligibleVoteCount()
 }
 
+//export taraxa_evm_state_api_dpos_get_eligible_vote_count
+func taraxa_evm_state_api_dpos_get_eligible_vote_count(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) uint64 {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	return state_API_instances[ptr].DPOSReader(params.BlkNum).GetEligibleVoteCount(&params.Addr)
+}
+
 //export taraxa_evm_state_api_db_snapshot
 func taraxa_evm_state_api_db_snapshot(
 	ptr C.taraxa_evm_state_API_ptr,
