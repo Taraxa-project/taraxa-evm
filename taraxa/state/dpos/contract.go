@@ -209,6 +209,12 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 func (self *Contract) Commit(blk_n types.BlockNum) {
 	defer self.storage.ClearCache()
 	var moneyback_withdrawals Addr2Addr2Balance
+	if !self.amount_delegated_initialized {
+		self.amount_delegated_initialized = true
+		self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+			self.amount_delegated = bigutil.FromBytes(bytes)
+		})
+	}
 	if self.cfg.WithdrawalDelay == 0 {
 		moneyback_withdrawals = self.curr_withdrawals
 	} else {
