@@ -84,7 +84,7 @@ func EligibleVotes(x, y *big.Int) (ret uint64) {
 
 
 func (self *Deposit) Init() *Deposit {
-	self.ValueNet, self.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
+	self.ValueNet, self.ValuePendingWithdrawal, self.amount_delegated = bigutil.Big0, bigutil.Big0, bigutil.Big0
 	return self
 }
 
