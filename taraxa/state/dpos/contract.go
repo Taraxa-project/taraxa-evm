@@ -84,7 +84,7 @@ func EligibleVotes(x, y *big.Int) (ret uint64) {
 
 
 func (self *Deposit) Init() *Deposit {
-	self.ValueNet, self.ValuePendingWithdrawal, self.amount_delegated = bigutil.Big0, bigutil.Big0, bigutil.Big0
+	self.ValueNet, self.ValuePendingWithdrawal = bigutil.Big0, bigutil.Big0
 	return self
 }
 
@@ -98,6 +98,7 @@ func (self *Deposit) IsZero() bool {
 
 func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	self.cfg = cfg
+	self.amount_delegated = bigutil.Big0
 	self.storage.Init(storage)
 	return self
 }
