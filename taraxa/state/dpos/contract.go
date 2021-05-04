@@ -3,6 +3,8 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -18,15 +20,16 @@ import (
 
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ff"))
 
-var field_staking_balances = []byte{0}
-var field_deposits = []byte{1}
-var field_eligible_count = []byte{2}
-var field_withdrawals_by_block = []byte{3}
-var field_addrs_in = []byte{4}
-var field_addrs_out = []byte{5}
-var field_eligible_vote_count = []byte{6}
-var field_amount_delegated = []byte{7}
-var field_vote_balances = []byte{8}
+var (
+	field_staking_balances     = []byte{0}
+	field_deposits             = []byte{1}
+	field_eligible_count       = []byte{2}
+	field_withdrawals_by_block = []byte{3}
+	field_addrs_in             = []byte{4}
+	field_addrs_out            = []byte{5}
+	field_eligible_vote_count  = []byte{6}
+	field_amount_delegated     = []byte{7}
+)
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
 var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior deposit value")
@@ -295,7 +298,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.FromBytes(bytes)
 	})
 	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
-	prev_vote_count := udiv64(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
 	if negative {
 		beneficiary_bal = bigutil.Sub(beneficiary_bal, delta)
 		self.amount_delegated = bigutil.Sub(self.amount_delegated, delta)
@@ -311,9 +314,8 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	if !was_eligible && eligible_now {
 		self.eligible_count++
 	}
-	new_vote_count := udiv64(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
 	if prev_vote_count != new_vote_count {
-		self.storage.Put(stor_k_1(field_vote_balances, beneficiary[:]), bin.ENC_b_endian_compact_64_1(new_vote_count))
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count += new_vote_count
 	}
@@ -334,4 +336,11 @@ func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
 	} else {
 		self.storage.Put(key, nil)
 	}
+}
+
+func vote_count(staking_balance, eligibility_threshold *big.Int) uint64 {
+	var tmp big.Int
+	tmp.Div(staking_balance, eligibility_threshold)
+	asserts.Holds(tmp.IsUint64())
+	return tmp.Uint64()
 }
