@@ -66,7 +66,7 @@ func (self *StorageReaderWrapper) ListForEach(prefix []byte, cb func([]byte)) {
 	}
 }
 
-// TODO rm
+// debug-only
 func (self *StorageReaderWrapper) ListPrint(prefix []byte) {
 	fmt.Println("[")
 	self.ListForEach(prefix, func(bytes []byte) {
