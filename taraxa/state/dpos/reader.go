@@ -33,6 +33,28 @@ func (self Reader) EligibleAddressCount() (ret uint64) {
 	return
 }
 
+func (self Reader) EligibleVoteCount() (ret uint64) {
+	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+		ret = bin.DEC_b_endian_compact_64(bytes)
+	})
+	return
+}
+
+func (self Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
+	self.storage.Get(stor_k_1(field_vote_balances, addr[:]), func(bytes []byte) {
+		ret = bin.DEC_b_endian_compact_64(bytes)
+	})
+	return 
+}
+
+func (self Reader) TotalAmountDelegated() (ret *big.Int) {
+	ret = bigutil.Big0
+	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+		ret = bigutil.FromBytes(bytes)
+	})
+	return
+}
+
 func (self Reader) IsEligible(address *common.Address) bool {
 	return self.cfg.EligibilityBalanceThreshold.Cmp(self.GetStakingBalance(address)) <= 0
 }
