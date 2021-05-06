@@ -15,8 +15,8 @@
 SLICE(taraxa_evm_Bytes, uint8_t);
 ARRAY(taraxa_evm_Hash, uint8_t, 32);
 ARRAY(taraxa_evm_Addr, uint8_t, 20);
-FUNCTION(taraxa_evm_BytesCallback, taraxa_evm_Bytes, void);
-FUNCTION(taraxa_evm_GetBlockHash, uint64_t, taraxa_evm_Hash);
+FUNCTION(taraxa_evm_BytesCallback, taraxa_evm_Bytes, void)
+FUNCTION(taraxa_evm_GetBlockHash, uint64_t, taraxa_evm_Hash)
 
 #undef SLICE
 #undef ARRAY
