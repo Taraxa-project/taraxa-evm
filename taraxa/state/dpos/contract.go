@@ -84,6 +84,26 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	return self
 }
 
+func (self *Contract) lazy_init() {
+	if self.lazy_init_done {
+		return
+	}
+	self.lazy_init_done = true
+	self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
+		self.eligible_count_orig = bin.DEC_b_endian_compact_64(bytes)
+	})
+	self.eligible_count = self.eligible_count_orig
+	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
+	})
+	self.eligible_vote_count = self.eligible_vote_count_orig
+	self.amount_delegated_orig = bigutil.Big0
+	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+		self.amount_delegated_orig = bigutil.FromBytes(bytes)
+	})
+	self.amount_delegated = self.amount_delegated_orig
+}
+
 func (self *Contract) ApplyGenesis() error {
 	for _, entry := range self.cfg.GenesisState {
 		transfers := make([]BeneficiaryAndTransfer, len(entry.Transfers))
@@ -126,22 +146,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 }
 
 func (self *Contract) run(benefactor common.Address, transfers Transfers) (err error) {
-	if !self.lazy_init_done {
-		self.lazy_init_done = true
-		self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
-			self.eligible_count_orig = bin.DEC_b_endian_compact_64(bytes)
-		})
-		self.eligible_count = self.eligible_count_orig
-		self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
-			self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
-		})
-		self.eligible_vote_count = self.eligible_vote_count_orig
-		self.amount_delegated_orig = bigutil.Big0
-		self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
-			self.amount_delegated_orig = bigutil.FromBytes(bytes)
-		})
-		self.amount_delegated = self.amount_delegated_orig
-	}
+	self.lazy_init()
 	if len(transfers) == 0 {
 		return ErrNoTransfers
 	}
@@ -204,6 +209,7 @@ func (self *Contract) run(benefactor common.Address, transfers Transfers) (err e
 }
 
 func (self *Contract) Commit(blk_n types.BlockNum) {
+	self.lazy_init()
 	defer self.storage.ClearCache()
 	var moneyback_withdrawals Addr2Addr2Balance
 	if self.cfg.WithdrawalDelay == 0 {
