@@ -46,6 +46,7 @@ func (self *DB) Init(opts Opts) *DB {
 		ret := gorocksdb.NewDefaultOptions()
 		ret.SetErrorIfExists(false)
 		ret.SetCreateIfMissing(true)
+		ret.SetCompression(gorocksdb.LZ4Compression)
 		ret.SetCreateIfMissingColumnFamilies(true)
 		ret.IncreaseParallelism(runtime.NumCPU())
 		ret.SetMaxFileOpeningThreads(runtime.NumCPU())
