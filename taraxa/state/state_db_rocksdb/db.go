@@ -52,6 +52,7 @@ func (self *DB) Init(opts Opts) *DB {
 		ret.SetMaxFileOpeningThreads(runtime.NumCPU())
 		ret.SetMaxBackgroundCompactions(runtime.NumCPU())
 		ret.SetMaxBackgroundFlushes(runtime.NumCPU())
+		ret.SetMaxOpenFiles(128) //Maybe even less
 		//ret.SetEnablePipelinedWrite(true)
 		//ret.SetUseAdaptiveMutex(true)
 		return ret
