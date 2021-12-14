@@ -47,5 +47,5 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
-	return evm.Main(trx, *opts)
+	return evm.Main(trx, *opts, nil)
 }

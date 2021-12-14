@@ -26,6 +26,8 @@ type ChainConfig struct {
 	DisableBlockRewards bool
 	ExecutionOptions    vm.ExecutionOpts
 	GenesisBalances     core.BalanceMap
+	GenesisStartAddress common.Address
+	GenesisTransactions core.GenesisTransactions
 	DPOS                *dpos.Config `rlp:"nil"`
 }
 type APIOpts struct {
@@ -48,6 +50,8 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 			DisableBlockRewards: chain_cfg.DisableBlockRewards,
 			ExecutionOptions:    chain_cfg.ExecutionOptions,
 			GenesisBalances:     chain_cfg.GenesisBalances,
+			GenesisStartAddress: chain_cfg.GenesisStartAddress,
+			GenesisTransactions: chain_cfg.GenesisTransactions,
 		},
 		state_transition.Opts{
 			EVMState: state_evm.Opts{

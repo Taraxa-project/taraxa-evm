@@ -18,6 +18,7 @@ package vm
 
 import (
 	"fmt"
+	"log"
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
@@ -93,7 +95,7 @@ type Transaction struct {
 	Nonce    uint64
 	Value    *big.Int
 	Gas      uint64
-	Input    []byte
+	Input    hexutil.Bytes
 }
 type ExecutionOpts struct {
 	DisableNonceCheck, DisableGasFee bool
@@ -176,7 +178,7 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+func (self *EVM) Main(trx *Transaction, opts ExecutionOpts, addr *common.Address) (ret ExecutionResult) {
 	self.trx = trx
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&trx.From)
@@ -215,7 +217,12 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	}
 	var err error
 	if contract_creation {
-		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
+		if addr == nil {
+			ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
+		} else {
+			ret.NewContractAddr = *addr
+			ret.CodeRetval, gas_left, err = self.create(caller, CodeAndHash{Code: self.trx.Input}, gas_left, self.trx.Value, addr)
+		}
 	} else {
 		acc_to := self.state.GetAccount(self.trx.To)
 		caller.IncrementNonce()
@@ -242,9 +249,20 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 }
 
 // create_1 creates a new contract using code as deployment code.
+func (self *EVM) create_with_address(caller StateAccount, code []byte, gas uint64, value *big.Int, address *common.Address) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
+	if address == nil {
+		self.create_1(caller, code, gas, value)
+	}
+	ret, leftOverGas, err = self.create(caller, CodeAndHash{Code: code}, gas, value, address)
+	return
+}
+
+// create_1 creates a new contract using code as deployment code.
 func (self *EVM) create_1(caller StateAccount, code []byte, gas uint64, value *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress(caller.Address(), caller.GetNonce())
+	log.Println(ret, contractAddr.Hex())
 	ret, leftOverGas, err = self.create(caller, CodeAndHash{Code: code}, gas, value, &contractAddr)
+	log.Println(err)
 	return
 }
 

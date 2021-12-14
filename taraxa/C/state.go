@@ -329,6 +329,9 @@ func taraxa_evm_state_api_dpos_contract_addr() (ret C.taraxa_evm_Addr) {
 	return
 }
 
+//export taraxa_evm_delegation_get
+func taraxa_evm_delegation_get() ret
+
 type state_API_ptr = byte
 
 const state_API_max_instances = ^state_API_ptr(0)

@@ -1,6 +1,10 @@
 package state_transition
 
 import (
+	"bytes"
+	"log"
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
@@ -32,6 +36,8 @@ type ChainConfig struct {
 	DisableBlockRewards bool
 	ExecutionOptions    vm.ExecutionOpts
 	GenesisBalances     core.BalanceMap
+	GenesisStartAddress common.Address
+	GenesisTransactions core.GenesisTransactions
 }
 type Opts struct {
 	EVMState state_evm.Opts
@@ -61,10 +67,26 @@ func (self *StateTransition) Init(
 		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
-		self.begin_block()
+		self.BeginBlock(&vm.BlockInfo{})
+		// self.BeginBlock()
 		asserts.Holds(self.pending_blk_state.GetNumber() == 0)
 		for addr, balance := range self.chain_cfg.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
+		}
+		log.Println(self.chain_cfg.GenesisStartAddress)
+		addrInt := new(big.Int)
+		addrInt.SetBytes(self.chain_cfg.GenesisStartAddress.Bytes())
+		addrInt.Sub(addrInt, big.NewInt(1))
+		for _, trx := range self.chain_cfg.GenesisTransactions {
+			// if to is zero address(no receiver) - it is a creation
+			if bytes.Equal(common.ZeroAddress.Bytes(), trx.To.Bytes()) {
+				addrInt.Add(addrInt, big.NewInt(1))
+				trx.To = nil
+			}
+			DeployAddress := new(common.Address)
+			DeployAddress.SetBytes(addrInt.Bytes())
+			res := self.evm.Main(&trx, self.chain_cfg.ExecutionOptions, DeployAddress)
+			log.Println("result", res, res.NewContractAddr.Hex())
 		}
 		if self.dpos_contract != nil {
 			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
@@ -104,7 +126,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 }
 
 func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret = self.evm.Main(trx, self.chain_cfg.ExecutionOptions)
+	ret = self.evm.Main(trx, self.chain_cfg.ExecutionOptions, nil)
 	self.evm_state_checkpoint()
 	return
 }

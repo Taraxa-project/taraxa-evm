@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
@@ -28,6 +29,7 @@ import (
 )
 
 type BalanceMap = map[common.Address]*big.Int
+type GenesisTransactions = []vm.Transaction
 
 func MainnetGenesisBalances() (ret BalanceMap) {
 	util.PanicIfNotNil(rlp.Decode(hex.NewDecoder(strings.NewReader(MainnetAllocData[2:])), &ret))
