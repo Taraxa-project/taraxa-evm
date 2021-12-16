@@ -110,8 +110,14 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
+	evm_block := self.evm.GetBlock()
 	if self.dpos_contract != nil {
 		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
+		self.evm_state_checkpoint()
+	}
+
+	if self.dpos_contract != nil  && evm_block.Number > 5 {
+		self.dpos_contract.AccumulateRewards(evm_block.Author, dpos.EVMStateStorage{&self.evm_state})
 		self.evm_state_checkpoint()
 	}
 	if !self.chain_cfg.DisableBlockRewards {

@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
 type Reader struct {
@@ -19,6 +20,7 @@ type Reader struct {
 func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
 	self.cfg = cfg
 	var blk_n_actual types.BlockNum
+	//WACHOUT we have some block delay !!!
 	if self.cfg.DepositDelay < blk_n {
 		blk_n_actual = blk_n - self.cfg.DepositDelay
 	}
@@ -56,9 +58,12 @@ func (self Reader) IsEligible(address *common.Address) bool {
 	return self.cfg.EligibilityBalanceThreshold.Cmp(self.GetStakingBalance(address)) <= 0
 }
 
+//we need to change all those fucntion for currnet dpos to work
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = bigutil.Big0
-	self.storage.Get(stor_k_1(field_staking_balances, addr[:]), func(bytes []byte) {
+	//e.g. example how to read from solidity contract
+	balance_stor_k := keccak256.Hash(common.LeftPadBytes(addr[:], 32), common.LeftPadBytes(index_to_delegations, 32))
+	self.storage.GetAccountStorage(&self.cfg.ContractAddress, balance_stor_k, func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
 	return

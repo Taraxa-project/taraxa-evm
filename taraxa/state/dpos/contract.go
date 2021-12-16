@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
@@ -350,3 +351,24 @@ func vote_count(staking_balance, eligibility_threshold *big.Int) uint64 {
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()
 }
+
+//index to first mapping (address => uint256) private _delegations;
+var index_to_delegations = []byte{0}
+
+func (self *Contract) AccumulateRewards(beneficiary common.Address, storage Storage) {
+	beneficiary_bal := bigutil.Big0
+	//get correct hash to memory
+	//evrything needs to be left-padded to 32 bytes
+	//and values are in reverse order e.g. INDEX IS ALWAYS LAST!!!
+	balance_stor_k := keccak256.Hash(common.LeftPadBytes(beneficiary[:], 32), common.LeftPadBytes(index_to_delegations, 32))
+	//reading from that memory
+	storage.GetAccountStorage(&self.cfg.ContractAddress, balance_stor_k, func(bytes []byte) {
+		beneficiary_bal = bigutil.FromBytes(bytes)
+	})
+	delta := bigutil.Big0
+	delta.SetUint64(33)
+	beneficiary_bal = bigutil.Add(beneficiary_bal, delta)
+	//writing to the memory
+	storage.Put(&self.cfg.ContractAddress, balance_stor_k, beneficiary_bal.Bytes())
+}
+
