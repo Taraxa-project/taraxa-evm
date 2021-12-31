@@ -84,6 +84,10 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	return self
 }
 
+func (self *Contract) UpdateConfig(cfg Config) {
+	self.cfg = cfg
+}
+
 func (self *Contract) lazy_init() {
 	if self.lazy_init_done {
 		return
@@ -113,7 +117,7 @@ func (self *Contract) ApplyGenesis() error {
 				Transfer:    Transfer{Value: v.Value},
 			}
 		}
-		if err := self.run(entry.Benefactor, transfers); err != nil {
+		if err := self.ApplyTransfers(entry.Benefactor, transfers); err != nil {
 			return err
 		}
 	}
@@ -142,10 +146,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if err := rlp.DecodeBytes(ctx.Input, &transfers); err != nil {
 		return nil, err
 	}
-	return nil, self.run(*ctx.CallerAccount.Address(), transfers)
+	return nil, self.ApplyTransfers(*ctx.CallerAccount.Address(), transfers)
 }
 
-func (self *Contract) run(benefactor common.Address, transfers Transfers) (err error) {
+func (self *Contract) ApplyTransfers(benefactor common.Address, transfers Transfers) (err error) {
 	self.lazy_init()
 	if len(transfers) == 0 {
 		return ErrNoTransfers

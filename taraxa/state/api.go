@@ -2,10 +2,9 @@ package state
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
@@ -20,35 +19,26 @@ type API struct {
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
 	dpos             *dpos.API
+	config           *chain_config.ChainConfig
 }
-type ChainConfig struct {
-	ETHChainConfig      params.ChainConfig
-	DisableBlockRewards bool
-	ExecutionOptions    vm.ExecutionOpts
-	GenesisBalances     core.BalanceMap
-	DPOS                *dpos.Config `rlp:"nil"`
-}
+
 type APIOpts struct {
 	// TODO have single "perm-gen size" config property to derive all preallocation sizes
 	ExpectedMaxTrxPerBlock        uint64
 	MainTrieFullNodeLevelsToCache byte
 }
 
-func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts APIOpts) *API {
+func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg *chain_config.ChainConfig, opts APIOpts) *API {
 	self.db = db
 	if chain_cfg.DPOS != nil {
 		self.dpos = new(dpos.API).Init(*chain_cfg.DPOS)
 	}
+	self.config = chain_cfg
 	self.state_transition.Init(
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		state_transition.ChainConfig{
-			ETHChainConfig:      chain_cfg.ETHChainConfig,
-			DisableBlockRewards: chain_cfg.DisableBlockRewards,
-			ExecutionOptions:    chain_cfg.ExecutionOptions,
-			GenesisBalances:     chain_cfg.GenesisBalances,
-		},
+		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
 				NumTransactionsToBuffer: opts.ExpectedMaxTrxPerBlock,
@@ -59,11 +49,12 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, state_dry_runner.ChainConfig{
-		ETHChainConfig:   chain_cfg.ETHChainConfig,
-		ExecutionOptions: chain_cfg.ExecutionOptions,
-	})
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.config)
 	return self
+}
+
+func (self *API) UpdateConfig(chain_cfg *chain_config.ChainConfig) {
+	self.config = chain_cfg
 }
 
 func (self *API) Close() {
