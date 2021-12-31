@@ -1,6 +1,8 @@
 package state_transition
 
 import (
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
@@ -72,7 +74,8 @@ func (self *StateTransition) Init(
 		self.evm_state_checkpoint()
 		self.Commit()
 	}
-	self.chain_cfg.GenesisBalances = nil
+	// we need genesis balances later, so it is commented
+	// self.chain_cfg.GenesisBalances = nil
 	return self
 }
 
@@ -100,6 +103,14 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	if self.chain_cfg.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
+	}
+	if blk_n == 12000 { // increase genesis balances fork
+		mul_power := big.NewInt(1000000000000000000)
+		for addr, balance := range self.chain_cfg.GenesisBalances {
+			balance_to_add := big.NewInt(0)
+			balance_to_add.Mul(balance, mul_power).Sub(balance_to_add, balance)
+			self.evm_state.GetAccount(&addr).AddBalance(balance_to_add)
+		}
 	}
 }
 
