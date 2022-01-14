@@ -14,7 +14,7 @@ type Hardforks struct {
 	FixGenesisBlockNum uint64
 }
 
-func (h *Hardforks) ApplyFixGenesisHardfork(balances core.BalanceMap, dpos_cfg *dpos.Config, state vm.State, dpos_contract *dpos.Contract) {
+func (h *Hardforks) ApplyFixGenesisHardfork(balances core.BalanceMap, dpos_cfg *dpos.Config, state vm.State, dpos_contract *dpos.Contract, dpos_reader dpos.Reader) {
 	// multiply genesis balances
 	// we can't change balances in cpp part, so do it here
 	fmt.Println("APPLY GO PART OF HARDFORK")
@@ -24,13 +24,18 @@ func (h *Hardforks) ApplyFixGenesisHardfork(balances core.BalanceMap, dpos_cfg *
 		balance_to_add.Mul(balance, mul_power).Sub(balance_to_add, balance)
 		state.GetAccount(&addr).AddBalance(balance_to_add)
 	}
-	// Increase delegations?
+	// Increase delegations
+	// something is wrong with calculations
 	for _, entry := range dpos_cfg.GenesisState {
 		transfers := make([]dpos.BeneficiaryAndTransfer, len(entry.Transfers))
 		for i, v := range entry.Transfers {
+			addr_bal := dpos_reader.GetStakingBalance(&v.Beneficiary)
+			// addr_bal := dpos_contract.
+			val := v.Value
+			val.Neg(addr_bal)
 			transfers[i] = dpos.BeneficiaryAndTransfer{
 				Beneficiary: v.Beneficiary,
-				Transfer:    dpos.Transfer{Value: v.Value},
+				Transfer:    dpos.Transfer{Value: val},
 			}
 		}
 		if err := dpos_contract.ApplyTransfers(entry.Benefactor, transfers); err != nil {

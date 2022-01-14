@@ -12,6 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
@@ -27,6 +28,7 @@ type StateTransition struct {
 	trie_sink          TrieSink
 	pending_state_root common.Hash
 	dpos_contract      *dpos.Contract
+	get_reader         func(types.BlockNum) dpos.Reader
 }
 type StateTransitionConfig struct {
 	ETHChainConfig      params.ChainConfig
@@ -43,12 +45,14 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
+	get_reader func(types.BlockNum) dpos.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
 	self.chain_config = chain_config
 	self.state = state
 	self.evm_state.Init(opts.EVMState)
+	self.get_reader = get_reader
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
 		U256PoolSize:           32 * vm.StackLimit,
@@ -108,7 +112,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.evm_state_checkpoint()
 	}
 	if self.chain_config.Hardforks.IsFixGenesisFork(blk_n) {
-		self.chain_config.Hardforks.ApplyFixGenesisHardfork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
+		self.chain_config.Hardforks.ApplyFixGenesisHardfork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract, self.get_reader(blk_n-1))
 	}
 }
 

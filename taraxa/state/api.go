@@ -38,6 +38,7 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg *
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
+		self.DPOSReader,
 		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
