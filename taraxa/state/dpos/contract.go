@@ -84,6 +84,35 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 	return self
 }
 
+func (self *Contract) ResetGenesisAddresses(old_cfg []GenesisStateEntry) {
+	for _, entry := range old_cfg {
+		for _, v := range entry.Transfers {
+			bal := bigutil.Big0
+			balance_stor_k := stor_k_1(field_staking_balances, v.Beneficiary[:])
+			self.storage.Get(balance_stor_k, func(bytes []byte) {
+				bal = bigutil.FromBytes(bytes)
+			})
+			self.upd_staking_balance(v.Beneficiary, bal, true)
+		}
+	}
+}
+
+func (self *Contract) ApplyGenesisBalancesFixHardfork() {
+	for _, entry := range self.cfg.GenesisState {
+		transfers := make([]BeneficiaryAndTransfer, len(entry.Transfers))
+		for i, v := range entry.Transfers {
+			val := v.Value
+			transfers[i] = BeneficiaryAndTransfer{
+				Beneficiary: v.Beneficiary,
+				Transfer:    Transfer{Value: val},
+			}
+		}
+		if err := self.apply_transfers(entry.Benefactor, transfers); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func (self *Contract) UpdateConfig(cfg Config) {
 	self.cfg = cfg
 }
@@ -117,7 +146,7 @@ func (self *Contract) ApplyGenesis() error {
 				Transfer:    Transfer{Value: v.Value},
 			}
 		}
-		if err := self.ApplyTransfers(entry.Benefactor, transfers); err != nil {
+		if err := self.apply_transfers(entry.Benefactor, transfers); err != nil {
 			return err
 		}
 	}
@@ -146,10 +175,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if err := rlp.DecodeBytes(ctx.Input, &transfers); err != nil {
 		return nil, err
 	}
-	return nil, self.ApplyTransfers(*ctx.CallerAccount.Address(), transfers)
+	return nil, self.apply_transfers(*ctx.CallerAccount.Address(), transfers)
 }
 
-func (self *Contract) ApplyTransfers(benefactor common.Address, transfers Transfers) (err error) {
+func (self *Contract) apply_transfers(benefactor common.Address, transfers Transfers) (err error) {
 	self.lazy_init()
 	if len(transfers) == 0 {
 		return ErrNoTransfers
@@ -308,7 +337,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.FromBytes(bytes)
 	})
 	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
-	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.CoinsPerVote)
 	if negative {
 		beneficiary_bal = bigutil.Sub(beneficiary_bal, delta)
 		self.amount_delegated = bigutil.Sub(self.amount_delegated, delta)
@@ -324,7 +353,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	if !was_eligible && eligible_now {
 		self.eligible_count++
 	}
-	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold)
+	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.CoinsPerVote)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count += new_vote_count
@@ -348,9 +377,13 @@ func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
 	}
 }
 
-func vote_count(staking_balance, eligibility_threshold *big.Int) uint64 {
+func vote_count(staking_balance, eligibility_threshold, coins_per_vote *big.Int) uint64 {
 	var tmp big.Int
-	tmp.Div(staking_balance, eligibility_threshold)
+	if staking_balance.Cmp(eligibility_threshold) >= 0 {
+		tmp.Sub(staking_balance, eligibility_threshold)
+		tmp.Div(&tmp, coins_per_vote)
+		tmp.Add(&tmp, big.NewInt(1))
+	}
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()
 }

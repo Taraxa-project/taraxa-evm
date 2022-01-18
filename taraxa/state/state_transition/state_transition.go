@@ -29,6 +29,7 @@ type StateTransition struct {
 	pending_state_root common.Hash
 	dpos_contract      *dpos.Contract
 	get_reader         func(types.BlockNum) dpos.Reader
+	new_chain_config   *chain_config.ChainConfig
 }
 type StateTransitionConfig struct {
 	ETHChainConfig      params.ChainConfig
@@ -83,7 +84,7 @@ func (self *StateTransition) Init(
 }
 
 func (self *StateTransition) UpdateConfig(cfg *chain_config.ChainConfig) {
-	self.chain_config = cfg
+	self.new_chain_config = cfg
 }
 
 func (self *StateTransition) Close() {
@@ -112,6 +113,14 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.evm_state_checkpoint()
 	}
 	if self.chain_config.Hardforks.IsFixGenesisFork(blk_n) {
+		if self.new_chain_config == nil {
+			panic("we should have new_chain_config for hardfork")
+		}
+		self.chain_config = self.new_chain_config
+		self.new_chain_config = nil
+
+		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
+		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
 		self.chain_config.Hardforks.ApplyFixGenesisHardfork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract, self.get_reader(blk_n-1))
 	}
 }

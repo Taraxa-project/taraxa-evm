@@ -5,7 +5,6 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
-	"fmt"
 	"math/big"
 	"sync"
 	"unsafe"
@@ -121,7 +120,6 @@ func taraxa_evm_state_api_update_state_config(
 	}
 	dec_rlp(params_enc, &params)
 	self := state_API_instances[ptr]
-	fmt.Println("UPDATE CHAIN CONFIG")
 	self.UpdateConfig(&params.ChainConfig)
 }
 
