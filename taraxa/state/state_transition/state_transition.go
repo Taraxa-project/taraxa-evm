@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -121,7 +122,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 
 		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
 		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
-		self.chain_config.Hardforks.ApplyFixGenesisHardfork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract, self.get_reader(blk_n-1))
+		hardfork.ApplyFixGenesisFork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
 	}
 }
 

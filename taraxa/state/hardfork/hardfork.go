@@ -8,11 +8,18 @@ import (
 )
 
 type Hardforks struct {
-	FixGenesisBlockNum uint64
+	FixGenesisBlock uint64
 }
 
-func (h *Hardforks) ApplyFixGenesisHardfork(balances core.BalanceMap, dpos_cfg *dpos.Config, state vm.State, dpos_contract *dpos.Contract, dpos_reader dpos.Reader) {
-	// multiply genesis balances
+func (h *Hardforks) IsFixGenesisFork(num types.BlockNum) bool {
+	return h.FixGenesisBlock != types.BlockNumberNIL && h.FixGenesisBlock == num
+}
+
+func ApplyFixGenesisFork(balances core.BalanceMap, dpos_config *dpos.Config, state vm.State, dpos_contract *dpos.Contract) {
+	dpos_contract.ResetGenesisAddresses(dpos_config.GenesisState)
+	dpos_contract.UpdateConfig(*dpos_config)
+
+	// reset genesis balances to correct state
 	// we can't change balances in cpp part, so do it here
 	for addr, balance := range balances {
 		balance.Sub(balance, state.GetAccount(&addr).GetBalance())
@@ -20,8 +27,4 @@ func (h *Hardforks) ApplyFixGenesisHardfork(balances core.BalanceMap, dpos_cfg *
 	}
 	// Increase delegations
 	dpos_contract.ApplyGenesisBalancesFixHardfork()
-}
-
-func (h *Hardforks) IsFixGenesisFork(num types.BlockNum) bool {
-	return h.FixGenesisBlockNum != types.BlockNumberNIL && h.FixGenesisBlockNum == num
 }

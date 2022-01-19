@@ -337,7 +337,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.FromBytes(bytes)
 	})
 	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
-	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.CoinsPerVote)
+	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if negative {
 		beneficiary_bal = bigutil.Sub(beneficiary_bal, delta)
 		self.amount_delegated = bigutil.Sub(self.amount_delegated, delta)
@@ -353,7 +353,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	if !was_eligible && eligible_now {
 		self.eligible_count++
 	}
-	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.CoinsPerVote)
+	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count += new_vote_count
@@ -377,11 +377,11 @@ func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
 	}
 }
 
-func vote_count(staking_balance, eligibility_threshold, coins_per_vote *big.Int) uint64 {
+func vote_count(staking_balance, eligibility_threshold, vote_eligibility_balance_step *big.Int) uint64 {
 	var tmp big.Int
 	if staking_balance.Cmp(eligibility_threshold) >= 0 {
 		tmp.Sub(staking_balance, eligibility_threshold)
-		tmp.Div(&tmp, coins_per_vote)
+		tmp.Div(&tmp, vote_eligibility_balance_step)
 		tmp.Add(&tmp, big.NewInt(1))
 	}
 	asserts.Holds(tmp.IsUint64())

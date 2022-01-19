@@ -41,7 +41,7 @@ func (self Reader) EligibleVoteCount() (ret uint64) {
 }
 
 func (self Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
-	return vote_count(self.GetStakingBalance(addr), self.cfg.EligibilityBalanceThreshold, self.cfg.CoinsPerVote)
+	return vote_count(self.GetStakingBalance(addr), self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 }
 
 func (self Reader) TotalAmountDelegated() (ret *big.Int) {
