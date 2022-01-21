@@ -378,11 +378,11 @@ func (self *Contract) deposits_put(key *common.Hash, deposit *Deposit) {
 }
 
 func vote_count(staking_balance, eligibility_threshold, vote_eligibility_balance_step *big.Int) uint64 {
-	var tmp big.Int
+	tmp := big.NewInt(0)
 	if staking_balance.Cmp(eligibility_threshold) >= 0 {
 		tmp.Sub(staking_balance, eligibility_threshold)
-		tmp.Div(&tmp, vote_eligibility_balance_step)
-		tmp.Add(&tmp, big.NewInt(1))
+		tmp.Div(tmp, vote_eligibility_balance_step)
+		tmp.Add(tmp, big.NewInt(1))
 	}
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()
