@@ -16,9 +16,6 @@ func (h *Hardforks) IsFixGenesisFork(num types.BlockNum) bool {
 }
 
 func ApplyFixGenesisFork(balances core.BalanceMap, dpos_config *dpos.Config, state vm.State, dpos_contract *dpos.Contract) {
-	dpos_contract.ResetGenesisAddresses(dpos_config.GenesisState)
-	dpos_contract.UpdateConfig(*dpos_config)
-
 	// reset genesis balances to correct state
 	// we can't change balances in cpp part, so do it here
 	for addr, balance := range balances {

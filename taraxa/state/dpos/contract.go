@@ -50,6 +50,9 @@ type Contract struct {
 	amount_delegated         *big.Int
 	lazy_init_done           bool
 	curr_withdrawals         Addr2Addr2Balance
+
+	prev_withdrawal_delay *uint64
+	prev_deposit_delay    *uint64
 }
 type Addr2Balance = map[common.Address]*big.Int
 type Addr2Addr2Balance = map[common.Address]Addr2Balance
@@ -68,6 +71,20 @@ type Deposit struct {
 	ValuePendingWithdrawal *big.Int
 	AddrsInPos             uint64
 	AddrsOutPos            uint64
+}
+
+func (self *Contract) SetDelaysToZero() {
+	self.prev_withdrawal_delay = &self.cfg.WithdrawalDelay
+	self.prev_deposit_delay = &self.cfg.DepositDelay
+	self.cfg.DepositDelay = 0
+	self.cfg.WithdrawalDelay = 0
+}
+
+func (self *Contract) SetDelaysToPreviousValues() {
+	if self.prev_deposit_delay != nil && self.prev_withdrawal_delay != nil {
+		self.cfg.DepositDelay = *self.prev_deposit_delay
+		self.cfg.WithdrawalDelay = *self.prev_withdrawal_delay
+	}
 }
 
 func (self *Deposit) Total() *big.Int {

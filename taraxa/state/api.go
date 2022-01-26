@@ -91,7 +91,14 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
-	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
+	// This hack is needed because deposit delay is implemented with a reader. So it is just delaying display of all changes. Because of that we can't just set different delay to immediately apply changes
+	without_delay_after_hardfork := false
+	if blk_n >= self.config.Hardforks.FixGenesisBlock && blk_n <= (self.config.Hardforks.FixGenesisBlock+self.config.DPOS.DepositDelay) {
+		without_delay_after_hardfork = true
+		// create reader with hardfork block num for 5 blocks after it to imitate delay
+		blk_n = self.config.Hardforks.FixGenesisBlock
+	}
+	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

@@ -42,7 +42,7 @@ func (self *API) NewContract(storage Storage) *Contract {
 	return new(Contract).init(self.cfg, storage)
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
-	ret.Init(&self.cfg, blk_n, storage_factory)
+func (self *API) NewReader(blk_n types.BlockNum, without_delay bool, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
+	ret.Init(&self.cfg, blk_n, without_delay, storage_factory)
 	return
 }

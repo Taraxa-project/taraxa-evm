@@ -117,10 +117,12 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		if self.new_chain_config == nil {
 			panic("we should have new_chain_config for hardfork")
 		}
+		// set delays to zero here and set it back after commit(see call of SetDelaysToPreviousValues below in End Block).
+		// Because some calculation in commit method uses this values
+		self.dpos_contract.SetDelaysToZero()
+		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
 		self.chain_config = self.new_chain_config
 		self.new_chain_config = nil
-
-		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
 		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
 		hardfork.ApplyFixGenesisFork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
 	}
@@ -135,6 +137,7 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 	if self.dpos_contract != nil {
 		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
+		self.dpos_contract.SetDelaysToPreviousValues()
 		self.evm_state_checkpoint()
 	}
 	if !self.chain_config.DisableBlockRewards {
