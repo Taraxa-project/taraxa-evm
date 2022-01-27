@@ -58,6 +58,7 @@ func (self *API) UpdateConfig(chain_cfg *chain_config.ChainConfig) {
 	self.config = chain_cfg
 	self.state_transition.UpdateConfig(self.config)
 	self.dry_runner.UpdateConfig(self.config)
+	self.dpos.UpdateConfig(*self.config.DPOS, self.state_transition.LastBlockNum)
 	// Is not updating DPOS contract config. Usually you cannot update its field without additional that processes it
 	// So it should be updated separately, for example in specific hardfork function
 }

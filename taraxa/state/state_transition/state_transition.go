@@ -31,6 +31,7 @@ type StateTransition struct {
 	dpos_contract      *dpos.Contract
 	get_reader         func(types.BlockNum) dpos.Reader
 	new_chain_config   *chain_config.ChainConfig
+	LastBlockNum       uint64
 }
 type StateTransitionConfig struct {
 	ETHChainConfig      params.ChainConfig
@@ -149,6 +150,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 			&self.evm_state)
 		self.evm_state_checkpoint()
 	}
+	self.LastBlockNum = self.evm.GetBlock().Number
 	self.pending_blk_state = nil
 }
 
