@@ -1,13 +1,17 @@
 package state
 
 import (
+	"sort"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_dry_runner"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
@@ -15,6 +19,7 @@ import (
 )
 
 type API struct {
+	rocksdb          *state_db_rocksdb.DB
 	db               state_db.DB
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
@@ -28,12 +33,37 @@ type APIOpts struct {
 	MainTrieFullNodeLevelsToCache byte
 }
 
-func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg *chain_config.ChainConfig, opts APIOpts) *API {
+func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, chain_cfg *chain_config.ChainConfig, opts APIOpts) *API {
 	self.db = db
-	if chain_cfg.DPOS != nil {
-		self.dpos = new(dpos.API).Init(*chain_cfg.DPOS)
-	}
+	self.rocksdb = db
 	self.config = chain_cfg
+
+	if self.config.DPOS != nil {
+		self.dpos = new(dpos.API).Init(*self.config.DPOS)
+		config_changes := self.rocksdb.GetDPOSConfigChanges()
+		if len(config_changes) == 0 {
+
+			bytes := rlp.MustEncodeToBytes(*self.config.DPOS)
+			self.rocksdb.SaveDPOSConfigChange(0, bytes)
+			self.dpos.UpdateConfig(0, *self.config.DPOS)
+		} else {
+			// Order mapping keys to apply changes in correct order
+			keys := make([]uint64, 0)
+			for k, _ := range config_changes {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+			// Decode rlp data from db and apply
+			for _, key := range keys {
+				value := config_changes[key]
+				cfg := new(dpos.Config)
+				rlp.MustDecodeBytes(value, cfg)
+				self.dpos.UpdateConfig(key, *cfg)
+			}
+		}
+	}
+
 	self.state_transition.Init(
 		self.db.GetLatestState(),
 		get_block_hash,
@@ -58,7 +88,9 @@ func (self *API) UpdateConfig(chain_cfg *chain_config.ChainConfig) {
 	self.config = chain_cfg
 	self.state_transition.UpdateConfig(self.config)
 	self.dry_runner.UpdateConfig(self.config)
-	self.dpos.UpdateConfig(*self.config.DPOS, self.state_transition.LastBlockNum)
+	config_update_block_num := self.state_transition.LastBlockNum + 1
+	self.dpos.UpdateConfig(config_update_block_num, *self.config.DPOS)
+	self.rocksdb.SaveDPOSConfigChange(config_update_block_num, rlp.MustEncodeToBytes(self.config.DPOS))
 	// Is not updating DPOS contract config. Usually you cannot update its field without additional that processes it
 	// So it should be updated separately, for example in specific hardfork function
 }

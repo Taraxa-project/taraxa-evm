@@ -40,7 +40,6 @@ type GenesisTransfer = struct {
 
 func (self *API) Init(cfg Config) *API {
 	asserts.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
-	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, 0})
 	self.cfg = cfg
 	return self
 }
@@ -60,8 +59,8 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) Config {
 	return self.cfg
 }
 
-func (self *API) UpdateConfig(cfg Config, blk_n uint64) {
-	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n + 1})
+func (self *API) UpdateConfig(blk_n uint64, cfg Config) {
+	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
 	self.cfg = cfg
 }
 
