@@ -184,7 +184,8 @@ func (self *DB) GetDPOSConfigChanges() map[uint64][]byte {
 	it.SeekToFirst()
 	for it = it; it.Valid(); it.Next() {
 		key := big.NewInt(0).SetBytes(it.Key().Data()).Uint64()
-		res[key] = it.Value().Data()
+		// make a copy of bytes
+		res[key] = append([]byte(nil), it.Value().Data()...)
 	}
 	if err := it.Err(); err != nil {
 		panic(err)
