@@ -3,6 +3,8 @@ package state_transition
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
@@ -18,7 +21,7 @@ import (
 )
 
 type StateTransition struct {
-	chain_cfg          ChainConfig
+	chain_config       *chain_config.ChainConfig
 	state              state_db.LatestState
 	pending_blk_state  state_db.PendingBlockState
 	evm_state          state_evm.EVMState
@@ -26,8 +29,11 @@ type StateTransition struct {
 	trie_sink          TrieSink
 	pending_state_root common.Hash
 	dpos_contract      *dpos.Contract
+	get_reader         func(types.BlockNum) dpos.Reader
+	new_chain_config   *chain_config.ChainConfig
+	LastBlockNum       uint64
 }
-type ChainConfig struct {
+type StateTransitionConfig struct {
 	ETHChainConfig      params.ChainConfig
 	DisableBlockRewards bool
 	ExecutionOptions    vm.ExecutionOpts
@@ -42,12 +48,14 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	chain_cfg ChainConfig,
+	get_reader func(types.BlockNum) dpos.Reader,
+	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
-	self.chain_cfg = chain_cfg
+	self.chain_config = chain_config
 	self.state = state
 	self.evm_state.Init(opts.EVMState)
+	self.get_reader = get_reader
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
 		U256PoolSize:           32 * vm.StackLimit,
@@ -63,7 +71,7 @@ func (self *StateTransition) Init(
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
 		asserts.Holds(self.pending_blk_state.GetNumber() == 0)
-		for addr, balance := range self.chain_cfg.GenesisBalances {
+		for addr, balance := range self.chain_config.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
 		if self.dpos_contract != nil {
@@ -72,8 +80,13 @@ func (self *StateTransition) Init(
 		self.evm_state_checkpoint()
 		self.Commit()
 	}
-	self.chain_cfg.GenesisBalances = nil
+	// we need genesis balances later, so it is commented
+	// self.chain_config.GenesisBalances = nil
 	return self
+}
+
+func (self *StateTransition) UpdateConfig(cfg *chain_config.ChainConfig) {
+	self.new_chain_config = cfg
 }
 
 func (self *StateTransition) Close() {
@@ -93,18 +106,31 @@ func (self *StateTransition) evm_state_checkpoint() {
 func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
-	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_cfg.ETHChainConfig.Rules(blk_n))
+	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.chain_cfg.ETHChainConfig.IsDAOFork(blk_n) {
+	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
+	}
+	if self.chain_config.Hardforks.IsFixGenesisFork(blk_n) {
+		if self.new_chain_config == nil {
+			panic("we should have new_chain_config for hardfork")
+		}
+		// set delays to zero here and set it back after commit(see call of SetDelaysToPreviousValues below in End Block).
+		// Because some calculation in commit method uses this values
+		self.dpos_contract.SetDelaysToZero()
+		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
+		self.chain_config = self.new_chain_config
+		self.new_chain_config = nil
+		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
+		hardfork.ApplyFixGenesisFork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
 	}
 }
 
 func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret = self.evm.Main(trx, self.chain_cfg.ExecutionOptions)
+	ret = self.evm.Main(trx, self.chain_config.ExecutionOptions)
 	self.evm_state_checkpoint()
 	return
 }
@@ -112,9 +138,10 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 	if self.dpos_contract != nil {
 		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
+		self.dpos_contract.SetDelaysToPreviousValues()
 		self.evm_state_checkpoint()
 	}
-	if !self.chain_cfg.DisableBlockRewards {
+	if !self.chain_config.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
 		ethash.AccumulateRewards(
 			self.evm.GetRules(),
@@ -123,6 +150,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 			&self.evm_state)
 		self.evm_state_checkpoint()
 	}
+	self.LastBlockNum = self.evm.GetBlock().Number
 	self.pending_blk_state = nil
 }
 

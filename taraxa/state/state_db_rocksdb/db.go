@@ -2,6 +2,7 @@ package state_db_rocksdb
 
 import (
 	"bytes"
+	"math/big"
 	"runtime"
 	"strconv"
 
@@ -30,6 +31,7 @@ type DB struct {
 const (
 	col_main_trie_value_latest = iota + state_db.COL_COUNT
 	col_acc_trie_value_latest
+	col_config_changes
 	col_COUNT
 )
 
@@ -170,6 +172,30 @@ func (self block_state_reader) Get(col state_db.Column, k *common.Hash, cb func(
 
 func (self *DB) GetLatestState() state_db.LatestState {
 	return &self.latest_state
+}
+
+func (self *DB) GetDPOSConfigChanges() map[uint64][]byte {
+	res := make(map[uint64][]byte)
+
+	ro := *self.opts_r
+	ro.SetFillCache(false)
+	it := self.db.NewIteratorCF(&ro, self.cf_handles[col_config_changes])
+	defer it.Close()
+	it.SeekToFirst()
+	for it = it; it.Valid(); it.Next() {
+		key := big.NewInt(0).SetBytes(it.Key().Data()).Uint64()
+		// make a copy of bytes
+		res[key] = append([]byte(nil), it.Value().Data()...)
+	}
+	if err := it.Err(); err != nil {
+		panic(err)
+	}
+	return res
+}
+
+func (self *DB) SaveDPOSConfigChange(blk uint64, cfg []byte) {
+	key_bytes := big.NewInt(0).SetUint64(blk).Bytes()
+	self.db.PutCF(gorocksdb.NewDefaultWriteOptions(), self.cf_handles[col_config_changes], key_bytes, cfg)
 }
 
 func (self *DB) invalidate_versioned_read_pools() {

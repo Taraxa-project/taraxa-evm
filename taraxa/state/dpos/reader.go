@@ -16,11 +16,18 @@ type Reader struct {
 	storage *StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
+func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, without_delay bool, storage_factory func(types.BlockNum) StorageReader) *Reader {
 	self.cfg = cfg
 	var blk_n_actual types.BlockNum
 	if self.cfg.DepositDelay < blk_n {
-		blk_n_actual = blk_n - self.cfg.DepositDelay
+		blk_n_actual = blk_n
+		if !without_delay {
+			blk_n_actual -= self.cfg.DepositDelay
+		}
+	} else {
+		if without_delay {
+			blk_n_actual = blk_n
+		}
 	}
 	self.storage = new(StorageReaderWrapper).Init(storage_factory(blk_n_actual))
 	return self
@@ -41,7 +48,7 @@ func (self Reader) EligibleVoteCount() (ret uint64) {
 }
 
 func (self Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
-	return vote_count(self.GetStakingBalance(addr), self.cfg.EligibilityBalanceThreshold)
+	return vote_count(self.GetStakingBalance(addr), self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 }
 
 func (self Reader) TotalAmountDelegated() (ret *big.Int) {

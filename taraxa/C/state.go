@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -44,7 +45,7 @@ func taraxa_evm_state_api_new(
 	defer handle_err(cb_err)
 	var params struct {
 		GetBlockHash uintptr
-		ChainConfig  state.ChainConfig
+		ChainConfig  *chain_config.ChainConfig
 		Opts         state.APIOpts
 		OptsDB       state_db_rocksdb.Opts
 	}
@@ -105,6 +106,21 @@ func taraxa_evm_state_api_prove(
 	dec_rlp(params_enc, &params)
 	ret := state_API_instances[ptr].ReadBlock(params.BlkNum).Prove(&params.StateRoot, &params.Addr, params.Keys...)
 	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_api_update_state_config
+func taraxa_evm_state_api_update_state_config(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		ChainConfig chain_config.ChainConfig
+	}
+	dec_rlp(params_enc, &params)
+	self := state_API_instances[ptr]
+	self.UpdateConfig(&params.ChainConfig)
 }
 
 //export taraxa_evm_state_api_get_account

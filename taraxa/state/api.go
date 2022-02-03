@@ -1,14 +1,17 @@
 package state
 
 import (
+	"sort"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_dry_runner"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
@@ -16,39 +19,57 @@ import (
 )
 
 type API struct {
+	rocksdb          *state_db_rocksdb.DB
 	db               state_db.DB
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
 	dpos             *dpos.API
+	config           *chain_config.ChainConfig
 }
-type ChainConfig struct {
-	ETHChainConfig      params.ChainConfig
-	DisableBlockRewards bool
-	ExecutionOptions    vm.ExecutionOpts
-	GenesisBalances     core.BalanceMap
-	DPOS                *dpos.Config `rlp:"nil"`
-}
+
 type APIOpts struct {
 	// TODO have single "perm-gen size" config property to derive all preallocation sizes
 	ExpectedMaxTrxPerBlock        uint64
 	MainTrieFullNodeLevelsToCache byte
 }
 
-func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg ChainConfig, opts APIOpts) *API {
+func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, chain_cfg *chain_config.ChainConfig, opts APIOpts) *API {
 	self.db = db
-	if chain_cfg.DPOS != nil {
-		self.dpos = new(dpos.API).Init(*chain_cfg.DPOS)
+	self.rocksdb = db
+	self.config = chain_cfg
+
+	if self.config.DPOS != nil {
+		self.dpos = new(dpos.API).Init(*self.config.DPOS)
+		config_changes := self.rocksdb.GetDPOSConfigChanges()
+		if len(config_changes) == 0 {
+
+			bytes := rlp.MustEncodeToBytes(*self.config.DPOS)
+			self.rocksdb.SaveDPOSConfigChange(0, bytes)
+			self.dpos.UpdateConfig(0, *self.config.DPOS)
+		} else {
+			// Order mapping keys to apply changes in correct order
+			keys := make([]uint64, 0)
+			for k, _ := range config_changes {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+			// Decode rlp data from db and apply
+			for _, key := range keys {
+				value := config_changes[key]
+				cfg := new(dpos.Config)
+				rlp.MustDecodeBytes(value, cfg)
+				self.dpos.UpdateConfig(key, *cfg)
+			}
+		}
 	}
+
 	self.state_transition.Init(
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		state_transition.ChainConfig{
-			ETHChainConfig:      chain_cfg.ETHChainConfig,
-			DisableBlockRewards: chain_cfg.DisableBlockRewards,
-			ExecutionOptions:    chain_cfg.ExecutionOptions,
-			GenesisBalances:     chain_cfg.GenesisBalances,
-		},
+		self.DPOSReader,
+		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
 				NumTransactionsToBuffer: opts.ExpectedMaxTrxPerBlock,
@@ -59,11 +80,19 @@ func (self *API) Init(db state_db.DB, get_block_hash vm.GetHashFunc, chain_cfg C
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, state_dry_runner.ChainConfig{
-		ETHChainConfig:   chain_cfg.ETHChainConfig,
-		ExecutionOptions: chain_cfg.ExecutionOptions,
-	})
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.config)
 	return self
+}
+
+func (self *API) UpdateConfig(chain_cfg *chain_config.ChainConfig) {
+	self.config = chain_cfg
+	self.state_transition.UpdateConfig(self.config)
+	self.dry_runner.UpdateConfig(self.config)
+	config_update_block_num := self.state_transition.LastBlockNum + 1
+	self.dpos.UpdateConfig(config_update_block_num, *self.config.DPOS)
+	self.rocksdb.SaveDPOSConfigChange(config_update_block_num, rlp.MustEncodeToBytes(self.config.DPOS))
+	// Is not updating DPOS contract config. Usually you cannot update its field without additional that processes it
+	// So it should be updated separately, for example in specific hardfork function
 }
 
 func (self *API) Close() {
@@ -95,7 +124,14 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
-	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
+	// This hack is needed because deposit delay is implemented with a reader. So it is just delaying display of all changes. Because of that we can't just set different delay to immediately apply changes
+	without_delay_after_hardfork := false
+	if blk_n >= self.config.Hardforks.FixGenesisBlock && blk_n <= (self.config.Hardforks.FixGenesisBlock+self.config.DPOS.DepositDelay) {
+		without_delay_after_hardfork = true
+		// create reader with hardfork block num for 5 blocks after it to imitate delay
+		blk_n = self.config.Hardforks.FixGenesisBlock
+	}
+	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }
