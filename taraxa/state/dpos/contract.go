@@ -104,12 +104,13 @@ func (self *Contract) init(cfg Config, storage Storage) *Contract {
 func (self *Contract) ResetGenesisAddresses(old_cfg []GenesisStateEntry) {
 	for _, entry := range old_cfg {
 		for _, v := range entry.Transfers {
-			bal := bigutil.Big0
-			balance_stor_k := stor_k_1(field_staking_balances, v.Beneficiary[:])
-			self.storage.Get(balance_stor_k, func(bytes []byte) {
-				bal = bigutil.FromBytes(bytes)
-			})
-			self.upd_staking_balance(v.Beneficiary, bal, true)
+			// get current balance
+			balance := self.get_balance(v.Beneficiary)
+
+			self.upd_staking_balance(v.Beneficiary, balance, true)
+			deposit, deposit_k := self.deposits_get(entry.Benefactor[:], v.Beneficiary[:])
+			deposit.ValueNet = bigutil.Sub(deposit.ValueNet, balance)
+			self.upd_deposits(entry.Benefactor, v.Beneficiary, deposit, deposit_k)
 		}
 	}
 }
@@ -308,28 +309,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 				self.deposits_put(&deposit_k, deposit)
 				continue
 			}
-			for i := 0; i < 2; i++ {
-				list_kind, list_owner, pos := field_addrs_out, benefactor[:], deposit.AddrsOutPos
-				if i%2 == 1 {
-					list_kind, list_owner, pos = field_addrs_in, beneficiary[:], deposit.AddrsInPos
-				}
-				moved_addr := self.storage.ListRemove(bin.Concat2(list_kind, list_owner), pos)
-				if moved_addr == nil {
-					continue
-				}
-				addr1, addr2 := list_owner, moved_addr
-				if i%2 == 1 {
-					addr1, addr2 = addr2, addr1
-				}
-				deposit, deposit_k := self.deposits_get(addr1, addr2)
-				if i%2 == 0 {
-					deposit.AddrsOutPos = pos
-				} else {
-					deposit.AddrsInPos = pos
-				}
-				self.deposits_put(&deposit_k, deposit)
-			}
-			self.deposits_put(&deposit_k, nil)
+			self.upd_deposits(benefactor, beneficiary, deposit, deposit_k)
 		}
 	}
 	if self.eligible_count_orig != self.eligible_count {
@@ -347,12 +327,33 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 	self.curr_withdrawals = nil
 }
 
+func (self *Contract) upd_deposits(benefactor, beneficiary common.Address, deposit *Deposit, deposit_k common.Hash) {
+	for i := 0; i < 2; i++ {
+		list_kind, list_owner, pos := field_addrs_out, benefactor[:], deposit.AddrsOutPos
+		if i%2 == 1 {
+			list_kind, list_owner, pos = field_addrs_in, beneficiary[:], deposit.AddrsInPos
+		}
+		moved_addr := self.storage.ListRemove(bin.Concat2(list_kind, list_owner), pos)
+		if moved_addr == nil {
+			continue
+		}
+		addr1, addr2 := list_owner, moved_addr
+		if i%2 == 1 {
+			addr1, addr2 = addr2, addr1
+		}
+		deposit, deposit_k := self.deposits_get(addr1, addr2)
+		if i%2 == 0 {
+			deposit.AddrsOutPos = pos
+		} else {
+			deposit.AddrsInPos = pos
+		}
+		self.deposits_put(&deposit_k, deposit)
+	}
+	self.deposits_put(&deposit_k, nil)
+}
+
 func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big.Int, negative bool) {
-	beneficiary_bal := bigutil.Big0
-	balance_stor_k := stor_k_1(field_staking_balances, beneficiary[:])
-	self.storage.Get(balance_stor_k, func(bytes []byte) {
-		beneficiary_bal = bigutil.FromBytes(bytes)
-	})
+	beneficiary_bal := self.get_balance(beneficiary)
 	was_eligible := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	prev_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if negative {
@@ -362,6 +363,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.Add(beneficiary_bal, delta)
 		self.amount_delegated = bigutil.Add(self.amount_delegated, delta)
 	}
+	balance_stor_k := stor_k_1(field_staking_balances, beneficiary[:])
 	self.storage.Put(balance_stor_k, beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	if was_eligible && !eligible_now {
@@ -401,4 +403,13 @@ func vote_count(staking_balance, eligibility_threshold, vote_eligibility_balance
 	}
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()
+}
+
+func (self *Contract) get_balance(addr common.Address) *big.Int {
+	balance := bigutil.Big0
+	balance_stor_k := stor_k_1(field_staking_balances, addr[:])
+	self.storage.Get(balance_stor_k, func(bytes []byte) {
+		balance = bigutil.FromBytes(bytes)
+	})
+	return balance
 }
