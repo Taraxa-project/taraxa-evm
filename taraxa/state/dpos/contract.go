@@ -2,6 +2,7 @@ package dpos
 
 import (
 	"math/big"
+	"strconv"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -375,8 +376,16 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 	new_vote_count := vote_count(beneficiary_bal, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
-		self.eligible_vote_count += new_vote_count
+		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
 	}
+}
+
+func Add64p(a, b uint64) uint64 {
+	c := a + b
+	if c < a || c < b {
+		panic("addition overflow " + strconv.FormatUint(a, 10) + " " + strconv.FormatUint(b, 10))
+	}
+	return c
 }
 
 func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (deposit *Deposit, key common.Hash) {
