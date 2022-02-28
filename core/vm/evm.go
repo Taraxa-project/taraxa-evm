@@ -90,7 +90,7 @@ type Transaction struct {
 	From     common.Address  // Provides information for ORIGIN
 	GasPrice *big.Int        // Provides information for GASPRICE
 	To       *common.Address `rlp:"nil"`
-	Nonce    uint64
+	Nonce    *big.Int
 	Value    *big.Int
 	Gas      uint64
 	Input    []byte
@@ -181,10 +181,10 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&trx.From)
 	if !opts.DisableNonceCheck {
-		if nonce := caller.GetNonce(); nonce < self.trx.Nonce {
+		if nonce := caller.GetNonce(); nonce.Cmp(self.trx.Nonce) < 0 {
 			ret.ConsensusErr = ErrNonceTooHigh
 			return
-		} else if nonce > self.trx.Nonce {
+		} else if nonce.Cmp(self.trx.Nonce) > 0 {
 			ret.ConsensusErr = ErrNonceTooLow
 			return
 		}
@@ -275,7 +275,7 @@ func (self *EVM) create(
 	caller.IncrementNonce()
 	new_acc := self.state.GetAccount(address)
 	// Ensure there's no existing contract already at the designated address
-	if new_acc.GetNonce() != 0 || new_acc.GetCodeSize() != 0 {
+	if new_acc.GetNonce().Sign() != 0 || new_acc.GetCodeSize() != 0 {
 		// TODO this also should check if new acc balance is zero, but this is how it works in ETH
 		return nil, 0, ErrContractAddressCollision
 	}
