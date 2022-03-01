@@ -37,7 +37,7 @@ type State interface {
 type StateAccount interface {
 	Address() *common.Address
 	GetBalance() *big.Int
-	GetNonce() uint64
+	GetNonce() *big.Int
 	GetCodeHash() *common.Hash
 	GetCode() []byte
 	GetCodeSize() uint64

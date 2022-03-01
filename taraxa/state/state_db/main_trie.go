@@ -55,7 +55,7 @@ func (MainTrieSchema) ValueStorageToHashEncoding(enc_storage []byte) (enc_hash [
 func (MainTrieSchema) MaxValueSizeToStoreInTrie() int { return 8 }
 
 type Account struct {
-	Nonce           uint64
+	Nonce           *big.Int
 	Balance         *big.Int
 	StorageRootHash *common.Hash
 	CodeHash        *common.Hash
@@ -65,7 +65,7 @@ type Account struct {
 func DecodeAccountFromTrie(enc_storage []byte) (ret Account) {
 	rest, tmp := rlp.MustSplitList(enc_storage)
 	tmp, rest = rlp.MustSplitString(rest)
-	ret.Nonce = bin.DEC_b_endian_compact_64(tmp)
+	ret.Nonce = bigutil.FromBytes(tmp)
 	tmp, rest = rlp.MustSplitString(rest)
 	ret.Balance = bigutil.FromBytes(tmp)
 	if tmp, rest = rlp.MustSplitString(rest); len(tmp) != 0 {
@@ -82,7 +82,7 @@ func DecodeAccountFromTrie(enc_storage []byte) (ret Account) {
 func (self *Account) EncodeForTrie() (enc_storage, enc_hash []byte) {
 	encoder := take_acc_encoder()
 	storage_rlp_list := encoder.ListStart()
-	encoder.AppendUint(self.Nonce)
+	encoder.AppendBigInt(self.Nonce)
 	encoder.AppendBigInt(self.Balance)
 	if self.StorageRootHash != nil {
 		encoder.AppendString(self.StorageRootHash[:])
@@ -99,7 +99,7 @@ func (self *Account) EncodeForTrie() (enc_storage, enc_hash []byte) {
 	enc_storage = encoder.ToBytes(-1)
 	encoder.Reset()
 	hash_rlp_list := encoder.ListStart()
-	encoder.AppendUint(self.Nonce)
+	encoder.AppendBigInt(self.Nonce)
 	encoder.AppendBigInt(self.Balance)
 	if self.StorageRootHash != nil {
 		encoder.AppendString(self.StorageRootHash[:])

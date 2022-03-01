@@ -72,7 +72,7 @@ func main() {
 		From     common.Address  `json:"from" gencodec:"required"`
 		GasPrice *hexutil.Big    `json:"gasPrice" gencodec:"required"`
 		To       *common.Address `json:"to,omitempty"`
-		Nonce    hexutil.Uint64  `json:"nonce" gencodec:"required"`
+		Nonce    *hexutil.Big    `json:"nonce" gencodec:"required"`
 		Value    *hexutil.Big    `json:"value" gencodec:"required"`
 		Gas      hexutil.Uint64  `json:"gas" gencodec:"required"`
 		Input    hexutil.Bytes   `json:"input" gencodec:"required"`

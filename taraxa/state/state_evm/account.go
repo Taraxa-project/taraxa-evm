@@ -40,7 +40,7 @@ func (self *Account) set_NIL() {
 }
 
 func (self *Account) IsEIP161Empty() bool {
-	return !self.IsNotNIL() || self.Nonce == 0 && self.Balance.Sign() == 0 && self.CodeSize == 0
+	return !self.IsNotNIL() || self.Nonce.Sign() == 0 && self.Balance.Sign() == 0 && self.CodeSize == 0
 }
 
 func (self *Account) GetBalance() *big.Int {
@@ -50,9 +50,9 @@ func (self *Account) GetBalance() *big.Int {
 	return self.Balance
 }
 
-func (self *Account) GetNonce() uint64 {
+func (self *Account) GetNonce() *big.Int {
 	if !self.IsNotNIL() {
-		return 0
+		return bigutil.Big0
 	}
 	return self.Nonce
 }
@@ -181,9 +181,9 @@ func (self *Account) set_balance(amount *big.Int) {
 
 func (self *Account) IncrementNonce() {
 	self.ensure_exists()
-	self.Nonce++
+	self.Nonce.Add(self.Nonce, big.NewInt(1))
 	self.register_change(func() {
-		self.Nonce--
+		self.Nonce.Sub(self.Nonce, big.NewInt(1))
 	})
 }
 
