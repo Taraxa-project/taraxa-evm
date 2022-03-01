@@ -182,7 +182,7 @@ func (self *Account) set_balance(amount *big.Int) {
 func (self *Account) IncrementNonce() {
 	self.ensure_exists()
 	nonce_prev := self.Nonce
-	self.Nonce = new(big.Int).Add(nonce_prev, new(big.Int).SetUint64(1))
+	self.Nonce.Add(self.Nonce, bigutil.Big1)
 	self.register_change(func() {
 		self.Nonce = nonce_prev
 	})
@@ -230,6 +230,7 @@ func (self *Account) ensure_exists() {
 	}
 	self.AccountBody = new(AccountBody)
 	self.AccountBody.Balance = bigutil.Big0
+	self.AccountBody.Nonce = bigutil.Big0
 	was_deleted := self.deleted
 	self.deleted = false
 	self.register_change(func() {
