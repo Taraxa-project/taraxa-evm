@@ -182,7 +182,7 @@ func (self *Account) set_balance(amount *big.Int) {
 func (self *Account) IncrementNonce() {
 	self.ensure_exists()
 	nonce_prev := self.Nonce
-	self.Nonce.Add(self.Nonce, bigutil.Big1)
+	self.Nonce = new(big.Int).Add(self.Nonce, bigutil.Big1)
 	self.register_change(func() {
 		self.Nonce = nonce_prev
 	})
