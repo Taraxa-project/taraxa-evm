@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
@@ -29,6 +30,7 @@ type StateTransition struct {
 	trie_sink          TrieSink
 	pending_state_root common.Hash
 	dpos_contract      *dpos.Contract
+	poc_contract       *poc.Contract
 	get_reader         func(types.BlockNum) dpos.Reader
 	new_chain_config   *chain_config.ChainConfig
 	LastBlockNum       uint64
@@ -67,7 +69,9 @@ func (self *StateTransition) Init(
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
 		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
+		self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&self.evm_state})
 	}
+
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
 		asserts.Holds(self.pending_blk_state.GetNumber() == 0)
@@ -109,6 +113,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
+		self.poc_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)

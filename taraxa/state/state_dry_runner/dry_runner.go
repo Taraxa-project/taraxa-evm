@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 )
@@ -47,5 +48,6 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
+	new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	return evm.Main(trx, *opts)
 }
