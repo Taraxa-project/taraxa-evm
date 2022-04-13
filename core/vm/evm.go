@@ -177,15 +177,19 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 }
 
 func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+	opts.DisableGasFee = true
+	opts.DisableNonceCheck = true
 	self.trx = trx
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&trx.From)
 	if !opts.DisableNonceCheck {
 		if nonce := caller.GetNonce(); nonce.Cmp(self.trx.Nonce) < 0 {
 			ret.ConsensusErr = ErrNonceTooHigh
+			fmt.Println("XXXXXXXXXX ErrNonceTooHigh")
 			return
 		} else if nonce.Cmp(self.trx.Nonce) > 0 {
 			ret.ConsensusErr = ErrNonceTooLow
+			fmt.Println("XXXXXXXXXX ErrNonceTooLow")
 			return
 		}
 	}
@@ -199,29 +203,35 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	if !opts.DisableGasFee {
 		if !BalanceGTE(caller, gas_fee) {
 			ret.ConsensusErr = ErrInsufficientBalanceForGas
+			fmt.Println("XXXXXXXXXX ErrInsufficientBalanceForGas")
 			return
 		}
 		caller.SubBalance(gas_fee)
 		gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
 		if err != nil {
 			ret.ConsensusErr = util.ErrorString(err.Error())
+			fmt.Println("XXXXXXXXXX ", err)
 			return
 		}
 		if gas_left < gas_intrinsic {
 			ret.ConsensusErr = ErrIntrinsicGas
+			fmt.Println("XXXXXXXXXX ErrIntrinsicGas")
 			return
 		}
 		gas_left -= gas_intrinsic
 	}
 	var err error
 	if contract_creation {
+		fmt.Println("XXXXXXXXXX contract_creation")
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
+		fmt.Println("XXXXXXXXXX self.call")
 		acc_to := self.state.GetAccount(self.trx.To)
 		caller.IncrementNonce()
 		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
+		fmt.Println("XXXXXXXXXX err != nil ", err )
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
 			ret.ConsensusErr = err_str
 			return
@@ -330,6 +340,7 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
+	fmt.Println("XXXXXXXXXX call ", callee.Address())
 	if value.Sign() == 0 {
 		if self.rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			return nil, gas, nil
@@ -346,6 +357,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 	gas_left = frame.Gas
 	if precompiled := self.precompiles.Get(code_owner.Address()); precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
+			fmt.Println("XXXXXXXXXX call_end ", gas_required, gas_left)
 			gas_left -= gas_required
 			ret, err = precompiled.Run(frame, self)
 		} else {

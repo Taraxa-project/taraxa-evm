@@ -1,6 +1,8 @@
 package state_dry_runner
 
 import (
+	"fmt"
+
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
@@ -13,6 +15,7 @@ type DryRunner struct {
 	db             state_db.DB
 	get_block_hash vm.GetHashFunc
 	dpos_api       *dpos.API
+	poc_contract   *poc.Contract
 	chain_config   *chain_config.ChainConfig
 }
 
@@ -20,11 +23,13 @@ func (self *DryRunner) Init(
 	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
+	poc_contract   *poc.Contract,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
+	self.poc_contract = poc_contract
 	self.chain_config = chain_config
 	return self
 }
@@ -48,6 +53,13 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
-	new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
+	self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
+	if self.poc_contract != nil {
+		self.poc_contract.Register(evm.RegisterPrecompiledContract)
+	} else {
+		self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
+		self.poc_contract.Register(evm.RegisterPrecompiledContract)
+	}
+	fmt.Println("XXXXXXXXXX ", trx)
 	return evm.Main(trx, *opts)
 }

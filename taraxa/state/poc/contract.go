@@ -103,32 +103,37 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if ctx.Value.Sign() != 0 {
 		return nil, ErrCallValueNonzero
 	}
+
 	if evm.GetDepth() != 0 {
 		return nil, ErrCallIsNotToplevel
 	}
-	// First 4 bytes it method signature
-	// input := ctx.Input
+
 	method, err := self.abi.MethodById(ctx.Input)
 	if err != nil {
 		fmt.Println("XXXXXXXXXX ", err)
 		return nil, nil
 	}
+
 	fmt.Println("XXXXXXXXXX " + method.Name)
+
+	// First 4 bytes it method signature !!!!
+	input := ctx.Input[4:]
+
 	switch method.Name {
 	case "stake":
 		var data StakeEvenet
-		if err = method.Inputs.Unpack(&data, ctx.Input); err != nil {
+		if err = method.Inputs.Unpack(&data, input); err != nil {
 			fmt.Println("XXXXXXXXXX ", err)
 			return nil, nil
 		}
 		return nil, self.stake(data.Account, data.Amount)
 	case "get_stake":
 		var data GetStakeEvent
-		if err = method.Inputs.Unpack(&data, ctx.Input); err != nil {
+		if err = method.Inputs.Unpack(&data, input); err != nil {
 			fmt.Println("XXXXXXXXXX ", err)
 			return nil, nil
 		}
-		return self.abi.Pack(method.Name, self.get_balance(data.Account))
+		return method.Outputs.Pack(self.get_balance(data.Account))
 	}
 	return nil, nil
 }
@@ -138,7 +143,9 @@ func (self *Contract) stake(acc common.Address, stake *big.Int) (err error) {
 		return ErrTransferAmountIsZero
 	}
 	balance := self.get_balance(acc)
-	bigutil.Add(balance, stake)
+	fmt.Println("XXXXXXXXXX stake ", stake)
+	balance = bigutil.Add(balance, stake)
+	fmt.Println("XXXXXXXXXX Add ", balance)
 	self.put_balance(acc, balance)
 
 	return
@@ -146,14 +153,23 @@ func (self *Contract) stake(acc common.Address, stake *big.Int) (err error) {
 
 func (self *Contract) get_balance(addr common.Address) *big.Int {
 	balance := bigutil.Big0
-	balance_stor_k := stor_k_1(field_staking_balances, addr[:])
+	balance_stor_k := stor_k_1(addr[:])
+	fmt.Println("XXXXXXXXXX get_balance key ", balance_stor_k)
 	self.storage.Get(balance_stor_k, func(bytes []byte) {
 		balance = bigutil.FromBytes(bytes)
 	})
+	fmt.Println("XXXXXXXXXX balance ", balance)
 	return balance
 }
 
 func (self *Contract) put_balance(addr common.Address, stake *big.Int) {
-	balance_stor_k := stor_k_1(field_staking_balances, addr[:])
+	fmt.Println("XXXXXXXXXX put_balance1 ", stake)
+	balance_stor_k := stor_k_1(addr[:])
+	fmt.Println("XXXXXXXXXX put_balance key ", balance_stor_k)
 	self.storage.Put(balance_stor_k, stake.Bytes())
+	balance := bigutil.Big0
+	self.storage.Get(balance_stor_k, func(bytes []byte) {
+		balance = bigutil.FromBytes(bytes)
+	})
+	fmt.Println("XXXXXXXXXX put_balance2 ", balance)
 }
