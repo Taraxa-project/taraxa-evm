@@ -1,34 +1,36 @@
 package state_dry_runner
 
 import (
-	"fmt"
-
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 )
 
 type DryRunner struct {
-	db             state_db.DB
-	get_block_hash vm.GetHashFunc
-	dpos_api       *dpos.API
-	poc_contract   *poc.Contract
-	chain_config   *chain_config.ChainConfig
+	db               state_db.DB
+	get_block_hash   vm.GetHashFunc
+	dpos_api         *dpos.API
+	poc_contract     *poc.Contract
+	dpos_v2_contract *dpos_2.Contract
+	chain_config     *chain_config.ChainConfig
 }
 
 func (self *DryRunner) Init(
 	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	poc_contract   *poc.Contract,
+	dpos_v2_contract *dpos_2.Contract,
+	poc_contract *poc.Contract,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
+	self.dpos_v2_contract = dpos_v2_contract
 	self.poc_contract = poc_contract
 	self.chain_config = chain_config
 	return self
@@ -53,13 +55,8 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
-	self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
-	if self.poc_contract != nil {
-		self.poc_contract.Register(evm.RegisterPrecompiledContract)
-	} else {
-		self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
-		self.poc_contract.Register(evm.RegisterPrecompiledContract)
-	}
-	fmt.Println("XXXXXXXXXX ", trx)
+	new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
+	new(dpos_2.Contract).Init(poc.EVMStateStorage{&evm_state}, self.db.GetLatestState().GetCommittedDescriptor().BlockNum).Register(evm.RegisterPrecompiledContract)
+
 	return evm.Main(trx, *opts)
 }
