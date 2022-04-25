@@ -6,7 +6,10 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled/data_types"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled/iterable"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -34,66 +37,6 @@ var ErrNoTransfers = util.ErrorString("no transfers")
 var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
-// Validator basic info
-type ValidatorBasicInfo struct {
-	// TotalStake == sum of all delegated tokens to the validator
-	TotalStake *big.Int
-
-	// Commission
-	Commission *big.Int
-
-	// Rewards accumulated from delegators rewards based on commission
-	CommissionRewards *big.Int
-
-	// Short description
-	// TODO: optional - maybe we dont want this ?
-	Description string
-
-	// Validator's website url
-	// TODO: optional - maybe we dont want this ?
-	Endpoint string
-}
-
-// Validator info
-type ValidatorInfo struct {
-	// Validtor basic info
-	BasicInfo ValidatorBasicInfo
-
-	// List of validator's delegators
-	Delegators map[common.Address]*DelegatorInfo
-}
-
-type DelegatorInfo struct {
-	// Num of delegated tokens == delegator's stake
-	Stake *big.Int
-
-	// UnlockedStake == unlocked(undelegated) tokens that can be withdrawn now
-	// TODO: in case we will send unlocked tokens to the delegator's balance automatically, we dont need this field
-	UnlockedStake *big.Int
-
-	// Accumulated rewards
-	Rewards *big.Int
-
-	// Undelegate request
-	// TODO: rethink implementation of undelegations
-	UndelegateRequests []*UndelegateRequest
-}
-
-type UndelegateRequest struct {
-	// Num of tokens that delegator wants to undelegate
-	Amount *big.Int
-
-	// Block number when this unstake request can be confirmed(act block num + locking period)
-	EligibleBlockNum *big.Int
-}
-
-// Delegator's validators info
-type DelegatorValidators struct {
-	// List of validators addresses that delegator delegated to
-	// Note: info about delegator's stake/reward, etc... is saved in ValidatorDelegators struct
-	Validators map[common.Address]bool // instead of set
-}
-
 // Contract storage fields keys
 var (
 	field_validators_info = []byte{0}
@@ -103,14 +46,16 @@ var (
 )
 
 type Contract struct {
-	Storage StorageWrapper
+	Storage storage.StorageWrapper
 	Abi     abi.ABI
 
 	// Validadors basic info, e.g. total stake, commission, etc...
-	ValidatorsInfo map[common.Address]*ValidatorInfo
+	ValidatorsInfo map[common.Address]*data_types.ValidatorInfo
 
 	// Delegators list of their validators -> key = delegator address
-	DelegatorsValidators map[common.Address]*DelegatorValidators
+	DelegatorsValidators map[common.Address]*data_types.DelegatorValidators
+
+	DelVal iterable.Map[data_types.ValidatorInfo]
 }
 
 // TODO: mappings that are going to be in in memory as well as storage
@@ -125,8 +70,8 @@ type Contract struct {
 // 4. are processed automatically in Commit() function
 // 6. does not need to be saved in storage - just memory is ok
 
-func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockNum) *Contract {
-	self.Storage.Init(storage)
+func (self *Contract) Init(storage storage.Storage, last_commited_block_num types.BlockNum) *Contract {
+	self.Storage.Init(contract_address, storage)
 
 	dpos_abi, err := ioutil.ReadFile("DposInterface.abi")
 	if err != nil {

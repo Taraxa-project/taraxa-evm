@@ -72,6 +72,19 @@ func (h *Hash) DecodeRLP(stream *rlp.Stream) error {
 	return nil
 }
 
+// Add big.Int to hash
+func (h *Hash) Add(v *big.Int) *Hash {
+	bi := h.Big()
+	ret := new(Hash)
+	ret.SetBytes(bi.Add(bi, v).Bytes())
+	return ret
+}
+
+func (h *Hash) Inc() *Hash {
+	h = h.Add(big.NewInt(1))
+	return h
+}
+
 // Bytes gets the byte representation of the underlying hash.
 func (h Hash) Bytes() []byte { return h[:] }
 

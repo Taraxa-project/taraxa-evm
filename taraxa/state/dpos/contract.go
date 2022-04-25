@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
@@ -42,7 +43,7 @@ var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 type Contract struct {
 	cfg                      Config
-	storage                  StorageWrapper
+	storage                  storage.StorageWrapper
 	eligible_count_orig      uint64
 	eligible_count           uint64
 	eligible_vote_count_orig uint64
@@ -96,9 +97,9 @@ func (self *Deposit) IsZero() bool {
 	return bigutil.IsZero(self.ValueNet) && bigutil.IsZero(self.ValuePendingWithdrawal)
 }
 
-func (self *Contract) init(cfg Config, storage Storage) *Contract {
+func (self *Contract) init(cfg Config, storage storage.Storage) *Contract {
 	self.cfg = cfg
-	self.storage.Init(storage)
+	self.storage.Init(contract_address, storage)
 	return self
 }
 
@@ -141,16 +142,16 @@ func (self *Contract) lazy_init() {
 		return
 	}
 	self.lazy_init_done = true
-	self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_eligible_count), func(bytes []byte) {
 		self.eligible_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_count = self.eligible_count_orig
-	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_vote_count = self.eligible_vote_count_orig
 	self.amount_delegated_orig = bigutil.Big0
-	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
 		self.amount_delegated_orig = bigutil.FromBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig
@@ -269,11 +270,11 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 	} else {
 		if len(self.curr_withdrawals) != 0 {
 			self.storage.Put(
-				stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
+				storage.Stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n)),
 				rlp.MustEncodeToBytes(self.curr_withdrawals))
 		}
 		if self.cfg.WithdrawalDelay < blk_n {
-			k := stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay))
+			k := storage.Stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-self.cfg.WithdrawalDelay))
 			self.storage.Get(k, func(bytes []byte) {
 				moneyback_withdrawals = make(Addr2Addr2Balance)
 				rlp.MustDecodeBytes(bytes, &moneyback_withdrawals)
@@ -295,7 +296,7 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		withdrawals_to_apply = self.curr_withdrawals
 	} else if delay_diff < blk_n {
 		self.storage.Get(
-			stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
+			storage.Stor_k_1(field_withdrawals_by_block, bin.ENC_b_endian_compact_64_1(blk_n-delay_diff)),
 			func(bytes []byte) {
 				withdrawals_to_apply = make(Addr2Addr2Balance)
 				rlp.MustDecodeBytes(bytes, &withdrawals_to_apply)
@@ -314,15 +315,15 @@ func (self *Contract) Commit(blk_n types.BlockNum) {
 		}
 	}
 	if self.eligible_count_orig != self.eligible_count {
-		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
+		self.storage.Put(storage.Stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
 		self.eligible_count_orig = self.eligible_count
 	}
 	if self.eligible_vote_count_orig != self.eligible_vote_count {
-		self.storage.Put(stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
+		self.storage.Put(storage.Stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
 		self.eligible_vote_count_orig = self.eligible_vote_count
 	}
 	if self.amount_delegated_orig.Cmp(self.amount_delegated) != 0 {
-		self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
+		self.storage.Put(storage.Stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 		self.amount_delegated_orig = self.amount_delegated
 	}
 	self.curr_withdrawals = nil
@@ -364,7 +365,7 @@ func (self *Contract) upd_staking_balance(beneficiary common.Address, delta *big
 		beneficiary_bal = bigutil.Add(beneficiary_bal, delta)
 		self.amount_delegated = bigutil.Add(self.amount_delegated, delta)
 	}
-	balance_stor_k := stor_k_1(field_staking_balances, beneficiary[:])
+	balance_stor_k := storage.Stor_k_1(field_staking_balances, beneficiary[:])
 	self.storage.Put(balance_stor_k, beneficiary_bal.Bytes())
 	eligible_now := beneficiary_bal.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
 	if was_eligible && !eligible_now {
@@ -389,7 +390,7 @@ func Add64p(a, b uint64) uint64 {
 }
 
 func (self *Contract) deposits_get(benefactor_addr, beneficiary_addr []byte) (deposit *Deposit, key common.Hash) {
-	key = stor_k_2(field_deposits, benefactor_addr, beneficiary_addr)
+	key = storage.Stor_k_2(field_deposits, benefactor_addr, beneficiary_addr)
 	self.storage.Get(&key, func(bytes []byte) {
 		deposit = new(Deposit)
 		rlp.MustDecodeBytes(bytes, deposit)
@@ -416,7 +417,7 @@ func vote_count(staking_balance, eligibility_threshold, vote_eligibility_balance
 
 func (self *Contract) get_balance(addr common.Address) *big.Int {
 	balance := bigutil.Big0
-	balance_stor_k := stor_k_1(field_staking_balances, addr[:])
+	balance_stor_k := storage.Stor_k_1(field_staking_balances, addr[:])
 	self.storage.Get(balance_stor_k, func(bytes []byte) {
 		balance = bigutil.FromBytes(bytes)
 	})

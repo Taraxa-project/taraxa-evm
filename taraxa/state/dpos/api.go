@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -64,11 +65,11 @@ func (self *API) UpdateConfig(blk_n uint64, cfg Config) {
 	self.cfg = cfg
 }
 
-func (self *API) NewContract(storage Storage) *Contract {
+func (self *API) NewContract(storage storage.Storage) *Contract {
 	return new(Contract).init(self.cfg, storage)
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, without_delay bool, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
+func (self *API) NewReader(blk_n types.BlockNum, without_delay bool, storage_factory func(types.BlockNum) storage.StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, without_delay, storage_factory)
 	return

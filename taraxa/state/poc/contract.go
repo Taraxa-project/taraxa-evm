@@ -8,6 +8,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -17,7 +18,7 @@ import (
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000ee"))
 
 var (
-	field_staking_balances     = []byte{0}
+	field_staking_balances = []byte{0}
 )
 
 var ErrTransferAmountIsZero = util.ErrorString("transfer amount is zero")
@@ -29,8 +30,8 @@ var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 type Contract struct {
-	storage                  StorageWrapper
-	abi						 abi.ABI
+	storage storage.StorageWrapper
+	abi     abi.ABI
 }
 
 type Addr2Balance = map[common.Address]*big.Int
@@ -76,8 +77,8 @@ const definition = `[
 	}
 ]`
 
-func (self *Contract) Init(storage Storage) *Contract {
-	self.storage.Init(storage)
+func (self *Contract) Init(storage storage.Storage) *Contract {
+	self.storage.Init(contract_address, storage)
 	self.abi, _ = abi.JSON(strings.NewReader(definition))
 	return self
 }
@@ -96,7 +97,7 @@ type GetStakeEvent struct {
 }
 type StakeEvenet struct {
 	Account common.Address
-	Amount *big.Int
+	Amount  *big.Int
 }
 
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
@@ -153,7 +154,7 @@ func (self *Contract) stake(acc common.Address, stake *big.Int) (err error) {
 
 func (self *Contract) get_balance(addr common.Address) *big.Int {
 	balance := bigutil.Big0
-	balance_stor_k := stor_k_1(addr[:])
+	balance_stor_k := storage.Stor_k_1(addr[:])
 	fmt.Println("XXXXXXXXXX get_balance key ", balance_stor_k)
 	self.storage.Get(balance_stor_k, func(bytes []byte) {
 		balance = bigutil.FromBytes(bytes)
@@ -164,7 +165,7 @@ func (self *Contract) get_balance(addr common.Address) *big.Int {
 
 func (self *Contract) put_balance(addr common.Address, stake *big.Int) {
 	fmt.Println("XXXXXXXXXX put_balance1 ", stake)
-	balance_stor_k := stor_k_1(addr[:])
+	balance_stor_k := storage.Stor_k_1(addr[:])
 	fmt.Println("XXXXXXXXXX put_balance key ", balance_stor_k)
 	self.storage.Put(balance_stor_k, stake.Bytes())
 	balance := bigutil.Big0

@@ -18,6 +18,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/storage"
 )
 
 type API struct {
@@ -135,7 +136,7 @@ func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
 		// create reader with hardfork block num for 5 blocks after it to imitate delay
 		blk_n = self.config.Hardforks.FixGenesisBlock
 	}
-	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
+	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) storage.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }
