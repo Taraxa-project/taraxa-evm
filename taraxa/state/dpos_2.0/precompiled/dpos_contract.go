@@ -55,7 +55,8 @@ type Contract struct {
 	// Delegators list of their validators -> key = delegator address
 	DelegatorsValidators map[common.Address]*data_types.DelegatorValidators
 
-	DelVal iterable.Map[data_types.ValidatorInfo]
+	ValInfo iterable.AddressMap[data_types.ValidatorInfo]
+	DelVal  iterable.AddressMap[data_types.DelegatorValidators]
 }
 
 // TODO: mappings that are going to be in in memory as well as storage

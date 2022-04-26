@@ -4,10 +4,9 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled/iterable"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
-
-type StorageData = map[*common.Hash][]byte
 
 // Validator basic info
 type ValidatorBasicInfo struct {
@@ -29,12 +28,28 @@ type ValidatorBasicInfo struct {
 	// Endpoint string
 }
 
-func (vb ValidatorBasicInfo) Serialize(pos *common.Hash, out StorageData) {
+func (vb ValidatorBasicInfo) Serialize(pos *common.Hash, out iterable.StorageData) {
 	out[pos] = vb.TotalStake.Bytes()
 	pos.Inc()
 	out[pos] = vb.Commission.Bytes()
 	pos.Inc()
 	out[pos] = vb.CommissionRewards.Bytes()
+	pos.Inc()
+}
+
+func (vb ValidatorBasicInfo) Load(pos *common.Hash, get func(*common.Hash, func([]byte))) {
+	get(pos, func(bytes []byte) {
+		vb.TotalStake.FillBytes(bytes)
+	})
+	pos.Inc()
+	get(pos, func(bytes []byte) {
+		vb.Commission.FillBytes(bytes)
+	})
+	pos.Inc()
+	get(pos, func(bytes []byte) {
+		vb.CommissionRewards.FillBytes(bytes)
+	})
+	pos.Inc()
 }
 
 // Validator info
@@ -43,16 +58,16 @@ type ValidatorInfo struct {
 	BasicInfo ValidatorBasicInfo
 
 	// List of validator's delegators
-	Delegators map[common.Address]*DelegatorInfo
+	Delegators iterable.AddressMap[*DelegatorInfo]
 }
 
-func (vi ValidatorInfo) Serialize(pos *common.Hash, out StorageData) {
+func (vi ValidatorInfo) Load(pos *common.Hash, get func(*common.Hash, func(bytes []byte))) {
+}
+
+func (vi ValidatorInfo) Serialize(pos *common.Hash, out iterable.StorageData) {
 	vi.BasicInfo.Serialize(keccak256.Hash(pos.Bytes()), out)
-	pos = pos.Add(big.NewInt(1))
-	for i, v := range vi.Delegators {
-		key := keccak256.Hash(i.Hash().Bytes(), pos.Bytes())
-		v.Serialize(key, out)
-	}
+
+	// SerializeAddressMap(pos, vi.Delegators, out)
 }
 
 type DelegatorInfo struct {
@@ -71,7 +86,9 @@ type DelegatorInfo struct {
 	UndelegateRequests []*UndelegateRequest
 }
 
-func (di DelegatorInfo) Serialize(pos *common.Hash, out StorageData) {
+func (di DelegatorInfo) Load(pos *common.Hash, get func(*common.Hash, func(bytes []byte))) {
+}
+func (di DelegatorInfo) Serialize(pos *common.Hash, out iterable.StorageData) {
 	out[pos] = di.Stake.Bytes()
 	pos.Inc()
 	out[pos] = di.UnlockedStake.Bytes()
@@ -79,13 +96,7 @@ func (di DelegatorInfo) Serialize(pos *common.Hash, out StorageData) {
 	out[pos] = di.Rewards.Bytes()
 	pos.Inc()
 
-	// write size
-	out[keccak256.Hash(big.NewInt(0).Bytes(), pos.Bytes())] = big.NewInt(int64(len(di.UndelegateRequests))).Bytes()
-	//write elements
-	for i, v := range di.UndelegateRequests {
-		key := keccak256.Hash(big.NewInt(int64(i+1)).Bytes(), pos.Bytes())
-		v.Serialize(key, out)
-	}
+	iterable.SerializeArray(pos, di.UndelegateRequests, out)
 }
 
 type UndelegateRequest struct {
@@ -96,18 +107,37 @@ type UndelegateRequest struct {
 	EligibleBlockNum *big.Int
 }
 
-func (ur UndelegateRequest) Serialize(pos *common.Hash, out StorageData) {
+func (ur *UndelegateRequest) Load(pos *common.Hash, get func(*common.Hash, func(bytes []byte))) {
+}
+func (ur *UndelegateRequest) Serialize(pos *common.Hash, out iterable.StorageData) {
 	out[pos] = ur.Amount.Bytes()
 	pos.Inc()
 	out[pos] = ur.EligibleBlockNum.Bytes()
+	pos.Inc()
+}
+
+type SerializableAddress struct {
+	common.Address
+}
+
+func (sa *SerializableAddress) Load(pos *common.Hash, get func(*common.Hash, func(bytes []byte))) {
+	get(pos, func(bytes []byte) {
+		sa.Address = common.BytesToAddress(bytes)
+	})
+}
+func (sa *SerializableAddress) Serialize(pos *common.Hash, out iterable.StorageData) {
+	out[pos] = sa.Address.Bytes()
 }
 
 // Delegator's validators info
 type DelegatorValidators struct {
 	// List of validators addresses that delegator delegated to
 	// Note: info about delegator's stake/reward, etc... is saved in ValidatorDelegators struct
-	Validators []common.Address
+	Validators []*SerializableAddress
 }
 
-func (vi DelegatorValidators) Serialize(pos *common.Hash, out StorageData) {
+func (dv DelegatorValidators) Load(pos *common.Hash, get func(*common.Hash, func(bytes []byte))) {
+}
+func (dv DelegatorValidators) Serialize(pos *common.Hash, out iterable.StorageData) {
+	iterable.SerializeArray(pos, dv.Validators, out)
 }
