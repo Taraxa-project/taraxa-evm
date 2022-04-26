@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 )
@@ -15,7 +14,6 @@ type DryRunner struct {
 	db               state_db.DB
 	get_block_hash   vm.GetHashFunc
 	dpos_api         *dpos.API
-	poc_contract     *poc.Contract
 	get_reader 		 func(types.BlockNum) dpos_2.Reader
 	chain_config     *chain_config.ChainConfig
 }
@@ -25,14 +23,12 @@ func (self *DryRunner) Init(
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
 	get_reader func(types.BlockNum) dpos_2.Reader,
-	poc_contract *poc.Contract,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
 	self.get_reader = get_reader
-	self.poc_contract = poc_contract
 	self.chain_config = chain_config
 	return self
 }
@@ -56,8 +52,6 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
-	new(poc.Contract).Init(poc.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
-	new(dpos_2.Contract).Init(poc.EVMStateStorage{&evm_state}, self.get_reader(blk.Number))
-
+	new(dpos_2.Contract).Init(dpos_2.EVMStateStorage{&evm_state}, self.get_reader(blk.Number))
 	return evm.Main(trx, *opts)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -28,7 +27,6 @@ type API struct {
 	dpos             *dpos.API
 	dpos2            *dpos_2.API
 	dpos_v2_contract *dpos_2.Contract
-	poc_contract     *poc.Contract
 	config           *chain_config.ChainConfig
 }
 
@@ -85,7 +83,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOS2Reader, self.poc_contract, self.config)
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOS2Reader, self.config)
 	return self
 }
 
