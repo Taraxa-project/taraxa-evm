@@ -33,7 +33,7 @@ type StateTransition struct {
 	dpos_v2_contract   *dpos_2.Contract
 	dpos_contract      *dpos.Contract // TODO: delete
 	poc_contract       *poc.Contract  // TODO: delete
-	get_reader         func(types.BlockNum) dpos.Reader
+	get_reader         func(types.BlockNum) dpos_2.Reader
 	new_chain_config   *chain_config.ChainConfig
 	LastBlockNum       uint64
 }
@@ -52,7 +52,7 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	get_reader func(types.BlockNum) dpos.Reader,
+	get_reader func(types.BlockNum) dpos_2.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
@@ -73,7 +73,7 @@ func (self *StateTransition) Init(
 		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
 	}
 	self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&self.evm_state})
-	self.dpos_v2_contract = new(dpos_2.Contract).Init(poc.EVMStateStorage{&self.evm_state}, state_desc.BlockNum)
+	self.dpos_v2_contract = new(dpos_2.Contract).Init(poc.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
 
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
@@ -118,6 +118,9 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 		self.poc_contract.Register(self.evm.RegisterPrecompiledContract)
 		self.dpos_v2_contract.Register(self.evm.RegisterPrecompiledContract)
+	}
+	if self.dpos_contract != nil {
+		self.dpos_v2_contract.UpdateStorage(self.get_reader(blk_n))
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)

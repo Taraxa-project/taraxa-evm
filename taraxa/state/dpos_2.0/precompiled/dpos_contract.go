@@ -10,15 +10,10 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
-
-var (
-	field_staking_balances = []byte{0}
-)
 
 var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
 var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
@@ -96,14 +91,18 @@ type DelegatorValidators struct {
 
 // Contract storage fields keys
 var (
-	field_validators_info = []byte{0}
+	field_validators_info 		= []byte{0}
 	// field_validators_delegators = []byte{1}
 	field_delegators_validators = []byte{1}
 	field_delayed_requests      = []byte{2}
+	field_eligible_count 		= []byte{3}
+	field_eligible_vote_count	= []byte{4}
+	field_amount_delegated 		= []byte{5}
 )
 
 type Contract struct {
 	Storage StorageWrapper
+	DelayedStorage Reader
 	Abi     abi.ABI
 
 	// Validadors basic info, e.g. total stake, commission, etc...
@@ -125,9 +124,9 @@ type Contract struct {
 // 4. are processed automatically in Commit() function
 // 6. does not need to be saved in storage - just memory is ok
 
-func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockNum) *Contract {
+func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
 	self.Storage.Init(storage)
-
+	self.DelayedStorage = readStorage
 	dpos_abi, err := ioutil.ReadFile("DposInterface.abi")
 	if err != nil {
 		panic("Unable to load dpos contract interface abi: " + err.Error())
@@ -137,6 +136,10 @@ func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockN
 	// TODO: read delayedRequest from storage for blocks <last_commited_block_num+1, last_commited_block_num + 1 + delay>
 
 	return self
+}
+
+func (self *Contract) UpdateStorage(readStorage Reader) {
+	self.DelayedStorage = readStorage
 }
 
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
@@ -237,13 +240,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse isValidatorEligible input args: ", err)
 			return nil, err
 		}
-
-		result, err := self.isValidatorEligible(ctx, args)
-		if err != nil {
-			fmt.Println("isValidatorEligible processing error: ", err)
-			return nil, err
-		}
-
+		result:= self.DelayedStorage.IsValidatorEligible(&args.Validator)
 		return method.Outputs.Pack(result)
 
 	case "getTotalEligibleValidatorsCount":
@@ -253,12 +250,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		result, err := self.getTotalEligibleValidatorsCount(ctx, args)
-		if err != nil {
-			fmt.Println("getTotalEligibleValidatorsCount processing error: ", err)
-			return nil, err
-		}
-
+		result := self.DelayedStorage.GetTotalEligibleValidatorsCount()
 		return method.Outputs.Pack(result)
 
 	case "getTotalEligibleVotesCount":
@@ -268,12 +260,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		result, err := self.getTotalEligibleVotesCount(ctx, args)
-		if err != nil {
-			fmt.Println("getTotalEligibleVotesCount processing error: ", err)
-			return nil, err
-		}
-
+		result := self.DelayedStorage.GetTotalEligibleVotesCount()
 		return method.Outputs.Pack(result)
 
 	case "getValidatorEligibleVotesCount":
@@ -283,12 +270,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		result, err := self.getValidatorEligibleVotesCount(ctx, args)
-		if err != nil {
-			fmt.Println("getValidatorEligibleVotesCount processing error: ", err)
-			return nil, err
-		}
-
+		result:= self.DelayedStorage.GetValidatorEligibleVotesCount(&args.Validator)
 		return method.Outputs.Pack(result)
 	}
 
@@ -386,20 +368,4 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 
 func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) error {
 	return nil
-}
-
-func (self *Contract) isValidatorEligible(ctx vm.CallFrame, args IsValidatorEligibleArgs) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (self *Contract) getTotalEligibleValidatorsCount(ctx vm.CallFrame, args GetTotalEligibleValidatorsCountArgs) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (self *Contract) getTotalEligibleVotesCount(ctx vm.CallFrame, args GetTotalEligibleVotesCountArgs) (*big.Int, error) {
-	return big.NewInt(0), nil
-}
-
-func (self *Contract) getValidatorEligibleVotesCount(ctx vm.CallFrame, args GetValidatorEligibleVotesCountArgs) (*big.Int, error) {
-	return big.NewInt(0), nil
 }
