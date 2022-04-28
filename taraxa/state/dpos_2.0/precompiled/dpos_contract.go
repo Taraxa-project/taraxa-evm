@@ -6,7 +6,10 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -15,10 +18,6 @@ import (
 )
 
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
-
-var (
-	field_staking_balances = []byte{0}
-)
 
 var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
 var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
@@ -34,8 +33,83 @@ var ErrNoTransfers = util.ErrorString("no transfers")
 var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
+// IterableMap storage wrapper
+type IterableMap struct {
+	storage                     StorageWrapper
+	keys_storage_prefix         []byte
+	keys_length_storage_key     *common.Hash
+	keys_mapping_storage_prefix []byte
+
+	// TODO: we can also save it into the memory, cache it or whatever - next step
+	//keys         []common.Address
+	//keys_mapping map[common.Address]uint64 // mapping with indexes for keys array
+}
+
+func (self *IterableMap) Init(prefix []byte) {
+	// Each item inside keys array is stored under key = stor_k_2(prefix, bin.BytesView("keys"), bin.ENC_b_endian_64(pos))
+
+	// Just pseudo code
+	self.keys_storage_prefix = append(prefix, bin.BytesView("keys")...) // keys are stored under "keys_storage_prefix + pos" key
+	self.keys_length_storage_key = stor_k_1(prefix, bin.BytesView("keys_len"))
+	self.keys_mapping_storage_prefix = append(prefix, bin.BytesView("keys_map")...) // key_mappings are stored under "keys_mapping_storage_prefix + address" key
+}
+
+func (self *IterableMap) ExistAccount(account common.Address) bool {
+	key := stor_k_1(self.keys_mapping_storage_prefix, account[:])
+	var validator_addr common.Address
+
+	// Loads validator delegators from storage
+	self.storage.Get(key, func(bytes []byte) {
+		rlp.MustDecodeBytes(bytes, &validator_addr)
+	})
+
+	return validator_addr != common.ZeroAddress
+}
+
+func (self *IterableMap) CreateAccount(account common.Address) bool {
+	if self.ExistAccount(account) {
+		//panic("Account already exists")
+		return false
+	}
+
+	// Gets keys array length
+	var keys_length *big.Int
+	self.storage.Get(self.keys_length_storage_key, func(bytes []byte) {
+		rlp.MustDecodeBytes(bytes, &keys_length)
+	})
+
+	// Saves new item into the keys array with key -> self.keys_storage_prefix + pos
+	keys_k := stor_k_1(self.keys_storage_prefix, rlp.MustEncodeToBytes(keys_length))
+	self.storage.Put(keys_k, rlp.MustEncodeToBytes(account))
+
+	// Save position of ney item in keys array into the keys mapping
+	keys_mapping_k := stor_k_1(self.keys_mapping_storage_prefix, account[:])
+	self.storage.Put(keys_mapping_k, rlp.MustEncodeToBytes(keys_length))
+
+	// Saves new keys array length
+	keys_length = bigutil.Add(keys_length, big.NewInt(1))
+	self.storage.Put(self.keys_length_storage_key, rlp.MustEncodeToBytes(keys_length))
+
+	return true
+}
+
+func (self *IterableMap) RemoveAccount(account common.Address) bool {
+	// TODO: delete item in iterable map
+
+	return true
+}
+
+func (self *IterableMap) GetAccounts() (result []common.Address) {
+	// Load array length from arr_length := storage.get(self.keys_length_storage_key)
+
+	// Load addresses for pos: 0 -> arr_length:
+	//   result[pos] = storage.get(self.keys_storage_prefix + pos_
+
+	return result
+}
+
 // Validator basic info
-type ValidatorBasicInfo struct {
+type Validator struct {
 	// TotalStake == sum of all delegated tokens to the validator
 	TotalStake *big.Int
 
@@ -47,23 +121,19 @@ type ValidatorBasicInfo struct {
 
 	// Short description
 	// TODO: optional - maybe we dont want this ?
-	Description string
+	//Description string
 
 	// Validator's website url
 	// TODO: optional - maybe we dont want this ?
-	Endpoint string
+	//Endpoint string
 }
 
-// Validator info
-type ValidatorInfo struct {
-	// Validtor basic info
-	BasicInfo ValidatorBasicInfo
-
+type ValidatorDelegators struct {
 	// List of validator's delegators
-	Delegators map[common.Address]*DelegatorInfo
+	Delegators map[common.Address]Delegator
 }
 
-type DelegatorInfo struct {
+type Delegator struct {
 	// Num of delegated tokens == delegator's stake
 	Stake *big.Int
 
@@ -76,7 +146,13 @@ type DelegatorInfo struct {
 
 	// Undelegate request
 	// TODO: rethink implementation of undelegations
-	UndelegateRequests []*UndelegateRequest
+	//UndelegateRequests []*UndelegateRequest
+}
+
+func (delegator Delegator) Serialize() (result []byte) {
+	// TODO: serialize delegator into the byte array
+
+	return result
 }
 
 type UndelegateRequest struct {
@@ -94,36 +170,36 @@ type DelegatorValidators struct {
 	Validators map[common.Address]bool // instead of set
 }
 
-// Contract storage fields keys
-var (
-	field_validators_info = []byte{0}
-	// field_validators_delegators = []byte{1}
-	field_delegators_validators = []byte{1}
-	field_delayed_requests      = []byte{2}
-)
-
 type Contract struct {
 	Storage StorageWrapper
 	Abi     abi.ABI
 
-	// Validadors basic info, e.g. total stake, commission, etc...
-	ValidatorsInfo map[common.Address]*ValidatorInfo
+	// TODO: mappings that are going to be in storage
+	// 			 1. field_validators + validator_address -> Serialized(Validator) // non-iterable map thath holds basic validator info // can be loaded during init based on 3.
+	//			 2. field_validators_delegators + validator_address -> Serialized(ValidatorDelegators) // non-iterable map that holds delegator(who delegated to validator_address) info // can be loaded during init based on 3.
+	// 			 3. IterableMap(field_validators_iter_map) // iterbale map of address of all validators, real data have to be fetched from 1. and 2. maps // can be loaded during init
+	//			 4. IterableMap(field_delegators_validators_iter_map + delegator_address) // iterbale map of address of all validators that delegator delegated to, real data have to be fetched from 1. and 2. maps
+	//			 4'. delegators_validators map[common.Address]*IterableMap(field_delegators_validators_iter_map + delegator_address) // cannot be loaded during init - has to be created ad-hod if it does not exist in delegators_validators
 
-	// Delegators list of their validators -> key = delegator address
-	DelegatorsValidators map[common.Address]*DelegatorValidators
+	// Storage - related structures
+	ValidatorsIterMap    IterableMap
+	DelegatorsValidators map[common.Address]IterableMap
+
+	// Validadors basic info, e.g. total stake, commission, etc...
+	// ValidatorsInfo map[common.Address]*ValidatorInfo
+
+	// // Delegators list of their validators -> key = delegator address
+	// DelegatorsValidators map[common.Address]*DelegatorValidators
 }
 
-// TODO: mappings that are going to be in in memory as well as storage
-// 1. validatorsInfo: address -> ValidatorInfo
-// 2. validatorsDelegators: address -> ValidatorDelegators
-// 3. delegatorValidators: address -> DelegatorValidators
-// 4. delayedRequest: block_num -> []DelayedRequests				// delayed delegation & undelegation requests that will be processed at the end of block_num.
-// 5. delayedUndelegations: block_num -> []DelayedRequests  // delayed undelegations
-// 6. delegatorDelayedUndelegations: address -> []DelayedRequests		// delayed undelegations for specific user - it is needed to check if he can do another undelegation request due to inefficient remaining stake
-//
-// Notes:
-// 4. are processed automatically in Commit() function
-// 6. does not need to be saved in storage - just memory is ok
+var (
+	field_validators                     = []byte{0}
+	field_validators_delegators          = []byte{1}
+	field_validators_iter_map            = []byte{2}
+	field_delegators_validators_iter_map = []byte{3}
+
+	//...
+)
 
 func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockNum) *Contract {
 	self.Storage.Init(storage)
@@ -133,6 +209,8 @@ func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockN
 		panic("Unable to load dpos contract interface abi: " + err.Error())
 	}
 	self.Abi, _ = abi.JSON(strings.NewReader(string(dpos_abi)))
+
+	self.ValidatorsIterMap.Init(field_validators_iter_map)
 
 	// TODO: read delayedRequest from storage for blocks <last_commited_block_num+1, last_commited_block_num + 1 + delay>
 
@@ -295,63 +373,82 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	return nil, nil
 }
 
+func (self *Contract) createValidator(validator_addr common.Address, stake *big.Int, commission *big.Int) error {
+	validators_k := stor_k_1(field_validators, validator_addr[:])
+	validator := Validator{stake, commission, big.NewInt(0)}
+	self.Storage.Put(validators_k, rlp.MustEncodeToBytes(validator))
+
+	self.ValidatorsIterMap.CreateAccount(validator_addr)
+
+	// Validator must also be a delegator to himself(has to have some self stake)
+	self.createDelegator(validator_addr, validator_addr, stake)
+
+	return nil
+}
+
+func (self *Contract) createDelegator(validator_addr common.Address, delegator_addr common.Address, stake *big.Int) error {
+	validator_delegators_k := stor_k_1(field_validators_delegators, validator_addr[:])
+	var validator_delegators ValidatorDelegators
+
+	// Loads validator delegators from storage
+	self.Storage.Get(validator_delegators_k, func(bytes []byte) {
+		rlp.MustDecodeBytes(bytes, &validator_delegators)
+	})
+
+	validator_delegators.Delegators[delegator_addr] = Delegator{stake, big.NewInt(0), big.NewInt(0)}
+
+	// Save adjusted validator delegators into storage
+	self.Storage.Put(validator_delegators_k, rlp.MustEncodeToBytes(validator_delegators))
+
+	return nil
+}
+
+func (self *Contract) addDelegatorsStake(validator_addr common.Address, delegator_addr common.Address, stake *big.Int) error {
+	validator_delegators_k := stor_k_1(field_validators_delegators, validator_addr[:])
+	var validator_delegators ValidatorDelegators
+
+	// Loads validator delegators from storage
+	self.Storage.Get(validator_delegators_k, func(bytes []byte) {
+		rlp.MustDecodeBytes(bytes, &validator_delegators)
+	})
+
+	if delegator, found := validator_delegators.Delegators[delegator_addr]; found {
+		delegator.Stake = bigutil.Add(delegator.Stake, stake)
+		validator_delegators.Delegators[delegator_addr] = delegator
+
+		// Save adjusted validator delegators into storage
+		self.Storage.Put(validator_delegators_k, rlp.MustEncodeToBytes(validator_delegators))
+		return nil
+	}
+
+	// This should never happen
+	panic("Delegator not found")
+}
+
 // Delegates <amount> of tokens to specified validator
 func (self *Contract) delegate(ctx vm.CallFrame, args DelegateArgs) error {
-	// // TODO: is the storga echange undo if the tx fails or not ?
-	// if !self.Storage.SubBalance(&delegator_addr, amount) {
-	// 	return ErrInsufficientBalance
-	// }
+	// TODO: some checks for insufficient balance, etc...
 
-	// // Checks if validator exists
-	// var validator *ValidatorInfo = nil
-	// validator, validator_exists := self.ValidatorsInfo[validator_addr]
+	// Checks if validator exists
+	if self.ValidatorsIterMap.ExistAccount(args.Validator) == false {
+		return util.ErrorString("Non-existent validator")
+	}
 
-	// // No such validator in memory - try to get him from storage
-	// if validator_exists == false {
-	// 	k := stor_k_1(field_validators_info, validator_addr[:])
-	// 	self.Storage.Get(k, func(bytes []byte) {
-	// 		validator = make(ValidatorInfo)
-	// 		rlp.MustDecodeBytes(bytes, validator)
-	// 	})
+	// Loads iterable map of validator for specified delegator
+	var delegator_validators_iter_map IterableMap
+	if delegator_validators_iter_map, found := self.DelegatorsValidators[*ctx.Account.Address()]; !found {
+		delegator_validators_iter_map = IterableMap{}
+		delegator_validators_iter_map.Init(append(field_delegators_validators_iter_map, ctx.Account.Address().Bytes()...))
 
-	// 	if validator == nil {
-	// 		return ErrNonExistentValidator
-	// 	}
-	// }
+		self.DelegatorsValidators[*ctx.Account.Address()] = delegator_validators_iter_map
+	}
 
-	// // Checks max validator's stake condition
-	// if validator.TotalStake+amount > MAX_VALIDATOR_STAKE {
-	// 	return ErrValidatorsMaxStakeExceeded
-	// }
-
-	// // Checks if validator has such delegator already
-	// var delegator *DelegatorInfo = nil
-	// delegator, delegator_exists := validator.Delegators[delegator_addr]
-	// // No such delegator exists
-	// if delegator_exists == false {
-	// 	if amount.Cmp(MIN_DELEGATOR_STAKE) < 0 {
-	// 		return ErrInsufficientDelegation
-	// 	}
-
-	// 	delegator = make(DelegatorInfo)
-	// 	delegator.Stake = amount
-
-	// 	// TODO: add validator as delegator's validator and put it into the storage
-	// } else {
-	// 	if delegator.Stake.Add(amount).Cmp(MIN_DELEGATOR_STAKE) < 0 {
-	// 		return ErrInsufficientDelegation
-	// 	}
-
-	// 	delegator.Stake = delegator.Stake.Add(amount)
-	// }
-
-	// validator.TotalStake = validator.TotalStake.Add(amount)
-	// validator.Delegators[delegator_addr] = delegator
-
-	// self.ValidatorsInfo[validator_addr] = validator
-	// self.Storage.Put(
-	// 	stor_k_1(field_validators_info, validator_addr[:]),
-	// 	rlp.MustEncodeToBytes(validator))
+	// Checks if delegator exists
+	if delegator_validators_iter_map.ExistAccount(args.Validator) == false {
+		self.createDelegator(args.Validator, *ctx.Account.Address(), ctx.Value)
+	} else {
+		self.addDelegatorsStake(args.Validator, *ctx.Account.Address(), ctx.Value)
+	}
 
 	return nil
 }
@@ -377,6 +474,14 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, args ClaimCommiss
 }
 
 func (self *Contract) registerValidator(ctx vm.CallFrame, args RegisterValidatorArgs) error {
+	if self.ValidatorsIterMap.ExistAccount(*ctx.Account.Address()) == true {
+		return util.ErrorString("Validator already exists")
+	}
+
+	// TODO: check all conditions
+
+	self.createValidator(*ctx.Account.Address(), ctx.Value, args.Commission)
+
 	return nil
 }
 
