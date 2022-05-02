@@ -9,7 +9,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -32,81 +31,6 @@ var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
 var ErrNoTransfers = util.ErrorString("no transfers")
 var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
-
-// IterableMap storage wrapper
-type IterableMap struct {
-	storage                     StorageWrapper
-	keys_storage_prefix         []byte
-	keys_length_storage_key     *common.Hash
-	keys_mapping_storage_prefix []byte
-
-	// TODO: we can also save it into the memory, cache it or whatever - next step
-	//keys         []common.Address
-	//keys_mapping map[common.Address]uint64 // mapping with indexes for keys array
-}
-
-func (self *IterableMap) Init(prefix []byte) {
-	// Each item inside keys array is stored under key = stor_k_2(prefix, bin.BytesView("keys"), bin.ENC_b_endian_64(pos))
-
-	// Just pseudo code
-	self.keys_storage_prefix = append(prefix, bin.BytesView("keys")...) // keys are stored under "keys_storage_prefix + pos" key
-	self.keys_length_storage_key = stor_k_1(prefix, bin.BytesView("keys_len"))
-	self.keys_mapping_storage_prefix = append(prefix, bin.BytesView("keys_map")...) // key_mappings are stored under "keys_mapping_storage_prefix + address" key
-}
-
-func (self *IterableMap) ExistAccount(account common.Address) bool {
-	key := stor_k_1(self.keys_mapping_storage_prefix, account[:])
-	var validator_addr common.Address
-
-	// Loads validator delegators from storage
-	self.storage.Get(key, func(bytes []byte) {
-		rlp.MustDecodeBytes(bytes, &validator_addr)
-	})
-
-	return validator_addr != common.ZeroAddress
-}
-
-func (self *IterableMap) CreateAccount(account common.Address) bool {
-	if self.ExistAccount(account) {
-		//panic("Account already exists")
-		return false
-	}
-
-	// Gets keys array length
-	var keys_length *big.Int
-	self.storage.Get(self.keys_length_storage_key, func(bytes []byte) {
-		rlp.MustDecodeBytes(bytes, &keys_length)
-	})
-
-	// Saves new item into the keys array with key -> self.keys_storage_prefix + pos
-	keys_k := stor_k_1(self.keys_storage_prefix, rlp.MustEncodeToBytes(keys_length))
-	self.storage.Put(keys_k, rlp.MustEncodeToBytes(account))
-
-	// Save position of ney item in keys array into the keys mapping
-	keys_mapping_k := stor_k_1(self.keys_mapping_storage_prefix, account[:])
-	self.storage.Put(keys_mapping_k, rlp.MustEncodeToBytes(keys_length))
-
-	// Saves new keys array length
-	keys_length = bigutil.Add(keys_length, big.NewInt(1))
-	self.storage.Put(self.keys_length_storage_key, rlp.MustEncodeToBytes(keys_length))
-
-	return true
-}
-
-func (self *IterableMap) RemoveAccount(account common.Address) bool {
-	// TODO: delete item in iterable map
-
-	return true
-}
-
-func (self *IterableMap) GetAccounts() (result []common.Address) {
-	// Load array length from arr_length := storage.get(self.keys_length_storage_key)
-
-	// Load addresses for pos: 0 -> arr_length:
-	//   result[pos] = storage.get(self.keys_storage_prefix + pos_
-
-	return result
-}
 
 // Validator basic info
 type Validator struct {
@@ -210,7 +134,7 @@ func (self *Contract) Init(storage Storage, last_commited_block_num types.BlockN
 	}
 	self.Abi, _ = abi.JSON(strings.NewReader(string(dpos_abi)))
 
-	self.ValidatorsIterMap.Init(field_validators_iter_map)
+	self.ValidatorsIterMap.Init(self.Storage, field_validators_iter_map)
 
 	// TODO: read delayedRequest from storage for blocks <last_commited_block_num+1, last_commited_block_num + 1 + delay>
 
@@ -430,7 +354,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, args DelegateArgs) error {
 	// TODO: some checks for insufficient balance, etc...
 
 	// Checks if validator exists
-	if self.ValidatorsIterMap.ExistAccount(args.Validator) == false {
+	if self.ValidatorsIterMap.AccountExists(args.Validator) == false {
 		return util.ErrorString("Non-existent validator")
 	}
 
@@ -438,13 +362,13 @@ func (self *Contract) delegate(ctx vm.CallFrame, args DelegateArgs) error {
 	var delegator_validators_iter_map IterableMap
 	if delegator_validators_iter_map, found := self.DelegatorsValidators[*ctx.Account.Address()]; !found {
 		delegator_validators_iter_map = IterableMap{}
-		delegator_validators_iter_map.Init(append(field_delegators_validators_iter_map, ctx.Account.Address().Bytes()...))
+		delegator_validators_iter_map.Init(self.Storage, append(field_delegators_validators_iter_map, ctx.Account.Address().Bytes()...))
 
 		self.DelegatorsValidators[*ctx.Account.Address()] = delegator_validators_iter_map
 	}
 
 	// Checks if delegator exists
-	if delegator_validators_iter_map.ExistAccount(args.Validator) == false {
+	if delegator_validators_iter_map.AccountExists(args.Validator) == false {
 		self.createDelegator(args.Validator, *ctx.Account.Address(), ctx.Value)
 	} else {
 		self.addDelegatorsStake(args.Validator, *ctx.Account.Address(), ctx.Value)
@@ -474,7 +398,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, args ClaimCommiss
 }
 
 func (self *Contract) registerValidator(ctx vm.CallFrame, args RegisterValidatorArgs) error {
-	if self.ValidatorsIterMap.ExistAccount(*ctx.Account.Address()) == true {
+	if self.ValidatorsIterMap.AccountExists(*ctx.Account.Address()) == true {
 		return util.ErrorString("Validator already exists")
 	}
 
