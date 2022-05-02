@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -95,6 +96,14 @@ type Contract struct {
 	storage        StorageWrapper
 	delayedStorage Reader
 	Abi            abi.ABI
+
+	eligible_count_orig      uint64
+	eligible_count           uint64
+	eligible_vote_count_orig uint64
+	eligible_vote_count      uint64
+	amount_delegated_orig    *big.Int
+	amount_delegated         *big.Int
+	lazy_init_done           bool
 }
 
 func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
@@ -125,10 +134,51 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	return uint64(len(ctx.Input)) * 20
 }
 
+func (self *Contract) lazy_init() {
+	if self.lazy_init_done {
+		return
+	}
+	self.lazy_init_done = true
+	self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
+		self.eligible_count_orig = bin.DEC_b_endian_compact_64(bytes)
+	})
+	self.eligible_count = self.eligible_count_orig
+	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
+	})
+	self.eligible_vote_count = self.eligible_vote_count_orig
+	self.amount_delegated_orig = bigutil.Big0
+	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+		self.amount_delegated_orig = bigutil.FromBytes(bytes)
+	})
+	self.amount_delegated = self.amount_delegated_orig
+}
+
 
 func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 	for validator, reward := range rewards {
 		self.update_rewards(&validator, reward)
+	}
+}
+
+func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
+	defer self.storage.ClearCache()
+	//Storage Update
+	self.delayedStorage = readStorage
+	//Handle withdrawals
+	
+	//Update values
+	if self.eligible_count_orig != self.eligible_count {
+		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
+		self.eligible_count_orig = self.eligible_count
+	}
+	if self.eligible_vote_count_orig != self.eligible_vote_count {
+		self.storage.Put(stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
+		self.eligible_vote_count_orig = self.eligible_vote_count
+	}
+	if self.amount_delegated_orig.Cmp(self.amount_delegated) != 0 {
+		self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
+		self.amount_delegated_orig = self.amount_delegated
 	}
 }
 
@@ -146,6 +196,8 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		fmt.Println("Unknown method: ", err)
 		return nil, nil
 	}
+
+	self.lazy_init()
 
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]

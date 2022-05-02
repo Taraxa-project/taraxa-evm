@@ -113,8 +113,8 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 		self.dpos_v2_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.dpos_contract != nil {
-		self.dpos_v2_contract.UpdateStorage(self.get_reader(blk_n))
+	if self.dpos_v2_contract != nil {
+		//self.dpos_v2_contract.BeginBlockCall(self.get_reader(blk_n))
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
@@ -157,6 +157,9 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
+	if self.dpos_v2_contract != nil {
+		self.dpos_v2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1), self.evm.GetBlock().Number)
+	}
 	self.pending_blk_state = nil
 }
 

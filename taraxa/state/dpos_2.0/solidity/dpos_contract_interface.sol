@@ -46,15 +46,15 @@ interface DposInterface {
 
     // Returns eligible validators counts
     // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
-    function getTotalEligibleValidatorsCount() external view returns (uint16);
+    function getTotalEligibleValidatorsCount() external view returns (uint64);
 
     // Returns all validators eligible votes counts
     // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
-    function getTotalEligibleVotesCount() external view returns (uint32);
+    function getTotalEligibleVotesCount() external view returns (uint64);
 
     // Returns specified validator eligible votes count
     // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
-    function getValidatorEligibleVotesCount(address validator) external view returns (uint32);
+    function getValidatorEligibleVotesCount(address validator) external view returns (uint64);
 
 
     struct ValidatorBasicInfo {
