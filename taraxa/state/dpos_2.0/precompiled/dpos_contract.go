@@ -46,12 +46,14 @@ var (
 	field_amount_delegated    = []byte{6}
 )
 
+var Big10000 = new(big.Int).SetInt64(10000)
+
 type Validator struct {
 	// TotalStake == sum of all delegated tokens to the validator
 	TotalStake *big.Int
 
 	// Commission
-	Commission uint16
+	Commission *big.Int
 
 	// Rewards accumulated
 	RewardsPool *big.Int
@@ -93,18 +95,6 @@ type Contract struct {
 	storage        StorageWrapper
 	delayedStorage Reader
 	Abi            abi.ABI
-
-	// Validadors basic info, e.g. total stake, commission, etc...
-	// this will be iterable after each block !!! important performance
-	Validators map[common.Address]*Validator
-
-	ValidatorsInfo map[common.Address]*ValidatorInfo
-
-	// this is state per each validator
-	ValidatorsState map[common.Address]StateMap
-
-	// Delegators list of their delegator -> key = validator address
-	DelegatorsValidators map[common.Address]ValidatorDelegation
 }
 
 func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
@@ -133,6 +123,13 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	// TODO: based on method being called, calculate the gas somehow. Doing it based on the length of input is totally useless
 	return uint64(len(ctx.Input)) * 20
+}
+
+
+func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
+	for validator, reward := range rewards {
+		self.update_rewards(&validator, reward)
+	}
 }
 
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
@@ -200,7 +197,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
 
 	case "claimCommissionRewards":
-		return nil, self.claimCommissionRewards(ctx)
+		return nil, self.claimCommissionRewards(ctx, evm.GetBlock().Number)
 
 	case "registerValidator":
 		var args RegisterValidatorArgs
@@ -349,6 +346,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 	if validator.TotalStake.Cmp(bigutil.Big0) == 0 {
 		self.validator_put(&validator_k, nil)
+		self.validator_info_delete(args.Validator[:])
 		self.state_put(&state_k, nil)
 	} else {
 		self.state_put(&state_k, state)
@@ -416,6 +414,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 
 		if validator_from.TotalStake.Cmp(bigutil.Big0) == 0 {
 			self.validator_put(&validator_from_k, nil)
+			self.validator_info_delete(args.Validator_from[:])
 			self.state_put(&state_k, nil)
 		} else {
 			self.state_put(&state_k, state)
@@ -503,20 +502,42 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	return nil
 }
 
-func (self *Contract) claimCommissionRewards(ctx vm.CallFrame) error {
+func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum) error {
 	validator, validator_k := self.validator_get(ctx.Account.Address()[:])
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+
+	state, state_k := self.state_get(ctx.Account.Address()[:], BlockToBytes(block))
+	if state == nil {
+		old_state := self.state_get_and_decrement(ctx.Account.Address()[:], BlockToBytes(validator.LastUpdated))
+		if old_state == nil {
+			return ErrBrokenState
+		}
+		state = new(State)
+		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
+		validator.RewardsPool = bigutil.Big0
+		validator.LastUpdated = block
+		state.Count++
+	}
+
 	ctx.Account.AddBalance(validator.CommissionRewardsPool)
 	validator.CommissionRewardsPool = bigutil.Big0
+
 	self.validator_put(&validator_k, validator)
+	self.state_put(&state_k, state)
+
 	return nil
 }
 
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
 	validator, validator_k := self.validator_get(ctx.Account.Address()[:])
 	if validator != nil {
+		return ErrExistentValidator
+	}
+
+	validator_info, validator_info_k := self.validator_info_get(ctx.Account.Address()[:])
+	if validator_info != nil {
 		return ErrExistentValidator
 	}
 
@@ -538,7 +559,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	validator = new(Validator)
 	validator.CommissionRewardsPool = bigutil.Big0
 	validator.RewardsPool = bigutil.Big0
-	validator.Commission = args.Commission
+	validator.Commission = new(big.Int).SetUint64(args.Commission)
 	validator.TotalStake = ctx.Value // TODO how to get correct value?
 	validator.LastUpdated = block
 	state.Count++
@@ -548,17 +569,27 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	delegation.LastUpdated = block
 	state.Count++
 
+	validator_info.Description = args.Description
+	validator_info.Endpoint = args.Endpoint
+
+	self.validator_info_put(&validator_info_k, validator_info)
 	self.validator_put(&validator_k, validator)
 	self.delegation_put(&delegation_k, delegation)
 	self.state_put(&state_k, state)
-
-	//TODO set info
 
 	return nil
 }
 
 func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
-	//TODO set info
+	validator_info, validator_info_k := self.validator_info_get(ctx.Account.Address()[:])
+	if validator_info == nil {
+		return ErrNonExistentValidator
+	}
+
+	validator_info.Description = args.Description
+	validator_info.Endpoint = args.Endpoint
+	self.validator_info_put(&validator_info_k, validator_info)
+
 	return nil
 }
 
@@ -568,10 +599,20 @@ func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) er
 		return ErrNonExistentValidator
 	}
 
-	validator.Commission = args.Commission
+	validator.Commission = new(big.Int).SetUint64(args.Commission)
 	self.validator_put(&validator_k, validator)
 
 	return nil
+}
+
+func (self *Contract) update_rewards(validator_addr *common.Address, reward *big.Int) {
+	validator, validator_k := self.validator_get(validator_addr[:])
+	if validator != nil {
+		commission := bigutil.Mul(bigutil.Div(reward, Big10000), validator.Commission )
+		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, commission)
+		validator.RewardsPool = bigutil.Add(validator.RewardsPool, bigutil.Sub(reward, commission))
+		self.validator_put(&validator_k, validator)
+	}
 }
 
 func (self *Contract) validator_get(validator_addr []byte) (validator *Validator, key common.Hash) {
@@ -591,8 +632,31 @@ func (self *Contract) validator_put(key *common.Hash, validator *Validator) {
 	}
 }
 
+func (self *Contract) validator_info_get(validator_addr []byte) (validator_info *ValidatorInfo, key common.Hash) {
+	key = stor_k_2(field_validators_info, validator_addr)
+	self.storage.Get(&key, func(bytes []byte) {
+		validator_info = new(ValidatorInfo)
+		rlp.MustDecodeBytes(bytes, validator_info)
+	})
+	return
+}
+
+func (self *Contract) validator_info_put(key *common.Hash, validator_info *ValidatorInfo) {
+	if validator_info != nil {
+		self.storage.Put(key, rlp.MustEncodeToBytes(validator_info))
+	} else {
+		self.storage.Put(key, nil)
+	}
+}
+
+func (self *Contract) validator_info_delete(validator_addr []byte)  {
+	key := stor_k_1(field_validators_info, validator_addr)
+	self.storage.Put(key, nil)
+	return
+}
+
 func (self *Contract) delegation_get(validator_addr, delegator_addr []byte) (delegation *Delegation, key common.Hash) {
-	key = stor_k_2(field_validators, validator_addr, delegator_addr)
+	key = stor_k_2(field_delegations, validator_addr, delegator_addr)
 	self.storage.Get(&key, func(bytes []byte) {
 		delegation = new(Delegation)
 		rlp.MustDecodeBytes(bytes, delegation)
@@ -609,7 +673,7 @@ func (self *Contract) delegation_put(key *common.Hash, delegation *Delegation) {
 }
 
 func (self *Contract) state_get(validator_addr, block []byte) (state *State, key common.Hash) {
-	key = stor_k_2(field_validators, validator_addr, block)
+	key = stor_k_2(field_state, validator_addr, block)
 	self.storage.Get(&key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
@@ -618,7 +682,7 @@ func (self *Contract) state_get(validator_addr, block []byte) (state *State, key
 }
 
 func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (state *State) {
-	key := stor_k_1(field_validators, validator_addr, block)
+	key := stor_k_1(field_state, validator_addr, block)
 	self.storage.Get(key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)

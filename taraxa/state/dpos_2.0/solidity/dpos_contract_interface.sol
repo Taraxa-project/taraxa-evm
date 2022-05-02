@@ -23,7 +23,7 @@ interface DposInterface {
     function claimCommissionRewards() external;
 
     // Registers new validator - validator also must delegate to himself, he can later withdraw his delegation
-    function registerValidator(uint16 commission, string calldata description, string calldata endpoint) external payable;
+    function registerValidator(uint64 commission, string calldata description, string calldata endpoint) external payable;
 
     /**
      * @notice Sets some of the static validator details.
@@ -34,7 +34,7 @@ interface DposInterface {
     function setValidatorInfo(string calldata description, string calldata endpoint) external;
 
     // Sets validator's commission [%] * 100 so 1% is 100 & 10% is 1000
-    function setCommission(uint16 commission) external;
+    function setCommission(uint64 commission) external;
 
 
     // TODO: these 4 methods below can be all replaced by "getValidator" and "getValidators" calls, but it should be

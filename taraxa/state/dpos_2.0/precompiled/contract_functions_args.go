@@ -20,18 +20,18 @@ type RedelegateArgs struct {
 }
 
 type RegisterValidatorArgs struct {
-	Commission   uint16
-	Descriptions string
+	Commission   uint64
+	Description  string
 	Endpoint     string
 }
 
 type SetValidatorInfoArgs struct {
-	Descriptions string
+	Description  string
 	Endpoint     string
 }
 
 type SetCommissionArgs struct {
-	Commission uint16
+	Commission uint64
 }
 
 type ValidatorArgs struct {
