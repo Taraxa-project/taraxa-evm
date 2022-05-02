@@ -166,7 +166,7 @@ func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
 	//Storage Update
 	self.delayedStorage = readStorage
 	//Handle withdrawals
-	
+
 	//Update values
 	if self.eligible_count_orig != self.eligible_count {
 		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
@@ -319,12 +319,12 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		state.Count++
 	}
 
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.Account.Address()[:])
+	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
 	if delegation == nil {
 		delegation = new(Delegation)
-		ctx.Account.SubBalance(ctx.Value) // TODO how to get correct value?
+		ctx.Account.SubBalance(ctx.Value)
 		delegation.Stake = ctx.Value
-		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value) // TODO how to get correct value?
+		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
@@ -332,11 +332,11 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 			return ErrBrokenState
 		}
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
-		ctx.Account.AddBalance(bigutil.Mul(reward, delegation.Stake))
+		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
-		ctx.Account.SubBalance(ctx.Value) // TODO how to get correct value?
+		ctx.Account.SubBalance(ctx.Value)
 		delegation.Stake = bigutil.Add(delegation.Stake, ctx.Value)
-		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value) // TODO how to get correct value?
+		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	}
 	delegation.LastUpdated = block
 	state.Count++
@@ -354,7 +354,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		return ErrNonExistentValidator
 	}
 
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.Account.Address()[:])
+	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
 	if delegation == nil {
 		return ErrExistentValidator
 	}
@@ -382,9 +382,9 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		return ErrBrokenState
 	}
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
-	ctx.Account.AddBalance(bigutil.Mul(reward, delegation.Stake))
+	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
-	ctx.Account.AddBalance(args.Amount) // TODO move it to wait queue
+	ctx.CallerAccount.AddBalance(args.Amount) // TODO move it to wait queue
 	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
@@ -424,7 +424,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 	}
 	//First we undelegate
 	{
-		delegation, delegation_k := self.delegation_get(args.Validator_from[:], ctx.Account.Address()[:])
+		delegation, delegation_k := self.delegation_get(args.Validator_from[:], ctx.CallerAccount.Address()[:])
 		if delegation == nil {
 			return ErrExistentValidator
 		}
@@ -451,7 +451,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			return ErrBrokenState
 		}
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
-		ctx.Account.AddBalance(bigutil.Mul(reward, delegation.Stake))
+		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
 		delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 		validator_from.TotalStake = bigutil.Sub(validator_from.TotalStake, args.Amount)
@@ -489,7 +489,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			state.Count++
 		}
 
-		delegation, delegation_k := self.delegation_get(args.Validator_to[:], ctx.Account.Address()[:])
+		delegation, delegation_k := self.delegation_get(args.Validator_to[:], ctx.CallerAccount.Address()[:])
 		if delegation == nil {
 			delegation = new(Delegation)
 			delegation.Stake = args.Amount
@@ -501,7 +501,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 				return ErrBrokenState
 			}
 			reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
-			ctx.Account.AddBalance(bigutil.Mul(reward, delegation.Stake))
+			ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 			delegation.Stake = bigutil.Add(delegation.Stake, args.Amount)
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		}
@@ -516,7 +516,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 }
 
 func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorArgs) error {
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.Account.Address()[:])
+	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
 	if delegation == nil {
 		return ErrNonExistentDelegator
 	}
@@ -544,7 +544,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		return ErrBrokenState
 	}
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
-	ctx.Account.AddBalance(bigutil.Mul(reward, delegation.Stake))
+	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 	delegation.LastUpdated = block
 	state.Count++
 
@@ -555,14 +555,14 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 }
 
 func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum) error {
-	validator, validator_k := self.validator_get(ctx.Account.Address()[:])
+	validator, validator_k := self.validator_get(ctx.CallerAccount.Address()[:])
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
 
-	state, state_k := self.state_get(ctx.Account.Address()[:], BlockToBytes(block))
+	state, state_k := self.state_get(ctx.CallerAccount.Address()[:], BlockToBytes(block))
 	if state == nil {
-		old_state := self.state_get_and_decrement(ctx.Account.Address()[:], BlockToBytes(validator.LastUpdated))
+		old_state := self.state_get_and_decrement(ctx.CallerAccount.Address()[:], BlockToBytes(validator.LastUpdated))
 		if old_state == nil {
 			return ErrBrokenState
 		}
@@ -573,7 +573,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		state.Count++
 	}
 
-	ctx.Account.AddBalance(validator.CommissionRewardsPool)
+	ctx.CallerAccount.AddBalance(validator.CommissionRewardsPool)
 	validator.CommissionRewardsPool = bigutil.Big0
 
 	self.validator_put(&validator_k, validator)
@@ -583,22 +583,22 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 }
 
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
-	validator, validator_k := self.validator_get(ctx.Account.Address()[:])
+	validator, validator_k := self.validator_get(ctx.CallerAccount.Address()[:])
 	if validator != nil {
 		return ErrExistentValidator
 	}
 
-	validator_info, validator_info_k := self.validator_info_get(ctx.Account.Address()[:])
+	validator_info, validator_info_k := self.validator_info_get(ctx.CallerAccount.Address()[:])
 	if validator_info != nil {
 		return ErrExistentValidator
 	}
 
-	delegation, delegation_k := self.delegation_get(ctx.Account.Address()[:], ctx.Account.Address()[:])
+	delegation, delegation_k := self.delegation_get(ctx.CallerAccount.Address()[:], ctx.CallerAccount.Address()[:])
 	if delegation != nil {
 		return ErrExistentValidator
 	}
 
-	state, state_k := self.state_get(ctx.Account.Address()[:], BlockToBytes(block))
+	state, state_k := self.state_get(ctx.CallerAccount.Address()[:], BlockToBytes(block))
 	if state != nil {
 		return ErrBrokenState
 	}
@@ -612,12 +612,12 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	validator.CommissionRewardsPool = bigutil.Big0
 	validator.RewardsPool = bigutil.Big0
 	validator.Commission = new(big.Int).SetUint64(args.Commission)
-	validator.TotalStake = ctx.Value // TODO how to get correct value?
+	validator.TotalStake = ctx.Value
 	validator.LastUpdated = block
 	state.Count++
 
 	delegation = new(Delegation)
-	delegation.Stake = ctx.Value // TODO how to get correct value?
+	delegation.Stake = ctx.Value
 	delegation.LastUpdated = block
 	state.Count++
 
@@ -633,7 +633,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 }
 
 func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
-	validator_info, validator_info_k := self.validator_info_get(ctx.Account.Address()[:])
+	validator_info, validator_info_k := self.validator_info_get(ctx.CallerAccount.Address()[:])
 	if validator_info == nil {
 		return ErrNonExistentValidator
 	}
@@ -646,7 +646,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 }
 
 func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) error {
-	validator, validator_k := self.validator_get(ctx.Account.Address()[:])
+	validator, validator_k := self.validator_get(ctx.CallerAccount.Address()[:])
 	if validator == nil {
 		return ErrNonExistentValidator
 	}

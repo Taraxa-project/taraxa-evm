@@ -114,7 +114,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.dpos_v2_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
 	if self.dpos_v2_contract != nil {
-		//self.dpos_v2_contract.BeginBlockCall(self.get_reader(blk_n))
+		//self.dpos_v2_contract.BeginBlockCall(TODO)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
