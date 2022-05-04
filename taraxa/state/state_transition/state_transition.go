@@ -8,10 +8,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
@@ -32,8 +29,7 @@ type StateTransition struct {
 	pending_state_root common.Hash
 	dpos_v2_contract   *dpos_2.Contract
 	dpos_contract      *dpos.Contract // TODO: delete
-	poc_contract       *poc.Contract  // TODO: delete
-	get_reader         func(types.BlockNum) dpos.Reader
+	get_reader         func(types.BlockNum) dpos_2.Reader
 	new_chain_config   *chain_config.ChainConfig
 	LastBlockNum       uint64
 }
@@ -52,7 +48,7 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	get_reader func(types.BlockNum) dpos.Reader,
+	get_reader func(types.BlockNum) dpos_2.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
@@ -72,8 +68,7 @@ func (self *StateTransition) Init(
 	if dpos_api != nil {
 		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
 	}
-	self.poc_contract = new(poc.Contract).Init(poc.EVMStateStorage{&self.evm_state})
-	self.dpos_v2_contract = new(dpos_2.Contract).Init(poc.EVMStateStorage{&self.evm_state}, state_desc.BlockNum)
+	self.dpos_v2_contract = new(dpos_2.Contract).Init(dpos_2.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
 
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
@@ -116,8 +111,10 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
-		self.poc_contract.Register(self.evm.RegisterPrecompiledContract)
 		self.dpos_v2_contract.Register(self.evm.RegisterPrecompiledContract)
+	}
+	if self.dpos_v2_contract != nil {
+		//self.dpos_v2_contract.BeginBlockCall(TODO)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
@@ -160,6 +157,9 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
+	if self.dpos_v2_contract != nil {
+		self.dpos_v2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1), self.evm.GetBlock().Number)
+	}
 	self.pending_blk_state = nil
 }
 

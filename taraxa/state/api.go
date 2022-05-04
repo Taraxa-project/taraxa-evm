@@ -10,7 +10,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/poc"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -26,8 +25,8 @@ type API struct {
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
 	dpos             *dpos.API
+	dpos2            *dpos_2.API
 	dpos_v2_contract *dpos_2.Contract
-	poc_contract     *poc.Contract
 	config           *chain_config.ChainConfig
 }
 
@@ -72,7 +71,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		self.DPOSReader,
+		self.DPOS2Reader,
 		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
@@ -84,7 +83,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.dpos_v2_contract, self.poc_contract, self.config)
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOS2Reader, self.config)
 	return self
 }
 
@@ -136,6 +135,12 @@ func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
 		blk_n = self.config.Hardforks.FixGenesisBlock
 	}
 	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
+		return self.ReadBlock(blk_n)
+	})
+}
+
+func (self *API) DPOS2Reader(blk_n types.BlockNum) dpos_2.Reader {
+	return self.dpos2.NewReader(blk_n, func(blk_n types.BlockNum) dpos_2.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

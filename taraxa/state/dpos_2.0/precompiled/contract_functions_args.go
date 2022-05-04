@@ -8,17 +8,9 @@ import (
 
 // Note: arguments names inside structs must match args names from solidity interface
 
-type DelegateArgs struct {
-	Validator common.Address
-}
-
 type UndelegateArgs struct {
 	Validator common.Address
 	Amount    *big.Int
-}
-
-type ConfirmUndelegateArgs struct {
-	Validator common.Address
 }
 
 type RedelegateArgs struct {
@@ -27,49 +19,22 @@ type RedelegateArgs struct {
 	Amount         *big.Int
 }
 
-type ClaimRewardsArgs struct {
-	Validator common.Address
-	Amount    *big.Int
-}
-
-type ClaimCommissionRewardsArgs struct {
-	Amount *big.Int
-}
-
 type RegisterValidatorArgs struct {
-	Commission   *big.Int
-	Descriptions string
+	Commission   uint64
+	Description  string
 	Endpoint     string
 }
 
 type SetValidatorInfoArgs struct {
-	Descriptions string
+	Description  string
 	Endpoint     string
 }
 
 type SetCommissionArgs struct {
-	Commission *big.Int
+	Commission uint64
 }
 
-type IsValidatorEligibleArgs struct {
-	Block_num *big.Int
-	Validator common.Address
-}
-
-type GetTotalEligibleValidatorsCountArgs struct {
-	Block_num *big.Int
-}
-
-type GetTotalEligibleVotesCountArgs struct {
-	Block_num *big.Int
-}
-
-type GetValidatorEligibleVotesCountArgs struct {
-	Block_num *big.Int
-	Validator common.Address
-}
-
-type GetValidatorArgs struct {
+type ValidatorArgs struct {
 	Validator common.Address
 }
 

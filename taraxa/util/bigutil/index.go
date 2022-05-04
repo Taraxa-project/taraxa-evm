@@ -56,6 +56,14 @@ func Sub(x, y *big.Int) *big.Int {
 	return new(big.Int).Sub(ZeroIfNIL(x), ZeroIfNIL(y))
 }
 
+func Div(x, y *big.Int) *big.Int {
+	return new(big.Int).Div(ZeroIfNIL(x), ZeroIfNIL(y))
+}
+
+func Mul(x, y *big.Int) *big.Int {
+	return new(big.Int).Mul(ZeroIfNIL(x), ZeroIfNIL(y))
+}
+
 type UnsignedBytes []byte
 type UnsignedStr string
 
