@@ -92,6 +92,7 @@ type State struct {
 // This could be saved as one chunk? it will be rarely accesed
 type ValidatorDelegation = map[common.Address]Delegation
 type StateMap = map[*big.Int]State
+
 type Contract struct {
 	storage        StorageWrapper
 	delayedStorage Reader
@@ -114,6 +115,8 @@ func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
 		panic("Unable to load dpos contract interface abi: " + err.Error())
 	}
 	self.Abi, _ = abi.JSON(strings.NewReader(string(dpos_abi)))
+
+	self.ValidatorsIterMap.Init(field_validators_iter_map)
 
 	// TODO: read delayedRequest from storage for blocks <last_commited_block_num+1, last_commited_block_num + 1 + delay>
 
@@ -344,7 +347,6 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	self.delegation_put(&delegation_k, delegation)
 	self.state_put(&state_k, state)
 	self.validator_put(&validator_k, validator)
-
 	return nil
 }
 
@@ -628,7 +630,6 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	self.validator_put(&validator_k, validator)
 	self.delegation_put(&delegation_k, delegation)
 	self.state_put(&state_k, state)
-
 	return nil
 }
 
