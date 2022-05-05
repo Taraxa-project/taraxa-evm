@@ -22,6 +22,5 @@ make devtools
 #### Create SC go class 
 run
 ```
-cd contracts
-abigen --abi=abi/dpos_contract_interface.abi --pkg=taraxaDposClient --out=client/dpos_contract_interface.go
+abigen --abi=abi/DposInterface.abi --pkg=taraxaDposClient --out=dpos_contract_interface.go
 ```
