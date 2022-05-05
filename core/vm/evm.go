@@ -96,7 +96,7 @@ type Transaction struct {
 	Input    []byte
 }
 type ExecutionOpts struct {
-	DisableNonceCheck, DisableGasFee bool
+	DisableNonceCheck, DisableGasFee, EnableNonceSkipping bool
 }
 type ExecutionResult struct {
 	CodeRetval      []byte
@@ -183,11 +183,15 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&trx.From)
 	if !opts.DisableNonceCheck {
-		if nonce := caller.GetNonce(); nonce.Cmp(self.trx.Nonce) < 0 {
-			ret.ConsensusErr = ErrNonceTooHigh
-			fmt.Println("XXXXXXXXXX ErrNonceTooHigh")
-			return
-		} else if nonce.Cmp(self.trx.Nonce) > 0 {
+		nonce := caller.GetNonce();
+		if !opts.EnableNonceSkipping {
+			if nonce.Cmp(self.trx.Nonce) < 0 {
+				ret.ConsensusErr = ErrNonceTooHigh
+				fmt.Println("XXXXXXXXXX ErrNonceTooHigh")
+				return
+			}
+		}
+		if nonce.Cmp(self.trx.Nonce) > 0 {
 			ret.ConsensusErr = ErrNonceTooLow
 			fmt.Println("XXXXXXXXXX ErrNonceTooLow")
 			return
