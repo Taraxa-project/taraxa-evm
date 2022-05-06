@@ -130,16 +130,4 @@ interface DposInterface {
      * @return end          Flag if there are no more delegations left. To get all delegations, caller should fetch all batches until he sees end == true
      **/
     function getDelegatorDelegations(address delegator, uint32 batch) view external returns (DelegationData[] memory delegations, bool end);
-
-
-    /**
-     * @notice Returns list of delegations for specified validator - which delegators delegated to specified validator
-     *
-     * @param validator     validator account addres
-     * @param batch         Batch number to be fetched. If the list is too big it cannot return all delegations in one call. Instead, users are fetching batches of 50 delegations at a time
-     *
-     * @return delegations  Batch of N delegations
-     * @return end          Flag if there are no more delegations left. To get all delegations, caller should fetch all batches until he sees end == true
-     **/
-    function getValidatorDelegations(address validator, uint32 batch) view external returns (DelegationData[] memory delegations, bool end);
 }

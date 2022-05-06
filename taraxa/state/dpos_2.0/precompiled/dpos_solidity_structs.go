@@ -48,6 +48,11 @@ type GetValidatorsRet struct {
 	End        bool
 }
 
+type GetDelegatorDelegationRet struct {
+	Delegations []DposInterfaceDelegationData
+	End         bool
+}
+
 // Note: arguments names inside structs must match args names from solidity interface
 type UndelegateArgs struct {
 	Validator common.Address
@@ -85,10 +90,5 @@ type GetValidatorsArgs struct {
 
 type GetDelegatorDelegationsArgs struct {
 	Delegator common.Address
-	Batch     uint32
-}
-
-type GetValidatorDelegationsArgs struct {
-	Validator common.Address
 	Batch     uint32
 }

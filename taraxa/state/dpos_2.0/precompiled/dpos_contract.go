@@ -21,6 +21,7 @@ var contract_address = new(common.Address).SetBytes(common.FromHex("0x0000000000
 
 var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
 var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
+var ErrNonExistentDelegation = util.ErrorString("Delegation does not exist")
 var ErrExistentValidator = util.ErrorString("Validator already exist")
 var ErrBrokenState = util.ErrorString("Fatal error state is broken")
 var ErrNonExistentDelegator = util.ErrorString("Delegator does not exist")
@@ -54,17 +55,6 @@ const GetValidatorsMaxCount = 50
 // Maximum number of validators per batch returned by getDelegatorDelegations call
 const GetDelegatorDelegationsMaxCount = 50
 
-// Maximum number of validators per batch returned by getValidatorDelegations call
-const GetValidatorDelegationsMaxCount = 50
-
-type Delegation struct {
-	// Num of delegated tokens == delegator's stake
-	Stake *big.Int
-
-	// Block number related to rewards
-	LastUpdated types.BlockNum
-}
-
 type State struct {
 	RwardsPer1Stake *big.Int
 
@@ -77,7 +67,8 @@ type Contract struct {
 	delayedStorage Reader
 	Abi            abi.ABI
 
-	validators Validators
+	validators  Validators
+	delegations Delegations
 
 	eligible_count_orig      uint64
 	eligible_count           uint64
@@ -98,6 +89,7 @@ func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
 	self.Abi, _ = abi.JSON(strings.NewReader(string(dpos_abi)))
 
 	self.validators.Init(self.storage, field_validators)
+	self.delegations.Init(self.storage, field_delegations)
 
 	return self
 }
@@ -287,6 +279,15 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		result := self.getValidators(args)
 		return method.Outputs.Pack(result)
 
+	case "getDelegatorDelegations":
+		var args GetDelegatorDelegationsArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getDelegatorDelegations input args: ", err)
+			return nil, err
+		}
+
+		result := self.getDelegatorDelegations(args)
+		return method.Outputs.Pack(result)
 	}
 
 	return nil, nil
@@ -306,17 +307,16 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
-		// TODO: question: how can we erase validator's RewardsPool during delegation ???
+		// TODO: question: how can we erase validator's RewardsPool during delegation of single delegator ???
 		validator.RewardsPool = bigutil.Big0
 		validator.LastUpdated = block
 		state.Count++
 	}
 
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
-		delegation = new(Delegation)
 		ctx.Account.SubBalance(ctx.Value)
-		delegation.Stake = ctx.Value
+		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
 		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	} else {
 		// We need to claim rewards first
@@ -328,13 +328,15 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
 		ctx.Account.SubBalance(ctx.Value)
+
 		delegation.Stake = bigutil.Add(delegation.Stake, ctx.Value)
+		delegation.LastUpdated = block
+		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
+
 		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	}
-	delegation.LastUpdated = block
-	state.Count++
 
-	self.delegation_put(&delegation_k, delegation)
+	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
 	return nil
@@ -346,9 +348,9 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		return ErrNonExistentValidator
 	}
 
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
-		return ErrExistentValidator
+		return ErrNonExistentDelegation
 	}
 
 	if delegation.Stake.Cmp(args.Amount) == -1 {
@@ -381,11 +383,11 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
 	if delegation.Stake.Cmp(bigutil.Big0) == 0 {
-		self.delegation_put(&delegation_k, nil)
+		self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	} else {
 		delegation.LastUpdated = block
 		state.Count++
-		self.delegation_put(&delegation_k, delegation)
+		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 	}
 
 	// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
@@ -417,9 +419,9 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 	}
 	//First we undelegate
 	{
-		delegation, delegation_k := self.delegation_get(args.Validator_from[:], ctx.CallerAccount.Address()[:])
+		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator_from)
 		if delegation == nil {
-			return ErrExistentValidator
+			return ErrNonExistentDelegation
 		}
 
 		if delegation.Stake.Cmp(args.Amount) == -1 {
@@ -450,11 +452,11 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		validator_from.TotalStake = bigutil.Sub(validator_from.TotalStake, args.Amount)
 
 		if delegation.Stake.Cmp(bigutil.Big0) == 0 {
-			self.delegation_put(&delegation_k, nil)
+			self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator_from)
 		} else {
 			delegation.LastUpdated = block
 			state.Count++
-			self.delegation_put(&delegation_k, delegation)
+			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator_from, delegation)
 		}
 
 		// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
@@ -482,10 +484,9 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			state.Count++
 		}
 
-		delegation, delegation_k := self.delegation_get(args.Validator_to[:], ctx.CallerAccount.Address()[:])
+		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator_to)
 		if delegation == nil {
-			delegation = new(Delegation)
-			delegation.Stake = args.Amount
+			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator_to, block, args.Amount)
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		} else {
 			// We need to claim rewards first
@@ -495,13 +496,16 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			}
 			reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 			ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
+
 			delegation.Stake = bigutil.Add(delegation.Stake, args.Amount)
+			delegation.LastUpdated = block
+			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator_to, delegation)
+
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		}
-		delegation.LastUpdated = block
+
 		state.Count++
 
-		self.delegation_put(&delegation_k, delegation)
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(&args.Validator_to, validator_to)
 	}
@@ -509,7 +513,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 }
 
 func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
-	delegation, delegation_k := self.delegation_get(args.Validator[:], ctx.CallerAccount.Address()[:])
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
 		return ErrNonExistentDelegator
 	}
@@ -526,6 +530,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
+		// TODO: question: how can we reset validator's rewards pool after singl delegator claim rewards ?
 		validator.RewardsPool = bigutil.Big0
 		validator.LastUpdated = block
 		state.Count++
@@ -536,12 +541,14 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	if old_state == nil {
 		return ErrBrokenState
 	}
+
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
+	// TODO: question: how is it possible that in case state == nil, we give delegator some rewards but we dont adjust validator's rewards pool ???
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 	delegation.LastUpdated = block
-	state.Count++
+	self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 
-	self.delegation_put(&delegation_k, delegation)
+	state.Count++
 	self.state_put(&state_k, state)
 
 	return nil
@@ -577,18 +584,19 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 }
 
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
-	validator_addres := ctx.CallerAccount.Address()
+	validator_address := ctx.CallerAccount.Address()
 
-	if self.validators.ValidatorExists(validator_addres) {
+	if self.validators.ValidatorExists(validator_address) {
 		return ErrExistentValidator
 	}
 
-	delegation, delegation_k := self.delegation_get(validator_addres[:], validator_addres[:])
+	delegation := self.delegations.GetDelegation(validator_address, validator_address)
 	if delegation != nil {
-		return ErrExistentValidator
+		// This could happen only due some serious logic bug
+		panic("registerValidator: delegation already exists")
 	}
 
-	state, state_k := self.state_get(validator_addres[:], BlockToBytes(block))
+	state, state_k := self.state_get(validator_address[:], BlockToBytes(block))
 	if state != nil {
 		return ErrBrokenState
 	}
@@ -601,16 +609,11 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	state.RwardsPer1Stake = bigutil.Big0
 
 	// Creates validator related objects in storage
-	self.validators.CreateValidator(validator_addres, block, ctx.Value, args.Commission, args.Description, args.Endpoint)
+	self.validators.CreateValidator(validator_address, block, ctx.Value, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 
-	// Creates delegation related objects in storage
-	//self.delegations.CreateDelegation(validator_address, validator_address, block, stake)
-
 	// Creates Delegation object in storage
-	delegation = new(Delegation)
-	delegation.Stake = ctx.Value
-	delegation.LastUpdated = block
+	self.delegations.CreateDelegation(validator_address, validator_address, block, ctx.Value)
 	state.Count++
 
 	self.state_put(&state_k, state)
@@ -648,7 +651,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) er
 	return nil
 }
 
-// TODO: measure performance of this call - if it is too small -> decrease GetValidatorsMaxCount constant
+// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
 func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidatorsRet) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
@@ -683,6 +686,33 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 	return
 }
 
+// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
+func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) (result GetDelegatorDelegationRet) {
+	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+
+	// Reserve slice capacity
+	result.Delegations = make([]DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
+
+	for _, validator_address := range delegator_validators_addresses {
+		delegation := self.delegations.GetDelegation(&args.Delegator, &validator_address)
+		if delegation == nil {
+			// This should never happen
+			panic("getDelegatorDelegations - unable to fetch delegation data")
+		}
+
+		var delegation_data DposInterfaceDelegationData
+		delegation_data.Account = validator_address
+		delegation_data.Delegation.Stake = delegation.Stake
+
+		// TODO: !!!Important - calculate delegator rewards
+		delegation_data.Delegation.Rewards = big.NewInt(0)
+		result.Delegations = append(result.Delegations, delegation_data)
+	}
+
+	result.End = end
+	return
+}
+
 func (self *Contract) update_rewards(validator_address *common.Address, reward *big.Int) {
 	validator := self.validators.GetValidator(validator_address)
 
@@ -692,23 +722,6 @@ func (self *Contract) update_rewards(validator_address *common.Address, reward *
 		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, commission)
 		validator.RewardsPool = bigutil.Add(validator.RewardsPool, bigutil.Sub(reward, commission))
 		self.validators.ModifyValidator(validator_address, validator)
-	}
-}
-
-func (self *Contract) delegation_get(validator_addr, delegator_addr []byte) (delegation *Delegation, key common.Hash) {
-	key = stor_k_2(field_delegations, validator_addr, delegator_addr)
-	self.storage.Get(&key, func(bytes []byte) {
-		delegation = new(Delegation)
-		rlp.MustDecodeBytes(bytes, delegation)
-	})
-	return
-}
-
-func (self *Contract) delegation_put(key *common.Hash, delegation *Delegation) {
-	if delegation != nil {
-		self.storage.Put(key, rlp.MustEncodeToBytes(delegation))
-	} else {
-		self.storage.Put(key, nil)
 	}
 }
 
