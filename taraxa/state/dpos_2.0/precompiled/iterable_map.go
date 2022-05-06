@@ -62,8 +62,8 @@ func (self *IterableMap) CreateAccount(account *common.Address) bool {
 	return true
 }
 
-// Removes account from iterable map
-func (self *IterableMap) RemoveAccount(account *common.Address) bool {
+// Removes account from iterable map, returns number of left accounts in the iterbale map
+func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 	// Gets accounts count
 	accounts_count := uint32(0)
 	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
@@ -88,7 +88,7 @@ func (self *IterableMap) RemoveAccount(account *common.Address) bool {
 		self.storage.Put(delete_acc_pos_k, nil)
 		self.storage.Put(self.accounts_count_storage_key, uint32ToBytes(accounts_count-1))
 
-		return true
+		return accounts_count - 1
 	}
 
 	// There is more accounts saved and account to be deleted is somewhere in the middle
@@ -115,7 +115,7 @@ func (self *IterableMap) RemoveAccount(account *common.Address) bool {
 	self.storage.Put(last_acc_address_at_pos_k, nil)
 	self.storage.Put(self.accounts_count_storage_key, uint32ToBytes(accounts_count-1))
 
-	return true
+	return accounts_count - 1
 }
 
 func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []common.Address, end bool) {

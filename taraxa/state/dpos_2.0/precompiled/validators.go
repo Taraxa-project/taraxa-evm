@@ -73,6 +73,10 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 }
 
 func (self *Validators) ModifyValidator(validator_address *common.Address, validator *Validator) {
+	if validator == nil {
+		panic("ModifyDelegation: validator cannot be nil")
+	}
+
 	// This could happen only due to some serious logic bug
 	if self.ValidatorExists(validator_address) == false {
 		panic("ModifyValidator: non existent validator")
@@ -132,6 +136,10 @@ func (self *Validators) GetValidatorInfo(validator_address *common.Address) (val
 }
 
 func (self *Validators) ModifyValidatorInfo(validator_address *common.Address, validator_info *ValidatorInfo) {
+	if validator_info == nil {
+		panic("ModifyValidatorInfo: validator_info cannot be nil")
+	}
+
 	// This could happen only due to some serious logic bug
 	if self.ValidatorExists(validator_address) == false {
 		panic("ModifyValidatorInfo: non existent validator")
@@ -142,6 +150,6 @@ func (self *Validators) ModifyValidatorInfo(validator_address *common.Address, v
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator_info))
 }
 
-func (self *Validators) GetValidatorsAddresses(batch uint32, count uint32) (result []common.Address, end bool) {
+func (self *Validators) GetValidatorsAddresses(batch uint32, count uint32) ([]common.Address, bool) {
 	return self.validators_list.GetAccounts(batch, count)
 }
