@@ -687,6 +687,7 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 }
 
 // TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
+// TODO: this will be super expensice call probably
 func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) (result GetDelegatorDelegationRet) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
 
@@ -695,7 +696,8 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 
 	for _, validator_address := range delegator_validators_addresses {
 		delegation := self.delegations.GetDelegation(&args.Delegator, &validator_address)
-		if delegation == nil {
+		validator := self.validators.GetValidator(&validator_address)
+		if delegation == nil || validator == nil {
 			// This should never happen
 			panic("getDelegatorDelegations - unable to fetch delegation data")
 		}
@@ -704,8 +706,18 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 		delegation_data.Account = validator_address
 		delegation_data.Delegation.Stake = delegation.Stake
 
-		// TODO: !!!Important - calculate delegator rewards
-		delegation_data.Delegation.Rewards = big.NewInt(0)
+		/// Temp values
+		state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
+		old_state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
+		if state == nil || old_state == nil {
+			// This should never happen
+			panic("getDelegatorDelegations - unable to state data")
+		}
+		current_reward := bigutil.Add(state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
+		reward := bigutil.Sub(current_reward, old_state.RwardsPer1Stake)
+		////
+
+		delegation_data.Delegation.Rewards = bigutil.Mul(reward, delegation.Stake)
 		result.Delegations = append(result.Delegations, delegation_data)
 	}
 
