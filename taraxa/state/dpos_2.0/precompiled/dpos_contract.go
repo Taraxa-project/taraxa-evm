@@ -22,6 +22,9 @@ var contract_address = new(common.Address).SetBytes(common.FromHex("0x0000000000
 var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
 var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
 var ErrNonExistentDelegation = util.ErrorString("Delegation does not exist")
+var ErrExistentUndelegation = util.ErrorString("Undelegation already exist")
+var ErrNonExistentUndelegation = util.ErrorString("Undelegation does not exist")
+var ErrNonReadyUndelegation = util.ErrorString("Undelegation is not yet ready to be withdrawn")
 var ErrExistentValidator = util.ErrorString("Validator already exist")
 var ErrBrokenState = util.ErrorString("Fatal error state is broken")
 var ErrNonExistentDelegator = util.ErrorString("Delegator does not exist")
@@ -38,13 +41,14 @@ var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 // Contract storage fields keys
 var (
-	field_validators  = []byte{0}
-	field_state       = []byte{1}
-	field_delegations = []byte{2}
+	field_validators  	= []byte{0}
+	field_state       	= []byte{1}
+	field_delegations 	= []byte{2}
+	field_undelegations = []byte{3}
 
-	field_eligible_count      = []byte{3}
-	field_eligible_vote_count = []byte{4}
-	field_amount_delegated    = []byte{5}
+	field_eligible_count      = []byte{4}
+	field_eligible_vote_count = []byte{5}
+	field_amount_delegated    = []byte{6}
 )
 
 var Big10000 = new(big.Int).SetInt64(10000)
@@ -54,6 +58,9 @@ const GetValidatorsMaxCount = 50
 
 // Maximum number of validators per batch returned by getDelegatorDelegations call
 const GetDelegatorDelegationsMaxCount = 50
+
+// Undelegation delay 300k blocks ~20 day if time is 6s (this should be part of config)
+const UndelegationDelay = 300000
 
 type State struct {
 	RwardsPer1Stake *big.Int
@@ -67,8 +74,9 @@ type Contract struct {
 	delayedStorage Reader
 	Abi            abi.ABI
 
-	validators  Validators
-	delegations Delegations
+	validators    Validators
+	delegations   Delegations
+	undelegations Undelegations
 
 	eligible_count_orig      uint64
 	eligible_count           uint64
@@ -90,6 +98,7 @@ func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
 
 	self.validators.Init(self.storage, field_validators)
 	self.delegations.Init(self.storage, field_delegations)
+	self.undelegations.Init(self.storage, field_undelegations)
 
 	return self
 }
@@ -136,11 +145,10 @@ func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 
 func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
 	defer self.storage.ClearCache()
-	//Storage Update
+	// Storage Update
 	self.delayedStorage = readStorage
-	//Handle withdrawals
 
-	//Update values
+	// Update values
 	if self.eligible_count_orig != self.eligible_count {
 		self.storage.Put(stor_k_1(field_eligible_count), bin.ENC_b_endian_compact_64_1(self.eligible_count))
 		self.eligible_count_orig = self.eligible_count
@@ -201,7 +209,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return nil, self.confirmUndelegate(ctx, args)
+		return nil, self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
 
 	case "reDelegate":
 		var args RedelegateArgs
@@ -343,6 +351,10 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 }
 
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args UndelegateArgs) error {
+	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+		return ErrExistentUndelegation
+	}
+
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
@@ -375,10 +387,13 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	if old_state == nil {
 		return ErrBrokenState
 	}
+
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
+	// Reward needs to be add to callers accounts as only stake is locked
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
-	ctx.CallerAccount.AddBalance(args.Amount) // TODO move it to wait queue
+	// Creating undelegation request
+	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block + UndelegationDelay, args.Amount)
 	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
@@ -402,7 +417,17 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	return nil
 }
 
-func (self *Contract) confirmUndelegate(ctx vm.CallFrame, args ValidatorAddress) error {
+func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+		return ErrExistentUndelegation
+	}
+	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
+	if undelegation.Block > block {
+		return ErrNonReadyUndelegation
+	}
+	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
+	// TODO slashing of balance
+	ctx.CallerAccount.AddBalance(undelegation.Amount)
 	return nil
 }
 

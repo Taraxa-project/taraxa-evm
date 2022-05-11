@@ -56,6 +56,15 @@ interface DposInterface {
         DelegatorInfo delegation;
     }
 
+    // Retun value for getUndelegations method
+    struct UndelegationData {
+        // Number of tokens that were locked
+        uint256 stake;
+        // block number when it will be unlocked
+        uint64 block;
+        address validator;
+    }
+
     // Delegates tokens to specified validator
     function delegate(address validator) external payable;
 
@@ -64,6 +73,9 @@ interface DposInterface {
 
     // Confirms undelegate request
     function confirmUndelegate(address validator) external;
+
+    // Cancel undelegate request
+    function cancelUndelegate(address validator) external;
 
     // Redelegates <amount> of tokens from one validator to the other
     function reDelegate(address validator_from, address validator_to, uint256 amount) external;
@@ -130,4 +142,15 @@ interface DposInterface {
      * @return end          Flag if there are no more delegations left. To get all delegations, caller should fetch all batches until he sees end == true
      **/
     function getDelegatorDelegations(address delegator, uint32 batch) view external returns (DelegationData[] memory delegations, bool end);
+
+    /**
+     * @notice Returns list of undelegations for specified delegator
+     *
+     * @param delegator       delegator account address
+     * @param batch           Batch number to be fetched. If the list is too big it cannot return all undelegations in one call. Instead, users are fetching batches of 50 undelegations at a time
+     *
+     * @return undelegations  Batch of N undelegations
+     * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
+     **/
+    function getDelegatorUnelegations(address delegator, uint32 batch) view external returns (UndelegationData[] memory undelegations, bool end);
 }
