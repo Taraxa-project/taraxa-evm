@@ -27,11 +27,18 @@ type DposInterfaceDelegatorInfo struct {
 	Rewards *big.Int
 }
 
+// DposInterfaceUndelegationData is an auto generated low-level Go binding around an user-defined struct.
+type DposInterfaceUndelegationData struct {
+	Stake     *big.Int
+	Block     uint64
+	Validator common.Address
+}
+
 // DposInterfaceValidatorBasicInfo is an auto generated low-level Go binding around an user-defined struct.
 type DposInterfaceValidatorBasicInfo struct {
 	TotalStake       *big.Int
-	Commission       uint16
 	CommissionReward *big.Int
+	Commission       uint16
 	Description      string
 	Endpoint         string
 }
@@ -50,6 +57,11 @@ type GetValidatorsRet struct {
 
 type GetDelegatorDelegationRet struct {
 	Delegations []DposInterfaceDelegationData
+	End         bool
+}
+
+type GetUnelegationsRet struct {
+	Undelegations []DposInterfaceUndelegationData
 	End         bool
 }
 
