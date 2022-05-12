@@ -2,7 +2,6 @@ package dpos_2
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"strings"
 
@@ -90,11 +89,7 @@ type Contract struct {
 func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
-	dpos_abi, err := ioutil.ReadFile("DposInterface.abi")
-	if err != nil {
-		panic("Unable to load dpos contract interface abi: " + err.Error())
-	}
-	self.Abi, _ = abi.JSON(strings.NewReader(string(dpos_abi)))
+	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
 
 	self.validators.Init(self.storage, field_validators)
 	self.delegations.Init(self.storage, field_delegations)

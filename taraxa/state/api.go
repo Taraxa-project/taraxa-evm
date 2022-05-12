@@ -67,6 +67,30 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		}
 	}
 
+	if self.config.DPOS != nil {
+		self.dpos2 = new(dpos_2.API).Init(*self.config.DPOS)
+		config_changes := self.rocksdb.GetDPOSConfigChanges()
+		if len(config_changes) == 0 {
+			self.dpos2.UpdateConfig(0, *self.config.DPOS)
+		} else {
+			// Order mapping keys to apply changes in correct order
+			keys := make([]uint64, 0)
+			for k, _ := range config_changes {
+				keys = append(keys, k)
+			}
+			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+			// Decode rlp data from db and apply
+			for _, key := range keys {
+				value := config_changes[key]
+				cfg := new(dpos.Config)
+				rlp.MustDecodeBytes(value, cfg)
+				self.dpos2.UpdateConfig(key, *cfg)
+			}
+		}
+	}
+
+
 	self.state_transition.Init(
 		self.db.GetLatestState(),
 		get_block_hash,
