@@ -41,9 +41,9 @@ var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 // Contract storage fields keys
 var (
-	field_validators  	= []byte{0}
-	field_state       	= []byte{1}
-	field_delegations 	= []byte{2}
+	field_validators    = []byte{0}
+	field_state         = []byte{1}
+	field_delegations   = []byte{2}
 	field_undelegations = []byte{3}
 
 	field_eligible_count      = []byte{4}
@@ -305,6 +305,16 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 		result := self.getDelegatorDelegations(args)
 		return method.Outputs.Pack(result)
+
+	case "getUndelegations":
+		var args GetDelegatorDelegationsArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getUndelegations input args: ", err)
+			return nil, err
+		}
+
+		result := self.getUndelegations(args)
+		return method.Outputs.Pack(result)
 	}
 
 	return nil, nil
@@ -402,7 +412,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
 	// Creating undelegation request
-	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block + UndelegationDelay, args.Amount)
+	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+UndelegationDelay, args.Amount)
 	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
@@ -804,6 +814,32 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 
 		delegation_data.Delegation.Rewards = bigutil.Mul(reward, delegation.Stake)
 		result.Delegations = append(result.Delegations, delegation_data)
+	}
+
+	result.End = end
+	return
+}
+
+
+func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result GetUnelegationsRet) {
+	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+
+	// Reserve slice capacity
+	result.Undelegations = make([]DposInterfaceUndelegationData, 0, len(undelegations_addresses))
+
+	for _, validator_address := range undelegations_addresses {
+		undelegation := self.undelegations.GetUndelegation(&args.Delegator, &validator_address)
+		if undelegation == nil {
+			// This should never happen
+			panic("getUndelegations - unable to fetch undelegation data")
+		}
+
+		var undelegation_data DposInterfaceUndelegationData
+		undelegation_data.Validator = validator_address
+		undelegation_data.Stake = undelegation.Amount
+		undelegation_data.Block = undelegation.Block
+
+		result.Undelegations = append(result.Undelegations, undelegation_data)
 	}
 
 	result.End = end

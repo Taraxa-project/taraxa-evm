@@ -77,6 +77,11 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 	}
 }
 
+func (self *Undelegations) GetUndelegations(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
+	undelegations_list := self.getDelegatorUndelegationsList(delegator_address)
+	return undelegations_list.GetAccounts(batch, count)
+}
+
 func (self *Undelegations) getDelegatorUndelegationsList(delegator_address *common.Address) *IterableMap {
 	delegator_undelegations, found := self.undelegations_map[*delegator_address]
 	if !found {
