@@ -152,5 +152,5 @@ interface DposInterface {
      * @return undelegations  Batch of N undelegations
      * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
      **/
-    function getDelegatorUnelegations(address delegator, uint32 batch) view external returns (UndelegationData[] memory undelegations, bool end);
+    function getDelegatorUndelegations(address delegator, uint32 batch) view external returns (UndelegationData[] memory undelegations, bool end);
 }
