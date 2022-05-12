@@ -211,6 +211,15 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 		return nil, self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
 
+	case "cancelUndelegate":
+		var args ValidatorAddress
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse cancelUndelegate input args: ", err)
+			return nil, err
+		}
+
+		return nil, self.cancelUndelegate(ctx, evm.GetBlock().Number, args)
+
 	case "reDelegate":
 		var args RedelegateArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -419,7 +428,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
-		return ErrExistentUndelegation
+		return ErrNonExistentUndelegation
 	}
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if undelegation.Block > block {
@@ -428,6 +437,57 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	// TODO slashing of balance
 	ctx.CallerAccount.AddBalance(undelegation.Amount)
+	return nil
+}
+
+func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+		return ErrNonExistentUndelegation
+	}
+	validator := self.validators.GetValidator(&args.Validator)
+	if validator == nil {
+		return ErrNonExistentValidator
+	}
+	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
+	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
+
+	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
+	if state == nil {
+		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+		if old_state == nil {
+			return ErrBrokenState
+		}
+		state = new(State)
+		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
+		// TODO: question: how can we erase validator's RewardsPool during delegation of single delegator ???
+		validator.RewardsPool = bigutil.Big0
+		validator.LastUpdated = block
+		state.Count++
+	}
+
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
+	if delegation == nil {
+		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, undelegation.Amount)
+		validator.TotalStake = bigutil.Add(validator.TotalStake, undelegation.Amount)
+	} else {
+		// We need to claim rewards first
+		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
+		if old_state == nil {
+			return ErrBrokenState
+		}
+		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
+		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
+
+		delegation.Stake = bigutil.Add(delegation.Stake, undelegation.Amount)
+		delegation.LastUpdated = block
+		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
+
+		validator.TotalStake = bigutil.Add(validator.TotalStake, undelegation.Amount)
+	}
+
+	state.Count++
+	self.state_put(&state_k, state)
+	self.validators.ModifyValidator(&args.Validator, validator)
 	return nil
 }
 
