@@ -35,7 +35,6 @@ var ErrWithdrawalExceedsDeposit = util.ErrorString("withdrawal exceeds prior dep
 var ErrInsufficientBalanceForDeposits = util.ErrorString("insufficient balance for the deposits")
 var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
 var ErrNoTransfers = util.ErrorString("no transfers")
-var ErrCallValueNonzero = util.ErrorString("call value must be zero")
 var ErrDuplicateBeneficiary = util.ErrorString("duplicate beneficiary")
 
 // Contract storage fields keys
@@ -159,10 +158,6 @@ func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
 }
 
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
-	if ctx.Value.Sign() != 0 {
-		return nil, ErrCallValueNonzero
-	}
-
 	if evm.GetDepth() != 0 {
 		return nil, ErrCallIsNotToplevel
 	}
@@ -177,6 +172,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]
+	fmt.Println("method.Name:", method.Name)
 
 	switch method.Name {
 	case "delegate":

@@ -87,7 +87,7 @@ interface DposInterface {
     function claimCommissionRewards() external;
 
     // Registers new validator - validator also must delegate to himself, he can later withdraw his delegation
-    function registerValidator(uint64 commission, string calldata description, string calldata endpoint) external payable;
+    function registerValidator(uint16 commission, string calldata description, string calldata endpoint) external payable;
 
     /**
      * @notice Sets some of the static validator details.
