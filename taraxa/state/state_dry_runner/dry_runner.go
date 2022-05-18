@@ -14,6 +14,7 @@ type DryRunner struct {
 	db               state_db.DB
 	get_block_hash   vm.GetHashFunc
 	dpos_api         *dpos.API
+	dpos2_api        *dpos_2.API
 	get_reader 		 func(types.BlockNum) dpos_2.Reader
 	chain_config     *chain_config.ChainConfig
 }
@@ -22,12 +23,14 @@ func (self *DryRunner) Init(
 	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
+	dpos2_api *dpos_2.API,
 	get_reader func(types.BlockNum) dpos_2.Reader,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
+	self.dpos2_api = dpos2_api
 	self.get_reader = get_reader
 	self.chain_config = chain_config
 	return self
@@ -52,6 +55,8 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
 	}
-	new(dpos_2.Contract).Init(dpos_2.EVMStateStorage{&evm_state}, self.get_reader(blk.Number))
+	if self.dpos2_api != nil {
+		self.dpos2_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number)).Register(evm.RegisterPrecompiledContract)
+	}
 	return evm.Main(trx, *opts)
 }
