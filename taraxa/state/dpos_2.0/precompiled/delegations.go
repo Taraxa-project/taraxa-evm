@@ -20,7 +20,7 @@ type Delegation struct {
 // as such info is stored under multiple independent storage keys, it is important that caller does not need to
 // think about all implementation details, but just calls functions on Delegations type
 type Delegations struct {
-	storage StorageWrapper
+	storage *StorageWrapper
 	// <delegator addres -> list of validators> as each delegator can delegate to multiple validators
 	delegators_validators map[common.Address]*IterableMap
 
@@ -28,7 +28,7 @@ type Delegations struct {
 	delegators_validators_field_prefix []byte
 }
 
-func (self *Delegations) Init(stor StorageWrapper, prefix []byte) {
+func (self *Delegations) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Delegations storage fields keys - relative to the prefix

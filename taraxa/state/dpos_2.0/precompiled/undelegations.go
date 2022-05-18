@@ -20,7 +20,7 @@ type Undelegation struct {
 }
 
 type Undelegations struct {
-	storage StorageWrapper
+	storage *StorageWrapper
 	// <delegator addres -> list of undelegations> as each delegator can undelegate multiple times
 	undelegations_map map[common.Address]*IterableMap
 
@@ -28,7 +28,7 @@ type Undelegations struct {
 	delegator_undelegations_field      []byte
 }
 
-func (self *Undelegations) Init(stor StorageWrapper, prefix []byte) {
+func (self *Undelegations) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Delegations storage fields keys - relative to the prefix

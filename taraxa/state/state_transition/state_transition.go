@@ -81,6 +81,9 @@ func (self *StateTransition) Init(
 		if self.dpos_contract != nil {
 			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
 		}
+		if self.dpos2_contract != nil {
+			util.PanicIfNotNil(self.dpos2_contract.ApplyGenesis())
+		}
 		self.evm_state_checkpoint()
 		self.Commit()
 	}

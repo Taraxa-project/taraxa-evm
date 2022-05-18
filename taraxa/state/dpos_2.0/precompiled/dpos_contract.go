@@ -92,9 +92,9 @@ func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader) *Con
 	self.delayedStorage = readStorage
 	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
 
-	self.validators.Init(self.storage, field_validators)
-	self.delegations.Init(self.storage, field_delegations)
-	self.undelegations.Init(self.storage, field_undelegations)
+	self.validators.Init(&self.storage, field_validators)
+	self.delegations.Init(&self.storage, field_delegations)
+	self.undelegations.Init(&self.storage, field_undelegations)
 
 	return self
 }
@@ -140,9 +140,6 @@ func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 }
 
 func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
-	// TODO do this on change? or every block is change?
-	self.storage.IncrementNonce(contract_address)
-
 	defer self.storage.ClearCache()
 	// Storage Update
 	self.delayedStorage = readStorage
@@ -160,6 +157,12 @@ func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
 		self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 		self.amount_delegated_orig = self.amount_delegated
 	}
+}
+
+func (self *Contract) ApplyGenesis() error {
+	// TOOD register validators
+	self.storage.IncrementNonce(contract_address)
+	return nil
 }
 
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
@@ -317,8 +320,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 }
 
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
-	fmt.Println("delegate input args: ", args)
-	fmt.Println("delegate input value, address: ", ctx.Value, ctx.CallerAccount.Address())
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
@@ -326,9 +327,6 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
 		// TODO: question: how can we erase validator's RewardsPool during delegation of single delegator ???
@@ -345,9 +343,6 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
@@ -388,9 +383,6 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
 		validator.RewardsPool = bigutil.Big0
@@ -400,10 +392,6 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 	// We need to claim rewards first
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
-	if old_state == nil {
-		return ErrBrokenState
-	}
-
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
@@ -461,9 +449,6 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
 		// TODO: question: how can we erase validator's RewardsPool during delegation of single delegator ???
@@ -479,9 +464,6 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
@@ -523,9 +505,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		state, state_k := self.state_get(args.Validator_from[:], BlockToBytes(block))
 		if state == nil {
 			old_state := self.state_get_and_decrement(args.Validator_from[:], BlockToBytes(validator_from.LastUpdated))
-			if old_state == nil {
-				return ErrBrokenState
-			}
 			state = new(State)
 			state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator_from.RewardsPool, validator_from.TotalStake))
 			validator_from.RewardsPool = bigutil.Big0
@@ -534,9 +513,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		}
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator_from[:], BlockToBytes(delegation.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
@@ -566,9 +542,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		state, state_k := self.state_get(args.Validator_to[:], BlockToBytes(block))
 		if state == nil {
 			old_state := self.state_get_and_decrement(args.Validator_to[:], BlockToBytes(validator_to.LastUpdated))
-			if old_state == nil {
-				return ErrBrokenState
-			}
 			state = new(State)
 			state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator_to.RewardsPool, validator_to.TotalStake))
 			validator_to.RewardsPool = bigutil.Big0
@@ -583,9 +556,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		} else {
 			// We need to claim rewards first
 			old_state := self.state_get_and_decrement(args.Validator_to[:], BlockToBytes(delegation.LastUpdated))
-			if old_state == nil {
-				return ErrBrokenState
-			}
 			reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 			ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
@@ -617,9 +587,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 			return ErrNonExistentValidator
 		}
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
 		// TODO: question: how can we reset validator's rewards pool after singl delegator claim rewards ?
@@ -630,10 +597,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	}
 
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
-	if old_state == nil {
-		return ErrBrokenState
-	}
-
 	reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 	// TODO: question: how is it possible that in case state == nil, we give delegator some rewards but we dont adjust validator's rewards pool ???
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
@@ -656,9 +619,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	state, state_k := self.state_get(ctx.CallerAccount.Address()[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(ctx.CallerAccount.Address()[:], BlockToBytes(validator.LastUpdated))
-		if old_state == nil {
-			return ErrBrokenState
-		}
 		state = new(State)
 		state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
 		validator.RewardsPool = bigutil.Big0
@@ -870,6 +830,10 @@ func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (sta
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
 	})
+	if state == nil {
+		// This should never happen
+		panic("state_get_and_decrement - unable to fetch undelegation data")
+	}
 	state.Count--
 	if state.Count == 0 {
 		self.state_put(key, nil)

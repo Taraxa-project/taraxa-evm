@@ -38,14 +38,14 @@ type ValidatorInfo struct {
 // as such info is stored under multiple independent storage keys, it is important that caller does not need to
 // think about all implementation details, but just calls functions on Validators type
 type Validators struct {
-	storage         StorageWrapper
+	storage         *StorageWrapper
 	validators_list IterableMap
 
 	validators_field      []byte
 	validators_info_field []byte
 }
 
-func (self *Validators) Init(stor StorageWrapper, prefix []byte) {
+func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Validators storage fields keys - relative to the prefix
