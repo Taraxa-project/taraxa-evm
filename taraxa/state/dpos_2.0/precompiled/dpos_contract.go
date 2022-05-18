@@ -68,6 +68,7 @@ type State struct {
 }
 
 type Contract struct {
+	cfg            Config
 	storage        StorageWrapper
 	delayedStorage Reader
 	Abi            abi.ABI
@@ -85,7 +86,8 @@ type Contract struct {
 	lazy_init_done           bool
 }
 
-func (self *Contract) Init(storage Storage, readStorage Reader) *Contract {
+func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader) *Contract {
+	self.cfg = cfg
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
 	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
@@ -138,6 +140,9 @@ func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 }
 
 func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
+	// TODO do this on change? or every block is change?
+	self.storage.IncrementNonce(contract_address)
+
 	defer self.storage.ClearCache()
 	// Storage Update
 	self.delayedStorage = readStorage
@@ -312,11 +317,12 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 }
 
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+	fmt.Println("delegate input args: ", args)
+	fmt.Println("delegate input value, address: ", ctx.Value, ctx.CallerAccount.Address())
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
-
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))

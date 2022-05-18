@@ -64,9 +64,9 @@ func (self *API) UpdateConfig(blk_n uint64, cfg Config) {
 	self.cfg = cfg
 }
 
-// func (self *API) NewContract(storage Storage) *Contract {
-// 	return new(Contract).init(self.cfg, storage)
-// }
+func (self *API) NewContract(storage Storage, reader Reader) *Contract {
+	return new(Contract).Init(self.cfg, storage, reader)
+}
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
