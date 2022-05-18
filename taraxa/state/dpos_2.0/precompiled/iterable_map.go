@@ -13,14 +13,14 @@ var (
 
 // IterableMap storage wrapper
 type IterableMap struct {
-	storage                     StorageWrapper
+	storage                     *StorageWrapper
 	accounts_storage_prefix     []byte       // accounts are stored under "accounts_storage_prefix + pos" key
 	accounts_count_storage_key  *common.Hash // accounts count is stored under accounts_count_storage_key
 	accounts_pos_storage_prefix []byte       // accounts positions are stored under "accounts_pos_storage_prefix + address" key
 }
 
 // Inits iterbale map with prefix, so multiple iterbale maps can coexists thanks to different prefixes
-func (self *IterableMap) Init(stor StorageWrapper, prefix []byte) {
+func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 	self.accounts_storage_prefix = append(prefix, field_accounts...)
 	self.accounts_count_storage_key = stor_k_1(prefix, field_accounts_count)
