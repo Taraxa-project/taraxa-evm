@@ -481,19 +481,19 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 }
 
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args RedelegateArgs) error {
-	//validator_from, validator_from_k := self.validator_get(args.Validator_from[:])
-	validator_from := self.validators.GetValidator(&args.Validator_from)
+	//validator_from, validator_from_k := self.validator_get(args.ValidatorFrom[:])
+	validator_from := self.validators.GetValidator(&args.ValidatorFrom)
 	if validator_from == nil {
 		return ErrNonExistentValidator
 	}
 
-	validator_to := self.validators.GetValidator(&args.Validator_to)
+	validator_to := self.validators.GetValidator(&args.ValidatorTo)
 	if validator_to == nil {
 		return ErrNonExistentValidator
 	}
 	//First we undelegate
 	{
-		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator_from)
+		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
 		if delegation == nil {
 			return ErrNonExistentDelegation
 		}
@@ -502,9 +502,9 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			return ErrInsufficientDelegation
 		}
 
-		state, state_k := self.state_get(args.Validator_from[:], BlockToBytes(block))
+		state, state_k := self.state_get(args.ValidatorFrom[:], BlockToBytes(block))
 		if state == nil {
-			old_state := self.state_get_and_decrement(args.Validator_from[:], BlockToBytes(validator_from.LastUpdated))
+			old_state := self.state_get_and_decrement(args.ValidatorFrom[:], BlockToBytes(validator_from.LastUpdated))
 			state = new(State)
 			state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator_from.RewardsPool, validator_from.TotalStake))
 			validator_from.RewardsPool = bigutil.Big0
@@ -512,7 +512,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			state.Count++
 		}
 		// We need to claim rewards first
-		old_state := self.state_get_and_decrement(args.Validator_from[:], BlockToBytes(delegation.LastUpdated))
+		old_state := self.state_get_and_decrement(args.ValidatorFrom[:], BlockToBytes(delegation.LastUpdated))
 		reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 		ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
@@ -520,28 +520,28 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		validator_from.TotalStake = bigutil.Sub(validator_from.TotalStake, args.Amount)
 
 		if delegation.Stake.Cmp(bigutil.Big0) == 0 {
-			self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator_from)
+			self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
 		} else {
 			delegation.LastUpdated = block
 			state.Count++
-			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator_from, delegation)
+			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom, delegation)
 		}
 
 		// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
 		if validator_from.TotalStake.Cmp(bigutil.Big0) == 0 {
-			self.validators.DeleteValidator(&args.Validator_from)
+			self.validators.DeleteValidator(&args.ValidatorFrom)
 			self.state_put(&state_k, nil)
 		} else {
 			self.state_put(&state_k, state)
-			self.validators.ModifyValidator(&args.Validator_from, validator_from)
+			self.validators.ModifyValidator(&args.ValidatorFrom, validator_from)
 		}
 	}
 
 	// Now we delegate
 	{
-		state, state_k := self.state_get(args.Validator_to[:], BlockToBytes(block))
+		state, state_k := self.state_get(args.ValidatorTo[:], BlockToBytes(block))
 		if state == nil {
-			old_state := self.state_get_and_decrement(args.Validator_to[:], BlockToBytes(validator_to.LastUpdated))
+			old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(validator_to.LastUpdated))
 			state = new(State)
 			state.RwardsPer1Stake = bigutil.Add(old_state.RwardsPer1Stake, bigutil.Div(validator_to.RewardsPool, validator_to.TotalStake))
 			validator_to.RewardsPool = bigutil.Big0
@@ -549,19 +549,19 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			state.Count++
 		}
 
-		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator_to)
+		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo)
 		if delegation == nil {
-			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator_to, block, args.Amount)
+			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		} else {
 			// We need to claim rewards first
-			old_state := self.state_get_and_decrement(args.Validator_to[:], BlockToBytes(delegation.LastUpdated))
+			old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
 			reward := bigutil.Sub(state.RwardsPer1Stake, old_state.RwardsPer1Stake)
 			ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
 			delegation.Stake = bigutil.Add(delegation.Stake, args.Amount)
 			delegation.LastUpdated = block
-			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator_to, delegation)
+			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, delegation)
 
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		}
@@ -569,7 +569,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		state.Count++
 
 		self.state_put(&state_k, state)
-		self.validators.ModifyValidator(&args.Validator_to, validator_to)
+		self.validators.ModifyValidator(&args.ValidatorTo, validator_to)
 	}
 	return nil
 }
@@ -776,7 +776,6 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 	result.End = end
 	return
 }
-
 
 func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result GetUnelegationsRet) {
 	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)

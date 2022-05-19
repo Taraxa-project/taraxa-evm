@@ -64,7 +64,7 @@ type GetDelegatorDelegationRet struct {
 
 type GetUnelegationsRet struct {
 	Undelegations []DposInterfaceUndelegationData
-	End         bool
+	End           bool
 }
 
 // Note: arguments names inside structs must match args names from solidity interface
@@ -74,9 +74,9 @@ type UndelegateArgs struct {
 }
 
 type RedelegateArgs struct {
-	Validator_from common.Address
-	Validator_to   common.Address
-	Amount         *big.Int
+	ValidatorFrom common.Address
+	ValidatorTo   common.Address
+	Amount        *big.Int
 }
 
 type RegisterValidatorArgs struct {

@@ -137,6 +137,12 @@ func (self *DposTest) execute(from common.Address, value uint64, input []byte) v
 	return res
 }
 
+func (self *DposTest) ExecuteAndCheck(from common.Address, value uint64, input []byte, exe_err util.ErrorString, cons_err util.ErrorString)  {
+	res := self.execute(from, value, input)
+	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
+	self.tc.Assert.Equal(exe_err, res.ExecutionErr)
+}
+
 func (self *DposTest) end() {
 	self.statedb.Close()
 	self.tc.Close()
