@@ -141,18 +141,8 @@ func (self *DposTest) execute(from common.Address, value uint64, input []byte) v
 func (self *DposTest) AddRewards(rewards map[common.Address]*big.Int)  {
 	self.blk_n++
 	self.st.BeginBlock(&vm.BlockInfo{}, rewards)
-
-	res := self.st.ExecuteTransaction(&vm.Transaction{
-		Value: new(big.Int).SetUint64(0),
-		To:    &self.dpos_addr,
-		From:  addr(1),
-		Input: []byte("0x123213"),
-	})
-
 	self.st.EndBlock(nil)
 	self.st.Commit()
-	self.tc.Assert.Equal(util.ErrorString(""), res.ConsensusErr)
-	self.tc.Assert.Equal(util.ErrorString(""), res.ExecutionErr)
 }
 
 func (self *DposTest) GetBalance(account common.Address) (*big.Int) {

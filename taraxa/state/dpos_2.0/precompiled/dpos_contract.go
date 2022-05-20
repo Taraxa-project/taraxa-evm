@@ -3,10 +3,12 @@ package dpos_2
 import (
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 
@@ -55,9 +57,6 @@ const GetValidatorsMaxCount = 50
 
 // Maximum number of validators per batch returned by getDelegatorDelegations call
 const GetDelegatorDelegationsMaxCount = 50
-
-// Undelegation delay 300k blocks ~20 day if time is 6s (this should be part of config)
-const UndelegationDelay = 300000
 
 type State struct {
 	RwardsPer1Stake *big.Int
@@ -171,6 +170,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
+		//Todo remove
 		fmt.Println("Unknown method: ", err)
 		return nil, nil
 	}
@@ -262,15 +262,15 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse isValidatorEligible input args: ", err)
 			return nil, err
 		}
-		result := self.delayedStorage.IsValidatorEligible(&args.Validator)
+		result := self.delayedStorage.IsEligible(&args.Validator)
 		return method.Outputs.Pack(result)
 
 	case "getTotalEligibleValidatorsCount":
-		result := self.delayedStorage.GetTotalEligibleValidatorsCount()
+		result := self.delayedStorage.EligibleAddressCount()
 		return method.Outputs.Pack(result)
 
 	case "getTotalEligibleVotesCount":
-		result := self.delayedStorage.GetTotalEligibleVotesCount()
+		result := self.delayedStorage.EligibleVoteCount()
 		return method.Outputs.Pack(result)
 
 	case "getValidatorEligibleVotesCount":
@@ -280,7 +280,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		result := self.delayedStorage.GetValidatorEligibleVotesCount(&args.Validator)
+		result := self.delayedStorage.GetEligibleVoteCount(&args.Validator)
 		return method.Outputs.Pack(result)
 
 	case "getValidators":
@@ -322,6 +322,8 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	was_eligible := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
@@ -353,6 +355,17 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	}
 
+	self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
+	eligible_now := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	if !was_eligible && eligible_now {
+		self.eligible_count++
+	}
+	new_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	if prev_vote_count != new_vote_count {
+		self.eligible_vote_count -= prev_vote_count
+		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+	}
+
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
@@ -368,6 +381,8 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	was_eligible := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
@@ -395,7 +410,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	ctx.CallerAccount.AddBalance(bigutil.Mul(reward, delegation.Stake))
 
 	// Creating undelegation request
-	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+UndelegationDelay, args.Amount)
+	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+self.cfg.WithdrawalDelay, args.Amount)
 	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
@@ -405,6 +420,17 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		delegation.LastUpdated = block
 		state.Count++
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
+	}
+
+	self.amount_delegated = bigutil.Sub(self.amount_delegated, args.Amount)
+	eligible_now := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	if was_eligible && !eligible_now {
+		self.eligible_count--
+	}
+	new_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	if prev_vote_count != new_vote_count {
+		self.eligible_vote_count -= prev_vote_count
+		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
 	}
 
 	// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
@@ -441,6 +467,9 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	was_eligible := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 
@@ -471,6 +500,16 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 
 		validator.TotalStake = bigutil.Add(validator.TotalStake, undelegation.Amount)
 	}
+	self.amount_delegated = bigutil.Add(self.amount_delegated, undelegation.Amount)
+	eligible_now := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	if !was_eligible && eligible_now {
+		self.eligible_count++
+	}
+	new_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	if prev_vote_count != new_vote_count {
+		self.eligible_vote_count -= prev_vote_count
+		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+	}
 
 	state.Count++
 	self.state_put(&state_k, state)
@@ -489,6 +528,12 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 	if validator_to == nil {
 		return ErrNonExistentValidator
 	}
+
+	was_eligible_from := validator_from.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	prev_vote_count_from := vote_count(validator_from.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+
+	was_eligible_to := validator_to.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+	prev_vote_count_to := vote_count(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	//First we undelegate
 	{
 		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
@@ -533,6 +578,17 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			self.state_put(&state_k, state)
 			self.validators.ModifyValidator(&args.ValidatorFrom, validator_from)
 		}
+
+		eligible_now := validator_from.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+		if was_eligible_from && !eligible_now {
+			self.eligible_count--
+		}
+		new_vote_count := vote_count(validator_from.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+		if prev_vote_count_from != new_vote_count {
+			self.eligible_vote_count -= prev_vote_count_from
+			self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+		}
+
 	}
 
 	// Now we delegate
@@ -564,8 +620,17 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
 		}
 
-		state.Count++
+		eligible_now := validator_to.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+		if !was_eligible_to && eligible_now {
+			self.eligible_count++
+		}
+		new_vote_count := vote_count(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+		if prev_vote_count_to != new_vote_count {
+			self.eligible_vote_count -= prev_vote_count_to
+			self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+		}
 
+		state.Count++
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(&args.ValidatorTo, validator_to)
 	}
@@ -854,4 +919,21 @@ func BlockToBytes(number types.BlockNum) []byte {
 	big := new(big.Int)
 	big.SetUint64(number)
 	return big.Bytes()
+}
+
+func vote_count(staking_balance, eligibility_threshold, vote_eligibility_balance_step *big.Int) uint64 {
+	tmp := big.NewInt(0)
+	if staking_balance.Cmp(eligibility_threshold) >= 0 {
+		tmp.Div(staking_balance, vote_eligibility_balance_step)
+	}
+	asserts.Holds(tmp.IsUint64())
+	return tmp.Uint64()
+}
+
+func Add64p(a, b uint64) uint64 {
+	c := a + b
+	if c < a || c < b {
+		panic("addition overflow " + strconv.FormatUint(a, 10) + " " + strconv.FormatUint(b, 10))
+	}
+	return c
 }
