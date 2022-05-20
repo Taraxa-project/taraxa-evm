@@ -26,7 +26,6 @@ var ErrNonExistentUndelegation = util.ErrorString("Undelegation does not exist")
 var ErrNonReadyUndelegation = util.ErrorString("Undelegation is not yet ready to be withdrawn")
 var ErrExistentValidator = util.ErrorString("Validator already exist")
 var ErrBrokenState = util.ErrorString("Fatal error state is broken")
-var ErrNonExistentDelegator = util.ErrorString("Delegator does not exist")
 var ErrValidatorsMaxStakeExceeded = util.ErrorString("Validator's max stake exceeded")
 var ErrInsufficientDelegation = util.ErrorString("Insufficient delegation")
 
@@ -139,7 +138,7 @@ func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 	}
 }
 
-func (self *Contract) EndBlockCall(readStorage Reader, blk_n types.BlockNum) {
+func (self *Contract) EndBlockCall(readStorage Reader) {
 	defer self.storage.ClearCache()
 	// Storage Update
 	self.delayedStorage = readStorage
@@ -180,7 +179,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]
-	fmt.Println("method.Name:", method.Name)
 
 	switch method.Name {
 	case "delegate":
@@ -577,7 +575,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
-		return ErrNonExistentDelegator
+		return ErrNonExistentDelegation
 	}
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
@@ -807,10 +805,12 @@ func (self *Contract) update_rewards(validator_address *common.Address, reward *
 
 	// TODO: situation when validator == nil should never happen, how to handle it ?
 	if validator != nil {
-		commission := bigutil.Mul(bigutil.Div(reward, Big10000), big.NewInt(int64(validator.Commission)))
+		commission := bigutil.Div(bigutil.Mul(reward, big.NewInt(int64(validator.Commission))), Big10000)
 		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, commission)
 		validator.RewardsPool = bigutil.Add(validator.RewardsPool, bigutil.Sub(reward, commission))
 		self.validators.ModifyValidator(validator_address, validator)
+	} else {
+		panic("update_rewards - non exexistent validator")
 	}
 }
 

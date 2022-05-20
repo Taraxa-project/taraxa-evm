@@ -216,7 +216,7 @@ func taraxa_evm_state_api_transition_state(
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
-	st.BeginBlock(&params.Blk)
+	st.BeginBlock(&params.Blk, nil)
 	for i := range params.Trxs {
 		retval.ExecutionResults = append(retval.ExecutionResults, st.ExecuteTransaction(&params.Trxs[i]))
 	}

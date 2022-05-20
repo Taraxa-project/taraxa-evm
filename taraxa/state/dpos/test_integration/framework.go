@@ -204,7 +204,7 @@ func (self *Spec) run(t *testing.T) {
 	check_exp_state(0)
 	st := SUT.GetStateTransition()
 	for blk_n := types.BlockNum(1); blk_n <= last_state_transition_blk_n; blk_n++ {
-		st.BeginBlock(&vm.BlockInfo{})
+		st.BeginBlock(&vm.BlockInfo{}, nil)
 		for _, trx := range self.DposTransactions[blk_n] {
 			dpos_addr := dpos.ContractAddress()
 			res := st.ExecuteTransaction(&vm.Transaction{

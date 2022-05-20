@@ -1,6 +1,7 @@
 package state
 
 import (
+	"math/big"
 	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -127,7 +128,7 @@ func (self *API) Close() {
 }
 
 type StateTransition interface {
-	BeginBlock(*vm.BlockInfo)
+	BeginBlock(*vm.BlockInfo, map[common.Address]*big.Int)
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
 	EndBlock([]state_common.UncleBlock)
 	PrepareCommit() (state_root common.Hash)

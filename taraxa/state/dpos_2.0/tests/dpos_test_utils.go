@@ -9,6 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
 	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -123,7 +124,7 @@ func (self *DposTest) init(t *tests.TestCtx) {
 
 func (self *DposTest) execute(from common.Address, value uint64, input []byte) vm.ExecutionResult {
 	self.blk_n++
-	self.st.BeginBlock(&vm.BlockInfo{})
+	self.st.BeginBlock(&vm.BlockInfo{}, nil)
 
 	res := self.st.ExecuteTransaction(&vm.Transaction{
 		Value: new(big.Int).SetUint64(value),
@@ -135,6 +136,31 @@ func (self *DposTest) execute(from common.Address, value uint64, input []byte) v
 	self.st.EndBlock(nil)
 	self.st.Commit()
 	return res
+}
+
+func (self *DposTest) AddRewards(rewards map[common.Address]*big.Int)  {
+	self.blk_n++
+	self.st.BeginBlock(&vm.BlockInfo{}, rewards)
+
+	res := self.st.ExecuteTransaction(&vm.Transaction{
+		Value: new(big.Int).SetUint64(0),
+		To:    &self.dpos_addr,
+		From:  addr(1),
+		Input: []byte("0x123213"),
+	})
+
+	self.st.EndBlock(nil)
+	self.st.Commit()
+	self.tc.Assert.Equal(util.ErrorString(""), res.ConsensusErr)
+	self.tc.Assert.Equal(util.ErrorString(""), res.ExecutionErr)
+}
+
+func (self *DposTest) GetBalance(account common.Address) (*big.Int) {
+	var bal_actual *big.Int
+	self.SUT.ReadBlock(self.blk_n).GetAccount(&account, func(account state_db.Account) {
+		bal_actual = account.Balance
+	})
+	return bal_actual
 }
 
 func (self *DposTest) ExecuteAndCheck(from common.Address, value uint64, input []byte, exe_err util.ErrorString, cons_err util.ErrorString)  {

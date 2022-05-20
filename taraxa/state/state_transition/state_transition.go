@@ -1,22 +1,24 @@
 package state_transition
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type StateTransition struct {
@@ -110,7 +112,7 @@ func (self *StateTransition) evm_state_checkpoint() {
 	self.evm_state.CommitTransaction(&self.trie_sink, self.evm.GetRules().IsEIP158)
 }
 
-func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
+func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo, rewards map[common.Address]*big.Int) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
@@ -121,7 +123,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		self.dpos2_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
 	if self.dpos2_contract != nil {
-		//self.dpos2_contract.BeginBlockCall(TODO)
+		self.dpos2_contract.BeginBlockCall(rewards)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
@@ -165,7 +167,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
 	if self.dpos2_contract != nil {
-		self.dpos2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1), self.evm.GetBlock().Number)
+		self.dpos2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1))
 	}
 	self.pending_blk_state = nil
 }
