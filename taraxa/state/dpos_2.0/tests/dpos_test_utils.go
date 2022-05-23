@@ -153,6 +153,10 @@ func (self *DposTest) GetBalance(account common.Address) (*big.Int) {
 	return bal_actual
 }
 
+func (self *DposTest) GetDPOSReader() dpos_2.Reader {
+	return self.SUT.DPOS2Reader(self.blk_n)
+}
+
 func (self *DposTest) ExecuteAndCheck(from common.Address, value uint64, input []byte, exe_err util.ErrorString, cons_err util.ErrorString)  {
 	res := self.execute(from, value, input)
 	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
@@ -174,6 +178,19 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 }
 
 
+func init_config_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestCtx, test DposTest){
+	tc = tests.NewTestCtx(t)
+	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
+	test.DposCfg = DposCfg{
+		EligibilityBalanceThreshold: 1000,
+		DepositDelay:                2,
+		WithdrawalDelay:             4,
+		DposGenesisState: 		genesis,
+	}
+	test.init(&tc)
+	return
+}
+
 func init_config(t *testing.T) (tc tests.TestCtx, test DposTest){
 	tc = tests.NewTestCtx(t)
 	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
@@ -181,11 +198,6 @@ func init_config(t *testing.T) (tc tests.TestCtx, test DposTest){
 		EligibilityBalanceThreshold: 1000,
 		DepositDelay:                2,
 		WithdrawalDelay:             4,
-		DposGenesisState: DposGenesisState{
-			addr(1): {
-				addr(1): 1000,
-			},
-		},
 	}
 	test.init(&tc)
 	return

@@ -80,9 +80,9 @@ func (self *StateTransition) Init(
 		for addr, balance := range self.chain_config.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
-		if self.dpos_contract != nil {
-			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
-		}
+		// if self.dpos_contract != nil {
+		// 	util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
+		// }
 		if self.dpos2_contract != nil {
 			util.PanicIfNotNil(self.dpos2_contract.ApplyGenesis())
 		}
@@ -166,9 +166,9 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
-	// if self.dpos2_contract != nil {
-	// 	 self.dpos2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1))
-	// }
+	if self.dpos2_contract != nil {
+		 self.dpos2_contract.EndBlockCall()
+	}
 	self.pending_blk_state = nil
 }
 
