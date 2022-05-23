@@ -166,9 +166,9 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
-	if self.dpos2_contract != nil {
-		self.dpos2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1))
-	}
+	// if self.dpos2_contract != nil {
+	// 	 self.dpos2_contract.EndBlockCall(self.get_reader(self.evm.GetBlock().Number + 1))
+	// }
 	self.pending_blk_state = nil
 }
 
@@ -186,5 +186,8 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	}
 	state_root, self.pending_state_root = self.pending_state_root, common.ZeroHash
 	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
+	if self.dpos2_contract != nil {
+		self.dpos2_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
+	}
 	return
 }

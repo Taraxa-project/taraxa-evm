@@ -137,7 +137,7 @@ func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 	}
 }
 
-func (self *Contract) EndBlockCall(readStorage Reader) {
+func (self *Contract) CommitCall(readStorage Reader) {
 	defer self.storage.ClearCache()
 	// Storage Update
 	self.delayedStorage = readStorage

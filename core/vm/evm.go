@@ -177,8 +177,6 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 }
 
 func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
-	opts.DisableGasFee = true
-	opts.DisableNonceCheck = true
 	self.trx = trx
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&trx.From)

@@ -16,13 +16,11 @@ type Reader struct {
 	storage *StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
+func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, without_delay bool, storage_factory func(types.BlockNum) StorageReader) *Reader {
 	self.cfg = cfg
-	var blk_n_actual types.BlockNum
-	if self.cfg.DepositDelay < blk_n {
-		blk_n_actual = blk_n - self.cfg.DepositDelay
-	} else {
-		blk_n_actual = blk_n
+	blk_n_actual:= blk_n
+	if self.cfg.DepositDelay < blk_n && !without_delay {
+		blk_n_actual -= self.cfg.DepositDelay
 	}
 	self.storage = new(StorageReaderWrapper).Init(storage_factory(blk_n_actual))
 	return self
