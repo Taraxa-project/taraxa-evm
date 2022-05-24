@@ -4,8 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 )
 
 type ChainConfig struct {
@@ -14,5 +13,4 @@ type ChainConfig struct {
 	ExecutionOptions    vm.ExecutionOpts
 	GenesisBalances     core.BalanceMap
 	DPOS                *dpos.Config `rlp:"nil"`
-	Hardforks           hardfork.Hardforks
 }

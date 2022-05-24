@@ -1,4 +1,4 @@
-package dpos_2
+package dpos
 
 import (
 	"math/big"
@@ -24,8 +24,8 @@ type Undelegations struct {
 	// <delegator addres -> list of undelegations> as each delegator can undelegate multiple times
 	undelegations_map map[common.Address]*IterableMap
 
-	undelegations_field                []byte
-	delegator_undelegations_field      []byte
+	undelegations_field           []byte
+	delegator_undelegations_field []byte
 }
 
 func (self *Undelegations) Init(stor *StorageWrapper, prefix []byte) {
@@ -36,12 +36,10 @@ func (self *Undelegations) Init(stor *StorageWrapper, prefix []byte) {
 	self.delegator_undelegations_field = append(prefix, []byte{1}...)
 }
 
-
 func (self *Undelegations) UndelegationExists(delegator_address *common.Address, validator_address *common.Address) bool {
 	delegator_undelegations := self.getDelegatorUndelegationsList(delegator_address)
 	return delegator_undelegations.AccountExists(validator_address)
 }
-
 
 func (self *Undelegations) GetUndelegation(delegator_address *common.Address, validator_address *common.Address) (undelegation *Undelegation) {
 	key := self.genUndelegationKey(delegator_address, validator_address)

@@ -9,8 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -26,7 +25,6 @@ type API struct {
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
 	dpos             *dpos.API
-	dpos2            *dpos_2.API
 	config           *chain_config.ChainConfig
 }
 
@@ -67,36 +65,11 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		}
 	}
 
-	if self.config.DPOS != nil {
-		self.dpos2 = new(dpos_2.API).Init(*self.config.DPOS)
-		config_changes := self.rocksdb.GetDPOSConfigChanges()
-		if len(config_changes) == 0 {
-			self.dpos2.UpdateConfig(0, *self.config.DPOS)
-		} else {
-			// Order mapping keys to apply changes in correct order
-			keys := make([]uint64, 0)
-			for k, _ := range config_changes {
-				keys = append(keys, k)
-			}
-			sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-
-			// Decode rlp data from db and apply
-			for _, key := range keys {
-				value := config_changes[key]
-				cfg := new(dpos.Config)
-				rlp.MustDecodeBytes(value, cfg)
-				self.dpos2.UpdateConfig(key, *cfg)
-			}
-		}
-	}
-
-
 	self.state_transition.Init(
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		self.dpos2,
-		self.DPOS2Reader,
+		self.DPOSReader,
 		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
@@ -108,7 +81,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.dpos2, self.DPOS2Reader, self.config)
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
 	return self
 }
 
@@ -152,27 +125,7 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
-	// This hack is needed because deposit delay is implemented with a reader. So it is just delaying display of all changes. Because of that we can't just set different delay to immediately apply changes
-	without_delay_after_hardfork := false
-	if blk_n >= self.config.Hardforks.FixGenesisBlock && blk_n <= (self.config.Hardforks.FixGenesisBlock+self.config.DPOS.DepositDelay) {
-		without_delay_after_hardfork = true
-		// create reader with hardfork block num for 5 blocks after it to imitate delay
-		blk_n = self.config.Hardforks.FixGenesisBlock
-	}
-	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
-		return self.ReadBlock(blk_n)
-	})
-}
-
-func (self *API) DPOS2Reader(blk_n types.BlockNum) dpos_2.Reader {
-	// This hack is needed because deposit delay is implemented with a reader. So it is just delaying display of all changes. Because of that we can't just set different delay to immediately apply changes
-	without_delay_after_hardfork := false
-	if blk_n >= self.config.Hardforks.FixGenesisBlock && blk_n <= (self.config.Hardforks.FixGenesisBlock+self.config.DPOS.DepositDelay) {
-		without_delay_after_hardfork = true
-		// create reader with hardfork block num for 5 blocks after it to imitate delay
-		blk_n = self.config.Hardforks.FixGenesisBlock
-	}
-	return self.dpos2.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos_2.StorageReader {
+	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

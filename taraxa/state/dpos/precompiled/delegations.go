@@ -1,4 +1,4 @@
-package dpos_2
+package dpos
 
 import (
 	"math/big"

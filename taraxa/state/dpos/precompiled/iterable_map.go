@@ -1,4 +1,4 @@
-package dpos_2
+package dpos
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"

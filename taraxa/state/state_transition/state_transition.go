@@ -11,9 +11,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
@@ -29,9 +27,8 @@ type StateTransition struct {
 	evm                vm.EVM
 	trie_sink          TrieSink
 	pending_state_root common.Hash
-	dpos2_contract     *dpos_2.Contract
-	dpos_contract      *dpos.Contract // TODO: delete
-	get_reader         func(types.BlockNum) dpos_2.Reader
+	dpos_contract      *dpos.Contract
+	get_reader         func(types.BlockNum) dpos.Reader
 	new_chain_config   *chain_config.ChainConfig
 	LastBlockNum       uint64
 }
@@ -50,8 +47,7 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	dpos2_api *dpos_2.API,
-	get_reader func(types.BlockNum) dpos_2.Reader,
+	get_reader func(types.BlockNum) dpos.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
@@ -69,10 +65,7 @@ func (self *StateTransition) Init(
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
-		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
-	}
-	if dpos2_api != nil {
-		self.dpos2_contract = dpos2_api.NewContract(dpos_2.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
+		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
@@ -80,11 +73,8 @@ func (self *StateTransition) Init(
 		for addr, balance := range self.chain_config.GenesisBalances {
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
-		// if self.dpos_contract != nil {
-		// 	util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
-		// }
-		if self.dpos2_contract != nil {
-			util.PanicIfNotNil(self.dpos2_contract.ApplyGenesis())
+		if self.dpos_contract != nil {
+			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
 		}
 		self.evm_state_checkpoint()
 		self.Commit()
@@ -119,28 +109,12 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo, rewards map[comm
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.dpos2_contract != nil && rules_changed {
-		self.dpos2_contract.Register(self.evm.RegisterPrecompiledContract)
-	}
-	if self.dpos2_contract != nil {
-		self.dpos2_contract.BeginBlockCall(rewards)
+	if self.dpos_contract != nil {
+		self.dpos_contract.BeginBlockCall(rewards)
 	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
-	}
-	if self.chain_config.Hardforks.IsFixGenesisFork(blk_n) {
-		if self.new_chain_config == nil {
-			panic("we should have new_chain_config for hardfork")
-		}
-		// set delays to zero here and set it back after commit(see call of SetDelaysToPreviousValues below in End Block).
-		// Because some calculation in commit method uses this values
-		self.dpos_contract.SetDelaysToZero()
-		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
-		self.chain_config = self.new_chain_config
-		self.new_chain_config = nil
-		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
-		hardfork.ApplyFixGenesisFork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
 	}
 }
 
@@ -151,11 +125,6 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
-	if self.dpos_contract != nil {
-		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
-		self.dpos_contract.SetDelaysToPreviousValues()
-		self.evm_state_checkpoint()
-	}
 	if !self.chain_config.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
 		ethash.AccumulateRewards(
@@ -166,8 +135,9 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
-	if self.dpos2_contract != nil {
-		 self.dpos2_contract.EndBlockCall()
+	if self.dpos_contract != nil {
+		self.dpos_contract.EndBlockCall()
+		self.evm_state_checkpoint()
 	}
 	self.pending_blk_state = nil
 }
@@ -186,8 +156,8 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	}
 	state_root, self.pending_state_root = self.pending_state_root, common.ZeroHash
 	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
-	if self.dpos2_contract != nil {
-		self.dpos2_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
+	if self.dpos_contract != nil {
+		self.dpos_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
 	}
 	return
 }

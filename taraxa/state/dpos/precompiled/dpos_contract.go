@@ -1,4 +1,4 @@
-package dpos_2
+package dpos
 
 import (
 	"fmt"
@@ -997,7 +997,6 @@ func (self *Contract) apply_genesis_entry(validator_address *common.Address, sta
 
 	self.state_put(&state_k, state)
 }
-
 
 func BlockToBytes(number types.BlockNum) []byte {
 	big := new(big.Int)

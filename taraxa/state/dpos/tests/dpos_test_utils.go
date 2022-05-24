@@ -7,8 +7,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
-	dpos_2 "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos_2.0/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -53,7 +52,6 @@ type DposCfg struct {
 type GenesisBalances = map[common.Address]uint64
 type DposTransactions = map[types.BlockNum][]DposTransaction
 type ExpectedStates = map[types.BlockNum]ExpectedState
-
 
 var addr, addr_p = tests.Addr, tests.AddrP
 
@@ -118,8 +116,8 @@ func (self *DposTest) init(t *tests.TestCtx) {
 	)
 
 	self.st = self.SUT.GetStateTransition()
-	self.dpos_addr = dpos_2.ContractAddress()
-	self.abi, _ = abi.JSON(strings.NewReader(dpos_2.TaraxaDposClientMetaData))
+	self.dpos_addr = dpos.ContractAddress()
+	self.abi, _ = abi.JSON(strings.NewReader(dpos.TaraxaDposClientMetaData))
 }
 
 func (self *DposTest) execute(from common.Address, value uint64, input []byte) vm.ExecutionResult {
@@ -138,14 +136,14 @@ func (self *DposTest) execute(from common.Address, value uint64, input []byte) v
 	return res
 }
 
-func (self *DposTest) AddRewards(rewards map[common.Address]*big.Int)  {
+func (self *DposTest) AddRewards(rewards map[common.Address]*big.Int) {
 	self.blk_n++
 	self.st.BeginBlock(&vm.BlockInfo{}, rewards)
 	self.st.EndBlock(nil)
 	self.st.Commit()
 }
 
-func (self *DposTest) GetBalance(account common.Address) (*big.Int) {
+func (self *DposTest) GetBalance(account common.Address) *big.Int {
 	var bal_actual *big.Int
 	self.SUT.ReadBlock(self.blk_n).GetAccount(&account, func(account state_db.Account) {
 		bal_actual = account.Balance
@@ -153,11 +151,11 @@ func (self *DposTest) GetBalance(account common.Address) (*big.Int) {
 	return bal_actual
 }
 
-func (self *DposTest) GetDPOSReader() dpos_2.Reader {
-	return self.SUT.DPOS2Reader(self.blk_n)
+func (self *DposTest) GetDPOSReader() dpos.Reader {
+	return self.SUT.DPOSReader(self.blk_n)
 }
 
-func (self *DposTest) ExecuteAndCheck(from common.Address, value uint64, input []byte, exe_err util.ErrorString, cons_err util.ErrorString)  {
+func (self *DposTest) ExecuteAndCheck(from common.Address, value uint64, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) {
 	res := self.execute(from, value, input)
 	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
 	self.tc.Assert.Equal(exe_err, res.ExecutionErr)
@@ -177,21 +175,20 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 	return packed
 }
 
-
-func init_config_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestCtx, test DposTest){
+func init_config_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestCtx, test DposTest) {
 	tc = tests.NewTestCtx(t)
 	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
 	test.DposCfg = DposCfg{
 		EligibilityBalanceThreshold: 1000,
 		DepositDelay:                2,
 		WithdrawalDelay:             4,
-		DposGenesisState: 		genesis,
+		DposGenesisState:            genesis,
 	}
 	test.init(&tc)
 	return
 }
 
-func init_config(t *testing.T) (tc tests.TestCtx, test DposTest){
+func init_config(t *testing.T) (tc tests.TestCtx, test DposTest) {
 	tc = tests.NewTestCtx(t)
 	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
 	test.DposCfg = DposCfg{

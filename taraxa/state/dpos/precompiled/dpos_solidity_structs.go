@@ -5,7 +5,7 @@
 //		 3. copy selected structs into this file
 // 		 4. rm dpos_contract_interface.go
 
-package dpos_2
+package dpos
 
 import (
 	"math/big"
