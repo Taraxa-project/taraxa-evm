@@ -541,8 +541,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom, delegation)
 		}
 
-		// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
-		if validator_from.TotalStake.Cmp(bigutil.Big0) == 0 {
+		if validator_from.TotalStake.Cmp(bigutil.Big0) == 0 && validator_from.CommissionRewardsPool.Cmp(bigutil.Big0) == 0 {
 			self.validators.DeleteValidator(&args.ValidatorFrom)
 			self.state_put(&state_k, nil)
 		} else {
@@ -640,25 +639,14 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		return ErrNonExistentValidator
 	}
 
-	state, state_k := self.state_get(ctx.CallerAccount.Address()[:], BlockToBytes(block))
-	if state == nil {
-		old_state := self.state_get_and_decrement(ctx.CallerAccount.Address()[:], BlockToBytes(validator.LastUpdated))
-		state = new(State)
-		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, bigutil.Div(validator.RewardsPool, validator.TotalStake))
-		validator.RewardsPool = bigutil.Big0
-		validator.LastUpdated = block
-		state.Count++
-	}
-
 	ctx.CallerAccount.AddBalance(validator.CommissionRewardsPool)
 	validator.CommissionRewardsPool = bigutil.Big0
 
 	if validator.TotalStake.Cmp(bigutil.Big0) == 0 {
 		self.validators.DeleteValidator(validator_address)
-		self.state_put(&state_k, nil)
+		self.state_get_and_decrement(ctx.CallerAccount.Address()[:], BlockToBytes(validator.LastUpdated))
 	} else {
 		self.validators.ModifyValidator(validator_address, validator)
-		self.state_put(&state_k, state)
 	}
 
 	return nil
@@ -684,7 +672,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 
 	// TODO: limit size of description & endpoint - should be very small
 
-	ctx.Account.SubBalance(ctx.Value) 
+	ctx.Account.SubBalance(ctx.Value)
 
 	state = new(State)
 	state.RewardsPer1Stake = bigutil.Big0
