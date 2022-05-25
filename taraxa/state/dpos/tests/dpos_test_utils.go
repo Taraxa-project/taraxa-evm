@@ -24,24 +24,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 )
 
-type DposTransfer = struct {
-	Value    uint64
-	Negative bool
-}
-type DposTransfers = map[common.Address]DposTransfer
-type DposTransaction = struct {
-	Benefactor common.Address
-	DposTransfers
-	ExpectedExecutionErr util.ErrorString
-}
 type Balances = map[common.Address]uint64
-type EligibleSet = []common.Address
-type Deposits = map[common.Address]map[common.Address]uint64
-type ExpectedState struct {
-	Balances         Balances
-	EligibleSet      EligibleSet
-	OutboundDeposits Deposits
-}
 type DposGenesisState = map[common.Address]Balances
 type DposCfg struct {
 	EligibilityBalanceThreshold uint64
@@ -50,9 +33,6 @@ type DposCfg struct {
 	DposGenesisState
 }
 type GenesisBalances = map[common.Address]uint64
-type DposTransactions = map[types.BlockNum][]DposTransaction
-type ExpectedStates = map[types.BlockNum]ExpectedState
-
 var addr, addr_p = tests.Addr, tests.AddrP
 
 type DposTest struct {

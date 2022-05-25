@@ -415,8 +415,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
 	}
 
-	// TODO: cant do this, RewardsPool as well as CommissionRewardsPool must be == 0 too
-	if validator.TotalStake.Cmp(bigutil.Big0) == 0 {
+	if validator.TotalStake.Cmp(bigutil.Big0) == 0 && validator.CommissionRewardsPool.Cmp(bigutil.Big0) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_put(&state_k, nil)
 	} else {
@@ -654,8 +653,13 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	ctx.CallerAccount.AddBalance(validator.CommissionRewardsPool)
 	validator.CommissionRewardsPool = bigutil.Big0
 
-	self.validators.ModifyValidator(validator_address, validator)
-	self.state_put(&state_k, state)
+	if validator.TotalStake.Cmp(bigutil.Big0) == 0 {
+		self.validators.DeleteValidator(validator_address)
+		self.state_put(&state_k, nil)
+	} else {
+		self.validators.ModifyValidator(validator_address, validator)
+		self.state_put(&state_k, state)
+	}
 
 	return nil
 }
@@ -680,7 +684,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 
 	// TODO: limit size of description & endpoint - should be very small
 
-	ctx.Account.SubBalance(ctx.Value) // TODO how to get correct value?
+	ctx.Account.SubBalance(ctx.Value) 
 
 	state = new(State)
 	state.RewardsPer1Stake = bigutil.Big0
