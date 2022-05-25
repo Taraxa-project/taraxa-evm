@@ -10,7 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -216,7 +216,7 @@ func taraxa_evm_state_api_transition_state(
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
-	st.BeginBlock(&params.Blk)
+	st.BeginBlock(&params.Blk, nil)
 	for i := range params.Trxs {
 		retval.ExecutionResults = append(retval.ExecutionResults, st.ExecuteTransaction(&params.Trxs[i]))
 	}
@@ -274,32 +274,6 @@ func taraxa_evm_state_api_dpos_total_amount_delegated(
 ) {
 	defer handle_err(cb_err)
 	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).TotalAmountDelegated().Bytes(), cb)
-}
-
-//export taraxa_evm_state_api_dpos_query
-func taraxa_evm_state_api_dpos_query(
-	ptr C.taraxa_evm_state_API_ptr,
-	params_enc C.taraxa_evm_Bytes,
-	cb C.taraxa_evm_BytesCallback,
-	cb_err C.taraxa_evm_BytesCallback,
-) {
-	defer handle_err(cb_err)
-	var params struct {
-		BlkNum types.BlockNum
-		Q      dpos.Query
-	}
-	dec_rlp(params_enc, &params)
-	enc_rlp(state_API_instances[ptr].DPOSReader(params.BlkNum).Query(&params.Q), cb)
-}
-
-//export taraxa_evm_state_api_dpos_eligible_count
-func taraxa_evm_state_api_dpos_eligible_count(
-	ptr C.taraxa_evm_state_API_ptr,
-	blk_n uint64,
-	cb_err C.taraxa_evm_BytesCallback,
-) uint64 {
-	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).EligibleAddressCount()
 }
 
 //export taraxa_evm_state_api_dpos_eligible_vote_count

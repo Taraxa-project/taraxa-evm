@@ -160,7 +160,7 @@ func main() {
 		fmt.Println("blocks:", blk_num_since, "-", last_blk_num, "tx_count:", tx_count)
 		time_before_execution := time.Now()
 		for _, b := range block_buf {
-			st.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)))
+			st.BeginBlock((*vm.BlockInfo)(unsafe.Pointer(&b.VmBlock)), nil)
 			for _, trx_and_receipt := range b.Transactions {
 				res := st.ExecuteTransaction((*vm.Transaction)(unsafe.Pointer(&trx_and_receipt.Transaction)))
 				receipt := trx_and_receipt.Receipt

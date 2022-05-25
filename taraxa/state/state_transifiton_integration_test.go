@@ -48,7 +48,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 	defer progress_bar.Finish()
 	for blk_num := 1; blk_num < len(blocks); blk_num++ {
 		blk := blocks[blk_num]
-		st.BeginBlock(&blk.EVMBlock)
+		st.BeginBlock(&blk.EVMBlock, nil)
 		for i := range blk.Transactions {
 			st.ExecuteTransaction(&blk.Transactions[i])
 		}

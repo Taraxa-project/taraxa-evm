@@ -1,9 +1,10 @@
 package state_dry_runner
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 )
@@ -12,6 +13,7 @@ type DryRunner struct {
 	db             state_db.DB
 	get_block_hash vm.GetHashFunc
 	dpos_api       *dpos.API
+	get_reader     func(types.BlockNum) dpos.Reader
 	chain_config   *chain_config.ChainConfig
 }
 
@@ -19,11 +21,13 @@ func (self *DryRunner) Init(
 	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
+	get_reader func(types.BlockNum) dpos.Reader,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
 	self.db = db
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
+	self.get_reader = get_reader
 	self.chain_config = chain_config
 	return self
 }
@@ -45,7 +49,7 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction, opts *vm.Execut
 	evm.Init(self.get_block_hash, &evm_state, vm.Opts{})
 	evm.SetBlock(blk, self.chain_config.ETHChainConfig.Rules(blk.Number))
 	if self.dpos_api != nil {
-		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}).Register(evm.RegisterPrecompiledContract)
+		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number)).Register(evm.RegisterPrecompiledContract)
 	}
 	return evm.Main(trx, *opts)
 }

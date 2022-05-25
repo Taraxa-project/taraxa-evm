@@ -1,6 +1,7 @@
 package state
 
 import (
+	"math/big"
 	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -8,7 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -80,7 +81,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.config)
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
 	return self
 }
 
@@ -100,7 +101,7 @@ func (self *API) Close() {
 }
 
 type StateTransition interface {
-	BeginBlock(*vm.BlockInfo)
+	BeginBlock(*vm.BlockInfo, map[common.Address]*big.Int)
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
 	EndBlock([]state_common.UncleBlock)
 	PrepareCommit() (state_root common.Hash)
@@ -124,14 +125,7 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
-	// This hack is needed because deposit delay is implemented with a reader. So it is just delaying display of all changes. Because of that we can't just set different delay to immediately apply changes
-	without_delay_after_hardfork := false
-	if blk_n >= self.config.Hardforks.FixGenesisBlock && blk_n <= (self.config.Hardforks.FixGenesisBlock+self.config.DPOS.DepositDelay) {
-		without_delay_after_hardfork = true
-		// create reader with hardfork block num for 5 blocks after it to imitate delay
-		blk_n = self.config.Hardforks.FixGenesisBlock
-	}
-	return self.dpos.NewReader(blk_n, without_delay_after_hardfork, func(blk_n types.BlockNum) dpos.StorageReader {
+	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

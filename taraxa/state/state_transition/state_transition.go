@@ -1,23 +1,22 @@
 package state_transition
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/hardfork"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos"
+	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
+	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type StateTransition struct {
@@ -66,7 +65,7 @@ func (self *StateTransition) Init(
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
-		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state})
+		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
@@ -103,29 +102,19 @@ func (self *StateTransition) evm_state_checkpoint() {
 	self.evm_state.CommitTransaction(&self.trie_sink, self.evm.GetRules().IsEIP158)
 }
 
-func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
+func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo, rewards map[common.Address]*big.Int) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
+	if self.dpos_contract != nil {
+		self.dpos_contract.BeginBlockCall(rewards)
+	}
 	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
 		misc.ApplyDAOHardFork(&self.evm_state)
 		self.evm_state_checkpoint()
-	}
-	if self.chain_config.Hardforks.IsFixGenesisFork(blk_n) {
-		if self.new_chain_config == nil {
-			panic("we should have new_chain_config for hardfork")
-		}
-		// set delays to zero here and set it back after commit(see call of SetDelaysToPreviousValues below in End Block).
-		// Because some calculation in commit method uses this values
-		self.dpos_contract.SetDelaysToZero()
-		self.dpos_contract.ResetGenesisAddresses(self.chain_config.DPOS.GenesisState)
-		self.chain_config = self.new_chain_config
-		self.new_chain_config = nil
-		self.dpos_contract.UpdateConfig(*self.chain_config.DPOS)
-		hardfork.ApplyFixGenesisFork(self.chain_config.GenesisBalances, self.chain_config.DPOS, &self.evm_state, self.dpos_contract)
 	}
 }
 
@@ -136,11 +125,6 @@ func (self *StateTransition) ExecuteTransaction(trx *vm.Transaction) (ret vm.Exe
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
-	if self.dpos_contract != nil {
-		self.dpos_contract.Commit(self.pending_blk_state.GetNumber())
-		self.dpos_contract.SetDelaysToPreviousValues()
-		self.evm_state_checkpoint()
-	}
 	if !self.chain_config.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
 		ethash.AccumulateRewards(
@@ -151,6 +135,10 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock) {
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number
+	if self.dpos_contract != nil {
+		self.dpos_contract.EndBlockCall()
+		self.evm_state_checkpoint()
+	}
 	self.pending_blk_state = nil
 }
 
@@ -168,5 +156,8 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	}
 	state_root, self.pending_state_root = self.pending_state_root, common.ZeroHash
 	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
+	if self.dpos_contract != nil {
+		self.dpos_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
+	}
 	return
 }
