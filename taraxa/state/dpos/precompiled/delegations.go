@@ -45,7 +45,7 @@ func (self *Delegations) DelegationExists(delegator_address *common.Address, val
 // Gets delegation
 func (self *Delegations) GetDelegation(delegator_address *common.Address, validator_address *common.Address) (delegation *Delegation) {
 	key := self.genDelegationKey(delegator_address, validator_address)
-	self.storage.Get(key, func(bytes []byte) {
+	self.storage.Get(&key, func(bytes []byte) {
 		delegation = new(Delegation)
 		rlp.MustDecodeBytes(bytes, delegation)
 	})
@@ -66,7 +66,7 @@ func (self *Delegations) ModifyDelegation(delegator_address *common.Address, val
 	}
 
 	key := self.genDelegationKey(delegator_address, validator_address)
-	self.storage.Put(key, rlp.MustEncodeToBytes(delegation))
+	self.storage.Put(&key, rlp.MustEncodeToBytes(delegation))
 }
 
 func (self *Delegations) CreateDelegation(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, stake *big.Int) {
@@ -76,7 +76,7 @@ func (self *Delegations) CreateDelegation(delegator_address *common.Address, val
 	delegation.LastUpdated = block
 
 	delegation_key := self.genDelegationKey(delegator_address, validator_address)
-	self.storage.Put(delegation_key, rlp.MustEncodeToBytes(delegation))
+	self.storage.Put(&delegation_key, rlp.MustEncodeToBytes(delegation))
 
 	// Adds validator into delegator's validators list
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
@@ -85,7 +85,7 @@ func (self *Delegations) CreateDelegation(delegator_address *common.Address, val
 
 func (self *Delegations) RemoveDelegation(delegator_address *common.Address, validator_address *common.Address) {
 	delegation_key := self.genDelegationKey(delegator_address, validator_address)
-	self.storage.Put(delegation_key, nil)
+	self.storage.Put(&delegation_key, nil)
 
 	// Removes validator from delegator's validators list
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
@@ -117,7 +117,6 @@ func (self *Delegations) removeDelegatorValidatorsList(delegator_address *common
 	delete(self.delegators_validators, *delegator_address)
 }
 
-func (self *Delegations) genDelegationKey(delegator_address *common.Address, validator_address *common.Address) *common.Hash {
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
-	return stor_k_1(self.delegations_field, validator_address[:], delegator_address[:])
+func (self *Delegations) genDelegationKey(delegator_address *common.Address, validator_address *common.Address) common.Hash {
+	return stor_k_2(self.delegations_field, validator_address[:], delegator_address[:])
 }

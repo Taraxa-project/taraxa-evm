@@ -82,7 +82,6 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 		panic("ModifyValidator: non existent validator")
 	}
 
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
 	key := stor_k_1(self.validators_field, validator_address[:])
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator))
 }
@@ -96,7 +95,6 @@ func (self *Validators) CreateValidator(validator_address *common.Address, block
 	validator.TotalStake = stake
 	validator.LastUpdated = block
 
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
 	validator_key := stor_k_1(self.validators_field, validator_address[:])
 	self.storage.Put(validator_key, rlp.MustEncodeToBytes(validator))
 
@@ -105,7 +103,6 @@ func (self *Validators) CreateValidator(validator_address *common.Address, block
 	validator_info.Description = description
 	validator_info.Endpoint = endpoint
 
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
 	validator_info_key := stor_k_1(self.validators_info_field, validator_address[:])
 	self.storage.Put(validator_info_key, rlp.MustEncodeToBytes(validator_info))
 
@@ -125,7 +122,6 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 }
 
 func (self *Validators) GetValidatorInfo(validator_address *common.Address) (validator_info *ValidatorInfo) {
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
 	key := stor_k_1(self.validators_info_field, validator_address[:])
 	self.storage.Get(key, func(bytes []byte) {
 		validator_info = new(ValidatorInfo)
@@ -145,7 +141,6 @@ func (self *Validators) ModifyValidatorInfo(validator_address *common.Address, v
 		panic("ModifyValidatorInfo: non existent validator")
 	}
 
-	// TODO: IMPORTANT -> is there an reason why to use stor_k_2 vs stor_k_1 ???
 	key := stor_k_1(self.validators_info_field, validator_address[:])
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator_info))
 }
