@@ -130,12 +130,11 @@ func TestGenesis(t *testing.T) {
 	tc, test := init_config_genesis(t, genesis)
 	defer test.end()
 
-	tc.Assert.Equal(new(big.Int).SetUint64(100000000-1000), test.GetBalance(addr(1)))
-	tc.Assert.Equal(new(big.Int).SetUint64(100000000-1000), test.GetBalance(addr(2)))
-	tc.Assert.Equal(new(big.Int).SetUint64(100000000-1000), test.GetBalance(addr(3)))
-
-	tc.Assert.Equal(uint64(1), test.GetDPOSReader().EligibleAddressCount())
+	tc.Assert.Equal(new(big.Int).SetUint64(100000000-3000), test.GetBalance(addr(1)))
+	tc.Assert.Equal(uint64(3), test.GetDPOSReader().EligibleAddressCount())
 	tc.Assert.Equal(uint64(3), test.GetDPOSReader().EligibleVoteCount())
 	tc.Assert.Equal(new(big.Int).SetUint64(3000), test.GetDPOSReader().TotalAmountDelegated())
-	tc.Assert.Equal(uint64(3), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
+	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
+	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(2)))
+	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(3)))
 }

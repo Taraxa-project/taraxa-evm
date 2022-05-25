@@ -173,9 +173,7 @@ func (self *Contract) ApplyGenesis() error {
 	self.lazy_init()
 
 	for _, entry := range self.cfg.GenesisState {
-		// TODO fill this
-		var args RegisterValidatorArgs
-		self.apply_genesis_entry(&entry.Benefactor, new(big.Int).SetInt64(0), args, entry.Transfers)
+		self.apply_genesis_entry(&entry.Benefactor, entry.Transfers)
 	}
 
 	self.EndBlockCall()
@@ -945,57 +943,71 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 	}
 }
 
-func (self *Contract) apply_genesis_entry(validator_address *common.Address, stake *big.Int, args RegisterValidatorArgs, transfers []GenesisTransfer) {
-	if self.validators.ValidatorExists(validator_address) {
-		panic("registerValidator: validator already exists")
-	}
+func (self *Contract) apply_genesis_entry(delegator_address *common.Address, transfers []GenesisTransfer) {
+	// TODO fill them?
+	var args RegisterValidatorArgs
 
-	delegation := self.delegations.GetDelegation(validator_address, validator_address)
-	if delegation != nil {
-		panic("registerValidator: delegation already exists")
-	}
-
-	state, state_k := self.state_get(validator_address[:], BlockToBytes(0))
-	if state != nil {
-		panic("registerValidator: state already exists")
-	}
-
-	// TODO: limit size of description & endpoint - should be very small
-	state = new(State)
-	state.RwardsPer1Stake = bigutil.Big0
-
-	if stake.Cmp(bigutil.Big0) == 1 {
-		// Creates Delegation object in storage
-		self.storage.SubBalance(validator_address, stake)
-		self.delegations.CreateDelegation(validator_address, validator_address, 0, stake)
-		state.Count++
-	}
-
-	new_stake := stake
 	for _, delegation := range transfers {
 		if delegation.Value.Cmp(bigutil.Big0) == 1 {
-			self.storage.SubBalance(&delegation.Beneficiary, delegation.Value)
+			var state *State
+			var state_k common.Hash
+			delegation_object := self.delegations.GetDelegation(delegator_address, &delegation.Beneficiary)
+			if delegation_object != nil {
+				panic("registerValidator: delegation already exists")
+			}
+
+			if self.validators.ValidatorExists(&delegation.Beneficiary) {
+				validator := self.validators.GetValidator(&delegation.Beneficiary)
+				if validator == nil {
+					panic("registerValidator: validator does not exist")
+				}
+
+				was_eligible := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+				prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+
+				validator.TotalStake.Add(validator.TotalStake, delegation.Value)
+				self.validators.ModifyValidator(&delegation.Beneficiary, validator)
+
+				state, state_k = self.state_get(delegation.Beneficiary[:], BlockToBytes(0))
+				if state == nil {
+					panic("registerValidator: broken state")
+				}
+
+				eligible_now := validator.TotalStake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0
+				if !was_eligible && eligible_now {
+					self.eligible_count++
+				}
+				new_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+				if prev_vote_count != new_vote_count {
+					self.eligible_vote_count -= prev_vote_count
+					self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+				}
+			} else {
+				state, state_k = self.state_get(delegation.Beneficiary[:], BlockToBytes(0))
+				if state != nil {
+					panic("registerValidator: state already exists")
+				}
+				state = new(State)
+				state.RwardsPer1Stake = bigutil.Big0
+				self.validators.CreateValidator(&delegation.Beneficiary, 0, delegation.Value, args.Commission, args.Description, args.Endpoint)
+				state.Count++
+				if delegation.Value.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0 {
+					self.eligible_count++
+				}
+				new_vote_count := vote_count(delegation.Value, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+				if new_vote_count > 0 {
+					self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
+				}
+			}
+
+			self.storage.SubBalance(delegator_address, delegation.Value)
 			// Creates Delegation object in storage
-			self.delegations.CreateDelegation(validator_address, &delegation.Beneficiary, 0, delegation.Value)
+			self.delegations.CreateDelegation(delegator_address, &delegation.Beneficiary, 0, delegation.Value)
 			state.Count++
-			stake.Add(new_stake, delegation.Value)
+			self.state_put(&state_k, state)
+			self.amount_delegated = bigutil.Add(self.amount_delegated, delegation.Value)
 		}
 	}
-
-	// Creates validator related objects in storage
-	self.validators.CreateValidator(validator_address, 0, stake, args.Commission, args.Description, args.Endpoint)
-	state.Count++
-
-	self.amount_delegated = bigutil.Add(self.amount_delegated, stake)
-	if stake.Cmp(self.cfg.EligibilityBalanceThreshold) >= 0 {
-		self.eligible_count++
-	}
-	new_vote_count := vote_count(stake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
-	if new_vote_count > 0 {
-		self.eligible_vote_count = Add64p(self.eligible_vote_count, new_vote_count)
-	}
-
-	self.state_put(&state_k, state)
 }
 
 func BlockToBytes(number types.BlockNum) []byte {
