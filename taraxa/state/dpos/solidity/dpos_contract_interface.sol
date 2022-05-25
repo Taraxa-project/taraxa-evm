@@ -104,19 +104,12 @@ interface DposInterface {
     //       considered in terms of performance, etc...
 
     // Returns true if acc is eligible validator, otherwise false
-    // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
     function isValidatorEligible(address validator) external view returns (bool);
 
-    // Returns eligible validators counts
-    // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
-    function getTotalEligibleValidatorsCount() external view returns (uint64);
-
     // Returns all validators eligible votes counts
-    // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
     function getTotalEligibleVotesCount() external view returns (uint64);
 
     // Returns specified validator eligible votes count
-    // TODO: we need block_num when calling this method from node, but what if we call it from some external contract ?
     function getValidatorEligibleVotesCount(address validator) external view returns (uint64);
 
     // Returns validator basic info (everything except list of his delegators)

@@ -26,13 +26,6 @@ func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func
 	return self
 }
 
-func (self Reader) EligibleAddressCount() (ret uint64) {
-	self.storage.Get(stor_k_1(field_eligible_count), func(bytes []byte) {
-		ret = bin.DEC_b_endian_compact_64(bytes)
-	})
-	return
-}
-
 func (self Reader) EligibleVoteCount() (ret uint64) {
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		ret = bin.DEC_b_endian_compact_64(bytes)

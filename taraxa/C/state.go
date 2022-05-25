@@ -276,16 +276,6 @@ func taraxa_evm_state_api_dpos_total_amount_delegated(
 	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).TotalAmountDelegated().Bytes(), cb)
 }
 
-//export taraxa_evm_state_api_dpos_eligible_count
-func taraxa_evm_state_api_dpos_eligible_count(
-	ptr C.taraxa_evm_state_API_ptr,
-	blk_n uint64,
-	cb_err C.taraxa_evm_BytesCallback,
-) uint64 {
-	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).EligibleAddressCount()
-}
-
 //export taraxa_evm_state_api_dpos_eligible_vote_count
 func taraxa_evm_state_api_dpos_eligible_vote_count(
 	ptr C.taraxa_evm_state_API_ptr,

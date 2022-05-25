@@ -131,7 +131,6 @@ func TestGenesis(t *testing.T) {
 	defer test.end()
 
 	tc.Assert.Equal(new(big.Int).SetUint64(100000000-3000), test.GetBalance(addr(1)))
-	tc.Assert.Equal(uint64(3), test.GetDPOSReader().EligibleAddressCount())
 	tc.Assert.Equal(uint64(3), test.GetDPOSReader().EligibleVoteCount())
 	tc.Assert.Equal(new(big.Int).SetUint64(3000), test.GetDPOSReader().TotalAmountDelegated())
 	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
