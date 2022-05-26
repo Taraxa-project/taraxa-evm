@@ -81,9 +81,6 @@ interface DposInterface {
     // Claims tokens from validator's commission rewards
     function claimCommissionRewards(address validator) external;
 
-    // Sender of this trxs will be associated with specified validator
-    function setValidatorOwner(address validator, bytes memory proof) external;
-
     // Registers new validator - validator also must delegate to himself, he can later withdraw his delegation
     function registerValidator(
         address validator,

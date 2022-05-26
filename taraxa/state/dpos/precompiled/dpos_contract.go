@@ -244,14 +244,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 		return nil, self.claimCommissionRewards(ctx, evm.GetBlock().Number, args)
 
-	case "setValidatorOwner":
-		var args SetValidatorOwnerArgs
-		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse setValidatorOwner input args: ", err)
-			return nil, err
-		}
-		return nil, self.setValidatorOwner(ctx, args)
-
 	case "registerValidator":
 		var args RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -672,26 +664,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	} else {
 		self.validators.ModifyValidator(&args.Validator, validator)
 	}
-
-	return nil
-}
-
-func (self *Contract) setValidatorOwner(ctx vm.CallFrame, args SetValidatorOwnerArgs) error {
-	// make sure the public key is a valid one
-	pubKey, err := crypto.Ecrecover(args.Validator.Hash().Bytes(), args.Proof)
-	// the first byte of pubkey is bitcoin heritage
-	if err != nil {
-		return err
-	}
-	if common.BytesToAddress(keccak256.Hash(pubKey[1:])[12:]) != args.Validator {
-		return ErrWrongProof
-	}
-
-	if !self.validators.ValidatorExists(&args.Validator) {
-		return ErrNonExistentValidator
-	}
-
-	self.set_validator_owner(ctx.CallerAccount.Address(), &args.Validator)
 
 	return nil
 }

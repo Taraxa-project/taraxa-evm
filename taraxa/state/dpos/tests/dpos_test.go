@@ -139,20 +139,6 @@ func TestCommissionRewards(t *testing.T) {
 	tc.Assert.Equal(bigutil.Add(old_balance, new(big.Int).SetUint64(3)), test.GetBalance(addr(1)))
 }
 
-func TestSetValidatorOwner(t *testing.T) {
-	_, test := init_config(t)
-	defer test.end()
-	val_addr, proof := generateAddrAndProof()
-	val_addr1, proof1 := generateAddrAndProof()
-	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(1000), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-	// ErrWrongProof
-	test.ExecuteAndCheck(addr(2), 0, test.pack("setValidatorOwner", val_addr1, proof), dpos.ErrWrongProof, util.ErrorString(""))
-	test.ExecuteAndCheck(addr(2), 0, test.pack("setValidatorOwner", val_addr1, proof1), dpos.ErrNonExistentValidator, util.ErrorString(""))
-	test.ExecuteAndCheck(addr(2), 0, test.pack("claimCommissionRewards", val_addr), dpos.ErrWrongOwnerAcc, util.ErrorString(""))
-	test.ExecuteAndCheck(addr(2), 0, test.pack("setValidatorOwner", val_addr, proof), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(addr(2), 0, test.pack("claimCommissionRewards", val_addr), util.ErrorString(""), util.ErrorString(""))
-}
-
 // TODO undelegation test time wise
 
 func TestGenesis(t *testing.T) {
