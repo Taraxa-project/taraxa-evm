@@ -687,6 +687,10 @@ func (self *Contract) setValidatorOwner(ctx vm.CallFrame, args SetValidatorOwner
 		return ErrWrongProof
 	}
 
+	if !self.validators.ValidatorExists(&args.Validator) {
+		return ErrNonExistentValidator
+	}
+
 	self.set_validator_owner(ctx.CallerAccount.Address(), &args.Validator)
 
 	return nil
