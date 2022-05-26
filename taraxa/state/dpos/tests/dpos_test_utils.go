@@ -1,17 +1,22 @@
 package test_integration
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
+	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -33,6 +38,7 @@ type DposCfg struct {
 	DposGenesisState
 }
 type GenesisBalances = map[common.Address]uint64
+
 var addr, addr_p = tests.Addr, tests.AddrP
 
 type DposTest struct {
@@ -177,5 +183,26 @@ func init_config(t *testing.T) (tc tests.TestCtx, test DposTest) {
 		WithdrawalDelay:             4,
 	}
 	test.init(&tc)
+	return
+}
+
+func generateKeyPair() (pubkey, privkey []byte) {
+	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	pubkey = elliptic.Marshal(secp256k1.S256(), key.X, key.Y)
+
+	privkey = make([]byte, 32)
+	blob := key.D.Bytes()
+	copy(privkey[32-len(blob):], blob)
+
+	return pubkey, privkey
+}
+
+func generateAddrAndProof() (addr common.Address, proof []byte) {
+	pubkey, seckey := generateKeyPair()
+	addr = common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	proof, _ = secp256k1.Sign(addr.Hash().Bytes(), seckey)
 	return
 }
