@@ -748,14 +748,16 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 }
 
 func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) error {
-	validator_address := ctx.CallerAccount.Address()
-	validator := self.validators.GetValidator(validator_address)
+	if !self.check_validator_owner(ctx.CallerAccount.Address(), &args.Validator) {
+		return ErrWrongOwnerAcc
+	}
+	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
 
 	validator.Commission = args.Commission
-	self.validators.ModifyValidator(validator_address, validator)
+	self.validators.ModifyValidator(&args.Validator, validator)
 
 	return nil
 }

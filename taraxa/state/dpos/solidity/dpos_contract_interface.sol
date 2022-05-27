@@ -103,7 +103,7 @@ interface DposInterface {
     ) external;
 
     // Sets validator's commission [%] * 100 so 1% is 100 & 10% is 1000
-    function setCommission(uint16 commission) external;
+    function setCommission(address validator, uint16 commission) external;
 
     // TODO: these 4 methods below can be all replaced by "getValidator" and "getValidators" calls, but it should be
     //       considered in terms of performance, etc...
