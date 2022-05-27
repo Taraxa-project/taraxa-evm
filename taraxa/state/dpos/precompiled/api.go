@@ -20,6 +20,10 @@ type API struct {
 type Config = struct {
 	EligibilityBalanceThreshold *big.Int
 	VoteEligibilityBalanceStep  *big.Int
+	MaximumStake                *big.Int
+	MinimumDeposit              *big.Int
+	CommissionChangeDelta       uint16
+	CommissionChangeFrequency   types.BlockNum
 	DepositDelay                types.BlockNum
 	WithdrawalDelay             types.BlockNum
 	GenesisState                []GenesisStateEntry

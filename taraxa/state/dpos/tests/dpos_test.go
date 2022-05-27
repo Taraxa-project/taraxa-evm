@@ -31,7 +31,7 @@ func TestProof(t *testing.T) {
 }
 
 func TestRegisterValidator(t *testing.T) {
-	_, test := init_config(t)
+	_, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -46,7 +46,7 @@ func TestRegisterValidator(t *testing.T) {
 }
 
 func TestDelegate(t *testing.T) {
-	_, test := init_config(t)
+	_, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -57,7 +57,7 @@ func TestDelegate(t *testing.T) {
 }
 
 func TestRedelegate(t *testing.T) {
-	_, test := init_config(t)
+	_, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -84,7 +84,7 @@ func TestRedelegate(t *testing.T) {
 }
 
 func TestUndelegate(t *testing.T) {
-	_, test := init_config(t)
+	_, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -104,7 +104,7 @@ func TestUndelegate(t *testing.T) {
 }
 
 func TestRewards(t *testing.T) {
-	tc, test := init_config(t)
+	tc, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(0), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -123,7 +123,7 @@ func TestRewards(t *testing.T) {
 }
 
 func TestCommissionRewards(t *testing.T) {
-	tc, test := init_config(t)
+	tc, test := init_test(t)
 	defer test.end()
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(1000), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -138,9 +138,6 @@ func TestCommissionRewards(t *testing.T) {
 	test.ExecuteAndCheck(addr(1), 0, test.pack("claimCommissionRewards", val_addr), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(bigutil.Add(old_balance, new(big.Int).SetUint64(3)), test.GetBalance(addr(1)))
 }
-
-// TODO undelegation test time wise
-
 func TestGenesis(t *testing.T) {
 	genesis := DposGenesisState{
 		addr(1): {
@@ -149,7 +146,7 @@ func TestGenesis(t *testing.T) {
 			addr(3): 1000,
 		},
 	}
-	tc, test := init_config_genesis(t, genesis)
+	tc, test := init_test_genesis(t, genesis)
 	defer test.end()
 
 	tc.Assert.Equal(new(big.Int).SetUint64(100000000-3000), test.GetBalance(addr(1)))
@@ -159,3 +156,84 @@ func TestGenesis(t *testing.T) {
 	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(2)))
 	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(3)))
 }
+
+func TestSetCommissions(t *testing.T) {
+	cfg := DposCfg{
+		EligibilityBalanceThreshold: 1,
+		CommissionChangeDelta:       5,
+		CommissionChangeFrequency:   4,
+	}
+	_, test := init_test_config(t, cfg)
+	defer test.end()
+
+	val_addr, proof := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 0, test.pack("setCommission", val_addr, uint16(11)), dpos.ErrWrongOwnerAcc, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("setCommission", val_addr, uint16(11)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
+	//Advance 4 rounds
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.ExecuteAndCheck(addr(1), 0, test.pack("setCommission", val_addr, uint16(11)), util.ErrorString(""), util.ErrorString(""))
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	test.AddRewards(map[common.Address]*big.Int{val_addr: new(big.Int).SetUint64(10)})
+	//Advance 4 rounds
+	test.ExecuteAndCheck(addr(1), 0, test.pack("setCommission", val_addr, uint16(20)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("setCommission", val_addr, uint16(16)), util.ErrorString(""), util.ErrorString(""))
+}
+
+func TestDelegateMinMax(t *testing.T) {
+	cfg := DposCfg{
+		EligibilityBalanceThreshold: 1,
+		MinimumDeposit:              5,
+		MaximumStake:                50,
+	}
+	_, test := init_test_config(t, cfg)
+	defer test.end()
+	val_addr, proof := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 1, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(addr(2), 1, test.pack("delegate", val_addr), dpos.ErrInsufficientDelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 40, test.pack("delegate", val_addr), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 10, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+}
+
+func TestUndelegateMin(t *testing.T) {
+	cfg := DposCfg{
+		EligibilityBalanceThreshold: 1,
+		MinimumDeposit:              5,
+	}
+	_, test := init_test_config(t, cfg)
+	defer test.end()
+	val_addr, proof := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("undelegate", val_addr,  new(big.Int).SetUint64(6)), dpos.ErrInsufficientDelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 10, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(addr(1), 1, test.pack("undelegate", val_addr,  new(big.Int).SetUint64(1)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 1, test.pack("undelegate", val_addr,  new(big.Int).SetUint64(10)), util.ErrorString(""), util.ErrorString(""))
+}
+
+func TestRedelegateMinMax(t *testing.T) {
+	cfg := DposCfg{
+		EligibilityBalanceThreshold: 1,
+		MinimumDeposit:              5,
+		MaximumStake:                50,
+	}
+	_, test := init_test_config(t, cfg)
+	defer test.end()
+	val_addr, proof := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(1), 10, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	val_addr1, proof1 := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(2), 10, test.pack("registerValidator", val_addr1, proof1, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("reDelegate", val_addr, val_addr1, new(big.Int).SetUint64(6)), dpos.ErrInsufficientDelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), 35, test.pack("delegate", val_addr1), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("reDelegate", val_addr, val_addr1, new(big.Int).SetUint64(10)), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), 0, test.pack("reDelegate", val_addr, val_addr1, new(big.Int).SetUint64(1)),  util.ErrorString(""), util.ErrorString(""))
+}
+
+// TODO undelegation test time wise

@@ -35,13 +35,14 @@ var ErrInsufficientDelegation = util.ErrorString("Insufficient delegation")
 var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
 var ErrWrongProof = util.ErrorString("Wrong proof, validator address could not be recoverd")
 var ErrWrongOwnerAcc = util.ErrorString("This account is not owner of specified validator")
+var ErrForbiddenCommissionChange = util.ErrorString("Forrbidden commission change")
 
 // Contract storage fields keys
 var (
-	field_validators      = []byte{0}
-	field_state           = []byte{1}
-	field_delegations     = []byte{2}
-	field_undelegations   = []byte{3}
+	field_validators    = []byte{0}
+	field_state         = []byte{1}
+	field_delegations   = []byte{2}
+	field_undelegations = []byte{3}
 
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
@@ -243,6 +244,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 		return nil, self.claimCommissionRewards(ctx, evm.GetBlock().Number, args)
 
+	case "setCommission":
+		var args SetCommissionArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse claimCommissionRewards input args: ", err)
+			return nil, err
+		}
+		return nil, self.setCommission(ctx, evm.GetBlock().Number, args)
+
 	case "registerValidator":
 		var args RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -323,6 +332,16 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+
+	if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
+		return ErrValidatorsMaxStakeExceeded
+	}
+
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
+	if delegation == nil && self.cfg.MinimumDeposit.Cmp(bigutil.Big0) != 0 && self.cfg.MinimumDeposit.Cmp(ctx.Value) == 1 {
+		return ErrInsufficientDelegation
+	}
+
 	prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
@@ -334,7 +353,6 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		state.Count++
 	}
 
-	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
 		ctx.Account.SubBalance(ctx.Value)
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
@@ -384,6 +402,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 	if delegation.Stake.Cmp(args.Amount) == -1 {
 		return ErrInsufficientDelegation
+	}
+
+	if self.cfg.MinimumDeposit.Cmp(bigutil.Big0) != 0 && delegation.Stake.Cmp(args.Amount) != 0 {
+		if self.cfg.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+			return ErrInsufficientDelegation
+		}
 	}
 
 	prev_vote_count := vote_count(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
@@ -512,6 +536,10 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		return ErrNonExistentValidator
 	}
 
+	if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
+		return ErrValidatorsMaxStakeExceeded
+	}
+
 	prev_vote_count_from := vote_count(validator_from.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	prev_vote_count_to := vote_count(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	//First we undelegate
@@ -523,6 +551,12 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 
 		if delegation.Stake.Cmp(args.Amount) == -1 {
 			return ErrInsufficientDelegation
+		}
+
+		if self.cfg.MinimumDeposit.Cmp(bigutil.Big0) != 0 && delegation.Stake.Cmp(args.Amount) != 0 {
+			if self.cfg.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+				return ErrInsufficientDelegation
+			}
 		}
 
 		state, state_k := self.state_get(args.ValidatorFrom[:], BlockToBytes(block))
@@ -577,8 +611,9 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 			validator_to.LastUpdated = block
 			state.Count++
 		}
-
+		
 		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo)
+
 		if delegation == nil {
 			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
 			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
@@ -684,6 +719,10 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return ErrExistentValidator
 	}
 
+	if self.cfg.MinimumDeposit.Cmp(bigutil.Big0) != 0 && self.cfg.MinimumDeposit.Cmp(ctx.Value) == 1 {
+		return ErrInsufficientDelegation
+	}
+
 	delegation := self.delegations.GetDelegation(owner_address, &args.Validator)
 	if delegation != nil {
 		// This could happen only due some serious logic bug
@@ -741,7 +780,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 	return nil
 }
 
-func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) error {
+func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args SetCommissionArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
@@ -750,7 +789,16 @@ func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) er
 		return ErrNonExistentValidator
 	}
 
+	if self.cfg.CommissionChangeFrequency != 0 && self.cfg.CommissionChangeFrequency > (block-validator.LastCommissionChange) {
+		return ErrForbiddenCommissionChange
+	}
+
+	if self.cfg.CommissionChangeDelta != 0 && self.cfg.CommissionChangeDelta < GetDelta(validator.Commission, args.Commission) {
+		return ErrForbiddenCommissionChange
+	}
+
 	validator.Commission = args.Commission
+	validator.LastCommissionChange = block
 	self.validators.ModifyValidator(&args.Validator, validator)
 
 	return nil
@@ -910,6 +958,12 @@ func (self *Contract) apply_genesis_entry(delegator_address *common.Address, tra
 	var args RegisterValidatorArgs
 
 	for _, delegation := range transfers {
+		if self.cfg.MinimumDeposit.Cmp(bigutil.Big0) != 0 && self.cfg.MinimumDeposit.Cmp(delegation.Value) == 1 {
+			panic("registerValidator: delegation is lower then the minimum")
+		}
+		if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(delegation.Value) == -1 {
+			panic("registerValidator: delegation is lower then the minimum")
+		}
 		if delegation.Value.Cmp(bigutil.Big0) == 1 {
 			var state *State
 			var state_k common.Hash
@@ -987,4 +1041,12 @@ func Add64p(a, b uint64) uint64 {
 		panic("addition overflow " + strconv.FormatUint(a, 10) + " " + strconv.FormatUint(b, 10))
 	}
 	return c
+}
+
+func GetDelta(x, y uint16) uint16 {
+	if x < y {
+		return y - x
+	} else {
+		return x - y
+	}
 }
