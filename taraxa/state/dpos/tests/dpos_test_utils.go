@@ -33,6 +33,11 @@ type Balances = map[common.Address]uint64
 type DposGenesisState = map[common.Address]Balances
 type DposCfg struct {
 	EligibilityBalanceThreshold uint64
+	VoteEligibilityBalanceStep  uint64
+	MaximumStake                uint64
+	MinimumDeposit              uint64
+	CommissionChangeDelta       uint16
+	CommissionChangeFrequency   types.BlockNum
 	DepositDelay                types.BlockNum
 	WithdrawalDelay             types.BlockNum
 	DposGenesisState
@@ -73,6 +78,12 @@ func (self *DposTest) init(t *tests.TestCtx) {
 		chain_cfg.GenesisBalances[k] = new(big.Int).SetInt64(int64(v))
 	}
 	chain_cfg.DPOS = new(dpos.Config)
+	chain_cfg.DPOS.CommissionChangeDelta = self.DposCfg.CommissionChangeDelta
+	chain_cfg.DPOS.CommissionChangeFrequency = self.DposCfg.CommissionChangeFrequency
+	chain_cfg.DPOS.MaximumStake = new(big.Int).SetInt64(int64(
+		self.DposCfg.MaximumStake))
+	chain_cfg.DPOS.MinimumDeposit = new(big.Int).SetInt64(int64(
+		self.DposCfg.MinimumDeposit))
 	chain_cfg.DPOS.WithdrawalDelay = self.DposCfg.WithdrawalDelay
 	chain_cfg.DPOS.DepositDelay = self.DposCfg.DepositDelay
 	chain_cfg.DPOS.EligibilityBalanceThreshold = new(big.Int).SetInt64(int64(
@@ -161,11 +172,15 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 	return packed
 }
 
-func init_config_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestCtx, test DposTest) {
+func init_test_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestCtx, test DposTest) {
 	tc = tests.NewTestCtx(t)
 	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
 	test.DposCfg = DposCfg{
 		EligibilityBalanceThreshold: 1000,
+		MaximumStake:                0,
+		MinimumDeposit:              0,
+		CommissionChangeDelta:       0,
+		CommissionChangeFrequency:   0,
 		DepositDelay:                2,
 		WithdrawalDelay:             4,
 		DposGenesisState:            genesis,
@@ -174,17 +189,30 @@ func init_config_genesis(t *testing.T, genesis DposGenesisState) (tc tests.TestC
 	return
 }
 
-func init_config(t *testing.T) (tc tests.TestCtx, test DposTest) {
+func init_test_config(t *testing.T, cfg DposCfg) (tc tests.TestCtx, test DposTest) {
+	tc = tests.NewTestCtx(t)
+	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
+	test.DposCfg = cfg
+	test.init(&tc)
+	return
+}
+
+func init_test(t *testing.T) (tc tests.TestCtx, test DposTest) {
 	tc = tests.NewTestCtx(t)
 	test.GenesisBalances = GenesisBalances{addr(1): 100000000, addr(2): 100000000, addr(3): 100000000}
 	test.DposCfg = DposCfg{
 		EligibilityBalanceThreshold: 1000,
+		MaximumStake:                0,
+		MinimumDeposit:              0,
+		CommissionChangeDelta:       0,
+		CommissionChangeFrequency:   0,
 		DepositDelay:                2,
 		WithdrawalDelay:             4,
 	}
 	test.init(&tc)
 	return
 }
+
 
 func generateKeyPair() (pubkey, privkey []byte) {
 	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)

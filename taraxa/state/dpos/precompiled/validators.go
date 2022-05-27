@@ -23,6 +23,9 @@ type Validator struct {
 	CommissionRewardsPool *big.Int
 
 	// Block number related to commission
+	LastCommissionChange types.BlockNum
+
+	// Block number poiting to latest state
 	LastUpdated types.BlockNum
 }
 
@@ -105,6 +108,7 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 	validator.RewardsPool = bigutil.Big0
 	validator.Commission = commission
 	validator.TotalStake = stake
+	validator.LastCommissionChange = block
 	validator.LastUpdated = block
 
 	validator_key := stor_k_1(self.validators_field, validator_address[:])
