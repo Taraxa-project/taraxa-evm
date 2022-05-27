@@ -39,13 +39,12 @@ var ErrWrongOwnerAcc = util.ErrorString("This account is not owner of specified 
 // Contract storage fields keys
 var (
 	field_validators      = []byte{0}
-	field_validator2owner = []byte{1}
-	field_state           = []byte{2}
-	field_delegations     = []byte{3}
-	field_undelegations   = []byte{4}
+	field_state           = []byte{1}
+	field_delegations     = []byte{2}
+	field_undelegations   = []byte{3}
 
-	field_eligible_vote_count = []byte{5}
-	field_amount_delegated    = []byte{6}
+	field_eligible_vote_count = []byte{4}
+	field_amount_delegated    = []byte{5}
 )
 
 var Big10000 = new(big.Int).SetInt64(10000)
@@ -427,7 +426,6 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 	if validator.TotalStake.Cmp(bigutil.Big0) == 0 && validator.CommissionRewardsPool.Cmp(bigutil.Big0) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
-		self.set_validator_owner(nil, &args.Validator)
 		self.state_put(&state_k, nil)
 	} else {
 		self.state_put(&state_k, state)
@@ -554,7 +552,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 
 		if validator_from.TotalStake.Cmp(bigutil.Big0) == 0 && validator_from.CommissionRewardsPool.Cmp(bigutil.Big0) == 0 {
 			self.validators.DeleteValidator(&args.ValidatorFrom)
-			self.set_validator_owner(nil, &args.ValidatorFrom)
 			self.state_put(&state_k, nil)
 		} else {
 			self.state_put(&state_k, state)
@@ -645,7 +642,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 }
 
 func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
-	if !self.check_validator_owner(ctx.CallerAccount.Address(), &args.Validator) {
+	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
 
@@ -659,7 +656,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 
 	if validator.TotalStake.Cmp(bigutil.Big0) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
-		self.set_validator_owner(nil, &args.Validator)
 		self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 	} else {
 		self.validators.ModifyValidator(&args.Validator, validator)
@@ -680,7 +676,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return ErrWrongProof
 	}
 	owner_address := ctx.CallerAccount.Address()
-	if !self.check_validator_owner(&common.ZeroAddress, &args.Validator) {
+	if !self.validators.CheckValidatorOwner(&common.ZeroAddress, &args.Validator) {
 		return ErrExistentValidator
 	}
 
@@ -699,8 +695,6 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return ErrBrokenState
 	}
 
-	self.set_validator_owner(owner_address, &args.Validator)
-
 	// TODO: limit size of description & endpoint - should be very small
 
 	ctx.Account.SubBalance(ctx.Value)
@@ -709,7 +703,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	state.RewardsPer1Stake = bigutil.Big0
 
 	// Creates validator related objects in storage
-	self.validators.CreateValidator(&args.Validator, block, ctx.Value, args.Commission, args.Description, args.Endpoint)
+	self.validators.CreateValidator(owner_address, &args.Validator, block, ctx.Value, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 
 	if ctx.Value.Cmp(bigutil.Big0) == 1 {
@@ -728,7 +722,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 }
 
 func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
-	if !self.check_validator_owner(ctx.CallerAccount.Address(), &args.Validator) {
+	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
 
@@ -748,7 +742,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 }
 
 func (self *Contract) setCommission(ctx vm.CallFrame, args SetCommissionArgs) error {
-	if !self.check_validator_owner(ctx.CallerAccount.Address(), &args.Validator) {
+	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
 	validator := self.validators.GetValidator(&args.Validator)
@@ -911,24 +905,6 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 	}
 }
 
-func (self *Contract) check_validator_owner(owner, validator *common.Address) bool {
-	key := stor_k_1(field_validator2owner, validator[:])
-	var saved_addr common.Address
-	self.storage.Get(key, func(bytes []byte) {
-		saved_addr = common.BytesToAddress(bytes)
-	})
-	return *owner == saved_addr
-}
-
-func (self *Contract) set_validator_owner(owner, validator *common.Address) {
-	key := stor_k_1(field_validator2owner, validator[:])
-	if owner != nil {
-		self.storage.Put(key, owner.Bytes())
-	} else {
-		self.storage.Put(key, nil)
-	}
-}
-
 func (self *Contract) apply_genesis_entry(delegator_address *common.Address, transfers []GenesisTransfer) {
 	// TODO fill them?
 	var args RegisterValidatorArgs
@@ -967,14 +943,12 @@ func (self *Contract) apply_genesis_entry(delegator_address *common.Address, tra
 					panic("registerValidator: state already exists")
 				}
 
-				if !self.check_validator_owner(&common.ZeroAddress, &delegation.Beneficiary) {
+				if !self.validators.CheckValidatorOwner(&common.ZeroAddress, &delegation.Beneficiary) {
 					panic("registerValidator: owner already exists")
 				}
-				self.set_validator_owner(delegator_address, &delegation.Beneficiary)
-
 				state = new(State)
 				state.RewardsPer1Stake = bigutil.Big0
-				self.validators.CreateValidator(&delegation.Beneficiary, 0, delegation.Value, args.Commission, args.Description, args.Endpoint)
+				self.validators.CreateValidator(delegator_address, &delegation.Beneficiary, 0, delegation.Value, args.Commission, args.Description, args.Endpoint)
 				state.Count++
 				new_vote_count := vote_count(delegation.Value, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 				if new_vote_count > 0 {

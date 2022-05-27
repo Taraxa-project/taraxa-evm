@@ -43,6 +43,7 @@ type Validators struct {
 
 	validators_field      []byte
 	validators_info_field []byte
+	validator_owner_field []byte
 }
 
 func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
@@ -51,9 +52,20 @@ func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	// Init Validators storage fields keys - relative to the prefix
 	self.validators_field = append(prefix, []byte{0}...)
 	self.validators_info_field = append(prefix, []byte{1}...)
-	validators_list_field := append(prefix, []byte{2}...)
+	self.validator_owner_field = append(prefix, []byte{2}...)
+	validators_list_field := append(prefix, []byte{3}...)
 
 	self.validators_list.Init(self.storage, validators_list_field)
+}
+
+//Check if correct account is trying to access validator object
+func (self *Validators) CheckValidatorOwner(owner, validator *common.Address) bool {
+	key := stor_k_1(self.validator_owner_field, validator[:])
+	var saved_addr common.Address
+	self.storage.Get(key, func(bytes []byte) {
+		saved_addr = common.BytesToAddress(bytes)
+	})
+	return *owner == saved_addr
 }
 
 // Checks is validator exists
@@ -86,7 +98,7 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator))
 }
 
-func (self *Validators) CreateValidator(validator_address *common.Address, block types.BlockNum, stake *big.Int, commission uint16, description string, endpoint string) {
+func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, block types.BlockNum, stake *big.Int, commission uint16, description string, endpoint string) {
 	// Creates Validator object in storage
 	validator := new(Validator)
 	validator.CommissionRewardsPool = bigutil.Big0
@@ -106,6 +118,9 @@ func (self *Validators) CreateValidator(validator_address *common.Address, block
 	validator_info_key := stor_k_1(self.validators_info_field, validator_address[:])
 	self.storage.Put(validator_info_key, rlp.MustEncodeToBytes(validator_info))
 
+	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
+	self.storage.Put(validator_owner_key, owner_address.Bytes())
+
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
 }
@@ -116,6 +131,9 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 
 	validator_info_key := stor_k_1(self.validators_info_field, validator_address[:])
 	self.storage.Put(validator_info_key, nil)
+
+	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
+	self.storage.Put(validator_owner_key, nil)
 
 	// Removes validator into the list of all validators
 	self.validators_list.RemoveAccount(validator_address)
