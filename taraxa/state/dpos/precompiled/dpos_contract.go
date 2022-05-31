@@ -370,6 +370,9 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 }
 
 func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
+	// When calling DistributeRewards, internal structures must be always initialized
+	self.lazy_init()
+
 	// Calculates number of tokens to be generated as block reward
 	blockReward := bigutil.Mul(self.amount_delegated, YieldPercentage)
 	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, BlocksPerYear))
