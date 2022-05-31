@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -44,6 +45,8 @@ type GenesisTransfer = struct {
 
 func (self *API) Init(cfg Config) *API {
 	asserts.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
+	// MaximumStake must be > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
+	asserts.Holds(cfg.MaximumStake.Cmp(bigutil.Big0) == 1)
 	self.cfg = cfg
 	return self
 }

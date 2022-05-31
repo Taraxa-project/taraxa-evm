@@ -10,6 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -101,9 +102,11 @@ func (self *API) Close() {
 }
 
 type StateTransition interface {
-	BeginBlock(*vm.BlockInfo, map[common.Address]*big.Int)
+	BeginBlock(*vm.BlockInfo)
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
-	EndBlock([]state_common.UncleBlock)
+	AddTxFeeToBalance(account *common.Address, tx_fee *big.Int)
+	GetChainConfig() *chain_config.ChainConfig
+	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards)
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)
 }
