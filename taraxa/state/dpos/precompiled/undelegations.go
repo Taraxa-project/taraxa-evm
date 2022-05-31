@@ -36,11 +36,13 @@ func (self *Undelegations) Init(stor *StorageWrapper, prefix []byte) {
 	self.delegator_undelegations_field = append(prefix, []byte{1}...)
 }
 
+// Returns true if for given values there is undelegation in queue
 func (self *Undelegations) UndelegationExists(delegator_address *common.Address, validator_address *common.Address) bool {
 	delegator_undelegations := self.getDelegatorUndelegationsList(delegator_address)
 	return delegator_undelegations.AccountExists(validator_address)
 }
 
+// Returns undelegation object from queue
 func (self *Undelegations) GetUndelegation(delegator_address *common.Address, validator_address *common.Address) (undelegation *Undelegation) {
 	key := self.genUndelegationKey(delegator_address, validator_address)
 	self.storage.Get(key, func(bytes []byte) {
@@ -51,6 +53,7 @@ func (self *Undelegations) GetUndelegation(delegator_address *common.Address, va
 	return
 }
 
+// Creates undelegation object in storage
 func (self *Undelegations) CreateUndelegation(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) {
 	undelegation := new(Undelegation)
 	undelegation.Amount = amount
@@ -64,6 +67,7 @@ func (self *Undelegations) CreateUndelegation(delegator_address *common.Address,
 	undelegations_list.CreateAccount(validator_address)
 }
 
+// Removes undelegation object from storage
 func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address, validator_address *common.Address) {
 	undelegation_key := self.genUndelegationKey(delegator_address, validator_address)
 	self.storage.Put(undelegation_key, nil)
@@ -75,11 +79,13 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 	}
 }
 
+// Returns all undelegations for given address
 func (self *Undelegations) GetUndelegations(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
 	undelegations_list := self.getDelegatorUndelegationsList(delegator_address)
 	return undelegations_list.GetAccounts(batch, count)
 }
 
+// Returns list of undelegations for given address
 func (self *Undelegations) getDelegatorUndelegationsList(delegator_address *common.Address) *IterableMap {
 	delegator_undelegations, found := self.undelegations_map[*delegator_address]
 	if !found {
@@ -91,10 +97,12 @@ func (self *Undelegations) getDelegatorUndelegationsList(delegator_address *comm
 	return delegator_undelegations
 }
 
+// Removes undelefation from the list of undelegations
 func (self *Undelegations) removeDelegatorUndelegationList(delegator_address *common.Address) {
 	delete(self.undelegations_map, *delegator_address)
 }
 
+// Return key to storage where undelegations is stored
 func (self *Undelegations) genUndelegationKey(delegator_address *common.Address, validator_address *common.Address) *common.Hash {
 	return stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
 }
