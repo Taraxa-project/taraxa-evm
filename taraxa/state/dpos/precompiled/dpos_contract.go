@@ -20,8 +20,23 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
+// This package implements the main DPOS contract as well as the fee distribution schema
+// Fee distribution is based on the "F1 Fee Distribution" algorithm
+////////////////////////////////////////////////////////////////////////////
+// The key point of how F1 works is that it tracks how much rewards a delegator with 1
+// stake delegated to a given validator would be entitled to if it had bonded at block 0 until
+// the latest block. When a delegator bonds at block b, the amount of rewards a delegator
+// with 1 stake would have if bonded at block 0 until block b is also persisted to state. When
+// the delegator withdraws, they receive the difference of these two values. Since rewards
+// are distributed according to stake-weighting, this amount of rewards can be scaled by the
+// amount of stake a delegator had delegated. [1]
+////////////////////////////////////////////////////////////////////////////
+// [1] https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf
+
+// Fixed contract address
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
 
+// Error values
 var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
 var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
 var ErrNonExistentDelegation = util.ErrorString("Delegation does not exist")
@@ -48,6 +63,7 @@ var (
 	field_amount_delegated    = []byte{5}
 )
 
+// const value of 10000 so we do not need to allocate it again
 var Big10000 = new(big.Int).SetInt64(10000)
 
 // Maximum number of validators per batch returned by getValidators call
@@ -56,70 +72,86 @@ const GetValidatorsMaxCount = 50
 // Maximum number of validators per batch returned by getDelegatorDelegations call
 const GetDelegatorDelegationsMaxCount = 50
 
+// State of the rewards distribution algorithm
 type State struct {
+	// represents number of rewards per 1 stake
 	RewardsPer1Stake *big.Int
-
 	// number of references
 	Count uint32
 }
 
+// Main contract class
 type Contract struct {
-	cfg            Config
-	storage        StorageWrapper
+	cfg Config
+	// current storage
+	storage StorageWrapper
+	// delayed storage for PBFT
 	delayedStorage Reader
-	Abi            abi.ABI
+	// ABI of the contract
+	Abi abi.ABI
 
+	// Iterable storages
 	validators    Validators
 	delegations   Delegations
 	undelegations Undelegations
 
+	// values for PBFT
 	eligible_vote_count_orig uint64
 	eligible_vote_count      uint64
 	amount_delegated_orig    *big.Int
 	amount_delegated         *big.Int
-	lazy_init_done           bool
+
+	lazy_init_done bool
 }
 
+// Initialize contract class
 func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader) *Contract {
 	self.cfg = cfg
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
+	return self
+}
+
+// Updates delayted storage after each commited block
+func (self *Contract) UpdateStorage(readStorage Reader) {
+	self.delayedStorage = readStorage
+}
+
+// Updates config - for HF
+func (self *Contract) UpdateConfig(cfg Config) {
+	self.cfg = cfg
+}
+
+// Register this precompiled contract
+func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
+	defensive_copy := *contract_address
+	registry(&defensive_copy, self)
+}
+
+// Calculate required gas for call to this contract
+func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	// TODO: based on method being called, calculate the gas somehow. Doing it based on the length of input is totally useless
+	return uint64(len(ctx.Input)) * 20
+}
+
+// Lazy initialization only if contract is needed
+func (self *Contract) lazy_init() {
+	if self.lazy_init_done {
+		return
+	}
+	self.lazy_init_done = true
+
 	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
 
 	self.validators.Init(&self.storage, field_validators)
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
 
-	return self
-}
-
-func (self *Contract) UpdateStorage(readStorage Reader) {
-	self.delayedStorage = readStorage
-}
-
-func (self *Contract) UpdateConfig(cfg Config) {
-	self.cfg = cfg
-}
-
-func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
-	defensive_copy := *contract_address
-	registry(&defensive_copy, self)
-}
-
-func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
-	// TODO: based on method being called, calculate the gas somehow. Doing it based on the length of input is totally useless
-	return uint64(len(ctx.Input)) * 20
-}
-
-func (self *Contract) lazy_init() {
-	if self.lazy_init_done {
-		return
-	}
-	self.lazy_init_done = true
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_vote_count = self.eligible_vote_count_orig
+
 	self.amount_delegated_orig = bigutil.Big0
 	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
 		self.amount_delegated_orig = bigutil.FromBytes(bytes)
@@ -127,12 +159,14 @@ func (self *Contract) lazy_init() {
 	self.amount_delegated = self.amount_delegated_orig
 }
 
+// Should be called from BeginBlock on each block
 func (self *Contract) BeginBlockCall(rewards map[common.Address]*big.Int) {
 	for validator, reward := range rewards {
 		self.update_rewards(&validator, reward)
 	}
 }
 
+// Should be called from EndBlock on each block
 func (self *Contract) EndBlockCall() {
 	if !self.lazy_init_done {
 		return
@@ -148,12 +182,14 @@ func (self *Contract) EndBlockCall() {
 	}
 }
 
+// Should be called on each block commit - updates delayedStorage
 func (self *Contract) CommitCall(readStorage Reader) {
 	defer self.storage.ClearCache()
 	// Storage Update
 	self.delayedStorage = readStorage
 }
 
+// Fills contract based on genesis values
 func (self *Contract) ApplyGenesis() error {
 	self.lazy_init()
 
@@ -166,6 +202,8 @@ func (self *Contract) ApplyGenesis() error {
 	return nil
 }
 
+// This is called on each call to contract
+// It translates call and tries to execute them
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if evm.GetDepth() != 0 {
 		return nil, ErrCallIsNotToplevel
@@ -327,6 +365,8 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	return nil, nil
 }
 
+// Delegates specified number of tokens to specified validator and creates new delegation object
+// It also increase total stake of specified validator and creas new state if necessary
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
@@ -385,6 +425,8 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 	return nil
 }
 
+// Removes delegation from specified validator and claims rewards
+// new undelegation object is created and moved to queue where after expiration can be claimed
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args UndelegateArgs) error {
 	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrExistentUndelegation
@@ -446,6 +488,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
 	}
 
+	// We can delete validator object as it doesn't have any stake anymore'
 	if validator.TotalStake.Cmp(bigutil.Big0) == 0 && validator.CommissionRewardsPool.Cmp(bigutil.Big0) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_put(&state_k, nil)
@@ -457,6 +500,8 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	return nil
 }
 
+// Removes undelegation from queue and moves staked toknes back to delegator
+// This only works after lock-up period expires
 func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrNonExistentUndelegation
@@ -471,6 +516,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	return nil
 }
 
+// Removes the undelegation request from queue and returns delegation value back to validator if possible
 func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrNonExistentUndelegation
@@ -523,6 +569,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	return nil
 }
 
+// Moves delegated tokens from one delegator to another
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args RedelegateArgs) error {
 	validator_from := self.validators.GetValidator(&args.ValidatorFrom)
 	if validator_from == nil {
@@ -639,6 +686,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 	return nil
 }
 
+// Pays off accumulated rewards back to delegator address
 func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
@@ -672,6 +720,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	return nil
 }
 
+// Pays off rewards from commission back to validator owner address
 func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
@@ -695,6 +744,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	return nil
 }
 
+// Creates a new validator object and delegates to it specific value of tokens
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
 	// make sure the public key is a valid one
 	pubKey, err := crypto.Ecrecover(args.Validator.Hash().Bytes(), args.Proof)
@@ -756,6 +806,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	return nil
 }
 
+// Changes validator specific field as endpoint or description
 func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
@@ -776,6 +827,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 	return nil
 }
 
+// Changes validator commission to new rate
 func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args SetCommissionArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
@@ -800,8 +852,10 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 	return nil
 }
 
-// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
+// Returns batch of validators
 func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidatorsRet) {
+	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
+
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
@@ -835,9 +889,12 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 	return
 }
 
-// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
-// TODO: this will be super expensice call probably
+// Returns batch of delegations for specified address
 func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) (result GetDelegatorDelegationRet) {
+
+	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
+	// TODO: this will be super expensice call probably
+
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
 
 	// Reserve slice capacity
@@ -874,6 +931,7 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 	return
 }
 
+// Returns batch of undelegation from queue for given address
 func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result GetUnelegationsRet) {
 	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
 
@@ -899,6 +957,7 @@ func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result
 	return
 }
 
+// Updates rewards pool for given validators addresses
 func (self *Contract) update_rewards(validator_address *common.Address, reward *big.Int) {
 	validator := self.validators.GetValidator(validator_address)
 
@@ -913,6 +972,7 @@ func (self *Contract) update_rewards(validator_address *common.Address, reward *
 	}
 }
 
+// Helper function to get correct state object from storage
 func (self *Contract) state_get(validator_addr, block []byte) (state *State, key common.Hash) {
 	key = stor_k_2(field_state, validator_addr, block)
 	self.storage.Get(&key, func(bytes []byte) {
@@ -922,6 +982,8 @@ func (self *Contract) state_get(validator_addr, block []byte) (state *State, key
 	return
 }
 
+// Gets state object from storage and decrements it's count
+// if number of references is 0 it also removes object from storage
 func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (state *State) {
 	key := stor_k_1(field_state, validator_addr, block)
 	self.storage.Get(key, func(bytes []byte) {
@@ -941,6 +1003,7 @@ func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (sta
 	return
 }
 
+// Saves state object to storage
 func (self *Contract) state_put(key *common.Hash, state *State) {
 	if state != nil {
 		self.storage.Put(key, rlp.MustEncodeToBytes(state))
@@ -949,6 +1012,7 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 	}
 }
 
+// Creates validator and delegation based on the given values
 func (self *Contract) apply_genesis_entry(delegator_address *common.Address, transfers []GenesisTransfer) {
 	// TODO fill them?
 	var args RegisterValidatorArgs
@@ -1016,12 +1080,14 @@ func (self *Contract) apply_genesis_entry(delegator_address *common.Address, tra
 	}
 }
 
+// Returns block number as bytes
 func BlockToBytes(number types.BlockNum) []byte {
 	big := new(big.Int)
 	big.SetUint64(number)
 	return big.Bytes()
 }
 
+// Calculates vote count from staking balance based on config values
 func voteCount(staking_balance, eligibility_threshold, vote_eligibility_balance_step *big.Int) uint64 {
 	tmp := big.NewInt(0)
 	if staking_balance.Cmp(eligibility_threshold) >= 0 {
@@ -1031,6 +1097,7 @@ func voteCount(staking_balance, eligibility_threshold, vote_eligibility_balance_
 	return tmp.Uint64()
 }
 
+// Safe add64, that panics on overflow (should never happen - misconfiguration)
 func add64p(a, b uint64) uint64 {
 	c := a + b
 	if c < a || c < b {
@@ -1039,6 +1106,7 @@ func add64p(a, b uint64) uint64 {
 	return c
 }
 
+// Returns absolute value of the difference of two uint16
 func getDelta(x, y uint16) uint16 {
 	if x < y {
 		return y - x
