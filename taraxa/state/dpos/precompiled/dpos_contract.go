@@ -53,6 +53,8 @@ var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
 var ErrWrongProof = util.ErrorString("Wrong proof, validator address could not be recoverd")
 var ErrWrongOwnerAcc = util.ErrorString("This account is not owner of specified validator")
 var ErrForbiddenCommissionChange = util.ErrorString("Forbidden commission change")
+var ErrMaxEndpointLengthExceeded = util.ErrorString("Max endpoint length exceeded")
+var ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
 
 // Contract storage fields keys
 var (
@@ -76,6 +78,12 @@ var (
 // const value of 10000 so we do not need to allocate it again
 var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
+
+// Max num of characters in url
+const MaxEndpointLength = 50
+
+// Max num of characters in description
+const MaxDescriptionLength = 100
 
 // Maximum number of validators per batch returned by getValidators call
 const GetValidatorsMaxCount = 50
@@ -809,7 +817,15 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 
 // Creates a new validator object and delegates to it specific value of tokens
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
-	// make sure the public key is a valid one
+	// Limit size of description & endpoint
+	if len(args.Endpoint) > MaxEndpointLength {
+		return ErrMaxEndpointLengthExceeded
+	}
+	if len(args.Description) > MaxDescriptionLength {
+		return ErrMaxDescriptionLengthExceeded
+	}
+
+	// Make sure the public key is a valid one
 	pubKey, err := crypto.Ecrecover(args.Validator.Hash().Bytes(), args.Proof)
 	// the first byte of pubkey is bitcoin heritage
 	if err != nil {
@@ -840,8 +856,6 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return ErrBrokenState
 	}
 
-	// TODO: limit size of description & endpoint - should be very small
-
 	// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
 	ctx.Account.SubBalance(ctx.Value)
 
@@ -869,6 +883,14 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 
 // Changes validator specific field as endpoint or description
 func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
+	// Limit size of description & endpoint
+	if len(args.Endpoint) > MaxEndpointLength {
+		return ErrMaxEndpointLengthExceeded
+	}
+	if len(args.Description) > MaxDescriptionLength {
+		return ErrMaxDescriptionLengthExceeded
+	}
+
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
@@ -877,8 +899,6 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 	if validator_info == nil {
 		return ErrNonExistentValidator
 	}
-
-	// TODO: limit max size of endpoint & description
 
 	validator_info.Description = args.Description
 	validator_info.Endpoint = args.Endpoint
