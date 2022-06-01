@@ -213,12 +213,12 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, ErrCallIsNotToplevel
 	}
 
+	self.lazy_init()
+
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		return nil, err
 	}
-
-	self.lazy_init()
 
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]
