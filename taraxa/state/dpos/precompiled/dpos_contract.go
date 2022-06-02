@@ -67,14 +67,6 @@ var (
 	field_amount_delegated    = []byte{5}
 )
 
-// Rewards related constants
-// TODO: these params will be propagated through config
-var (
-	TaraPrecision   = big.NewInt(1e+18)              // Tara precision
-	YieldPercentage = big.NewInt(20)                 // 20% yield
-	BlocksPerYear   = big.NewInt(365 * 24 * 60 * 15) // 365 days * 24 hours * 60 minutes * 15 (1 pbft block every 4 seconds -> 15 per minute)
-)
-
 // const value of 10000 so we do not need to allocate it again
 var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
@@ -119,6 +111,8 @@ type Contract struct {
 	eligible_vote_count      uint64
 	amount_delegated_orig    *big.Int
 	amount_delegated         *big.Int
+	blocks_per_year          *big.Int
+	yield_percentage         *big.Int
 
 	lazy_init_done bool
 }
@@ -158,13 +152,15 @@ func (self *Contract) lazy_init() {
 	if self.lazy_init_done {
 		return
 	}
-	self.lazy_init_done = true
 
 	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
 
 	self.validators.Init(&self.storage, field_validators)
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
+
+	self.blocks_per_year = big.NewInt(int64(self.cfg.BlocksPerYear))
+	self.yield_percentage = big.NewInt(int64(self.cfg.YieldPercentage))
 
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
@@ -176,6 +172,8 @@ func (self *Contract) lazy_init() {
 		self.amount_delegated_orig = bigutil.FromBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig
+
+	self.lazy_init_done = true
 }
 
 // Should be called from EndBlock on each block
@@ -298,6 +296,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.setCommission(ctx, evm.GetBlock().Number, args)
 
 	case "registerValidator":
+
 		var args RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse registerValidator input args: ", err)
@@ -377,8 +376,8 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	self.lazy_init()
 
 	// Calculates number of tokens to be generated as block reward
-	blockReward := bigutil.Mul(self.amount_delegated, YieldPercentage)
-	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, BlocksPerYear))
+	blockReward := bigutil.Mul(self.amount_delegated, self.yield_percentage)
+	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, self.blocks_per_year))
 
 	totalUniqueTxsCountCheck := uint32(0)
 
@@ -534,7 +533,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 	ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 	// Creating undelegation request
-	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+self.cfg.WithdrawalDelay, args.Amount)
+	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
 	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
 
@@ -914,7 +913,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.CommissionChangeFrequency != 0 && self.cfg.CommissionChangeFrequency > (block-validator.LastCommissionChange) {
+	if self.cfg.CommissionChangeFrequency != 0 && uint64(self.cfg.CommissionChangeFrequency) > (block-validator.LastCommissionChange) {
 		return ErrForbiddenCommissionChange
 	}
 

@@ -6,10 +6,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -33,11 +31,7 @@ type StateTransition struct {
 	new_chain_config   *chain_config.ChainConfig
 	LastBlockNum       uint64
 }
-type StateTransitionConfig struct {
-	ETHChainConfig   params.ChainConfig
-	ExecutionOptions vm.ExecutionOpts
-	GenesisBalances  core.BalanceMap
-}
+
 type Opts struct {
 	EVMState state_evm.Opts
 	Trie     TrieSinkOpts
@@ -127,9 +121,9 @@ func (self *StateTransition) GetChainConfig() (ret *chain_config.ChainConfig) {
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
-	if !self.chain_config.ExecutionOptions.DisableBlockRewards {
+	if !self.chain_config.BlockRewardsOptions.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()
-		if self.chain_config.ExecutionOptions.DisableStatsRewards {
+		if self.chain_config.BlockRewardsOptions.DisableContractDistribution {
 			ethash.AccumulateRewards(
 				self.evm.GetRules(),
 				ethash.BlockNumAndCoinbase{evm_block.Number, evm_block.Author},

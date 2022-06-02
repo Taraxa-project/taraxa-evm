@@ -18,35 +18,54 @@ type API struct {
 	cfg_by_block []ConfigWithBlock
 	cfg          Config
 }
+
 type Config = struct {
 	EligibilityBalanceThreshold *big.Int
 	VoteEligibilityBalanceStep  *big.Int
 	MaximumStake                *big.Int
 	MinimumDeposit              *big.Int
 	CommissionChangeDelta       uint16
-	CommissionChangeFrequency   types.BlockNum
-	DepositDelay                types.BlockNum
-	WithdrawalDelay             types.BlockNum
+	CommissionChangeFrequency   uint32 // [number of blocks]
+	DelegationDelay             uint32 // [number of blocks]
+	DelegationLockingPeriod     uint32 // [number of blocks]
+	BlocksPerYear               uint32 // [count]
+	YieldPercentage             uint16 // [%]
 	GenesisState                []GenesisStateEntry
 }
 
 type ConfigWithBlock struct {
 	cfg   Config
-	blk_n uint64
+	blk_n types.BlockNum
 }
+
 type GenesisStateEntry = struct {
 	Benefactor common.Address
 	Transfers  []GenesisTransfer
 }
+
 type GenesisTransfer = struct {
 	Beneficiary common.Address
 	Value       *big.Int
 }
 
 func (self *API) Init(cfg Config) *API {
-	asserts.Holds(cfg.DepositDelay <= cfg.WithdrawalDelay)
+	asserts.Holds(cfg.DelegationDelay <= cfg.DelegationLockingPeriod)
+
+	asserts.Holds(cfg.EligibilityBalanceThreshold != nil)
+	asserts.Holds(cfg.VoteEligibilityBalanceStep != nil)
+	asserts.Holds(cfg.MaximumStake != nil)
+	asserts.Holds(cfg.MinimumDeposit != nil)
+
+	// MinimumDeposit must be <= MaximumStake
+	asserts.Holds(cfg.MaximumStake.Cmp(cfg.MinimumDeposit) != -1)
+
 	// MaximumStake must be > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
 	asserts.Holds(cfg.MaximumStake.Cmp(bigutil.Big0) == 1)
+
+	// Bots YieldPercentage & BlocksPerYear must be > 0 due to possible division by 0
+	asserts.Holds(cfg.YieldPercentage > 0)
+	asserts.Holds(cfg.BlocksPerYear > 0)
+
 	self.cfg = cfg
 	return self
 }
@@ -66,7 +85,7 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) Config {
 	return self.cfg
 }
 
-func (self *API) UpdateConfig(blk_n uint64, cfg Config) {
+func (self *API) UpdateConfig(blk_n types.BlockNum, cfg Config) {
 	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
 	self.cfg = cfg
 }

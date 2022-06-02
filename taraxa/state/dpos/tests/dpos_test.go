@@ -2,7 +2,6 @@ package test_integration
 
 import (
 	"bytes"
-	"fmt"
 	"math/big"
 	"testing"
 
@@ -33,7 +32,7 @@ func TestProof(t *testing.T) {
 }
 
 func TestRegisterValidator(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
 	validator1_owner := addr(1)
@@ -53,7 +52,7 @@ func TestRegisterValidator(t *testing.T) {
 }
 
 func TestDelegate(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -65,7 +64,7 @@ func TestDelegate(t *testing.T) {
 }
 
 func TestRedelegate(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
 	validator1_owner := addr(1)
@@ -99,7 +98,7 @@ func TestRedelegate(t *testing.T) {
 }
 
 func TestUndelegate(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -123,10 +122,10 @@ func TestUndelegate(t *testing.T) {
 }
 
 func TestRewardsAndCommission(t *testing.T) {
-	tc, test := init_test(t, DefaultDposConfig)
+	tc, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
-	txFee := bigutil.Div(dpos.TaraPrecision, big.NewInt(1000)) //  0.001 TARA
+	txFee := bigutil.Div(TaraPrecision, big.NewInt(1000)) //  0.001 TARA
 
 	validator1_addr, validator1_proof := generateAddrAndProof()
 	validator1_owner := addr(1)
@@ -201,8 +200,8 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.AdvanceBlock(&tmp_rewards_stats, &fees_rewards)
 
 	// Expected block reward
-	expected_block_reward := bigutil.Mul(total_stake, dpos.YieldPercentage)
-	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(dpos.Big100, dpos.BlocksPerYear))
+	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
+	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(dpos.Big100, big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_txs * blockReward) / total_txs
@@ -247,9 +246,9 @@ func TestRewardsAndCommission(t *testing.T) {
 	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
 	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
 
-	tc.Assert.Equal(actual_delegator1_reward, expected_delegator1_reward)
-	tc.Assert.Equal(actual_delegator2_reward, expected_delegator2_reward)
-	tc.Assert.Equal(actual_delegator3_reward, expected_delegator3_reward)
+	tc.Assert.Equal(expected_delegator1_reward, actual_delegator1_reward)
+	tc.Assert.Equal(expected_delegator2_reward, actual_delegator2_reward)
+	tc.Assert.Equal(expected_delegator3_reward, actual_delegator3_reward)
 
 	// Check commission rewards
 	validator1_old_balance := test.GetBalance(validator1_owner)
@@ -261,39 +260,41 @@ func TestRewardsAndCommission(t *testing.T) {
 	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
 	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
 
-	fmt.Print("expected_validator1_commission_reward: ", expected_validator1_commission_reward)
-	fmt.Print("expected_validator2_commission_reward: ", expected_validator2_commission_reward)
-	tc.Assert.Equal(actual_validator1_commission_reward, expected_validator1_commission_reward)
-	tc.Assert.Equal(actual_validator2_commission_reward, expected_validator2_commission_reward)
+	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
+	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
 }
 
 func TestGenesis(t *testing.T) {
-	cfg := DefaultDposConfig
-	cfg.DposGenesisState = DposGenesisState{
-		addr(1): {
-			addr(1): DefaultEligibilityBalanceThreshold,
-			addr(2): DefaultEligibilityBalanceThreshold,
-			addr(3): DefaultEligibilityBalanceThreshold,
-			addr(3): DefaultEligibilityBalanceThreshold,
-		},
-	}
+	cfg := CopyDefaulChainConfig()
+
+	entry := dpos.GenesisStateEntry{Benefactor: addr(1)}
+	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(1), Value: DefaultEligibilityBalanceThreshold})
+	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(2), Value: DefaultEligibilityBalanceThreshold})
+	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(3), Value: DefaultEligibilityBalanceThreshold})
+	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(4), Value: DefaultEligibilityBalanceThreshold})
+
+	accVoteCount := bigutil.Div(DefaultEligibilityBalanceThreshold, cfg.DPOS.VoteEligibilityBalanceStep)
+
+	cfg.DPOS.GenesisState = append(cfg.DPOS.GenesisState, entry)
+
 	tc, test := init_test(t, cfg)
+
 	defer test.end()
 
-	totalAmountDelegated := bigutil.Mul(DefaultEligibilityBalanceThreshold, big.NewInt(3))
+	totalAmountDelegated := bigutil.Mul(DefaultEligibilityBalanceThreshold, big.NewInt(4))
 
 	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(addr(1)))
-	tc.Assert.Equal(uint64(3), test.GetDPOSReader().EligibleVoteCount())
+	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().EligibleVoteCount())
 	tc.Assert.Equal(totalAmountDelegated, test.GetDPOSReader().TotalAmountDelegated())
-	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
-	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(2)))
-	tc.Assert.Equal(uint64(1), test.GetDPOSReader().GetEligibleVoteCount(addr_p(3)))
+	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
+	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(2)))
+	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(3)))
 }
 
 func TestSetCommissions(t *testing.T) {
-	cfg := DefaultDposConfig
-	cfg.CommissionChangeDelta = 5
-	cfg.CommissionChangeFrequency = 4
+	cfg := CopyDefaulChainConfig()
+	cfg.DPOS.CommissionChangeDelta = 5
+	cfg.DPOS.CommissionChangeFrequency = 4
 
 	_, test := init_test(t, cfg)
 	defer test.end()
@@ -324,13 +325,12 @@ func TestSetCommissions(t *testing.T) {
 }
 
 func TestDelegateMinMax(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(addr(1), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
-
 	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultMinimumDeposit, Big1), test.pack("delegate", val_addr), dpos.ErrInsufficientDelegation, util.ErrorString(""))
 	test.ExecuteAndCheck(addr(3), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
@@ -338,7 +338,7 @@ func TestDelegateMinMax(t *testing.T) {
 }
 
 func TestUndelegateMin(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
 	val_addr, proof := generateAddrAndProof()
@@ -351,7 +351,7 @@ func TestUndelegateMin(t *testing.T) {
 }
 
 func TestRedelegateMinMax(t *testing.T) {
-	_, test := init_test(t, DefaultDposConfig)
+	_, test := init_test(t, CopyDefaulChainConfig())
 	defer test.end()
 
 	validator1_addr, validator1_proof := generateAddrAndProof()

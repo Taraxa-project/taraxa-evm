@@ -20,6 +20,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
@@ -115,10 +116,12 @@ func main() {
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			state.ChainConfig{
 				ExecutionOptions: vm.ExecutionOpts{
-					DisableGasFee:       false,
-					DisableNonceCheck:   true,
-					DisableBlockRewards: true,
-					DisableStatsRewards: true,
+					DisableGasFee:     false,
+					DisableNonceCheck: true,
+				},
+				BlockRewardsOptions: chain_config.BlockRewardsOpts{
+					DisableBlockRewards:         true,
+					DisableContractDistribution: true,
 				},
 				ETHChainConfig: params.ChainConfig{
 					DAOForkBlock: types.BlockNumberNIL,
