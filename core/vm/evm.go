@@ -176,8 +176,8 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
-	self.trx = tx
+func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+	self.trx = trx
 
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&self.trx.From)
@@ -201,6 +201,13 @@ func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult)
 	}
 	gas_left := gas_cap
 	contract_creation := self.trx.To == nil
+
+	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
+	if err != nil {
+		ret.ConsensusErr = util.ErrorString(err.Error())
+		return
+	}
+
 	if !opts.DisableGasFee {
 		if !BalanceGTE(caller, gas_fee) {
 			ret.ConsensusErr = ErrInsufficientBalanceForGas
@@ -216,9 +223,10 @@ func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult)
 			ret.ConsensusErr = ErrIntrinsicGas
 			return
 		}
-		gas_left -= gas_intrinsic
 	}
-	var err error
+
+	gas_left -= gas_intrinsic
+
 	if contract_creation {
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
