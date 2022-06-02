@@ -230,7 +230,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.delegate(ctx, evm.GetBlock().Number, args)
 
 	case "undelegate":
@@ -239,7 +238,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.undelegate(ctx, evm.GetBlock().Number, args)
 
 	case "confirmUndelegate":
@@ -248,7 +246,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse confirmUndelegate input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
 
 	case "cancelUndelegate":
@@ -266,7 +263,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse reDelegate input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.redelegate(ctx, evm.GetBlock().Number, args)
 
 	case "claimRewards":
@@ -275,7 +271,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse claimRewards input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
 
 	case "claimCommissionRewards":
@@ -300,7 +295,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse registerValidator input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.registerValidator(ctx, evm.GetBlock().Number, args)
 
 	case "setValidatorInfo":
@@ -309,7 +303,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse setValidatorInfo input args: ", err)
 			return nil, err
 		}
-
 		return nil, self.setValidatorInfo(ctx, args)
 
 	case "isValidatorEligible":
@@ -318,12 +311,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse isValidatorEligible input args: ", err)
 			return nil, err
 		}
-		result := self.delayedStorage.IsEligible(&args.Validator)
-		return method.Outputs.Pack(result)
+		return method.Outputs.Pack(self.delayedStorage.IsEligible(&args.Validator))
 
 	case "getTotalEligibleVotesCount":
-		result := self.delayedStorage.EligibleVoteCount()
-		return method.Outputs.Pack(result)
+		return method.Outputs.Pack(self.delayedStorage.EligibleVoteCount())
 
 	case "getValidatorEligibleVotesCount":
 		var args ValidatorAddress
@@ -331,8 +322,18 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidatorEligibleVotesCount input args: ", err)
 			return nil, err
 		}
+		return method.Outputs.Pack(self.delayedStorage.GetEligibleVoteCount(&args.Validator))
 
-		result := self.delayedStorage.GetEligibleVoteCount(&args.Validator)
+	case "getValidator":
+		var args ValidatorAddress
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getValidator input args: ", err)
+			return nil, err
+		}
+		result, err := self.getValidator(args)
+		if err != nil {
+			return nil, err
+		}
 		return method.Outputs.Pack(result)
 
 	case "getValidators":
@@ -341,9 +342,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-
-		result := self.getValidators(args)
-		return method.Outputs.Pack(result)
+		return method.Outputs.Pack(self.getValidators(args))
 
 	case "getDelegatorDelegations":
 		var args GetDelegatorDelegationsArgs
@@ -351,9 +350,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegatorDelegations input args: ", err)
 			return nil, err
 		}
-
-		result := self.getDelegatorDelegations(args)
-		return method.Outputs.Pack(result)
+		return method.Outputs.Pack(self.getDelegatorDelegations(args))
 
 	case "getUndelegations":
 		var args GetDelegatorDelegationsArgs
@@ -361,9 +358,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
 		}
-
-		result := self.getUndelegations(args)
-		return method.Outputs.Pack(result)
+		return method.Outputs.Pack(self.getUndelegations(args))
 	}
 
 	return nil, nil
@@ -912,6 +907,27 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 	self.validators.ModifyValidator(&args.Validator, validator)
 
 	return nil
+}
+
+// Returns single validator object
+func (self *Contract) getValidator(args ValidatorAddress) (DposInterfaceValidatorBasicInfo, error) {
+	var result DposInterfaceValidatorBasicInfo
+	validator := self.validators.GetValidator(&args.Validator)
+	if validator == nil {
+		return result, ErrNonExistentValidator
+	}
+	validator_info := self.validators.GetValidatorInfo(&args.Validator)
+	if validator_info == nil {
+		// This should never happen
+		panic("getValidators - unable to fetch validator info data")
+	}
+
+	result.Commission = validator.Commission
+	result.CommissionReward = validator.CommissionRewardsPool
+	result.TotalStake = validator.TotalStake
+	result.Endpoint = validator_info.Endpoint
+	result.Description = validator_info.Description
+	return result, nil
 }
 
 // Returns batch of validators

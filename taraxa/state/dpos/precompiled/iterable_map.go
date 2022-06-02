@@ -136,9 +136,9 @@ func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []commo
 
 	// Invalid batch provided - there is not so many accounts in iterbale map
 	if requested_idx_start >= accounts_count {
-		panic("Invalid batch provided - there is not so many accounts in iterable map")
+		end = true
+		return
 	}
-
 	if accounts_count <= requested_idx_end {
 		result = make([]common.Address, accounts_count-requested_idx_start)
 		end = true
