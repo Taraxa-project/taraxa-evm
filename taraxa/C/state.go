@@ -222,8 +222,8 @@ func taraxa_evm_state_api_transition_state(
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
 
-	disabled_stats_rewards := st.GetChainConfig().ExecutionOptions.DisableStatsRewards
-	if !disabled_stats_rewards && len(params.Txs) != len(params.TxsValidators) {
+	disabled_contract_distribution := st.GetChainConfig().BlockRewardsOptions.DisableContractDistribution
+	if !disabled_contract_distribution && len(params.Txs) != len(params.TxsValidators) {
 		errorString := fmt.Sprintf("Number of txs (%d) != number of txs validators (%d)", len(params.Txs), len(params.TxsValidators))
 		panic(errorString)
 	}
@@ -241,9 +241,9 @@ func taraxa_evm_state_api_transition_state(
 		if !st.GetChainConfig().ExecutionOptions.DisableGasFee {
 			txFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.GasUsed), tx.GasPrice)
 
-			// Rewards stats are not enabled - just add fee to the block author balance
+			// Contract distribution is disabled - just add fee to the block author balance
 			// TODO: once there is a stabilized version - remove this flag and use only dpos contract
-			if disabled_stats_rewards {
+			if disabled_contract_distribution {
 				st.AddTxFeeToBalance(&params.Blk.Author, txFee)
 			} else {
 				// Reward dag block author, who included specified tx as first
