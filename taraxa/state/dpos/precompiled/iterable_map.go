@@ -33,6 +33,16 @@ func (self *IterableMap) AccountExists(account *common.Address) bool {
 	return acc_exists
 }
 
+// Returnd number of stored items
+func (self *IterableMap) GetCount() uint32 {
+	// Gets keys array length
+	accounts_count := uint32(0)
+	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
+		accounts_count = bytesToUint32(bytes)
+	})
+	return accounts_count;
+}
+
 // Creates account from iterable map
 func (self *IterableMap) CreateAccount(account *common.Address) bool {
 	if acc_exists, _ := self.accountExists(account); acc_exists {

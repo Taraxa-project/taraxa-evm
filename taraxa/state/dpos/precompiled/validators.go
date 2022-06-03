@@ -170,3 +170,7 @@ func (self *Validators) ModifyValidatorInfo(validator_address *common.Address, v
 func (self *Validators) GetValidatorsAddresses(batch uint32, count uint32) ([]common.Address, bool) {
 	return self.validators_list.GetAccounts(batch, count)
 }
+
+func (self *Validators) GetValidatorsCount() (uint32) {
+	return self.validators_list.GetCount()
+}
