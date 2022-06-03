@@ -35,6 +35,20 @@ import (
 ////////////////////////////////////////////////////////////////////////////
 // [1] https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf
 
+const (
+	RegisterValidatorGas uint64 = 5000000
+	SetCommissionGas     uint64 = 500000
+	DelegateGas          uint64 = 1200000
+	UndelegateGas        uint64 = 2000000
+	ConfirmUndelegateGas uint64 = 300000
+	CancelUndelegateGas  uint64 = 1500000
+	ReDelegateGas        uint64 = 2100000
+	ClaimRewardsGas      uint64 = 1000000
+	SetValidatorInfoGas  uint64 = 400000
+	DposGetMethodsGas    uint64 = 10000
+	DefaultDposMethodGas uint64 = 10000
+)
+
 // Fixed contract address
 var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
 
@@ -143,8 +157,38 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
-	// TODO: based on method being called, calculate the gas somehow. Doing it based on the length of input is totally useless
-	return uint64(len(ctx.Input)) * 20
+	method, _ := self.Abi.MethodById(ctx.Input)
+
+	switch method.Name {
+	case "delegate":
+		return DelegateGas
+	case "undelegate":
+		return UndelegateGas
+	case "confirmUndelegate":
+		return ConfirmUndelegateGas
+	case "cancelUndelegate":
+		return CancelUndelegateGas
+	case "reDelegate":
+		return ReDelegateGas
+	case "claimRewards":
+		return ClaimRewardsGas
+	case "claimCommissionRewards":
+		return ClaimRewardsGas
+	case "setCommission":
+		return SetCommissionGas
+	case "registerValidator":
+		return RegisterValidatorGas
+	case "setValidatorInfo":
+		return SetValidatorInfoGas
+	case "isValidatorEligible":
+	case "getTotalEligibleVotesCount":
+	case "getValidatorEligibleVotesCount":
+	case "getValidators":
+	case "getDelegatorDelegations":
+	case "getUndelegations":
+		return DposGetMethodsGas
+	}
+	return DefaultDposMethodGas
 }
 
 // Lazy initialization only if contract is needed
