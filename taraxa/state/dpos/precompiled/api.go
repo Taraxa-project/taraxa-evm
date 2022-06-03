@@ -3,6 +3,7 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -30,19 +31,21 @@ type Config = struct {
 	DelegationLockingPeriod     uint32 // [number of blocks]
 	BlocksPerYear               uint32 // [count]
 	YieldPercentage             uint16 // [%]
-	GenesisState                []GenesisStateEntry
+	InitialValidators           []GenesisValidator
 }
 
 type ConfigWithBlock struct {
 	cfg   Config
 	blk_n types.BlockNum
 }
-
-type GenesisStateEntry = struct {
-	Benefactor common.Address
-	Transfers  []GenesisTransfer
+type GenesisValidator struct {
+	Address     common.Address
+	Owner       common.Address
+	Commission  uint16
+	Endpoint    string
+	Description string
+	Delegations core.BalanceMap
 }
-
 type GenesisTransfer = struct {
 	Beneficiary common.Address
 	Value       *big.Int
