@@ -96,7 +96,7 @@ type Transaction struct {
 	Input    []byte
 }
 type ExecutionOpts struct {
-	DisableNonceCheck, DisableGasFee, EnableNonceSkipping, DisableBlockRewards, DisableStatsRewards bool
+	DisableNonceCheck, DisableGasFee, EnableNonceSkipping bool
 }
 type ExecutionResult struct {
 	CodeRetval      []byte

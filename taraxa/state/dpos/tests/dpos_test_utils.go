@@ -24,33 +24,18 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
-	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 )
 
-type Balances = map[common.Address]*big.Int
-type DposGenesisState = map[common.Address]Balances
-type DposCfg struct {
-	EligibilityBalanceThreshold *big.Int
-	VoteEligibilityBalanceStep  *big.Int
-	MaximumStake                *big.Int
-	MinimumDeposit              *big.Int
-	CommissionChangeDelta       uint16
-	CommissionChangeFrequency   types.BlockNum
-	DepositDelay                types.BlockNum
-	WithdrawalDelay             types.BlockNum
-	DposGenesisState
-}
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
 
 type DposTest struct {
-	GenesisBalances
-	DposCfg
+	Chain_cfg chain_config.ChainConfig
 	st        state.StateTransition
 	statedb   *state_db_rocksdb.DB
 	tc        *tests.TestCtx
@@ -66,64 +51,86 @@ var (
 	Big5                               = big.NewInt(5)
 	Big10                              = big.NewInt(10)
 	Big50                              = big.NewInt(50)
-	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), dpos.TaraPrecision)
-	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), dpos.TaraPrecision)
-	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), dpos.TaraPrecision)
-	DefaultMaximumStake                = bigutil.Mul(big.NewInt(10000000), dpos.TaraPrecision)
-	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), dpos.TaraPrecision)
-
-	DefaultDposConfig = DposCfg{
-		EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
-		VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
-		MaximumStake:                DefaultMaximumStake,
-		MinimumDeposit:              DefaultMinimumDeposit,
-		CommissionChangeDelta:       0,
-		CommissionChangeFrequency:   0,
-		DepositDelay:                2,
-		WithdrawalDelay:             4,
-	}
+	TaraPrecision                      = big.NewInt(1e+18)
+	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
+	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
+	DefaultMaximumStake                = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
+	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		ExecutionOptions: vm.ExecutionOpts{
-			DisableGasFee:       true,
 			DisableNonceCheck:   true,
-			DisableBlockRewards: false,
-			DisableStatsRewards: false,
+			DisableGasFee:       true,
+			EnableNonceSkipping: true,
+		},
+		BlockRewardsOptions: chain_config.BlockRewardsOpts{
+			DisableBlockRewards:         false,
+			DisableContractDistribution: false,
 		},
 		ETHChainConfig: params.ChainConfig{
 			DAOForkBlock: types.BlockNumberNIL,
 		},
-		GenesisBalances: make(core.BalanceMap),
+		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance},
+		DPOS: &dpos.Config{
+			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
+			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
+			MaximumStake:                DefaultMaximumStake,
+			MinimumDeposit:              DefaultMinimumDeposit,
+			CommissionChangeDelta:       0,
+			CommissionChangeFrequency:   0,
+			DelegationDelay:             2,
+			DelegationLockingPeriod:     4,
+			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
+			YieldPercentage:             20,
+		},
 	}
 )
 
-func (self *DposTest) init(t *tests.TestCtx) {
+func init_test(t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test DposTest) {
+	tc = tests.NewTestCtx(t)
+	test.init(&tc, cfg)
+	return
+}
+
+// When running test suite, it is somehow overriding default config so it must be copied...
+// TODO: fix this
+func CopyDefaulChainConfig() chain_config.ChainConfig {
+	var new_cfg chain_config.ChainConfig
+
+	new_cfg.ExecutionOptions.DisableNonceCheck = DefaultChainCfg.ExecutionOptions.DisableNonceCheck
+	new_cfg.ExecutionOptions.DisableGasFee = DefaultChainCfg.ExecutionOptions.DisableGasFee
+	new_cfg.ExecutionOptions.EnableNonceSkipping = DefaultChainCfg.ExecutionOptions.EnableNonceSkipping
+
+	new_cfg.BlockRewardsOptions.DisableBlockRewards = DefaultChainCfg.BlockRewardsOptions.DisableBlockRewards
+	new_cfg.BlockRewardsOptions.DisableContractDistribution = DefaultChainCfg.BlockRewardsOptions.DisableContractDistribution
+
+	new_cfg.ETHChainConfig.DAOForkBlock = DefaultChainCfg.ETHChainConfig.DAOForkBlock
+
+	new_cfg.GenesisBalances = make(GenesisBalances)
+	for k, v := range DefaultChainCfg.GenesisBalances {
+		new_cfg.GenesisBalances[k] = v
+	}
+
+	new_cfg.DPOS = new(dpos.Config)
+	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
+	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
+	new_cfg.DPOS.MaximumStake = DefaultChainCfg.DPOS.MaximumStake
+	new_cfg.DPOS.MinimumDeposit = DefaultChainCfg.DPOS.MinimumDeposit
+	new_cfg.DPOS.DelegationLockingPeriod = DefaultChainCfg.DPOS.DelegationLockingPeriod
+	new_cfg.DPOS.DelegationDelay = DefaultChainCfg.DPOS.DelegationDelay
+	new_cfg.DPOS.EligibilityBalanceThreshold = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
+	new_cfg.DPOS.VoteEligibilityBalanceStep = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
+	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
+	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
+	new_cfg.DPOS.GenesisState = DefaultChainCfg.DPOS.GenesisState
+
+	return new_cfg
+}
+
+func (self *DposTest) init(t *tests.TestCtx, cfg chain_config.ChainConfig) {
 	self.tc = t
-
-	chain_cfg := DefaultChainCfg
-	for k, v := range self.GenesisBalances {
-		chain_cfg.GenesisBalances[k] = v
-	}
-	chain_cfg.DPOS = new(dpos.Config)
-	chain_cfg.DPOS.CommissionChangeDelta = self.DposCfg.CommissionChangeDelta
-	chain_cfg.DPOS.CommissionChangeFrequency = self.DposCfg.CommissionChangeFrequency
-	chain_cfg.DPOS.MaximumStake = self.DposCfg.MaximumStake
-	chain_cfg.DPOS.MinimumDeposit = self.DposCfg.MinimumDeposit
-	chain_cfg.DPOS.WithdrawalDelay = self.DposCfg.WithdrawalDelay
-	chain_cfg.DPOS.DepositDelay = self.DposCfg.DepositDelay
-	chain_cfg.DPOS.EligibilityBalanceThreshold = self.DposCfg.EligibilityBalanceThreshold
-	chain_cfg.DPOS.VoteEligibilityBalanceStep = self.DposCfg.EligibilityBalanceThreshold
-
-	for k, v := range self.DposCfg.DposGenesisState {
-		entry := dpos.GenesisStateEntry{Benefactor: k}
-		for k1, v1 := range v {
-			entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{
-				Beneficiary: k1,
-				Value:       v1,
-			})
-		}
-		chain_cfg.DPOS.GenesisState = append(chain_cfg.DPOS.GenesisState, entry)
-	}
+	self.Chain_cfg = cfg
 
 	self.statedb = new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
 		Path: self.tc.DataDir(),
@@ -131,7 +138,7 @@ func (self *DposTest) init(t *tests.TestCtx) {
 	self.SUT = new(state.API).Init(
 		self.statedb,
 		func(num types.BlockNum) *big.Int { panic("unexpected") },
-		&chain_cfg,
+		&self.Chain_cfg,
 		state.APIOpts{},
 	)
 
@@ -193,14 +200,6 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 		self.tc.FailNow()
 	}
 	return packed
-}
-
-func init_test(t *testing.T, cfg DposCfg) (tc tests.TestCtx, test DposTest) {
-	tc = tests.NewTestCtx(t)
-	test.GenesisBalances = GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance}
-	test.DposCfg = cfg
-	test.init(&tc)
-	return
 }
 
 func generateKeyPair() (pubkey, privkey []byte) {
