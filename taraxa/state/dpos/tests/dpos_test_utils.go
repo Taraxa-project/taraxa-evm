@@ -55,7 +55,7 @@ var (
 	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
 	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
 	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
-	DefaultMaximumStake                = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
+	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
 	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 
 	DefaultChainCfg = chain_config.ChainConfig{
@@ -75,7 +75,7 @@ var (
 		DPOS: &dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
-			MaximumStake:                DefaultMaximumStake,
+			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
 			MinimumDeposit:              DefaultMinimumDeposit,
 			CommissionChangeDelta:       0,
 			CommissionChangeFrequency:   0,
@@ -115,7 +115,7 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS = new(dpos.Config)
 	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
 	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
-	new_cfg.DPOS.MaximumStake = DefaultChainCfg.DPOS.MaximumStake
+	new_cfg.DPOS.ValidatorMaximumStake = DefaultChainCfg.DPOS.ValidatorMaximumStake
 	new_cfg.DPOS.MinimumDeposit = DefaultChainCfg.DPOS.MinimumDeposit
 	new_cfg.DPOS.DelegationLockingPeriod = DefaultChainCfg.DPOS.DelegationLockingPeriod
 	new_cfg.DPOS.DelegationDelay = DefaultChainCfg.DPOS.DelegationDelay

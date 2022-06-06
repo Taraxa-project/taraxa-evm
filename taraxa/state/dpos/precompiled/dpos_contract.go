@@ -433,7 +433,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
+	if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
@@ -644,7 +644,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
+	if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
@@ -1118,8 +1118,11 @@ func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator) {
 		if self.cfg.MinimumDeposit.Cmp(delegation) == 1 {
 			panic("apply_genesis_entry: delegation is lower then the minimum")
 		}
-		if self.cfg.MaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.MaximumStake.Cmp(delegation) == -1 {
+		if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.ValidatorMaximumStake.Cmp(delegation) == -1 {
 			panic("apply_genesis_entry: delegation is bigger then the maximum")
+		}
+		if self.cfg.ValidatorMaximumStake.Cmp(big.NewInt(0).Add(validator.TotalStake, delegation)) == -1 {
+			panic("apply_genesis_entry: validator delegation exceeds ValidatorMaximumStake")
 		}
 
 		// Creates Delegation object in storage
@@ -1147,11 +1150,11 @@ func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator) {
 }
 
 func (self *Contract) calculateRewardPer1Stake(rewardsPool *big.Int, stake *big.Int) *big.Int {
-	return bigutil.Div(bigutil.Mul(rewardsPool, self.cfg.MaximumStake), stake)
+	return bigutil.Div(bigutil.Mul(rewardsPool, self.cfg.ValidatorMaximumStake), stake)
 }
 
 func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *big.Int) *big.Int {
-	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.MaximumStake)
+	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.ValidatorMaximumStake)
 }
 
 // Returns block number as bytes
