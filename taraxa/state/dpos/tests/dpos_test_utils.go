@@ -125,7 +125,7 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.VoteEligibilityBalanceStep = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
-	new_cfg.DPOS.GenesisState = DefaultChainCfg.DPOS.GenesisState
+	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
 
 	return new_cfg
 }
