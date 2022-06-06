@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
@@ -267,15 +268,14 @@ func TestRewardsAndCommission(t *testing.T) {
 func TestGenesis(t *testing.T) {
 	cfg := CopyDefaulChainConfig()
 
-	entry := dpos.GenesisStateEntry{Benefactor: addr(1)}
-	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(1), Value: DefaultEligibilityBalanceThreshold})
-	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(2), Value: DefaultEligibilityBalanceThreshold})
-	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(3), Value: DefaultEligibilityBalanceThreshold})
-	entry.Transfers = append(entry.Transfers, dpos.GenesisTransfer{Beneficiary: addr(4), Value: DefaultEligibilityBalanceThreshold})
+	delegator := addr(1)
 
+	for i := uint64(0); i < 4; i++ {
+		entry := dpos.GenesisValidator{addr(i), addr(i), 0, "", "", core.BalanceMap{}}
+		entry.Delegations[delegator] = DefaultEligibilityBalanceThreshold
+		cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, entry)
+	}
 	accVoteCount := bigutil.Div(DefaultEligibilityBalanceThreshold, cfg.DPOS.VoteEligibilityBalanceStep)
-
-	cfg.DPOS.GenesisState = append(cfg.DPOS.GenesisState, entry)
 
 	tc, test := init_test(t, cfg)
 

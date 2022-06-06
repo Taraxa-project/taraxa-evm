@@ -3,6 +3,7 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
@@ -22,7 +23,7 @@ type API struct {
 type Config = struct {
 	EligibilityBalanceThreshold *big.Int
 	VoteEligibilityBalanceStep  *big.Int
-	MaximumStake                *big.Int
+	ValidatorMaximumStake       *big.Int
 	MinimumDeposit              *big.Int
 	CommissionChangeDelta       uint16
 	CommissionChangeFrequency   uint32 // [number of blocks]
@@ -30,19 +31,21 @@ type Config = struct {
 	DelegationLockingPeriod     uint32 // [number of blocks]
 	BlocksPerYear               uint32 // [count]
 	YieldPercentage             uint16 // [%]
-	GenesisState                []GenesisStateEntry
+	InitialValidators           []GenesisValidator
 }
 
 type ConfigWithBlock struct {
 	cfg   Config
 	blk_n types.BlockNum
 }
-
-type GenesisStateEntry = struct {
-	Benefactor common.Address
-	Transfers  []GenesisTransfer
+type GenesisValidator struct {
+	Address     common.Address
+	Owner       common.Address
+	Commission  uint16
+	Endpoint    string
+	Description string
+	Delegations core.BalanceMap
 }
-
 type GenesisTransfer = struct {
 	Beneficiary common.Address
 	Value       *big.Int
@@ -53,14 +56,14 @@ func (self *API) Init(cfg Config) *API {
 
 	asserts.Holds(cfg.EligibilityBalanceThreshold != nil)
 	asserts.Holds(cfg.VoteEligibilityBalanceStep != nil)
-	asserts.Holds(cfg.MaximumStake != nil)
+	asserts.Holds(cfg.ValidatorMaximumStake != nil)
 	asserts.Holds(cfg.MinimumDeposit != nil)
 
-	// MinimumDeposit must be <= MaximumStake
-	asserts.Holds(cfg.MaximumStake.Cmp(cfg.MinimumDeposit) != -1)
+	// MinimumDeposit must be <= ValidatorMaximumStake
+	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(cfg.MinimumDeposit) != -1)
 
-	// MaximumStake must be > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
-	asserts.Holds(cfg.MaximumStake.Cmp(bigutil.Big0) == 1)
+	// ValidatorMaximumStake must be > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
+	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) == 1)
 
 	// Bots YieldPercentage & BlocksPerYear must be > 0 due to possible division by 0
 	asserts.Holds(cfg.YieldPercentage > 0)
