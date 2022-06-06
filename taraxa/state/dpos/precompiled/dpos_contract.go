@@ -809,6 +809,25 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	return nil
 }
 
+func validateProof(proof []byte, validator *common.Address) error {
+	if len(proof) != 65 {
+		return ErrWrongProof
+	}
+
+	// Make sure the public key is a valid one
+	pubKey, err := crypto.Ecrecover(keccak256.Hash(validator.Bytes()).Bytes(), append(proof[:64], proof[64]-27))
+	if err != nil {
+		return err
+	}
+
+	// the first byte of pubkey is bitcoin heritage
+	if common.BytesToAddress(keccak256.Hash(pubKey[1:])[12:]) != *validator {
+		return ErrWrongProof
+	}
+
+	return nil
+}
+
 // Creates a new validator object and delegates to it specific value of tokens
 func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
 	// Limit size of description & endpoint
@@ -819,15 +838,8 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return ErrMaxDescriptionLengthExceeded
 	}
 
-	// Make sure the public key is a valid one
-	pubKey, err := crypto.Ecrecover(args.Validator.Hash().Bytes(), args.Proof)
-	// the first byte of pubkey is bitcoin heritage
-	if err != nil {
+	if err := validateProof(args.Proof, &args.Validator); err != nil {
 		return err
-	}
-
-	if common.BytesToAddress(keccak256.Hash(pubKey[1:])[12:]) != args.Validator {
-		return ErrWrongProof
 	}
 
 	if self.validators.ValidatorExists(&args.Validator) {

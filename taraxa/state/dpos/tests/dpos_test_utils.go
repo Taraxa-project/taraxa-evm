@@ -4,12 +4,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec"
+
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
-	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -202,25 +204,39 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 	return packed
 }
 
-func generateKeyPair() (pubkey, privkey []byte) {
-	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+func generateKeyPair() (pubkey []byte, privkey *ecdsa.PrivateKey) {
+	privkey, err := ecdsa.GenerateKey(btcec.S256(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
-	pubkey = elliptic.Marshal(secp256k1.S256(), key.X, key.Y)
-
-	privkey = make([]byte, 32)
-	blob := key.D.Bytes()
-	copy(privkey[32-len(blob):], blob)
-
-	return pubkey, privkey
+	pubkey = elliptic.Marshal(btcec.S256(), privkey.X, privkey.Y)
+	return
 }
 
 func generateAddrAndProof() (addr common.Address, proof []byte) {
 	pubkey, seckey := generateKeyPair()
 	addr = common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
-	proof, _ = secp256k1.Sign(addr.Hash().Bytes(), seckey)
+	proof, _ = sign(keccak256.Hash(addr.Bytes()).Bytes(), seckey)
 	return
+}
+
+// This is modified version of sign to match python implementation, do not use this outside of this package
+func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
+	if len(hash) != 32 {
+		return nil, fmt.Errorf("hash is required to be exactly 32 bytes (%d)", len(hash))
+	}
+	if prv.Curve != btcec.S256() {
+		return nil, fmt.Errorf("private key curve is not secp256k1")
+	}
+	sig, err := btcec.SignCompact(btcec.S256(), (*btcec.PrivateKey)(prv), hash, false)
+	if err != nil {
+		return nil, err
+	}
+	// Convert to Ethereum signature format with 'recovery id' v at the end.
+	v := sig[0]
+	copy(sig, sig[1:])
+	sig[64] = v
+	return sig, nil
 }
 
 func initValidatorTxsStats(validator common.Address, feesRewards *dpos.FeesRewards, txFee *big.Int, txsCount uint32) {

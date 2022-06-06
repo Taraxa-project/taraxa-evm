@@ -7,7 +7,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -18,8 +18,8 @@ import (
 func TestProof(t *testing.T) {
 	pubkey, seckey := generateKeyPair()
 	addr := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
-	proof, _ := secp256k1.Sign(addr.Hash().Bytes(), seckey)
-	pubkey2, err := secp256k1.RecoverPubkey(addr.Hash().Bytes(), proof)
+	proof, _ := sign(addr.Hash().Bytes(), seckey)
+	pubkey2, err := crypto.Ecrecover(addr.Hash().Bytes(), append(proof[:64], proof[64]-27))
 	if err != nil {
 		t.Errorf(err.Error())
 	}
