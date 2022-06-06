@@ -2,6 +2,7 @@ package test_integration
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -262,6 +263,36 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
+}
+
+func TestProcessingTimes(t *testing.T) {
+	_, test := init_test(t, CopyDefaulChainConfig())
+	defer test.end()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+	fmt.Printf("\nSTART\n")
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, Big0, test.pack("setCommission", val_addr, uint16(11)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(val_owner, Big0, test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+
+	//test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, Big0, test.pack("reDelegate", addr(2), addr(2), DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(addr(2), Big0, test.pack("claimRewards", val_owner), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, Big0, test.pack("claimCommisionRewards", val_owner), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("setValidatorInfo", val_addr, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+
+	//a := uint32(1)
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("isValidatorEligible", val_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("getTotalEligibleVotesCount"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("getValidatorEligibleVotesCount", val_addr), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("getValidators", a), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("getDelegatorDelegations", val_addr), util.ErrorString(""), util.ErrorString(""))
+	//test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("getUndelegations", val_addr), util.ErrorString(""), util.ErrorString(""))
+
 }
 
 func TestGenesis(t *testing.T) {

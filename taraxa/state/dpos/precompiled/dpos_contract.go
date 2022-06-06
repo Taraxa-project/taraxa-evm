@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -273,6 +274,8 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]
 
+	start := time.Now()
+
 	switch method.Name {
 	case "delegate":
 		var args ValidatorAddress
@@ -280,7 +283,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
 		}
-		return nil, self.delegate(ctx, evm.GetBlock().Number, args)
+		ret := self.delegate(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** delegate took %s\n", elapsed)
+		return nil, ret
 
 	case "undelegate":
 		var args UndelegateArgs
@@ -288,7 +294,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
 		}
-		return nil, self.undelegate(ctx, evm.GetBlock().Number, args)
+
+		ret := self.undelegate(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** undelegate took %s\n", elapsed)
+		return nil, ret
 
 	case "confirmUndelegate":
 		var args ValidatorAddress
@@ -296,7 +306,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse confirmUndelegate input args: ", err)
 			return nil, err
 		}
-		return nil, self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
+
+		ret := self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** confirmUndelegate took %s\n", elapsed)
+		return nil, ret
 
 	case "cancelUndelegate":
 		var args ValidatorAddress
@@ -305,7 +319,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return nil, self.cancelUndelegate(ctx, evm.GetBlock().Number, args)
+		ret := self.cancelUndelegate(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** cancelUndelegate took %s\n", elapsed)
+		return nil, ret
 
 	case "reDelegate":
 		var args RedelegateArgs
@@ -313,7 +330,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse reDelegate input args: ", err)
 			return nil, err
 		}
-		return nil, self.redelegate(ctx, evm.GetBlock().Number, args)
+
+		ret := self.redelegate(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** reDelegate took %s\n", elapsed)
+		return nil, ret
 
 	case "claimRewards":
 		var args ValidatorAddress
@@ -321,7 +342,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse claimRewards input args: ", err)
 			return nil, err
 		}
-		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
+
+		ret := self.claimRewards(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** claimRewards took %s\n", elapsed)
+		return nil, ret
 
 	case "claimCommissionRewards":
 		var args ValidatorAddress
@@ -329,7 +354,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse claimCommissionRewards input args: ", err)
 			return nil, err
 		}
-		return nil, self.claimCommissionRewards(ctx, evm.GetBlock().Number, args)
+		ret := self.claimCommissionRewards(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** claimCommissionRewards took %s\n", elapsed)
+		return nil, ret
 
 	case "setCommission":
 		var args SetCommissionArgs
@@ -337,16 +365,21 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse claimCommissionRewards input args: ", err)
 			return nil, err
 		}
-		return nil, self.setCommission(ctx, evm.GetBlock().Number, args)
+		ret := self.setCommission(ctx, evm.GetBlock().Number, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** setCommission took %s\n", elapsed)
+		return nil, ret
 
 	case "registerValidator":
-
 		var args RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse registerValidator input args: ", err)
 			return nil, err
 		}
-		return nil, self.registerValidator(ctx, evm.GetBlock().Number, args)
+		ret := self.registerValidator(ctx, evm.GetBlock().Number, args)
+		elapsedx := time.Since(start)
+		fmt.Printf("\n**** registerValidator took d %s\n", elapsedx)
+		return nil, ret
 
 	case "setValidatorInfo":
 		var args SetValidatorInfoArgs
@@ -354,7 +387,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse setValidatorInfo input args: ", err)
 			return nil, err
 		}
-		return nil, self.setValidatorInfo(ctx, args)
+
+		ret := self.setValidatorInfo(ctx, args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** setValidatorInfo took %s\n", elapsed)
+		return nil, ret
 
 	case "isValidatorEligible":
 		var args ValidatorAddress
@@ -362,10 +399,16 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse isValidatorEligible input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.delayedStorage.IsEligible(&args.Validator))
+		result := self.delayedStorage.IsEligible(&args.Validator)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** isValidatorEligible took %s\n", elapsed)
+		return method.Outputs.Pack(result)
 
 	case "getTotalEligibleVotesCount":
-		return method.Outputs.Pack(self.delayedStorage.EligibleVoteCount())
+		result := self.delayedStorage.EligibleVoteCount()
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** getTotalEligibleVotesCount took %s\n", elapsed)
+		return method.Outputs.Pack(result)
 
 	case "getValidatorEligibleVotesCount":
 		var args ValidatorAddress
@@ -373,18 +416,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidatorEligibleVotesCount input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.delayedStorage.GetEligibleVoteCount(&args.Validator))
 
-	case "getValidator":
-		var args ValidatorAddress
-		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse getValidator input args: ", err)
-			return nil, err
-		}
-		result, err := self.getValidator(args)
-		if err != nil {
-			return nil, err
-		}
+		result := self.delayedStorage.GetEligibleVoteCount(&args.Validator)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** getValidatorEligibleVotesCount took %s\n", elapsed)
 		return method.Outputs.Pack(result)
 
 	case "getValidators":
@@ -393,7 +428,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidators(args))
+
+		result := self.getValidators(args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** getValidators took %s\n", elapsed)
+		return method.Outputs.Pack(result)
 
 	case "getDelegatorDelegations":
 		var args GetDelegatorDelegationsArgs
@@ -401,7 +440,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegatorDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegatorDelegations(args))
+
+		result := self.getDelegatorDelegations(args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** getDelegatorDelegations took %s\n", elapsed)
+		return method.Outputs.Pack(result)
 
 	case "getUndelegations":
 		var args GetDelegatorDelegationsArgs
@@ -409,7 +452,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getUndelegations(args))
+
+		result := self.getUndelegations(args)
+		elapsed := time.Since(start)
+		fmt.Printf("\n**** getUndelegations took %s\n", elapsed)
+		return method.Outputs.Pack(result)
 	}
 
 	return nil, nil
