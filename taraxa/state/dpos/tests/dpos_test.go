@@ -270,7 +270,7 @@ func TestGenesis(t *testing.T) {
 
 	delegator := addr(1)
 
-	for i := uint64(0); i < 4; i++ {
+	for i := uint64(1); i < 5; i++ {
 		entry := dpos.GenesisValidator{addr(i), addr(i), 0, "", "", core.BalanceMap{}}
 		entry.Delegations[delegator] = DefaultEligibilityBalanceThreshold
 		cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, entry)
