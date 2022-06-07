@@ -96,7 +96,7 @@ type Transaction struct {
 	Input    []byte
 }
 type ExecutionOpts struct {
-	DisableNonceCheck, DisableGasFee, EnableNonceSkipping bool
+	DisableNonceCheck, EnableNonceSkipping bool
 }
 type ExecutionResult struct {
 	CodeRetval      []byte
@@ -194,31 +194,29 @@ func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult)
 			return
 		}
 	}
-	gas_cap, gas_price, gas_fee := uint64(math.MaxUint64/2), bigutil.Big0, bigutil.Big0
-	if !opts.DisableGasFee {
-		gas_cap, gas_price = self.trx.Gas, self.trx.GasPrice
-		gas_fee = new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
-	}
+	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice
+	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	gas_left := gas_cap
 	contract_creation := self.trx.To == nil
-	if !opts.DisableGasFee {
-		if !BalanceGTE(caller, gas_fee) {
-			ret.ConsensusErr = ErrInsufficientBalanceForGas
-			return
-		}
-		caller.SubBalance(gas_fee)
-		gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
-		if err != nil {
-			ret.ConsensusErr = util.ErrorString(err.Error())
-			return
-		}
-		if gas_left < gas_intrinsic {
-			ret.ConsensusErr = ErrIntrinsicGas
-			return
-		}
-		gas_left -= gas_intrinsic
+
+	if !BalanceGTE(caller, gas_fee) {
+		ret.ConsensusErr = ErrInsufficientBalanceForGas
+		return
 	}
+	caller.SubBalance(gas_fee)
+
 	var err error
+	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
+	if err != nil {
+		ret.ConsensusErr = util.ErrorString(err.Error())
+		return
+	}
+	if gas_left < gas_intrinsic {
+		ret.ConsensusErr = ErrIntrinsicGas
+		return
+	}
+	gas_left -= gas_intrinsic
+
 	if contract_creation {
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
@@ -237,10 +235,8 @@ func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult)
 	gas_left += util.MinU64(self.state.GetRefund(), (gas_cap-gas_left)/2)
 	ret.GasUsed = gas_cap - gas_left
 	ret.Logs = self.state.GetLogs()
-	if !opts.DisableGasFee {
-		// Return ETH for remaining gas, exchanged at the original rate.
-		caller.AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(gas_left), gas_price))
-	}
+	// Return ETH for remaining gas, exchanged at the original rate.
+	caller.AddBalance(new(big.Int).Mul(new(big.Int).SetUint64(gas_left), gas_price))
 	return
 }
 

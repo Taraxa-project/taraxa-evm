@@ -63,7 +63,6 @@ var (
 	DefaultChainCfg = chain_config.ChainConfig{
 		ExecutionOptions: vm.ExecutionOpts{
 			DisableNonceCheck:   true,
-			DisableGasFee:       true,
 			EnableNonceSkipping: true,
 		},
 		BlockRewardsOptions: chain_config.BlockRewardsOpts{
@@ -101,7 +100,6 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	var new_cfg chain_config.ChainConfig
 
 	new_cfg.ExecutionOptions.DisableNonceCheck = DefaultChainCfg.ExecutionOptions.DisableNonceCheck
-	new_cfg.ExecutionOptions.DisableGasFee = DefaultChainCfg.ExecutionOptions.DisableGasFee
 	new_cfg.ExecutionOptions.EnableNonceSkipping = DefaultChainCfg.ExecutionOptions.EnableNonceSkipping
 
 	new_cfg.BlockRewardsOptions.DisableBlockRewards = DefaultChainCfg.BlockRewardsOptions.DisableBlockRewards

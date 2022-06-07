@@ -237,18 +237,15 @@ func taraxa_evm_state_api_transition_state(
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
 
-		// Process tx fees only if enabled
-		if !st.GetChainConfig().ExecutionOptions.DisableGasFee {
-			txFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.GasUsed), tx.GasPrice)
+		txFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.GasUsed), tx.GasPrice)
 
-			// Contract distribution is disabled - just add fee to the block author balance
-			// TODO: once there is a stabilized version - remove this flag and use only dpos contract
-			if disabled_contract_distribution {
-				st.AddTxFeeToBalance(&params.Blk.Author, txFee)
-			} else {
-				// Reward dag block author, who included specified tx as first
-				feesRewards.AddTxFeeReward(params.TxsValidators[i], txFee)
-			}
+		// Contract distribution is disabled - just add fee to the block author balance
+		// TODO: once there is a stabilized version - remove this flag and use only dpos contract
+		if disabled_contract_distribution {
+			st.AddTxFeeToBalance(&params.Blk.Author, txFee)
+		} else {
+			// Reward dag block author, who included specified tx as first
+			feesRewards.AddTxFeeReward(params.TxsValidators[i], txFee)
 		}
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
