@@ -116,7 +116,6 @@ func main() {
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			state.ChainConfig{
 				ExecutionOptions: vm.ExecutionOpts{
-					DisableGasFee:     false,
 					DisableNonceCheck: true,
 				},
 				BlockRewardsOptions: chain_config.BlockRewardsOpts{
