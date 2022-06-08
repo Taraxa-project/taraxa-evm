@@ -20,6 +20,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -128,7 +129,7 @@ func main() {
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
-		state.ChainConfig{
+		&chain_config.ChainConfig{
 			ETHChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},

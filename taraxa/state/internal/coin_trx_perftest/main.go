@@ -21,7 +21,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -110,9 +109,9 @@ func main() {
 		DisableMostRecentTrieValueViews: disable_most_recent_trie_value_views,
 	})
 	root_genesis_bal := new(big.Int).Set(bigutil.MaxU256)
-	OpenStateAPI := func(db state_db.DB) *state.API {
+	OpenStateAPI := func(db *state_db_rocksdb.DB) *state.API {
 		return new(state.API).Init(
-			statedb_prep,
+			db,
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			&chain_config.ChainConfig{
 				ExecutionOptions: vm.ExecutionOpts{
