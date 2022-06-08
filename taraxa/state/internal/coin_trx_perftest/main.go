@@ -112,9 +112,9 @@ func main() {
 	root_genesis_bal := new(big.Int).Set(bigutil.MaxU256)
 	OpenStateAPI := func(db state_db.DB) *state.API {
 		return new(state.API).Init(
-			db,
+			statedb_prep,
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
-			state.ChainConfig{
+			&chain_config.ChainConfig{
 				ExecutionOptions: vm.ExecutionOpts{
 					DisableNonceCheck: true,
 				},

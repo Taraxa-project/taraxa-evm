@@ -10,6 +10,7 @@ import (
 
 	"github.com/schollz/progressbar/v3"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
 	"github.com/Taraxa-project/taraxa-evm/core"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestEthMainnetSmoke(t *testing.T) {
-	//t.Skip()
+	t.Skip() // TODO[78]
 	tc := tests.NewTestCtx(t)
 	defer tc.Close()
 	statedb := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
@@ -32,7 +33,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 		func(num types.BlockNum) *big.Int {
 			return new(big.Int).SetBytes(blocks[num].Hash[:])
 		},
-		ChainConfig{
+		&chain_config.ChainConfig{
 			ETHChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},
