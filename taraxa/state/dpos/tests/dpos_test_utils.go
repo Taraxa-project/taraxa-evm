@@ -156,6 +156,8 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 		To:    &self.dpos_addr,
 		From:  from,
 		Input: input,
+		Gas: 1000000,
+		GasPrice: bigutil.Big0,
 	})
 
 	self.st.EndBlock(nil, nil, nil)
