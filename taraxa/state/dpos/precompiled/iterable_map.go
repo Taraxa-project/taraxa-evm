@@ -33,16 +33,6 @@ func (self *IterableMap) AccountExists(account *common.Address) bool {
 	return acc_exists
 }
 
-// Returnd number of stored items
-func (self *IterableMap) GetCount() uint32 {
-	// Gets keys array length
-	accounts_count := uint32(0)
-	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
-		accounts_count = bytesToUint32(bytes)
-	})
-	return accounts_count;
-}
-
 // Creates account from iterable map
 func (self *IterableMap) CreateAccount(account *common.Address) bool {
 	if acc_exists, _ := self.accountExists(account); acc_exists {
@@ -50,12 +40,9 @@ func (self *IterableMap) CreateAccount(account *common.Address) bool {
 	}
 
 	// Gets keys array length
-	accounts_count := uint32(0)
-	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
-		accounts_count = bytesToUint32(bytes)
-	})
+	accounts_count := self.GetCount()
 
-	// Accounts position are shifetd + 1, 0 accounts is saved on pos 1, etc... pos 0 is reserved for non-existent account
+	// Accounts positions are shifetd + 1, account 0 is saved on pos 1, etc... pos 0 is reserved for non-existent account
 	new_account_pos := accounts_count + 1
 
 	// Saves new account into the accounts array with key -> self.accounts_storage_prefix + pos
@@ -75,10 +62,8 @@ func (self *IterableMap) CreateAccount(account *common.Address) bool {
 // Removes account from iterable map, returns number of left accounts in the iterbale map
 func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 	// Gets accounts count
-	accounts_count := uint32(0)
-	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
-		accounts_count = bytesToUint32(bytes)
-	})
+	accounts_count := self.GetCount()
+
 	// There are no accounts saved in storage
 	if accounts_count == 0 {
 		panic("Unable to delete account " + account.String() + ". No accounts in iterable map")
@@ -130,10 +115,7 @@ func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 
 func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []common.Address, end bool) {
 	// Gets accounts count
-	accounts_count := uint32(0)
-	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
-		accounts_count = bytesToUint32(bytes)
-	})
+	accounts_count := self.GetCount()
 
 	// No accounts in iterable map
 	if accounts_count == 0 {
@@ -178,7 +160,8 @@ func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []commo
 	return
 }
 
-func (self *IterableMap) GetAccountsCount() (count uint32) {
+// Returns number of stored items
+func (self *IterableMap) GetCount() (count uint32) {
 	count = 0
 	self.storage.Get(self.accounts_count_storage_key, func(bytes []byte) {
 		count = bytesToUint32(bytes)

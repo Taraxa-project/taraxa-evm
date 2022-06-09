@@ -53,13 +53,10 @@ func (self *Undelegations) GetUndelegation(delegator_address *common.Address, va
 	return
 }
 
-// Returns number of undelegation for specified address
-func (self *Undelegations) GetUndelegationCount(delegator_address *common.Address) (uint32) {
-	delegator_undelegations, found := self.undelegations_map[*delegator_address]
-	if found {
-		return delegator_undelegations.GetCount()
-	}
-	return 0
+// Returns number of undelegations for specified address
+func (self *Undelegations) GetUndelegationsCount(delegator_address *common.Address) uint32 {
+	delegator_undelegations := self.getDelegatorUndelegationsList(delegator_address)
+	return delegator_undelegations.GetCount()
 }
 
 // Creates undelegation object in storage

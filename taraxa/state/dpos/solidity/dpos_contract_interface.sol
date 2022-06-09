@@ -41,7 +41,7 @@ interface DposInterface {
 
     // Retun value for getDelegations method
     struct DelegationData {
-        // Validator's(in case of getDelegatorDelegations) or Delegator's (in case of getValidatorDelegations) account address
+        // Validator's(in case of getDelegations) or Delegator's (in case of getValidatorDelegations) account address
         address account;
         // Delegation info
         DelegatorInfo delegation;
@@ -151,7 +151,7 @@ interface DposInterface {
      * @return delegations  Batch of N delegations
      * @return end          Flag if there are no more delegations left. To get all delegations, caller should fetch all batches until he sees end == true
      **/
-    function getDelegatorDelegations(address delegator, uint32 batch)
+    function getDelegations(address delegator, uint32 batch)
         external
         view
         returns (DelegationData[] memory delegations, bool end);

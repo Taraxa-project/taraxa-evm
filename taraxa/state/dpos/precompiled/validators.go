@@ -172,6 +172,6 @@ func (self *Validators) GetValidatorsAddresses(batch uint32, count uint32) ([]co
 	return self.validators_list.GetAccounts(batch, count)
 }
 
-func (self *Validators) GetValidatorsCount() (uint32) {
+func (self *Validators) GetValidatorsCount() uint32 {
 	return self.validators_list.GetCount()
 }

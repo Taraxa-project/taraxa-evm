@@ -35,6 +35,10 @@ import (
 ////////////////////////////////////////////////////////////////////////////
 // [1] https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf
 
+// Fixed contract address
+var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+
+// Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
 const (
 	RegisterValidatorGas     uint64 = 80000
 	SetCommissionGas         uint64 = 20000
@@ -51,26 +55,42 @@ const (
 	DefaultDposMethodGas     uint64 = 20000
 )
 
-// Fixed contract address
-var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+// Contract methods error return values
+var (
+	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
+	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
+	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
+	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
+	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
+	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
+	ErrExistentValidator            = util.ErrorString("Validator already exist")
+	ErrBrokenState                  = util.ErrorString("Fatal error state is broken")
+	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
+	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
+	ErrCallIsNotToplevel            = util.ErrorString("only top-level calls are allowed")
+	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recoverd")
+	ErrWrongOwnerAcc                = util.ErrorString("This account is not owner of specified validator")
+	ErrForbiddenCommissionChange    = util.ErrorString("Forbidden commission change")
+	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
+	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
+)
 
-// Error values
-var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
-var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
-var ErrNonExistentDelegation = util.ErrorString("Delegation does not exist")
-var ErrExistentUndelegation = util.ErrorString("Undelegation already exist")
-var ErrNonExistentUndelegation = util.ErrorString("Undelegation does not exist")
-var ErrLockedUndelegation = util.ErrorString("Undelegation is not yet ready to be withdrawn")
-var ErrExistentValidator = util.ErrorString("Validator already exist")
-var ErrBrokenState = util.ErrorString("Fatal error state is broken")
-var ErrValidatorsMaxStakeExceeded = util.ErrorString("Validator's max stake exceeded")
-var ErrInsufficientDelegation = util.ErrorString("Insufficient delegation")
-var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
-var ErrWrongProof = util.ErrorString("Wrong proof, validator address could not be recoverd")
-var ErrWrongOwnerAcc = util.ErrorString("This account is not owner of specified validator")
-var ErrForbiddenCommissionChange = util.ErrorString("Forbidden commission change")
-var ErrMaxEndpointLengthExceeded = util.ErrorString("Max endpoint length exceeded")
-var ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
+const (
+	// Max num of characters in url
+	MaxEndpointLength = 50
+
+	// Max num of characters in description
+	MaxDescriptionLength = 100
+
+	// Maximum number of validators per batch returned by getValidators call
+	GetValidatorsMaxCount = 50
+
+	// Maximum number of validators per batch returned by getDelegations call
+	GetDelegationsMaxCount = 50
+
+	// Maximum number of validators per batch returned by getUndelegations call
+	GetUndelegationsMaxCount = 50
+)
 
 // Contract storage fields keys
 var (
@@ -86,18 +106,6 @@ var (
 // const value of 10000 so we do not need to allocate it again
 var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
-
-// Max num of characters in url
-const MaxEndpointLength = 50
-
-// Max num of characters in description
-const MaxDescriptionLength = 100
-
-// Maximum number of validators per batch returned by getValidators call
-const GetValidatorsMaxCount = 50
-
-// Maximum number of validators per batch returned by getDelegatorDelegations call
-const GetDelegatorDelegationsMaxCount = 50
 
 // State of the rewards distribution algorithm
 type State struct {
@@ -187,10 +195,61 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getValidatorEligibleVotesCount":
 		return DposGetMethodsGas
 	case "getValidators":
-	case "getDelegatorDelegations":
+		validators_count := uint64(self.validators.GetValidatorsCount())
+
+		if validators_count == 0 {
+			// In case there are no validators, charge as for standard get method as counter must have been read from db
+			return DposGetMethodsGas
+		} else if validators_count > GetValidatorsMaxCount {
+			// There is a hard cap of max num of returned validators
+			validators_count = GetValidatorsMaxCount
+		}
+
+		return validators_count * DposBatchGetMethodsGas
+
+	case "getDelegations":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args GetDelegationsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed anyway
+			return DposBatchGetMethodsGas
+		}
+
+		delegations_count := uint64(self.delegations.GetDelegationsCount(&args.Delegator))
+
+		if delegations_count == 0 {
+			// In case there are no delegations, charge as for standard get method as counter must have been read from db
+			return DposGetMethodsGas
+		} else if delegations_count > GetDelegationsMaxCount {
+			// There is a hard cap of max num of returned delegations
+			delegations_count = GetDelegationsMaxCount
+		}
+
+		return delegations_count * DposBatchGetMethodsGas
+
 	case "getUndelegations":
-		return DposBatchGetMethodsGas
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args GetUndelegationsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed anyway
+			return DposBatchGetMethodsGas
+		}
+
+		undelegations_count := uint64(self.undelegations.GetUndelegationsCount(&args.Delegator))
+
+		if undelegations_count == 0 {
+			// In case there are no delegations, charge as for standard get method as counter must have been read from db
+			return DposGetMethodsGas
+		} else if undelegations_count > GetUndelegationsMaxCount {
+			// There is a hard cap of max num of returned delegations
+			undelegations_count = GetUndelegationsMaxCount
+		}
+
+		return undelegations_count * DposBatchGetMethodsGas
 	}
+
 	return DefaultDposMethodGas
 }
 
@@ -404,16 +463,16 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 		return method.Outputs.Pack(self.getValidators(args))
 
-	case "getDelegatorDelegations":
-		var args GetDelegatorDelegationsArgs
+	case "getDelegations":
+		var args GetDelegationsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse getDelegatorDelegations input args: ", err)
+			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegatorDelegations(args))
+		return method.Outputs.Pack(self.getDelegations(args))
 
 	case "getUndelegations":
-		var args GetDelegatorDelegationsArgs
+		var args GetUndelegationsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
@@ -1056,12 +1115,11 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 }
 
 // Returns batch of delegations for specified address
-func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) (result GetDelegatorDelegationRet) {
-
+func (self *Contract) getDelegations(args GetDelegationsArgs) (result GetDelegationsRet) {
 	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
 	// TODO: this will be super expensice call probably
 
-	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
 	result.Delegations = make([]DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
@@ -1071,7 +1129,7 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 		validator := self.validators.GetValidator(&validator_address)
 		if delegation == nil || validator == nil {
 			// This should never happen
-			panic("getDelegatorDelegations - unable to fetch delegation data")
+			panic("getDelegations - unable to fetch delegation data")
 		}
 
 		var delegation_data DposInterfaceDelegationData
@@ -1083,7 +1141,7 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 		old_state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
 		if state == nil || old_state == nil {
 			// This should never happen
-			panic("getDelegatorDelegations - unable to state data")
+			panic("getDelegations - unable to state data")
 		}
 		current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator.RewardsPool, validator.TotalStake))
 		reward_per_stake := bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
@@ -1098,8 +1156,8 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 }
 
 // Returns batch of undelegation from queue for given address
-func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result GetUnelegationsRet) {
-	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+func (self *Contract) getUndelegations(args GetUndelegationsArgs) (result GetUndelegationsRet) {
+	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
 	result.Undelegations = make([]DposInterfaceUndelegationData, 0, len(undelegations_addresses))
