@@ -1,4 +1,5 @@
 # go-taraxa-abi
+Read tutorial inside dpos_contract_solidity_structs.go file
 
 #### Prerequisites
 ##### solc
@@ -11,7 +12,6 @@ go get -u github.com/ethereum/go-ethereum
 cd $GOPATH/pkg/mod/github.com/ethereum/go-ethereum/
 make
 make devtools
-
 
 #### Create SC ABI
 run

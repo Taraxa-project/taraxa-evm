@@ -14,6 +14,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
@@ -144,7 +145,7 @@ func (self *DposTest) init(t *tests.TestCtx, cfg chain_config.ChainConfig) {
 
 	self.st = self.SUT.GetStateTransition()
 	self.dpos_addr = dpos.ContractAddress()
-	self.abi, _ = abi.JSON(strings.NewReader(dpos.TaraxaDposClientMetaData))
+	self.abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
 }
 
 func (self *DposTest) execute(from common.Address, value *big.Int, input []byte) vm.ExecutionResult {
@@ -152,11 +153,11 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	self.st.BeginBlock(&vm.BlockInfo{})
 
 	res := self.st.ExecuteTransaction(&vm.Transaction{
-		Value: value,
-		To:    &self.dpos_addr,
-		From:  from,
-		Input: input,
-		Gas: 1000000,
+		Value:    value,
+		To:       &self.dpos_addr,
+		From:     from,
+		Input:    input,
+		Gas:      1000000,
 		GasPrice: bigutil.Big0,
 	})
 
