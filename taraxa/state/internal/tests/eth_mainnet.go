@@ -33,7 +33,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
-	"github.com/tecbot/gorocksdb"
+	"github.com/linxGnu/grocksdb"
 )
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 		pprof.StartCPUProfile(new_prof_file(last_profile_snapshot_time, "cpu"))
 	}
 
-	blk_db_opts := gorocksdb.NewDefaultOptions()
+	blk_db_opts := grocksdb.NewDefaultOptions()
 	blk_db_opts.SetErrorIfExists(false)
 	blk_db_opts.SetCreateIfMissing(true)
 	blk_db_opts.SetCreateIfMissingColumnFamilies(true)
@@ -65,7 +65,7 @@ func main() {
 	blk_db_opts.SetMaxFileOpeningThreads(runtime.NumCPU())
 	blk_db_opts.OptimizeForPointLookup(256)
 	blk_db_opts.SetMaxOpenFiles(32)
-	blk_db, e0 := gorocksdb.OpenDbForReadOnly(blk_db_opts, "/home/oleg/win10/ubuntu/blockchain", false)
+	blk_db, e0 := grocksdb.OpenDbForReadOnly(blk_db_opts, "/home/oleg/win10/ubuntu/blockchain", false)
 	util.PanicIfNotNil(e0)
 	defer blk_db.Close()
 
@@ -110,7 +110,7 @@ func main() {
 		StateRoot    common.Hash             `json:"stateRoot" gencodec:"required"`
 	}
 
-	rocksdb_opts_r_default := gorocksdb.NewDefaultReadOptions()
+	rocksdb_opts_r_default := grocksdb.NewDefaultReadOptions()
 	getBlockByNumber := func(block_num types.BlockNum) *BlockInfo {
 		block_json, err := blk_db.GetPinned(rocksdb_opts_r_default, bin.BytesView(fmt.Sprintf("%09d", block_num)))
 		util.PanicIfNotNil(err)
