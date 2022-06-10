@@ -11,7 +11,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/goroutines"
-	"github.com/tecbot/gorocksdb"
+	"github.com/linxGnu/grocksdb"
 )
 
 var last_committed_desc_key = []byte("last_committed_descriptor")
@@ -20,18 +20,18 @@ var most_recent_trie_value_views_status_key = []byte("most_recent_trie_value_vie
 
 type LatestState struct {
 	*DB
-	batch         *gorocksdb.WriteBatch
+	batch         *grocksdb.WriteBatch
 	writer_thread goroutines.GoroutineGroup
 	state_desc    state_db.StateDescriptor
 	pending_blk_n types.BlockNum
 	state_desc_mu sync.RWMutex
-	opts_w        *gorocksdb.WriteOptions
+	opts_w        *grocksdb.WriteOptions
 }
 
 func (self *LatestState) Init(db *DB) *LatestState {
 	self.DB = db
-	self.opts_w = gorocksdb.NewDefaultWriteOptions()
-	self.batch = gorocksdb.NewWriteBatch()
+	self.opts_w = grocksdb.NewDefaultWriteOptions()
+	self.batch = grocksdb.NewWriteBatch()
 	self.writer_thread.InitSingle(1024) // 8KB
 	state_desc_raw, err := self.db.Get(self.opts_r, last_committed_desc_key)
 	util.PanicIfNotNil(err)

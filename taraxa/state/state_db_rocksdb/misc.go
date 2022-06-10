@@ -4,8 +4,7 @@ import (
 	"encoding/binary"
 	"unsafe"
 
-	"github.com/tecbot/gorocksdb"
-
+	"github.com/linxGnu/grocksdb"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 )
@@ -21,7 +20,7 @@ func (self *VersionedKey) SetVersion(block_num types.BlockNum) {
 }
 
 type VersionedReadContext struct {
-	itr        *gorocksdb.Iterator
+	itr        *grocksdb.Iterator
 	key_buffer VersionedKey
 }
 

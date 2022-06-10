@@ -13,15 +13,15 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/goroutines"
-	"github.com/tecbot/gorocksdb"
+	"github.com/linxGnu/grocksdb"
 )
 
 type DB struct {
-	db                        *gorocksdb.DB
-	cf_handle_default         *gorocksdb.ColumnFamilyHandle
-	cf_handles                [col_COUNT]*gorocksdb.ColumnFamilyHandle
-	opts_r                    *gorocksdb.ReadOptions
-	opts_r_itr                *gorocksdb.ReadOptions
+	db                        *grocksdb.DB
+	cf_handle_default         *grocksdb.ColumnFamilyHandle
+	cf_handles                [col_COUNT]*grocksdb.ColumnFamilyHandle
+	opts_r                    *grocksdb.ReadOptions
+	opts_r_itr                *grocksdb.ReadOptions
 	versioned_read_pools      [col_COUNT]*util.Pool
 	latest_state              LatestState
 	maintenance_task_executor goroutines.GoroutineGroup
@@ -44,11 +44,11 @@ type Opts = struct {
 
 func (self *DB) Init(opts Opts) *DB {
 	self.opts = opts
-	new_db_opts := func() *gorocksdb.Options {
-		ret := gorocksdb.NewDefaultOptions()
+	new_db_opts := func() *grocksdb.Options {
+		ret := grocksdb.NewDefaultOptions()
 		ret.SetErrorIfExists(false)
 		ret.SetCreateIfMissing(true)
-		ret.SetCompression(gorocksdb.LZ4Compression)
+		ret.SetCompression(grocksdb.LZ4Compression)
 		ret.SetCreateIfMissingColumnFamilies(true)
 		ret.IncreaseParallelism(runtime.NumCPU())
 		ret.SetMaxFileOpeningThreads(runtime.NumCPU())
@@ -60,9 +60,9 @@ func (self *DB) Init(opts Opts) *DB {
 		return ret
 	}
 	const real_col_cnt = 1 + col_COUNT
-	cf_opts_default := gorocksdb.NewDefaultOptions()
+	cf_opts_default := grocksdb.NewDefaultOptions()
 	defer cf_opts_default.Destroy()
-	cfnames, cfopts := [real_col_cnt]string{"default"}, [real_col_cnt]*gorocksdb.Options{cf_opts_default}
+	cfnames, cfopts := [real_col_cnt]string{"default"}, [real_col_cnt]*grocksdb.Options{cf_opts_default}
 	for i := state_db.Column(1); i < real_col_cnt; i++ {
 		cf_opts := new_db_opts()
 		defer cf_opts.Destroy()
@@ -74,18 +74,18 @@ func (self *DB) Init(opts Opts) *DB {
 	}
 	db_opts := new_db_opts()
 	defer db_opts.Destroy()
-	db, cf_handles, err := gorocksdb.OpenDbColumnFamilies(db_opts, opts.Path, cfnames[:], cfopts[:])
+	db, cf_handles, err := grocksdb.OpenDbColumnFamilies(db_opts, opts.Path, cfnames[:], cfopts[:])
 	util.PanicIfNotNil(err)
 	self.db = db
 	self.cf_handle_default = cf_handles[0]
 	copy(self.cf_handles[:], cf_handles[1:])
-	self.opts_r = func() *gorocksdb.ReadOptions {
-		ret := gorocksdb.NewDefaultReadOptions()
+	self.opts_r = func() *grocksdb.ReadOptions {
+		ret := grocksdb.NewDefaultReadOptions()
 		ret.SetVerifyChecksums(false)
 		return ret
 	}()
-	self.opts_r_itr = func() *gorocksdb.ReadOptions {
-		ret := gorocksdb.NewDefaultReadOptions()
+	self.opts_r_itr = func() *grocksdb.ReadOptions {
+		ret := grocksdb.NewDefaultReadOptions()
 		ret.SetVerifyChecksums(false)
 		ret.SetPrefixSameAsStart(true)
 		ret.SetFillCache(false)
@@ -195,7 +195,7 @@ func (self *DB) GetDPOSConfigChanges() map[uint64][]byte {
 
 func (self *DB) SaveDPOSConfigChange(blk uint64, cfg []byte) {
 	key_bytes := big.NewInt(0).SetUint64(blk).Bytes()
-	self.db.PutCF(gorocksdb.NewDefaultWriteOptions(), self.cf_handles[col_config_changes], key_bytes, cfg)
+	self.db.PutCF(grocksdb.NewDefaultWriteOptions(), self.cf_handles[col_config_changes], key_bytes, cfg)
 }
 
 func (self *DB) invalidate_versioned_read_pools() {

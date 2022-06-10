@@ -16,8 +16,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/jsonutil"
 
-	"github.com/tecbot/gorocksdb"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
@@ -37,6 +35,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/files"
+	"github.com/linxGnu/grocksdb"
 )
 
 // Usage: `go run <this_file> ...arguments`. Also can be just compiled as usual via `go build` and run as executable.
@@ -101,8 +100,8 @@ func main() {
 		return ret
 	}
 
-	rocksdb_opts_r_default := gorocksdb.NewDefaultReadOptions()
-	rocksdb_opts_w_default := gorocksdb.NewDefaultWriteOptions()
+	rocksdb_opts_r_default := grocksdb.NewDefaultReadOptions()
+	rocksdb_opts_w_default := grocksdb.NewDefaultWriteOptions()
 	statedb_prep_path := files.Path(output_dir, "statedb_prep")
 	statedb_prep := new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
 		Path:                            statedb_prep_path,
@@ -189,10 +188,10 @@ func main() {
 	util.PanicIfNotNil(err)
 	defer func() { util.PanicIfNotNil(stats_file.Close()) }()
 
-	stats_db_opts := gorocksdb.NewDefaultOptions()
+	stats_db_opts := grocksdb.NewDefaultOptions()
 	stats_db_opts.SetErrorIfExists(false)
 	stats_db_opts.SetCreateIfMissing(true)
-	stats_db, err_0 := gorocksdb.OpenDb(stats_db_opts, stats_db_path)
+	stats_db, err_0 := grocksdb.OpenDb(stats_db_opts, stats_db_path)
 	util.PanicIfNotNil(err_0)
 	defer stats_db.Close()
 
