@@ -101,13 +101,13 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator))
 }
 
-func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, block types.BlockNum, stake *big.Int, commission uint16, description string, endpoint string) {
+func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
 	// Creates Validator object in storage
 	validator := new(Validator)
 	validator.CommissionRewardsPool = bigutil.Big0
 	validator.RewardsPool = bigutil.Big0
 	validator.Commission = commission
-	validator.TotalStake = stake
+	validator.TotalStake = big.NewInt(0)
 	validator.LastCommissionChange = block
 	validator.LastUpdated = block
 
@@ -127,6 +127,7 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
+	return validator
 }
 
 func (self *Validators) DeleteValidator(validator_address *common.Address) {

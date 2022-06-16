@@ -479,6 +479,18 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	}
 }
 
+func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Validator, prev_vote_count uint64) {
+	// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
+	ctx.Account.SubBalance(ctx.Value)
+	validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
+	self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
+	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	if prev_vote_count != new_vote_count {
+		self.eligible_vote_count -= prev_vote_count
+		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
+	}
+}
+
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
@@ -487,7 +499,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) != 0 && self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
+	if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
@@ -496,7 +508,6 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		return ErrInsufficientDelegation
 	}
 
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
@@ -507,11 +518,10 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 		state.Count++
 	}
 
+	prev_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+
 	if delegation == nil {
-		// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
-		ctx.Account.SubBalance(ctx.Value)
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
-		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
@@ -519,22 +529,13 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 
 		// ctx.CallerAccount == caller address
 		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-		// ctx.Account == contract address
-		ctx.Account.SubBalance(ctx.Value)
 
 		delegation.Stake = bigutil.Add(delegation.Stake, ctx.Value)
 		delegation.LastUpdated = block
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
-
-		validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	}
 
-	self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
-	if prev_vote_count != new_vote_count {
-		self.eligible_vote_count -= prev_vote_count
-		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
-	}
+	self.delegate_update_values(ctx, validator, prev_vote_count)
 
 	state.Count++
 	self.state_put(&state_k, state)
@@ -907,26 +908,24 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 		return ErrBrokenState
 	}
 
-	// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
-	ctx.Account.SubBalance(ctx.Value)
+	if self.cfg.ValidatorMaximumStake.Cmp(ctx.Value) == -1 {
+		return ErrValidatorsMaxStakeExceeded
+	}
 
 	state = new(State)
 	state.RewardsPer1Stake = bigutil.Big0
 
 	// Creates validator related objects in storage
-	self.validators.CreateValidator(owner_address, &args.Validator, block, ctx.Value, args.Commission, args.Description, args.Endpoint)
+	validator := self.validators.CreateValidator(owner_address, &args.Validator, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 
 	if ctx.Value.Cmp(bigutil.Big0) == 1 {
-		new_vote_count := voteCount(ctx.Value, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
-		if new_vote_count > 0 {
-			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
-		}
-		self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
-		// Creates Delegation object in storage
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
+		self.delegate_update_values(ctx, validator, 0)
+		self.validators.ModifyValidator(&args.Validator, validator)
 		state.Count++
 	}
+
 	self.state_put(&state_k, state)
 
 	return nil
