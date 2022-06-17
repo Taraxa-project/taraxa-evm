@@ -68,7 +68,7 @@ func (self *StateTransition) Init(
 			self.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
 		if self.dpos_contract != nil {
-			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis())
+			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis(self.evm_state.GetAccount))
 		}
 		self.evm_state_checkpoint()
 		self.Commit()

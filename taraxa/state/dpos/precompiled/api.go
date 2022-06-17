@@ -46,6 +46,15 @@ type GenesisValidator struct {
 	Description string
 	Delegations core.BalanceMap
 }
+
+func (self *GenesisValidator) gen_register_validator_args() (vi RegisterValidatorArgs) {
+	vi.Commission = self.Commission
+	vi.Description = self.Description
+	vi.Endpoint = self.Endpoint
+	vi.Validator = self.Address
+	return
+}
+
 type GenesisTransfer = struct {
 	Beneficiary common.Address
 	Value       *big.Int
