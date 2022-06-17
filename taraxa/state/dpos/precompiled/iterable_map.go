@@ -131,6 +131,7 @@ func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []commo
 		end = true
 		return
 	}
+
 	if accounts_count <= requested_idx_end {
 		result = make([]common.Address, accounts_count-requested_idx_start)
 		end = true
@@ -154,7 +155,7 @@ func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []commo
 			panic("Unable to find account " + account.String())
 		}
 
-		result[idx-1] = account
+		result[(idx-1)%count] = account
 	}
 
 	return

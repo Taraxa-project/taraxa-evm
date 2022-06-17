@@ -52,7 +52,7 @@ const (
 	ClaimCommisionRewardsGas uint64 = 20000
 	SetValidatorInfoGas      uint64 = 20000
 	DposGetMethodsGas        uint64 = 5000
-	DposBatchGetMethodsGas   uint64 = 20000
+	DposBatchGetMethodsGas   uint64 = 5000
 	DefaultDposMethodGas     uint64 = 20000
 )
 
@@ -84,13 +84,13 @@ const (
 	MaxDescriptionLength = 100
 
 	// Maximum number of validators per batch returned by getValidators call
-	GetValidatorsMaxCount = 50
+	GetValidatorsMaxCount = 20
 
 	// Maximum number of validators per batch returned by getDelegations call
-	GetDelegationsMaxCount = 50
+	GetDelegationsMaxCount = 20
 
 	// Maximum number of validators per batch returned by getUndelegations call
-	GetUndelegationsMaxCount = 50
+	GetUndelegationsMaxCount = 20
 )
 
 // Contract storage fields keys
@@ -168,6 +168,8 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
+	self.lazy_init()
 	method, _ := self.Abi.MethodById(ctx.Input)
 
 	switch method.Name {
@@ -196,16 +198,15 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getValidatorEligibleVotesCount":
 		return DposGetMethodsGas
 	case "getValidators":
-		validators_count := uint64(self.validators.GetValidatorsCount())
-
-		if validators_count == 0 {
-			// In case there are no validators, charge as for standard get method as counter must have been read from db
-			return DposGetMethodsGas
-		} else if validators_count > GetValidatorsMaxCount {
-			// There is a hard cap of max num of returned validators
-			validators_count = GetValidatorsMaxCount
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetValidatorsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
 		}
 
+		validators_count := self.batch_items_count(uint64(self.validators.GetValidatorsCount()), uint64(args.Batch), GetValidatorsMaxCount)
 		return validators_count * DposBatchGetMethodsGas
 
 	case "getDelegations":
@@ -213,20 +214,11 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		input := ctx.Input[4:]
 		var args sol.GetDelegationsArgs
 		if err := method.Inputs.Unpack(&args, input); err != nil {
-			// args parsing will fail also during Run() so the tx wont get executed anyway
-			return DposBatchGetMethodsGas
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
 		}
 
-		delegations_count := uint64(self.delegations.GetDelegationsCount(&args.Delegator))
-
-		if delegations_count == 0 {
-			// In case there are no delegations, charge as for standard get method as counter must have been read from db
-			return DposGetMethodsGas
-		} else if delegations_count > GetDelegationsMaxCount {
-			// There is a hard cap of max num of returned delegations
-			delegations_count = GetDelegationsMaxCount
-		}
-
+		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(&args.Delegator)), uint64(args.Batch), GetDelegationsMaxCount)
 		return delegations_count * DposBatchGetMethodsGas
 
 	case "getUndelegations":
@@ -234,24 +226,37 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		input := ctx.Input[4:]
 		var args sol.GetUndelegationsArgs
 		if err := method.Inputs.Unpack(&args, input); err != nil {
-			// args parsing will fail also during Run() so the tx wont get executed anyway
-			return DposBatchGetMethodsGas
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
 		}
 
-		undelegations_count := uint64(self.undelegations.GetUndelegationsCount(&args.Delegator))
-
-		if undelegations_count == 0 {
-			// In case there are no delegations, charge as for standard get method as counter must have been read from db
-			return DposGetMethodsGas
-		} else if undelegations_count > GetUndelegationsMaxCount {
-			// There is a hard cap of max num of returned delegations
-			undelegations_count = GetUndelegationsMaxCount
-		}
-
+		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
 		return undelegations_count * DposBatchGetMethodsGas
 	}
 
 	return DefaultDposMethodGas
+}
+
+func (self *Contract) batch_items_count(actual_count uint64, batch uint64, max_batch_items_count uint64) uint64 {
+	// In case there are no validators, charge as for standard get method as counter must have been read from db
+	if actual_count == 0 {
+		return 1
+	}
+
+	// Wrong batch specified - there are no more validators for specified batch, charge as for standard get method as counter must have been read from db
+	batch_shift_count := batch * max_batch_items_count
+	if batch_shift_count >= actual_count {
+		return 1
+	}
+
+	items_to_be_returned_count := actual_count - batch_shift_count
+
+	// There is a hard cap of max num of returned validators
+	if items_to_be_returned_count > max_batch_items_count {
+		return max_batch_items_count
+	}
+
+	return items_to_be_returned_count
 }
 
 // Lazy initialization only if contract is needed
@@ -463,7 +468,9 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidators(args))
+
+		res := self.getValidators(args)
+		return method.Outputs.Pack(res.Validators, res.End)
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -471,7 +478,9 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegations(args))
+
+		res := self.getDelegations(args)
+		return method.Outputs.Pack(res.Delegations, res.End)
 
 	case "getUndelegations":
 		var args sol.GetUndelegationsArgs
@@ -479,7 +488,9 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getUndelegations(args))
+
+		res := self.getUndelegations(args)
+		return method.Outputs.Pack(res.Undelegations, res.End)
 	}
 
 	return nil, nil
@@ -1081,8 +1092,6 @@ func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInter
 
 // Returns batch of validators
 func (self *Contract) getValidators(args sol.GetValidatorsArgs) (result sol.GetValidatorsRet) {
-	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
-
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
@@ -1118,9 +1127,6 @@ func (self *Contract) getValidators(args sol.GetValidatorsArgs) (result sol.GetV
 
 // Returns batch of delegations for specified address
 func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (result sol.GetDelegationsRet) {
-	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
-	// TODO: this will be super expensice call probably
-
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
@@ -1159,7 +1165,7 @@ func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (result sol.Ge
 
 // Returns batch of undelegation from queue for given address
 func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (result sol.GetUndelegationsRet) {
-	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegationsMaxCount)
+	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
 
 	// Reserve slice capacity
 	result.Undelegations = make([]sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))

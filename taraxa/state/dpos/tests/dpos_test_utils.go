@@ -185,10 +185,12 @@ func (self *DposTest) GetDPOSReader() dpos.Reader {
 	return self.SUT.DPOSReader(self.blk_n)
 }
 
-func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) {
+func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) vm.ExecutionResult {
 	res := self.execute(from, value, input)
 	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
 	self.tc.Assert.Equal(exe_err, res.ExecutionErr)
+
+	return res
 }
 
 func (self *DposTest) end() {
@@ -203,6 +205,15 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 		self.tc.FailNow()
 	}
 	return packed
+}
+
+func (self *DposTest) unpack(v interface{}, name string, output []byte) error {
+	err := self.abi.Unpack(v, name, output)
+	if err != nil {
+		self.tc.Error(err)
+		self.tc.FailNow()
+	}
+	return err
 }
 
 func generateKeyPair() (pubkey []byte, privkey *ecdsa.PrivateKey) {
