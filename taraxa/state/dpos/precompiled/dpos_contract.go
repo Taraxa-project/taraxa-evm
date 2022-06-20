@@ -955,7 +955,7 @@ func validateProof(proof []byte, validator *common.Address) error {
 }
 
 // Creates a new validator object and delegates to it specific value of tokens
-func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args sol.RegisterValidatorArgs) error {
+func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block types.BlockNum, args sol.RegisterValidatorArgs) error {
 	// Limit size of description & endpoint
 	if len(args.Endpoint) > MaxEndpointLength {
 		return ErrMaxEndpointLengthExceeded
@@ -1003,8 +1003,8 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 	return nil
 }
 
-// Creates a new validator object and delegates to it specific value of tokens
-func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
+// Main part of logic from `registerValidator` method. Doesn't have a few checks that is not needed for validator creation from genesis
+func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args sol.RegisterValidatorArgs) error {
 	if err := validateProof(args.Proof, &args.Validator); err != nil {
 		return err
 	}
@@ -1242,7 +1242,7 @@ func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator, make
 		self.storage.SubBalance(&delegator, amount)
 		self.storage.AddBalance(contract_address, amount)
 
-		delegationError := self.delegate(make_context(&delegator, amount), 0, ValidatorAddress{validator_info.Address})
+		delegationError := self.delegate(make_context(&delegator, amount), 0, sol.ValidatorAddressArgs{validator_info.Address})
 		if delegationError != nil {
 			panic("apply_genesis_entry: delegationError: " + delegationError.Error())
 		}
