@@ -42,6 +42,12 @@ func (self *Delegations) DelegationExists(delegator_address *common.Address, val
 	return delegator_validators.AccountExists(validator_address)
 }
 
+// Returns number of delegations for specified address
+func (self *Delegations) GetDelegationsCount(delegator_address *common.Address) uint32 {
+	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
+	return delegator_validators.GetCount()
+}
+
 // Gets delegation
 func (self *Delegations) GetDelegation(delegator_address *common.Address, validator_address *common.Address) (delegation *Delegation) {
 	key := self.genDelegationKey(delegator_address, validator_address)

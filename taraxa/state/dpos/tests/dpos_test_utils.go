@@ -14,6 +14,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
@@ -144,7 +145,7 @@ func (self *DposTest) init(t *tests.TestCtx, cfg chain_config.ChainConfig) {
 
 	self.st = self.SUT.GetStateTransition()
 	self.dpos_addr = dpos.ContractAddress()
-	self.abi, _ = abi.JSON(strings.NewReader(dpos.TaraxaDposClientMetaData))
+	self.abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
 }
 
 func (self *DposTest) execute(from common.Address, value *big.Int, input []byte) vm.ExecutionResult {
@@ -152,11 +153,11 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	self.st.BeginBlock(&vm.BlockInfo{})
 
 	res := self.st.ExecuteTransaction(&vm.Transaction{
-		Value: value,
-		To:    &self.dpos_addr,
-		From:  from,
-		Input: input,
-		Gas: 1000000,
+		Value:    value,
+		To:       &self.dpos_addr,
+		From:     from,
+		Input:    input,
+		Gas:      1000000,
 		GasPrice: bigutil.Big0,
 	})
 
@@ -184,10 +185,12 @@ func (self *DposTest) GetDPOSReader() dpos.Reader {
 	return self.SUT.DPOSReader(self.blk_n)
 }
 
-func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) {
+func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) vm.ExecutionResult {
 	res := self.execute(from, value, input)
 	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
 	self.tc.Assert.Equal(exe_err, res.ExecutionErr)
+
+	return res
 }
 
 func (self *DposTest) end() {
@@ -202,6 +205,15 @@ func (self *DposTest) pack(name string, args ...interface{}) []byte {
 		self.tc.FailNow()
 	}
 	return packed
+}
+
+func (self *DposTest) unpack(v interface{}, name string, output []byte) error {
+	err := self.abi.Unpack(v, name, output)
+	if err != nil {
+		self.tc.Error(err)
+		self.tc.FailNow()
+	}
+	return err
 }
 
 func generateKeyPair() (pubkey []byte, privkey *ecdsa.PrivateKey) {

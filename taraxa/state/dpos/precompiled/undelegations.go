@@ -53,6 +53,12 @@ func (self *Undelegations) GetUndelegation(delegator_address *common.Address, va
 	return
 }
 
+// Returns number of undelegations for specified address
+func (self *Undelegations) GetUndelegationsCount(delegator_address *common.Address) uint32 {
+	delegator_undelegations := self.getDelegatorUndelegationsList(delegator_address)
+	return delegator_undelegations.GetCount()
+}
+
 // Creates undelegation object in storage
 func (self *Undelegations) CreateUndelegation(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) {
 	undelegation := new(Undelegation)

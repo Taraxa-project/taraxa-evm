@@ -2,6 +2,7 @@ package test_integration
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -368,6 +370,282 @@ func TestRedelegateMinMax(t *testing.T) {
 	test.ExecuteAndCheck(validator2_owner, bigutil.Sub(DefaultBalance, init_stake), test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(addr(3), DefaultBalance, test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(validator1_owner, Big0, test.pack("reDelegate", validator1_addr, validator2_addr, Big1), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
+}
+
+func TestGetValidators(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	gen_validators_num := 3*dpos.GetValidatorsMaxCount - 1
+
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+		val_owner := addr(uint64(i))
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := CopyDefaulChainConfig()
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = DefaultBalance
+	}
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	// Register validators
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.pack("registerValidator", validator.address, validator.proof, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	intristic_gas_batch0 := 21400
+	intristic_gas_batch1 := 21464
+	intristic_gas_batch2 := 21464
+	intristic_gas_batch3 := 21464
+
+	// Get first batch of validators from contract
+	batch0_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(sol.GetValidatorsRet)
+	test.unpack(batch0_parsed_result, "getValidators", batch0_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount, len(batch0_parsed_result.Validators))
+	tc.Assert.Equal(false, batch0_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(dpos.GetValidatorsMaxCount)+"_description", batch0_parsed_result.Validators[len(batch0_parsed_result.Validators)-1].Info.Description)
+
+	// Get second batch of validators from contract
+	batch1_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch1_parsed_result := new(sol.GetValidatorsRet)
+	test.unpack(batch1_parsed_result, "getValidators", batch1_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount, len(batch1_parsed_result.Validators))
+	tc.Assert.Equal(false, batch1_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(2*dpos.GetValidatorsMaxCount)+"_description", batch1_parsed_result.Validators[len(batch1_parsed_result.Validators)-1].Info.Description)
+
+	// Get third batch of validators from contract
+	batch2_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch2_parsed_result := new(sol.GetValidatorsRet)
+	test.unpack(batch2_parsed_result, "getValidators", batch2_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetValidatorsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount - 1
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount-1, len(batch2_parsed_result.Validators))
+	tc.Assert.Equal(true, batch2_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(3*dpos.GetValidatorsMaxCount-1)+"_description", batch2_parsed_result.Validators[len(batch2_parsed_result.Validators)-1].Info.Description)
+
+	// Get fourth batch of validators from contract - it should return 0 validators
+	batch3_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch3_parsed_result := new(sol.GetValidatorsRet)
+	test.unpack(batch3_parsed_result, "getValidators", batch3_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
+	// Checks if number of returned validators is == 0
+	tc.Assert.Equal(0, len(batch3_parsed_result.Validators))
+	tc.Assert.Equal(true, batch3_parsed_result.End)
+}
+
+func TestGetDelegations(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	gen_validators_num := 3 * dpos.GetDelegationsMaxCount
+	gen_delegator1_delegations := gen_validators_num - 1
+
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+		val_owner := addr(uint64(i))
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := CopyDefaulChainConfig()
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = DefaultBalance
+	}
+
+	// Generate  delegator and set some balance to him
+	delegator1_addr := addr(uint64(gen_validators_num + 1))
+	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	// Register validators
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.pack("registerValidator", validator.address, validator.proof, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	// Create delegator delegations
+	for i := 0; i < gen_delegator1_delegations; i++ {
+		test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.pack("delegate", gen_validators[i].address), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	intristic_gas_batch0 := 21592
+	intristic_gas_batch1 := 21656
+	intristic_gas_batch2 := 21656
+	intristic_gas_batch3 := 21656
+
+	// Get first batch of delegator1 delegations from contract
+	batch0_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(sol.GetDelegationsRet)
+	test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetDelegationsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
+	// Checks if number of returned delegations is == dpos.GetDelegationsMaxCount
+	tc.Assert.Equal(dpos.GetDelegationsMaxCount, len(batch0_parsed_result.Delegations))
+	tc.Assert.Equal(false, batch0_parsed_result.End)
+	// Checks if last returned delegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[len(batch0_parsed_result.Delegations)-1].address, batch0_parsed_result.Delegations[len(batch0_parsed_result.Delegations)-1].Account)
+
+	// Get second batch of delegator1 delegations from contract
+	batch1_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch1_parsed_result := new(sol.GetDelegationsRet)
+	test.unpack(batch1_parsed_result, "getDelegations", batch1_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetDelegationsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
+	// Checks if number of returned delegations is == dpos.GetDelegationsMaxCount
+	tc.Assert.Equal(dpos.GetDelegationsMaxCount, len(batch1_parsed_result.Delegations))
+	tc.Assert.Equal(false, batch1_parsed_result.End)
+	// Checks if last returned delegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[dpos.GetDelegationsMaxCount+len(batch1_parsed_result.Delegations)-1].address, batch1_parsed_result.Delegations[len(batch1_parsed_result.Delegations)-1].Account)
+
+	// Get third batch of delegator1 delegations from contract
+	batch2_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch2_parsed_result := new(sol.GetDelegationsRet)
+	test.unpack(batch2_parsed_result, "getDelegations", batch2_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetDelegationsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
+	// Checks if number of returned v is == dpos.GetDelegationsMaxCount - 1
+	tc.Assert.Equal(dpos.GetDelegationsMaxCount-1, len(batch2_parsed_result.Delegations))
+	tc.Assert.Equal(true, batch2_parsed_result.End)
+	// Checks if last returned delegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[2*dpos.GetDelegationsMaxCount+len(batch2_parsed_result.Delegations)-1].address, batch2_parsed_result.Delegations[len(batch2_parsed_result.Delegations)-1].Account)
+
+	// Get fourth batch of delegator1 delegations from contract - it should return 0 delegations
+	batch3_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch3_parsed_result := new(sol.GetDelegationsRet)
+	test.unpack(batch3_parsed_result, "getDelegations", batch3_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
+	// Checks if number of returned delegations is == 0
+	tc.Assert.Equal(0, len(batch3_parsed_result.Delegations))
+	tc.Assert.Equal(true, batch3_parsed_result.End)
+}
+
+func TestGetUndelegations(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	gen_validators_num := 3 * dpos.GetUndelegationsMaxCount
+	gen_delegator1_delegations := gen_validators_num - 1
+
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+		val_owner := addr(uint64(i))
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := CopyDefaulChainConfig()
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = DefaultBalance
+	}
+
+	// Generate  delegator and set some balance to him
+	delegator1_addr := addr(uint64(gen_validators_num + 1))
+	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	// Register validators
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.pack("registerValidator", validator.address, validator.proof, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	// Create delegator delegations
+	for i := 0; i < gen_delegator1_delegations; i++ {
+		test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.pack("delegate", gen_validators[i].address), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	// Create delegator undelegations
+	for i := 0; i < gen_delegator1_delegations; i++ {
+		test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.pack("undelegate", gen_validators[i].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	intristic_gas_batch0 := 21592
+	intristic_gas_batch1 := 21656
+	intristic_gas_batch2 := 21656
+	intristic_gas_batch3 := 21656
+
+	// Get first batch of delegator1 undelegations from contract
+	batch0_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(sol.GetUndelegationsRet)
+	test.unpack(batch0_parsed_result, "getUndelegations", batch0_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetUndelegationsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
+	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
+	tc.Assert.Equal(dpos.GetUndelegationsMaxCount, len(batch0_parsed_result.Undelegations))
+	tc.Assert.Equal(false, batch0_parsed_result.End)
+	// Checks if last returned undelegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[len(batch0_parsed_result.Undelegations)-1].address, batch0_parsed_result.Undelegations[len(batch0_parsed_result.Undelegations)-1].Validator)
+
+	// Get second batch of delegator1 undelegations from contract
+	batch1_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch1_parsed_result := new(sol.GetUndelegationsRet)
+	test.unpack(batch1_parsed_result, "getUndelegations", batch1_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetUndelegationsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
+	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
+	tc.Assert.Equal(dpos.GetUndelegationsMaxCount, len(batch1_parsed_result.Undelegations))
+	tc.Assert.Equal(false, batch1_parsed_result.End)
+	// Checks if last returned undelegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[dpos.GetUndelegationsMaxCount+len(batch1_parsed_result.Undelegations)-1].address, batch1_parsed_result.Undelegations[len(batch1_parsed_result.Undelegations)-1].Validator)
+
+	// Get third batch of delegator1 undelegations from contract
+	batch2_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch2_parsed_result := new(sol.GetUndelegationsRet)
+	test.unpack(batch2_parsed_result, "getUndelegations", batch2_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetUndelegationsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
+	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount - 1
+	tc.Assert.Equal(dpos.GetUndelegationsMaxCount-1, len(batch2_parsed_result.Undelegations))
+	tc.Assert.Equal(true, batch2_parsed_result.End)
+	// Checks if last returned undelegation in this batch is the right one based on validator address
+	tc.Assert.Equal(gen_validators[2*dpos.GetUndelegationsMaxCount+len(batch2_parsed_result.Undelegations)-1].address, batch2_parsed_result.Undelegations[len(batch2_parsed_result.Undelegations)-1].Validator)
+
+	// Get fourth batch of delegator1 undelegations from contract - it should return 0 undelegations
+	batch3_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch3_parsed_result := new(sol.GetUndelegationsRet)
+	test.unpack(batch3_parsed_result, "getUndelegations", batch3_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
+	// Checks if number of returned undelegations is == 0
+	tc.Assert.Equal(0, len(batch3_parsed_result.Undelegations))
+	tc.Assert.Equal(true, batch3_parsed_result.End)
 }
 
 // TODO undelegation test time wise

@@ -19,6 +19,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 )
 
@@ -35,6 +36,10 @@ import (
 ////////////////////////////////////////////////////////////////////////////
 // [1] https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf
 
+// Fixed contract address
+var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+
+// Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
 const (
 	RegisterValidatorGas     uint64 = 80000
 	SetCommissionGas         uint64 = 20000
@@ -47,30 +52,46 @@ const (
 	ClaimCommisionRewardsGas uint64 = 20000
 	SetValidatorInfoGas      uint64 = 20000
 	DposGetMethodsGas        uint64 = 5000
-	DposBatchGetMethodsGas   uint64 = 20000
+	DposBatchGetMethodsGas   uint64 = 5000
 	DefaultDposMethodGas     uint64 = 20000
 )
 
-// Fixed contract address
-var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+// Contract methods error return values
+var (
+	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
+	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
+	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
+	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
+	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
+	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
+	ErrExistentValidator            = util.ErrorString("Validator already exist")
+	ErrBrokenState                  = util.ErrorString("Fatal error state is broken")
+	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
+	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
+	ErrCallIsNotToplevel            = util.ErrorString("only top-level calls are allowed")
+	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recoverd")
+	ErrWrongOwnerAcc                = util.ErrorString("This account is not owner of specified validator")
+	ErrForbiddenCommissionChange    = util.ErrorString("Forbidden commission change")
+	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
+	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
+)
 
-// Error values
-var ErrInsufficientBalance = util.ErrorString("Insufficient balance")
-var ErrNonExistentValidator = util.ErrorString("Validator does not exist")
-var ErrNonExistentDelegation = util.ErrorString("Delegation does not exist")
-var ErrExistentUndelegation = util.ErrorString("Undelegation already exist")
-var ErrNonExistentUndelegation = util.ErrorString("Undelegation does not exist")
-var ErrLockedUndelegation = util.ErrorString("Undelegation is not yet ready to be withdrawn")
-var ErrExistentValidator = util.ErrorString("Validator already exist")
-var ErrBrokenState = util.ErrorString("Fatal error state is broken")
-var ErrValidatorsMaxStakeExceeded = util.ErrorString("Validator's max stake exceeded")
-var ErrInsufficientDelegation = util.ErrorString("Insufficient delegation")
-var ErrCallIsNotToplevel = util.ErrorString("only top-level calls are allowed")
-var ErrWrongProof = util.ErrorString("Wrong proof, validator address could not be recoverd")
-var ErrWrongOwnerAcc = util.ErrorString("This account is not owner of specified validator")
-var ErrForbiddenCommissionChange = util.ErrorString("Forbidden commission change")
-var ErrMaxEndpointLengthExceeded = util.ErrorString("Max endpoint length exceeded")
-var ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
+const (
+	// Max num of characters in url
+	MaxEndpointLength = 50
+
+	// Max num of characters in description
+	MaxDescriptionLength = 100
+
+	// Maximum number of validators per batch returned by getValidators call
+	GetValidatorsMaxCount = 20
+
+	// Maximum number of validators per batch returned by getDelegations call
+	GetDelegationsMaxCount = 20
+
+	// Maximum number of validators per batch returned by getUndelegations call
+	GetUndelegationsMaxCount = 20
+)
 
 // Contract storage fields keys
 var (
@@ -86,18 +107,6 @@ var (
 // const value of 10000 so we do not need to allocate it again
 var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
-
-// Max num of characters in url
-const MaxEndpointLength = 50
-
-// Max num of characters in description
-const MaxDescriptionLength = 100
-
-// Maximum number of validators per batch returned by getValidators call
-const GetValidatorsMaxCount = 50
-
-// Maximum number of validators per batch returned by getDelegatorDelegations call
-const GetDelegatorDelegationsMaxCount = 50
 
 // State of the rewards distribution algorithm
 type State struct {
@@ -159,6 +168,8 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
+	self.lazy_init()
 	method, _ := self.Abi.MethodById(ctx.Input)
 
 	switch method.Name {
@@ -187,11 +198,65 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getValidatorEligibleVotesCount":
 		return DposGetMethodsGas
 	case "getValidators":
-	case "getDelegatorDelegations":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetValidatorsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		validators_count := self.batch_items_count(uint64(self.validators.GetValidatorsCount()), uint64(args.Batch), GetValidatorsMaxCount)
+		return validators_count * DposBatchGetMethodsGas
+
+	case "getDelegations":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetDelegationsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(&args.Delegator)), uint64(args.Batch), GetDelegationsMaxCount)
+		return delegations_count * DposBatchGetMethodsGas
+
 	case "getUndelegations":
-		return DposBatchGetMethodsGas
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetUndelegationsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
+		return undelegations_count * DposBatchGetMethodsGas
 	}
+
 	return DefaultDposMethodGas
+}
+
+func (self *Contract) batch_items_count(actual_count uint64, batch uint64, max_batch_items_count uint64) uint64 {
+	// In case there are no validators, charge as for standard get method as counter must have been read from db
+	if actual_count == 0 {
+		return 1
+	}
+
+	// Wrong batch specified - there are no more validators for specified batch, charge as for standard get method as counter must have been read from db
+	batch_shift_count := batch * max_batch_items_count
+	if batch_shift_count >= actual_count {
+		return 1
+	}
+
+	items_to_be_returned_count := actual_count - batch_shift_count
+
+	// There is a hard cap of max num of returned validators
+	if items_to_be_returned_count > max_batch_items_count {
+		return max_batch_items_count
+	}
+
+	return items_to_be_returned_count
 }
 
 // Lazy initialization only if contract is needed
@@ -200,7 +265,7 @@ func (self *Contract) lazy_init() {
 		return
 	}
 
-	self.Abi, _ = abi.JSON(strings.NewReader(TaraxaDposClientMetaData))
+	self.Abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
 
 	self.validators.Init(&self.storage, field_validators)
 	self.delegations.Init(&self.storage, field_delegations)
@@ -285,7 +350,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	switch method.Name {
 	case "delegate":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
@@ -293,7 +358,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.delegate(ctx, evm.GetBlock().Number, args)
 
 	case "undelegate":
-		var args UndelegateArgs
+		var args sol.UndelegateArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
@@ -301,7 +366,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.undelegate(ctx, evm.GetBlock().Number, args)
 
 	case "confirmUndelegate":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse confirmUndelegate input args: ", err)
 			return nil, err
@@ -309,7 +374,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.confirmUndelegate(ctx, evm.GetBlock().Number, args)
 
 	case "cancelUndelegate":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse cancelUndelegate input args: ", err)
 			return nil, err
@@ -318,7 +383,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.cancelUndelegate(ctx, evm.GetBlock().Number, args)
 
 	case "reDelegate":
-		var args RedelegateArgs
+		var args sol.RedelegateArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse reDelegate input args: ", err)
 			return nil, err
@@ -326,7 +391,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.redelegate(ctx, evm.GetBlock().Number, args)
 
 	case "claimRewards":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse claimRewards input args: ", err)
 			return nil, err
@@ -334,7 +399,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
 
 	case "claimCommissionRewards":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse claimCommissionRewards input args: ", err)
 			return nil, err
@@ -342,7 +407,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimCommissionRewards(ctx, evm.GetBlock().Number, args)
 
 	case "setCommission":
-		var args SetCommissionArgs
+		var args sol.SetCommissionArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse claimCommissionRewards input args: ", err)
 			return nil, err
@@ -350,7 +415,8 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.setCommission(ctx, evm.GetBlock().Number, args)
 
 	case "registerValidator":
-		var args RegisterValidatorArgs
+
+		var args sol.RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse registerValidator input args: ", err)
 			return nil, err
@@ -358,7 +424,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.registerValidator(ctx, evm.GetBlock().Number, args)
 
 	case "setValidatorInfo":
-		var args SetValidatorInfoArgs
+		var args sol.SetValidatorInfoArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse setValidatorInfo input args: ", err)
 			return nil, err
@@ -366,7 +432,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.setValidatorInfo(ctx, args)
 
 	case "isValidatorEligible":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse isValidatorEligible input args: ", err)
 			return nil, err
@@ -377,7 +443,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.delayedStorage.EligibleVoteCount())
 
 	case "getValidatorEligibleVotesCount":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getValidatorEligibleVotesCount input args: ", err)
 			return nil, err
@@ -385,7 +451,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.delayedStorage.GetEligibleVoteCount(&args.Validator))
 
 	case "getValidator":
-		var args ValidatorAddress
+		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getValidator input args: ", err)
 			return nil, err
@@ -397,28 +463,34 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(result)
 
 	case "getValidators":
-		var args GetValidatorsArgs
+		var args sol.GetValidatorsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidators(args))
 
-	case "getDelegatorDelegations":
-		var args GetDelegatorDelegationsArgs
+		res := self.getValidators(args)
+		return method.Outputs.Pack(res.Validators, res.End)
+
+	case "getDelegations":
+		var args sol.GetDelegationsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse getDelegatorDelegations input args: ", err)
+			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegatorDelegations(args))
+
+		res := self.getDelegations(args)
+		return method.Outputs.Pack(res.Delegations, res.End)
 
 	case "getUndelegations":
-		var args GetDelegatorDelegationsArgs
+		var args sol.GetUndelegationsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getUndelegations(args))
+
+		res := self.getUndelegations(args)
+		return method.Outputs.Pack(res.Undelegations, res.End)
 	}
 
 	return nil, nil
@@ -492,8 +564,8 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 }
 
 // Delegates specified number of tokens to specified validator and creates new delegation object
-// It also increase total stake of specified validator and creates new state if necessary
-func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+// It also increase total stake of specified validator and creas new state if necessary
+func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
@@ -545,7 +617,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args Vali
 
 // Removes delegation from specified validator and claims rewards
 // new undelegation object is created and moved to queue where after expiration can be claimed
-func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args UndelegateArgs) error {
+func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args sol.UndelegateArgs) error {
 	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrExistentUndelegation
 	}
@@ -620,7 +692,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args Un
 
 // Removes undelegation from queue and moves staked toknes back to delegator
 // This only works after lock-up period expires
-func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrNonExistentUndelegation
 	}
@@ -635,7 +707,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 }
 
 // Removes the undelegation request from queue and returns delegation value back to validator if possible
-func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrNonExistentUndelegation
 	}
@@ -688,7 +760,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 }
 
 // Moves delegated tokens from one delegator to another
-func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args RedelegateArgs) error {
+func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args sol.RedelegateArgs) error {
 	validator_from := self.validators.GetValidator(&args.ValidatorFrom)
 	if validator_from == nil {
 		return ErrNonExistentValidator
@@ -805,7 +877,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args Re
 }
 
 // Pays off accumulated rewards back to delegator address
-func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
 		return ErrNonExistentDelegation
@@ -840,7 +912,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 }
 
 // Pays off rewards from commission back to validator owner address
-func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum, args ValidatorAddress) error {
+func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
@@ -882,8 +954,8 @@ func validateProof(proof []byte, validator *common.Address) error {
 	return nil
 }
 
-// Main part of logic from `registerValidator` method. Doesn't have a few checks that is not needed for validator creation from genesis
-func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block types.BlockNum, args RegisterValidatorArgs) error {
+// Creates a new validator object and delegates to it specific value of tokens
+func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, args sol.RegisterValidatorArgs) error {
 	// Limit size of description & endpoint
 	if len(args.Endpoint) > MaxEndpointLength {
 		return ErrMaxEndpointLengthExceeded
@@ -945,7 +1017,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 }
 
 // Changes validator specific field as endpoint or description
-func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoArgs) error {
+func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorInfoArgs) error {
 	// Limit size of description & endpoint
 	if len(args.Endpoint) > MaxEndpointLength {
 		return ErrMaxEndpointLengthExceeded
@@ -972,7 +1044,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args SetValidatorInfoAr
 }
 
 // Changes validator commission to new rate
-func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args SetCommissionArgs) error {
+func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args sol.SetCommissionArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
 	}
@@ -998,8 +1070,8 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 }
 
 // Returns single validator object
-func (self *Contract) getValidator(args ValidatorAddress) (DposInterfaceValidatorBasicInfo, error) {
-	var result DposInterfaceValidatorBasicInfo
+func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInterfaceValidatorBasicInfo, error) {
+	var result sol.DposInterfaceValidatorBasicInfo
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
 		return result, ErrNonExistentValidator
@@ -1019,13 +1091,11 @@ func (self *Contract) getValidator(args ValidatorAddress) (DposInterfaceValidato
 }
 
 // Returns batch of validators
-func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidatorsRet) {
-	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
-
+func (self *Contract) getValidators(args sol.GetValidatorsArgs) (result sol.GetValidatorsRet) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
-	result.Validators = make([]DposInterfaceValidatorData, 0, len(validators_addresses))
+	result.Validators = make([]sol.DposInterfaceValidatorData, 0, len(validators_addresses))
 
 	for _, validator_address := range validators_addresses {
 		validator := self.validators.GetValidator(&validator_address)
@@ -1040,7 +1110,7 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 			panic("getValidators - unable to fetch validator info data")
 		}
 
-		var validator_data DposInterfaceValidatorData
+		var validator_data sol.DposInterfaceValidatorData
 		validator_data.Account = validator_address
 		validator_data.Info.Commission = validator.Commission
 		validator_data.Info.CommissionReward = validator.CommissionRewardsPool
@@ -1056,25 +1126,21 @@ func (self *Contract) getValidators(args GetValidatorsArgs) (result GetValidator
 }
 
 // Returns batch of delegations for specified address
-func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) (result GetDelegatorDelegationRet) {
-
-	// TODO: measure performance of this call - if it is too bad -> decrease GetValidatorsMaxCount constant
-	// TODO: this will be super expensice call probably
-
-	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (result sol.GetDelegationsRet) {
+	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
-	result.Delegations = make([]DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
+	result.Delegations = make([]sol.DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
 
 	for _, validator_address := range delegator_validators_addresses {
 		delegation := self.delegations.GetDelegation(&args.Delegator, &validator_address)
 		validator := self.validators.GetValidator(&validator_address)
 		if delegation == nil || validator == nil {
 			// This should never happen
-			panic("getDelegatorDelegations - unable to fetch delegation data")
+			panic("getDelegations - unable to fetch delegation data")
 		}
 
-		var delegation_data DposInterfaceDelegationData
+		var delegation_data sol.DposInterfaceDelegationData
 		delegation_data.Account = validator_address
 		delegation_data.Delegation.Stake = delegation.Stake
 
@@ -1083,7 +1149,7 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 		old_state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
 		if state == nil || old_state == nil {
 			// This should never happen
-			panic("getDelegatorDelegations - unable to state data")
+			panic("getDelegations - unable to state data")
 		}
 		current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator.RewardsPool, validator.TotalStake))
 		reward_per_stake := bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
@@ -1098,11 +1164,11 @@ func (self *Contract) getDelegatorDelegations(args GetDelegatorDelegationsArgs) 
 }
 
 // Returns batch of undelegation from queue for given address
-func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result GetUnelegationsRet) {
-	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetDelegatorDelegationsMaxCount)
+func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (result sol.GetUndelegationsRet) {
+	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
 
 	// Reserve slice capacity
-	result.Undelegations = make([]DposInterfaceUndelegationData, 0, len(undelegations_addresses))
+	result.Undelegations = make([]sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))
 
 	for _, validator_address := range undelegations_addresses {
 		undelegation := self.undelegations.GetUndelegation(&args.Delegator, &validator_address)
@@ -1111,7 +1177,7 @@ func (self *Contract) getUndelegations(args GetDelegatorDelegationsArgs) (result
 			panic("getUndelegations - unable to fetch undelegation data")
 		}
 
-		var undelegation_data DposInterfaceUndelegationData
+		var undelegation_data sol.DposInterfaceUndelegationData
 		undelegation_data.Validator = validator_address
 		undelegation_data.Stake = undelegation.Amount
 		undelegation_data.Block = undelegation.Block
