@@ -33,6 +33,21 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 )
 
+type GetUndelegationsRet struct {
+	Undelegations []sol.DposInterfaceUndelegationData
+	End           bool
+}
+
+type GetValidatorsRet struct {
+	Validators []sol.DposInterfaceValidatorData
+	End        bool
+}
+
+type GetDelegationsRet struct {
+	Delegations []sol.DposInterfaceDelegationData
+	End         bool
+}
+
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
@@ -166,9 +181,13 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	return res
 }
 
-func (self *DposTest) AdvanceBlock(rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
+func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
 	self.blk_n++
-	self.st.BeginBlock(&vm.BlockInfo{})
+	if author == nil {
+		self.st.BeginBlock(&vm.BlockInfo{})
+	} else {
+		self.st.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
+	}
 	self.st.EndBlock(nil, rewardsStats, feesRewards)
 	self.st.Commit()
 }

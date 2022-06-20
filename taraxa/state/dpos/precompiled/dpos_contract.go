@@ -108,6 +108,9 @@ var (
 var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
 
+// This will split block reward 8:2 (8 - transactions, 2 - votes)
+var VotesToTrasnactionsRatio = big.NewInt(20)
+
 // State of the rewards distribution algorithm
 type State struct {
 	// represents number of rewards per 1 stake
@@ -468,9 +471,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-
-		res := self.getValidators(args)
-		return method.Outputs.Pack(res.Validators, res.End)
+		return method.Outputs.Pack(self.getValidators(args))
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -478,9 +479,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-
-		res := self.getDelegations(args)
-		return method.Outputs.Pack(res.Delegations, res.End)
+		return method.Outputs.Pack(self.getDelegations(args))
 
 	case "getUndelegations":
 		var args sol.GetUndelegationsArgs
@@ -488,15 +487,13 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getUndelegations input args: ", err)
 			return nil, err
 		}
-
-		res := self.getUndelegations(args)
-		return method.Outputs.Pack(res.Undelegations, res.End)
+		return method.Outputs.Pack(self.getUndelegations(args))
 	}
 
 	return nil, nil
 }
 
-func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
+func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 
@@ -504,7 +501,26 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	blockReward := bigutil.Mul(self.amount_delegated, self.yield_percentage)
 	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, self.blocks_per_year))
 
+	voteReward := bigutil.Big0
+	authorReward := bigutil.Big0
+	trxReward := blockReward
+	// We need to handle case for block 0
+	if rewardsStats.TotalVotesCount > 0 {
+		// Calculate propotion between votes and transactions
+		voteReward = bigutil.Div(bigutil.Mul(blockReward, VotesToTrasnactionsRatio), Big100)
+		trxReward = bigutil.Sub(blockReward, voteReward)
+
+		// In case block author included more than minimum required number of votes
+		if rewardsStats.BonusVotesCount > 0 {
+			tmpVoteReward := bigutil.Div(voteReward, big.NewInt(int64(rewardsStats.TotalVotesCount)))
+			authorReward = bigutil.Mul(tmpVoteReward, big.NewInt(int64(rewardsStats.BonusVotesCount)))
+			voteReward = bigutil.Sub(voteReward, authorReward)
+		}
+		voteReward = bigutil.Div(voteReward, big.NewInt(int64(rewardsStats.TotalVotesCount)))
+	}
+
 	totalUniqueTxsCountCheck := uint32(0)
+	totalUniqueVoteCountCheck := uint32(0)
 
 	// Calculates validators rewards
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
@@ -526,11 +542,19 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		}
 
 		// Calculate it like this to eliminate rounding error as much as possible
-		validatorReward := bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTxsCount)), blockReward)
+		validatorReward := bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTxsCount)), trxReward)
 		validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTxsCount)))
 
-		// TODO: once we have also votes statistics, use it in calculations
-		// TODO: should voter with 1M stake be rewarded same as voter with 10M stake ???
+		// Add reward for voting
+		if validatorStats.ValidCertVote {
+			totalUniqueVoteCountCheck++
+			validatorReward = bigutil.Add(validatorReward, voteReward)
+		}
+
+		// Add reward to the author for additional included votes
+		if validatorAddress == *author {
+			validatorReward = bigutil.Add(validatorReward, authorReward)
+		}
 
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTxsFeesReward(validatorAddress))
@@ -547,6 +571,11 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	// TODO: debug check - can be deleted for release
 	if totalUniqueTxsCountCheck != rewardsStats.TotalUniqueTxsCount {
 		errorString := fmt.Sprintf("TotalUniqueTxsCount (%d) based on validators stats != rewardsStats.TotalUniqueTxsCount (%d)", totalUniqueTxsCountCheck, rewardsStats.TotalUniqueTxsCount)
+		panic(errorString)
+	}
+
+	if totalUniqueVoteCountCheck != rewardsStats.TotalVotesCount {
+		errorString := fmt.Sprintf("TotalVotesCount (%d) based on validators stats != rewardsStats.TotalVotesCount (%d)", totalUniqueVoteCountCheck, rewardsStats.TotalVotesCount)
 		panic(errorString)
 	}
 }
@@ -1091,11 +1120,11 @@ func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInter
 }
 
 // Returns batch of validators
-func (self *Contract) getValidators(args sol.GetValidatorsArgs) (result sol.GetValidatorsRet) {
+func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
-	result.Validators = make([]sol.DposInterfaceValidatorData, 0, len(validators_addresses))
+	validators = make([]sol.DposInterfaceValidatorData, 0, len(validators_addresses))
 
 	for _, validator_address := range validators_addresses {
 		validator := self.validators.GetValidator(&validator_address)
@@ -1118,19 +1147,17 @@ func (self *Contract) getValidators(args sol.GetValidatorsArgs) (result sol.GetV
 		validator_data.Info.Endpoint = validator_info.Endpoint
 		validator_data.Info.Description = validator_info.Description
 
-		result.Validators = append(result.Validators, validator_data)
+		validators = append(validators, validator_data)
 	}
-
-	result.End = end
 	return
 }
 
 // Returns batch of delegations for specified address
-func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (result sol.GetDelegationsRet) {
+func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations []sol.DposInterfaceDelegationData, end bool) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
-	result.Delegations = make([]sol.DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
+	delegations = make([]sol.DposInterfaceDelegationData, 0, len(delegator_validators_addresses))
 
 	for _, validator_address := range delegator_validators_addresses {
 		delegation := self.delegations.GetDelegation(&args.Delegator, &validator_address)
@@ -1156,19 +1183,17 @@ func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (result sol.Ge
 		////
 
 		delegation_data.Delegation.Rewards = self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-		result.Delegations = append(result.Delegations, delegation_data)
+		delegations = append(delegations, delegation_data)
 	}
-
-	result.End = end
 	return
 }
 
 // Returns batch of undelegation from queue for given address
-func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (result sol.GetUndelegationsRet) {
+func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (undelegations []sol.DposInterfaceUndelegationData, end bool) {
 	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
 
 	// Reserve slice capacity
-	result.Undelegations = make([]sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))
+	undelegations = make([]sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))
 
 	for _, validator_address := range undelegations_addresses {
 		undelegation := self.undelegations.GetUndelegation(&args.Delegator, &validator_address)
@@ -1182,10 +1207,9 @@ func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (result so
 		undelegation_data.Stake = undelegation.Amount
 		undelegation_data.Block = undelegation.Block
 
-		result.Undelegations = append(result.Undelegations, undelegation_data)
+		undelegations = append(undelegations, undelegation_data)
 	}
 
-	result.End = end
 	return
 }
 

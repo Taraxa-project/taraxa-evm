@@ -22,7 +22,10 @@ type RewardsStats struct {
 	TotalUniqueTxsCount uint32
 
 	// Total unique votes counter
-	TotalUniqueVotesCount uint32
+	TotalVotesCount uint32
+
+	// Total count of addtional votes in block
+	BonusVotesCount uint32
 }
 
 func NewRewardsStats() RewardsStats {

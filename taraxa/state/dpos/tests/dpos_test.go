@@ -11,7 +11,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -153,17 +152,25 @@ func TestRewardsAndCommission(t *testing.T) {
 					- stake == 20% (from total stake)
 					- he delegates to himself those 20%
 					- added 8 unique txs
+					- 1 vote
 			- validator 2:
 					- stake == 80% (from total stake)
 					- he delegates to himself 20% (from total stake)
 					- added 32 unique txs
+					- 1 vote
 			- delegator 1:
 					- delegated 60% (from total stake) to validator 2
 
 
 		After every participant claims his rewards:
-			- validator1_rewards = (validator1_txs * blockReward) / total_txs
-			- validator2_rewards = (validator2_txs * blockReward) / total_txs
+
+			- block author (validator 1) - added 2 votes => bonus 1 vote
+
+			- author_reward(validator 1) = blockReward*.2 / total_votes
+			- vote_reward = ((blockReward*.2/2) - author_reward)/ total_votes
+
+			- validator1_rewards = (validator1_txs * blockReward*.8) / total_txs + vote_reward + author_reward
+			- validator2_rewards = (validator2_txs * blockReward*.8) / total_txs + vote_reward
 
 			- delegator 1(validator 1) gets 100 % from validator1_rewards
 			- delegator 2(validator 2) gets 25 % from validator2_rewards
@@ -186,36 +193,53 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.UniqueTxsCount = 8
-	validator1_stats.ValidCertVote = false
+	validator1_stats.ValidCertVote = true
 	initValidatorTxsStats(validator1_addr, &fees_rewards, txFee, validator1_stats.UniqueTxsCount)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.UniqueTxsCount = 32
-	validator2_stats.ValidCertVote = false
+	validator2_stats.ValidCertVote = true
 	initValidatorTxsStats(validator2_addr, &fees_rewards, txFee, validator2_stats.UniqueTxsCount)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
 	tmp_rewards_stats.TotalUniqueTxsCount = validator1_stats.UniqueTxsCount + validator2_stats.UniqueTxsCount
-	tmp_rewards_stats.TotalUniqueVotesCount = 0
+	tmp_rewards_stats.TotalVotesCount = 2
+	tmp_rewards_stats.BonusVotesCount = 1
 
 	// Advance block
-	test.AdvanceBlock(&tmp_rewards_stats, &fees_rewards)
+	test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards)
 
 	// Expected block reward
 	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(dpos.Big100, big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
+	// Spliting block rewards between votes and blocks
+	expected_vote_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.VotesToTrasnactionsRatio), dpos.Big100)
+	expected_trx_reward := bigutil.Sub(expected_block_reward, expected_vote_reward)
+
+	//Vote bonus rewards
+	tmp_vote_reward := bigutil.Div(expected_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesCount)))
+	author_reward := bigutil.Mul(tmp_vote_reward, big.NewInt(int64(tmp_rewards_stats.BonusVotesCount)))
+	expected_vote_reward = bigutil.Sub(expected_vote_reward, author_reward)
+	expected_vote_reward = bigutil.Div(expected_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesCount)))
+
 	// Expected participants rewards
 	// validator1_rewards = (validator1_txs * blockReward) / total_txs
-	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(validator1_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
+	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator1_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
 	validator1_total_reward = bigutil.Add(validator1_total_reward, bigutil.Mul(txFee, big.NewInt(int64(validator1_stats.UniqueTxsCount))))
+	// Add vote reward
+	validator1_total_reward = bigutil.Add(validator1_total_reward, expected_vote_reward)
+	// Add author reward
+	validator1_total_reward = bigutil.Add(validator1_total_reward, author_reward)
 	expected_validator1_commission_reward := bigutil.Div(bigutil.Mul(validator1_total_reward, big.NewInt(int64(validator1_commission))), dpos.Big10000)
 	expected_validator1_delegators_reward := bigutil.Sub(validator1_total_reward, expected_validator1_commission_reward)
 
 	// validator2_rewards = (validator2_txs * blockReward) / total_txs
-	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(validator2_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
+	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator2_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
 	validator2_total_reward = bigutil.Add(validator2_total_reward, bigutil.Mul(txFee, big.NewInt(int64(validator2_stats.UniqueTxsCount))))
+	// Add vote reward
+	validator2_total_reward = bigutil.Add(validator2_total_reward, expected_vote_reward)
 	expected_validator2_commission_reward := bigutil.Div(bigutil.Mul(validator2_total_reward, big.NewInt(int64(validator2_commission))), dpos.Big10000)
 	expected_validator2_delegators_reward := bigutil.Sub(validator2_total_reward, expected_validator2_commission_reward)
 
@@ -228,10 +252,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	// delegator 3 gets 75 % from validator2_rewards
 	expected_delegator3_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(75)), dpos.Big100)
 
-	// expected_block_rewardPlusFees := bigutil.Add(expected_block_reward, bigutil.Mul(txFee, big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount))))
+	// expected_trx_rewardPlusFees := bigutil.Add(expected_trx_reward, bigutil.Mul(txFee, big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount))))
 	// expectedDelegatorsRewards := bigutil.Add(expected_delegator1_reward, bigutil.Add(expected_delegator2_reward, expected_delegator3_reward))
 	// // Last digit is removed due to rounding error that makes these values unequal
-	// tc.Assert.Equal(bigutil.Div(expected_block_rewardPlusFees, Big10), bigutil.Div(expectedDelegatorsRewards, Big10))
+	// tc.Assert.Equal(bigutil.Div(expected_trx_rewardPlusFees, Big10), bigutil.Div(expectedDelegatorsRewards, Big10))
 
 	// ErrNonExistentDelegation
 	test.ExecuteAndCheck(validator1_owner, Big0, test.pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
@@ -309,18 +333,18 @@ func TestSetCommissions(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, Big0, test.pack("setCommission", val_addr, uint16(11)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
 
 	//Advance 4 rounds
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
 
 	test.ExecuteAndCheck(val_owner, Big0, test.pack("setCommission", val_addr, uint16(11)), util.ErrorString(""), util.ErrorString(""))
 
 	//Advance 4 rounds
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
-	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
 
 	test.ExecuteAndCheck(val_owner, Big0, test.pack("setCommission", val_addr, uint16(20)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, Big0, test.pack("setCommission", val_addr, uint16(16)), util.ErrorString(""), util.ErrorString(""))
@@ -410,7 +434,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Get first batch of validators from contract
 	batch0_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch0_parsed_result := new(sol.GetValidatorsRet)
+	batch0_parsed_result := new(GetValidatorsRet)
 	test.unpack(batch0_parsed_result, "getValidators", batch0_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
@@ -422,7 +446,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Get second batch of validators from contract
 	batch1_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch1_parsed_result := new(sol.GetValidatorsRet)
+	batch1_parsed_result := new(GetValidatorsRet)
 	test.unpack(batch1_parsed_result, "getValidators", batch1_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
@@ -434,7 +458,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Get third batch of validators from contract
 	batch2_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch2_parsed_result := new(sol.GetValidatorsRet)
+	batch2_parsed_result := new(GetValidatorsRet)
 	test.unpack(batch2_parsed_result, "getValidators", batch2_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetValidatorsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
@@ -446,7 +470,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Get fourth batch of validators from contract - it should return 0 validators
 	batch3_result := test.ExecuteAndCheck(addr(1), Big0, test.pack("getValidators", uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch3_parsed_result := new(sol.GetValidatorsRet)
+	batch3_parsed_result := new(GetValidatorsRet)
 	test.unpack(batch3_parsed_result, "getValidators", batch3_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
@@ -504,7 +528,7 @@ func TestGetDelegations(t *testing.T) {
 
 	// Get first batch of delegator1 delegations from contract
 	batch0_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch0_parsed_result := new(sol.GetDelegationsRet)
+	batch0_parsed_result := new(GetDelegationsRet)
 	test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetDelegationsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
@@ -516,7 +540,7 @@ func TestGetDelegations(t *testing.T) {
 
 	// Get second batch of delegator1 delegations from contract
 	batch1_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch1_parsed_result := new(sol.GetDelegationsRet)
+	batch1_parsed_result := new(GetDelegationsRet)
 	test.unpack(batch1_parsed_result, "getDelegations", batch1_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetDelegationsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
@@ -528,7 +552,7 @@ func TestGetDelegations(t *testing.T) {
 
 	// Get third batch of delegator1 delegations from contract
 	batch2_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch2_parsed_result := new(sol.GetDelegationsRet)
+	batch2_parsed_result := new(GetDelegationsRet)
 	test.unpack(batch2_parsed_result, "getDelegations", batch2_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetDelegationsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
@@ -540,7 +564,7 @@ func TestGetDelegations(t *testing.T) {
 
 	// Get fourth batch of delegator1 delegations from contract - it should return 0 delegations
 	batch3_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getDelegations", delegator1_addr, uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch3_parsed_result := new(sol.GetDelegationsRet)
+	batch3_parsed_result := new(GetDelegationsRet)
 	test.unpack(batch3_parsed_result, "getDelegations", batch3_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
@@ -603,7 +627,7 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Get first batch of delegator1 undelegations from contract
 	batch0_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch0_parsed_result := new(sol.GetUndelegationsRet)
+	batch0_parsed_result := new(GetUndelegationsRet)
 	test.unpack(batch0_parsed_result, "getUndelegations", batch0_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetUndelegationsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
@@ -615,7 +639,7 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Get second batch of delegator1 undelegations from contract
 	batch1_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch1_parsed_result := new(sol.GetUndelegationsRet)
+	batch1_parsed_result := new(GetUndelegationsRet)
 	test.unpack(batch1_parsed_result, "getUndelegations", batch1_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetUndelegationsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
@@ -627,7 +651,7 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Get third batch of delegator1 undelegations from contract
 	batch2_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch2_parsed_result := new(sol.GetUndelegationsRet)
+	batch2_parsed_result := new(GetUndelegationsRet)
 	test.unpack(batch2_parsed_result, "getUndelegations", batch2_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetUndelegationsMaxCount-1)+uint64(intristic_gas_batch2), batch2_result.GasUsed)
@@ -639,7 +663,7 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Get fourth batch of delegator1 undelegations from contract - it should return 0 undelegations
 	batch3_result := test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("getUndelegations", delegator1_addr, uint32(3) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	batch3_parsed_result := new(sol.GetUndelegationsRet)
+	batch3_parsed_result := new(GetUndelegationsRet)
 	test.unpack(batch3_parsed_result, "getUndelegations", batch3_result.CodeRetval)
 	// Checks used gas
 	tc.Assert.Equal(dpos.DposBatchGetMethodsGas+uint64(intristic_gas_batch3), batch3_result.GasUsed)
