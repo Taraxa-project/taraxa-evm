@@ -142,39 +142,52 @@ func TestRewardsAndCommission(t *testing.T) {
 	delegator2_stake := DefaultMinimumDeposit
 
 	delegator3_addr := addr(3)
-	delegator3_stake := bigutil.Mul(DefaultMinimumDeposit, big.NewInt(3))
+	delegator3_stake := bigutil.Mul(DefaultMinimumDeposit, big.NewInt(4))
+
+	validator4_addr, validator4_proof := generateAddrAndProof()
+	validator4_owner := addr(4)
+	validator4_commission := uint16(0) // 0%
+	delegator4_addr := validator4_owner
+	delegator4_stake := DefaultMinimumDeposit
+
+	validator5_addr, validator5_proof := generateAddrAndProof()
+	validator5_owner := addr(5)
+	validator5_commission := uint16(10000) //100%
+	// delegator5_addr := validator5_owner
+	delegator5_stake := DefaultMinimumDeposit
 
 	/*
 		Simulate scenario when we have:
 
 		  - total unique txs count == 40
 			- validator 1:
-					- stake == 20% (from total stake)
-					- he delegates to himself those 20%
+					- stake == 12.5% (from total stake)
+					- he delegates to himself those 12.5%
 					- added 8 unique txs
 					- 1 vote
 			- validator 2:
-					- stake == 80% (from total stake)
-					- he delegates to himself 20% (from total stake)
+					- stake == 62.5% (from total stake)
+					- he delegates to himself 12.5% (from total stake)
 					- added 32 unique txs
 					- 1 vote
-			- delegator 1:
-					- delegated 60% (from total stake) to validator 2
-
+			- delegator 3:
+					- delegated 50% (from total stake) to validator 2
+			- validator 4:
+					- stake == 12.5% (from total stake)
+					- he delegates to himself 12.5% (from total stake)
+					- 1 vote
+			- validator 5:
+					- stake == 12.5% (from total stake)
+					- he delegates to himself 12.5% (from total stake)
+					- 1 vote
 
 		After every participant claims his rewards:
 
-			- block author (validator 1) - added 2 votes => bonus 1 vote
-
-			- author_reward(validator 1) = blockReward*.2 / total_votes
-			- vote_reward = ((blockReward*.2/2) - author_reward)/ total_votes
-
-			- validator1_rewards = (validator1_txs * blockReward*.8) / total_txs + vote_reward + author_reward
-			- validator2_rewards = (validator2_txs * blockReward*.8) / total_txs + vote_reward
-
+			- block author (validator 1) - added 7 votes => bonus 1 vote
 			- delegator 1(validator 1) gets 100 % from validator1_rewards
-			- delegator 2(validator 2) gets 25 % from validator2_rewards
-			- delegator 3 gets 75 % from validator2_rewards
+			- delegator 2(validator 2) gets 20 % from validator2_rewards
+			- delegator 3 gets 80 % from validator2_rewards
+			- delegator 4 gets 100% reward for 1 vote
 	*/
 
 	// Creates validators & delegators
@@ -187,25 +200,36 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.ExecuteAndCheck(delegator3_addr, delegator3_stake, test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator3_stake)
 
+	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.pack("registerValidator", validator4_addr, validator4_proof, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_stake = bigutil.Add(total_stake, delegator4_stake)
+
+	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.pack("registerValidator", validator5_addr, validator5_proof, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_stake = bigutil.Add(total_stake, delegator5_stake)
+
 	// Simulated rewards statistics
 	tmp_rewards_stats := rewards_stats.NewRewardsStats()
 	fees_rewards := dpos.NewFeesRewards()
 
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.UniqueTxsCount = 8
-	validator1_stats.ValidCertVote = true
+	validator1_stats.VoteWeight = 1
 	initValidatorTxsStats(validator1_addr, &fees_rewards, txFee, validator1_stats.UniqueTxsCount)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.UniqueTxsCount = 32
-	validator2_stats.ValidCertVote = true
+	validator2_stats.VoteWeight = 5
 	initValidatorTxsStats(validator2_addr, &fees_rewards, txFee, validator2_stats.UniqueTxsCount)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
+	validator4_stats := rewards_stats.ValidatorStats{}
+	validator4_stats.VoteWeight = 1
+	tmp_rewards_stats.ValidatorsStats[validator4_addr] = validator4_stats
+
 	tmp_rewards_stats.TotalUniqueTxsCount = validator1_stats.UniqueTxsCount + validator2_stats.UniqueTxsCount
-	tmp_rewards_stats.TotalVotesCount = 2
-	tmp_rewards_stats.BonusVotesCount = 1
+	tmp_rewards_stats.TotalVotesWeight = 7
+	tmp_rewards_stats.MaxVotesWeight = 8
+	tmp_rewards_stats.BonusVotesWeight = 1
 
 	// Advance block
 	test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards)
@@ -215,42 +239,58 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(dpos.Big100, big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
 	// Spliting block rewards between votes and blocks
-	expected_vote_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.VotesToTrasnactionsRatio), dpos.Big100)
-	expected_trx_reward := bigutil.Sub(expected_block_reward, expected_vote_reward)
+	expected_trx_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.VotesToTrasnactionsRatio), dpos.Big100)
+	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_trx_reward)
 
-	//Vote bonus rewards
-	tmp_vote_reward := bigutil.Div(expected_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesCount)))
-	author_reward := bigutil.Mul(tmp_vote_reward, big.NewInt(int64(tmp_rewards_stats.BonusVotesCount)))
+	// Vote bonus rewards - aka Author reward
+	maxBonusVotes := tmp_rewards_stats.MaxVotesWeight / 3
+	authorRewardRatio := tmp_rewards_stats.BonusVotesWeight * 100 / maxBonusVotes
+	bonus_vote_reward := bigutil.Mul(big.NewInt(int64(tmp_rewards_stats.BonusVotesWeight)), expected_vote_reward)
+	bonus_vote_reward = bigutil.Div(bonus_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
+	author_reward := bigutil.Div(bigutil.Mul(bonus_vote_reward, big.NewInt(int64(authorRewardRatio))), dpos.Big100)
 	expected_vote_reward = bigutil.Sub(expected_vote_reward, author_reward)
-	expected_vote_reward = bigutil.Div(expected_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesCount)))
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_txs * blockReward) / total_txs
 	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator1_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
 	validator1_total_reward = bigutil.Add(validator1_total_reward, bigutil.Mul(txFee, big.NewInt(int64(validator1_stats.UniqueTxsCount))))
 	// Add vote reward
-	validator1_total_reward = bigutil.Add(validator1_total_reward, expected_vote_reward)
-	// Add author reward
-	validator1_total_reward = bigutil.Add(validator1_total_reward, author_reward)
+	validatorVoteReward := bigutil.Mul(big.NewInt(int64(validator1_stats.VoteWeight)), expected_vote_reward)
+	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
+	validator1_total_reward = bigutil.Add(validator1_total_reward, validatorVoteReward)
+	// Commission reward
 	expected_validator1_commission_reward := bigutil.Div(bigutil.Mul(validator1_total_reward, big.NewInt(int64(validator1_commission))), dpos.Big10000)
 	expected_validator1_delegators_reward := bigutil.Sub(validator1_total_reward, expected_validator1_commission_reward)
+	// Add author reward
+	author_commission_reward := bigutil.Div(bigutil.Mul(author_reward, big.NewInt(int64(validator1_commission))), dpos.Big10000)
+	author_reward = bigutil.Sub(author_reward, author_commission_reward)
+	expected_validator1_delegators_reward = bigutil.Add(expected_validator1_delegators_reward, author_reward)
+	expected_validator1_commission_reward = bigutil.Add(expected_validator1_commission_reward, author_commission_reward)
 
 	// validator2_rewards = (validator2_txs * blockReward) / total_txs
 	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator2_stats.UniqueTxsCount))), big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount)))
 	validator2_total_reward = bigutil.Add(validator2_total_reward, bigutil.Mul(txFee, big.NewInt(int64(validator2_stats.UniqueTxsCount))))
 	// Add vote reward
-	validator2_total_reward = bigutil.Add(validator2_total_reward, expected_vote_reward)
+	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator2_stats.VoteWeight)), expected_vote_reward)
+	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
+	validator2_total_reward = bigutil.Add(validator2_total_reward, validatorVoteReward)
+
 	expected_validator2_commission_reward := bigutil.Div(bigutil.Mul(validator2_total_reward, big.NewInt(int64(validator2_commission))), dpos.Big10000)
 	expected_validator2_delegators_reward := bigutil.Sub(validator2_total_reward, expected_validator2_commission_reward)
+
+	// Add vote reward for validator 4
+	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator4_stats.VoteWeight)), expected_vote_reward)
+	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
+	expected_delegator4_reward := validatorVoteReward
 
 	// delegator 1(validator 1) gets 100 % from validator1_rewards
 	expected_delegator1_reward := expected_validator1_delegators_reward
 
 	// delegator 2(validator 2) gets 25 % from validator2_rewards
-	expected_delegator2_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(25)), dpos.Big100)
+	expected_delegator2_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(20)), dpos.Big100)
 
 	// delegator 3 gets 75 % from validator2_rewards
-	expected_delegator3_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(75)), dpos.Big100)
+	expected_delegator3_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(80)), dpos.Big100)
 
 	// expected_trx_rewardPlusFees := bigutil.Add(expected_trx_reward, bigutil.Mul(txFee, big.NewInt(int64(tmp_rewards_stats.TotalUniqueTxsCount))))
 	// expectedDelegatorsRewards := bigutil.Add(expected_delegator1_reward, bigutil.Add(expected_delegator2_reward, expected_delegator3_reward))
@@ -264,31 +304,39 @@ func TestRewardsAndCommission(t *testing.T) {
 	delegator1_old_balance := test.GetBalance(delegator1_addr)
 	delegator2_old_balance := test.GetBalance(delegator2_addr)
 	delegator3_old_balance := test.GetBalance(delegator3_addr)
+	delegator4_old_balance := test.GetBalance(delegator4_addr)
 
 	test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, Big0, test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator3_addr, Big0, test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator4_addr, Big0, test.pack("claimRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
 
 	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
 	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
 	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
+	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
 
 	tc.Assert.Equal(expected_delegator1_reward, actual_delegator1_reward)
 	tc.Assert.Equal(expected_delegator2_reward, actual_delegator2_reward)
 	tc.Assert.Equal(expected_delegator3_reward, actual_delegator3_reward)
+	tc.Assert.Equal(expected_delegator4_reward, actual_delegator4_reward)
 
 	// Check commission rewards
 	validator1_old_balance := test.GetBalance(validator1_owner)
 	validator2_old_balance := test.GetBalance(validator2_owner)
+	validator4_old_balance := test.GetBalance(validator4_owner)
 
 	test.ExecuteAndCheck(delegator1_addr, Big0, test.pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, Big0, test.pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator4_addr, Big0, test.pack("claimCommissionRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
 
 	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
 	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
+	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(validator4_owner), validator4_old_balance)
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
+	tc.Assert.Equal(Big0.Cmp(actual_validator4_commission_reward), 0)
 }
 
 func TestGenesis(t *testing.T) {

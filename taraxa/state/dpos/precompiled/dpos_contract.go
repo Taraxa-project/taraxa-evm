@@ -109,7 +109,7 @@ var Big10000 = big.NewInt(10000)
 var Big100 = big.NewInt(100)
 
 // This will split block reward 8:2 (8 - transactions, 2 - votes)
-var VotesToTrasnactionsRatio = big.NewInt(20)
+var VotesToTrasnactionsRatio = big.NewInt(80)
 
 // State of the rewards distribution algorithm
 type State struct {
@@ -501,36 +501,53 @@ func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *re
 	blockReward := bigutil.Mul(self.amount_delegated, self.yield_percentage)
 	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, self.blocks_per_year))
 
-	voteReward := bigutil.Big0
+	votesReward := bigutil.Big0
 	authorReward := bigutil.Big0
-	trxReward := blockReward
-	// We need to handle case for block 0
-	if rewardsStats.TotalVotesCount > 0 {
+	trxsReward := blockReward
+	// We need to handle case for block 1
+	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions
-		voteReward = bigutil.Div(bigutil.Mul(blockReward, VotesToTrasnactionsRatio), Big100)
-		trxReward = bigutil.Sub(blockReward, voteReward)
+		trxsReward = bigutil.Div(bigutil.Mul(blockReward, VotesToTrasnactionsRatio), Big100)
+		votesReward = bigutil.Sub(blockReward, trxsReward)
 
 		// In case block author included more than minimum required number of votes
-		if rewardsStats.BonusVotesCount > 0 {
-			tmpVoteReward := bigutil.Div(voteReward, big.NewInt(int64(rewardsStats.TotalVotesCount)))
-			authorReward = bigutil.Mul(tmpVoteReward, big.NewInt(int64(rewardsStats.BonusVotesCount)))
-			voteReward = bigutil.Sub(voteReward, authorReward)
+		if rewardsStats.BonusVotesWeight > 0 && self.cfg.MaxBlockAuthorReward > 0 {
+			maxBonusVotes := rewardsStats.MaxVotesWeight / 3
+			authorRewardRatio := rewardsStats.BonusVotesWeight * uint64(self.cfg.MaxBlockAuthorReward) / maxBonusVotes
+			validatorVoteReward := bigutil.Mul(big.NewInt(int64(rewardsStats.BonusVotesWeight)), votesReward)
+			validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(rewardsStats.TotalVotesWeight)))
+			authorReward = bigutil.Div(bigutil.Mul(validatorVoteReward, big.NewInt(int64(authorRewardRatio))), Big100)
+			votesReward = bigutil.Sub(votesReward, authorReward)
 		}
-		voteReward = bigutil.Div(voteReward, big.NewInt(int64(rewardsStats.TotalVotesCount)))
 	}
 
 	totalUniqueTxsCountCheck := uint32(0)
-	totalUniqueVoteCountCheck := uint32(0)
+	totalVoteWeightCheck := uint64(0)
+	totalRewardCheck := bigutil.Big0
+	// Add reward to the author for additional included votes
+	if authorReward.Cmp(bigutil.Big0) == 1 {
+		validator := self.validators.GetValidator(author)
+		if validator == nil {
+			panic("DistributeRewards - non existent block author")
+		}
+
+		validatorCommission := bigutil.Div(bigutil.Mul(authorReward, big.NewInt(int64(validator.Commission))), Big10000)
+		delegatorsRewards := bigutil.Sub(authorReward, validatorCommission)
+
+		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, validatorCommission)
+		validator.RewardsPool = bigutil.Add(validator.RewardsPool, delegatorsRewards)
+
+		totalRewardCheck = bigutil.Add(totalRewardCheck, authorReward)
+		self.validators.ModifyValidator(author, validator)
+	}
 
 	// Calculates validators rewards
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
-		totalUniqueTxsCountCheck += validatorStats.UniqueTxsCount
-
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
 			// This should never happen. Validator must exist(be eligible) either now or at least in delayed storage
 			if !self.delayedStorage.IsEligible(&validatorAddress) {
-				panic("update_rewards - non existent validator")
+				panic("DistributeRewards - non existent validator")
 			}
 
 			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
@@ -541,20 +558,24 @@ func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *re
 			continue
 		}
 
+		validatorReward := bigutil.Big0
 		// Calculate it like this to eliminate rounding error as much as possible
-		validatorReward := bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTxsCount)), trxReward)
-		validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTxsCount)))
+		if validatorStats.UniqueTxsCount > 0 {
+			totalUniqueTxsCountCheck += validatorStats.UniqueTxsCount
+			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTxsCount)), trxsReward)
+			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTxsCount)))
+		}
 
 		// Add reward for voting
-		if validatorStats.ValidCertVote {
-			totalUniqueVoteCountCheck++
-			validatorReward = bigutil.Add(validatorReward, voteReward)
+		if validatorStats.VoteWeight > 0 {
+			totalVoteWeightCheck += validatorStats.VoteWeight
+			validatorVoteReward := bigutil.Mul(big.NewInt(int64(validatorStats.VoteWeight)), votesReward)
+			validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(rewardsStats.TotalVotesWeight)))
+			validatorReward = bigutil.Add(validatorReward, validatorVoteReward)
 		}
 
-		// Add reward to the author for additional included votes
-		if validatorAddress == *author {
-			validatorReward = bigutil.Add(validatorReward, authorReward)
-		}
+		// Add reward for for final check
+		totalRewardCheck = bigutil.Add(totalRewardCheck, validatorReward)
 
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTxsFeesReward(validatorAddress))
@@ -574,8 +595,13 @@ func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *re
 		panic(errorString)
 	}
 
-	if totalUniqueVoteCountCheck != rewardsStats.TotalVotesCount {
-		errorString := fmt.Sprintf("TotalVotesCount (%d) based on validators stats != rewardsStats.TotalVotesCount (%d)", totalUniqueVoteCountCheck, rewardsStats.TotalVotesCount)
+	if totalVoteWeightCheck != rewardsStats.TotalVotesWeight {
+		errorString := fmt.Sprintf("TotalVotesWeight (%d) based on validators stats != rewardsStats.TotalVotesWeight (%d)", totalVoteWeightCheck, rewardsStats.TotalVotesWeight)
+		panic(errorString)
+	}
+
+	if totalRewardCheck.Cmp(blockReward) == 1 {
+		errorString := fmt.Sprintf("totalRewardCheck (%d) is more then blockReward (%d)", totalRewardCheck, blockReward)
 		panic(errorString)
 	}
 }

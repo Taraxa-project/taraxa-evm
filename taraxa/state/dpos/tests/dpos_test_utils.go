@@ -88,12 +88,13 @@ var (
 		ETHChainConfig: params.ChainConfig{
 			DAOForkBlock: types.BlockNumberNIL,
 		},
-		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance},
+		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
 		DPOS: &dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
 			MinimumDeposit:              DefaultMinimumDeposit,
+			MaxBlockAuthorReward:        100,
 			CommissionChangeDelta:       0,
 			CommissionChangeFrequency:   0,
 			DelegationDelay:             2,
@@ -129,6 +130,7 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	}
 
 	new_cfg.DPOS = new(dpos.Config)
+	new_cfg.DPOS.MaxBlockAuthorReward = DefaultChainCfg.DPOS.MaxBlockAuthorReward
 	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
 	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
 	new_cfg.DPOS.ValidatorMaximumStake = DefaultChainCfg.DPOS.ValidatorMaximumStake

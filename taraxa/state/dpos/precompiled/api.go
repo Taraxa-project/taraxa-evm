@@ -26,6 +26,7 @@ type Config = struct {
 	VoteEligibilityBalanceStep  *big.Int
 	ValidatorMaximumStake       *big.Int
 	MinimumDeposit              *big.Int
+	MaxBlockAuthorReward        uint16
 	CommissionChangeDelta       uint16
 	CommissionChangeFrequency   uint32 // [number of blocks]
 	DelegationDelay             uint32 // [number of blocks]
@@ -84,6 +85,9 @@ func (self *API) Init(cfg Config) *API {
 	// Both YieldPercentage & BlocksPerYear must be > 0 due to possible division by 0
 	asserts.Holds(cfg.YieldPercentage > 0)
 	asserts.Holds(cfg.BlocksPerYear > 0)
+
+	//MaxBlockAuthorReward is in %
+	asserts.Holds(cfg.MaxBlockAuthorReward <= 100)
 
 	self.cfg = cfg
 	return self

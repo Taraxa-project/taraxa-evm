@@ -10,8 +10,8 @@ type ValidatorStats struct {
 	// than block with single unique transaction.
 	UniqueTxsCount uint32
 
-	// Validator cert voted block
-	ValidCertVote bool
+	// Validator cert voted block weight
+	VoteWeight uint64
 }
 
 type RewardsStats struct {
@@ -21,11 +21,14 @@ type RewardsStats struct {
 	// Total unique transactions counter
 	TotalUniqueTxsCount uint32
 
-	// Total unique votes counter
-	TotalVotesCount uint32
+	// Total weight of votes in block
+	TotalVotesWeight uint64
 
-	// Total count of addtional votes in block
-	BonusVotesCount uint32
+	// Bonus weight of votes in block
+	BonusVotesWeight uint64
+
+	// Max weight of votes in block
+	MaxVotesWeight uint64
 }
 
 func NewRewardsStats() RewardsStats {
