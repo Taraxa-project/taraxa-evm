@@ -120,6 +120,10 @@ func (self *StateTransition) GetChainConfig() (ret *chain_config.ChainConfig) {
 	return
 }
 
+func (self *StateTransition) GetEvmState() *state_evm.EVMState {
+	return &self.evm_state
+}
+
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
 	if !self.chain_config.BlockRewardsOptions.DisableBlockRewards {
 		evm_block := self.evm.GetBlock()

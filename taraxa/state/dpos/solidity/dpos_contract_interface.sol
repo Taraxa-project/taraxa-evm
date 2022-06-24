@@ -127,7 +127,7 @@ interface DposInterface {
     function getValidator(address validator)
         external
         view
-        returns (ValidatorBasicInfo memory);
+        returns (ValidatorBasicInfo memory validator_info);
 
     /**
      * @notice Returns list of registered validators
