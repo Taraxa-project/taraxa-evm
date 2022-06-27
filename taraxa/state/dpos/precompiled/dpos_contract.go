@@ -493,7 +493,20 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	return nil, nil
 }
 
-func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
+// ----------------------------------------------------------------
+// Brief description of distribution algorithm
+// ----------------------------------------------------------------
+// - Total block reward is calucaled `blockReward` based on yield_percentage
+// - Block reward is splitted based on `VotesToTrasnactionsRatio` between votes and transactions
+// - If block author includes more then 2t+1 votes - `BonusVotesWeight` an `authorReward` is calculated:
+// // + first we calculate theoretical maxamount of bonus votes `maxBonusVotes`
+// // + then `authorRewardRatio` is calculate included votes : to `maxBonusVotes`
+// // + then based on this ratio, author will receive propotion of reward from bonus votes reward
+// // + final reward can be tuned by `MaxBlockAuthorReward` that represents % of calculated bonus votes
+// - Vote reward is reduced by author reward
+// - Then for each validator vote and transaction propotion rewards are calculated and distributed 
+
+func (self *Contract) DistributeRewards(BlockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 
@@ -526,19 +539,19 @@ func (self *Contract) DistributeRewards(author *common.Address, rewardsStats *re
 	totalRewardCheck := bigutil.Big0
 	// Add reward to the author for additional included votes
 	if authorReward.Cmp(bigutil.Big0) == 1 {
-		validator := self.validators.GetValidator(author)
-		if validator == nil {
+		block_author := self.validators.GetValidator(BlockAuthorAddr)
+		if block_author == nil {
 			panic("DistributeRewards - non existent block author")
 		}
 
-		validatorCommission := bigutil.Div(bigutil.Mul(authorReward, big.NewInt(int64(validator.Commission))), Big10000)
+		validatorCommission := bigutil.Div(bigutil.Mul(authorReward, big.NewInt(int64(block_author.Commission))), Big10000)
 		delegatorsRewards := bigutil.Sub(authorReward, validatorCommission)
 
-		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, validatorCommission)
-		validator.RewardsPool = bigutil.Add(validator.RewardsPool, delegatorsRewards)
+		block_author.CommissionRewardsPool = bigutil.Add(block_author.CommissionRewardsPool, validatorCommission)
+		block_author.RewardsPool = bigutil.Add(block_author.RewardsPool, delegatorsRewards)
 
 		totalRewardCheck = bigutil.Add(totalRewardCheck, authorReward)
-		self.validators.ModifyValidator(author, validator)
+		self.validators.ModifyValidator(BlockAuthorAddr, block_author)
 	}
 
 	// Calculates validators rewards
