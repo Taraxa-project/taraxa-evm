@@ -33,6 +33,21 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 )
 
+type GetUndelegationsRet struct {
+	Undelegations []sol.DposInterfaceUndelegationData
+	End           bool
+}
+
+type GetValidatorsRet struct {
+	Validators []sol.DposInterfaceValidatorData
+	End        bool
+}
+
+type GetDelegationsRet struct {
+	Delegations []sol.DposInterfaceDelegationData
+	End         bool
+}
+
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
@@ -73,12 +88,13 @@ var (
 		ETHChainConfig: params.ChainConfig{
 			DAOForkBlock: types.BlockNumberNIL,
 		},
-		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance},
+		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
 		DPOS: &dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
 			MinimumDeposit:              DefaultMinimumDeposit,
+			MaxBlockAuthorReward:        10,
 			CommissionChangeDelta:       0,
 			CommissionChangeFrequency:   0,
 			DelegationDelay:             2,
@@ -114,6 +130,7 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	}
 
 	new_cfg.DPOS = new(dpos.Config)
+	new_cfg.DPOS.MaxBlockAuthorReward = DefaultChainCfg.DPOS.MaxBlockAuthorReward
 	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
 	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
 	new_cfg.DPOS.ValidatorMaximumStake = DefaultChainCfg.DPOS.ValidatorMaximumStake
@@ -166,9 +183,13 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	return res
 }
 
-func (self *DposTest) AdvanceBlock(rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
+func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
 	self.blk_n++
-	self.st.BeginBlock(&vm.BlockInfo{})
+	if author == nil {
+		self.st.BeginBlock(&vm.BlockInfo{})
+	} else {
+		self.st.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
+	}
 	self.st.EndBlock(nil, rewardsStats, feesRewards)
 	self.st.Commit()
 }

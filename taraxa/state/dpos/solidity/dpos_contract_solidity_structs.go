@@ -111,18 +111,3 @@ type GetUndelegationsArgs struct {
 	Delegator common.Address
 	Batch     uint32
 }
-
-type GetValidatorsRet struct {
-	Validators []DposInterfaceValidatorData
-	End        bool
-}
-
-type GetDelegationsRet struct {
-	Delegations []DposInterfaceDelegationData
-	End         bool
-}
-
-type GetUndelegationsRet struct {
-	Undelegations []DposInterfaceUndelegationData
-	End           bool
-}

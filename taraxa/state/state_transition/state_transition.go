@@ -133,7 +133,7 @@ func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsS
 			if self.dpos_contract == nil {
 				panic("Stats rewards enabled but no dpos contract registered")
 			}
-			self.dpos_contract.DistributeRewards(rewardsStats, feesRewards)
+			self.dpos_contract.DistributeRewards(&evm_block.Author, rewardsStats, feesRewards)
 		}
 		self.evm_state_checkpoint()
 	}
