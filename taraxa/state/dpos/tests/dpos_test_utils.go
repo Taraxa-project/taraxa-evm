@@ -94,7 +94,7 @@ var (
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
 			MinimumDeposit:              DefaultMinimumDeposit,
-			MaxBlockAuthorReward:        100,
+			MaxBlockAuthorReward:        10,
 			CommissionChangeDelta:       0,
 			CommissionChangeFrequency:   0,
 			DelegationDelay:             2,

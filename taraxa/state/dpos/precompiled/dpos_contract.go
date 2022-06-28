@@ -496,17 +496,15 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // ----------------------------------------------------------------
 // Brief description of distribution algorithm
 // ----------------------------------------------------------------
-// - Total block reward is calucaled `blockReward` based on yield_percentage
-// - Block reward is splitted based on `VotesToTrasnactionsRatio` between votes and transactions
-// - If block author includes more then 2t+1 votes - `BonusVotesWeight` an `authorReward` is calculated:
-// // + first we calculate theoretical maxamount of bonus votes `maxBonusVotes`
-// // + then `authorRewardRatio` is calculate included votes : to `maxBonusVotes`
-// // + then based on this ratio, author will receive propotion of reward from bonus votes reward
-// // + final reward can be tuned by `MaxBlockAuthorReward` that represents % of calculated bonus votes
-// - Vote reward is reduced by author reward
-// - Then for each validator vote and transaction propotion rewards are calculated and distributed 
+// - Total block reward - `blockReward` is calucaled  based on yield_percentage
+// - Block reward is distributed based on `VotesToTrasnactionsRatio` between votes and transactions
+// - Then bonus reward is calculated based on MaxBlockAuthorReward
+// - Vote reward is reduced by bonus reward
+// - Bonus reward is teoretical and it will be added to block proposer (author) only when all votes are included
+// - If less reward votes are included, rest of the bonus reward it is just burned
+// - Then for each validator vote and transaction propotion rewards are calculated and distributed
 
-func (self *Contract) DistributeRewards(BlockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
+func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 
@@ -515,7 +513,7 @@ func (self *Contract) DistributeRewards(BlockAuthorAddr *common.Address, rewards
 	blockReward = bigutil.Div(blockReward, bigutil.Mul(Big100, self.blocks_per_year))
 
 	votesReward := bigutil.Big0
-	authorReward := bigutil.Big0
+	blockAuthorReward := bigutil.Big0
 	trxsReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
@@ -523,14 +521,20 @@ func (self *Contract) DistributeRewards(BlockAuthorAddr *common.Address, rewards
 		trxsReward = bigutil.Div(bigutil.Mul(blockReward, VotesToTrasnactionsRatio), Big100)
 		votesReward = bigutil.Sub(blockReward, trxsReward)
 
-		// In case block author included more than minimum required number of votes
-		if rewardsStats.BonusVotesWeight > 0 && self.cfg.MaxBlockAuthorReward > 0 {
-			maxBonusVotes := rewardsStats.MaxVotesWeight / 3
-			authorRewardRatio := rewardsStats.BonusVotesWeight * uint64(self.cfg.MaxBlockAuthorReward) / maxBonusVotes
-			validatorVoteReward := bigutil.Mul(big.NewInt(int64(rewardsStats.BonusVotesWeight)), votesReward)
-			validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(rewardsStats.TotalVotesWeight)))
-			authorReward = bigutil.Div(bigutil.Mul(validatorVoteReward, big.NewInt(int64(authorRewardRatio))), Big100)
-			votesReward = bigutil.Sub(votesReward, authorReward)
+		// Calculate bonus reward based on MaxBlockAuthorReward and subtract from total votes reward
+		bonusReward := bigutil.Div(bigutil.Mul(votesReward, big.NewInt(int64(self.cfg.MaxBlockAuthorReward))), Big100)
+		votesReward = bigutil.Sub(votesReward, bonusReward)
+
+		// As MaxVotesWeight is just teoretical value we need to have use max of those
+		maxVotesWeigh := Max(rewardsStats.MaxVotesWeight, rewardsStats.TotalVotesWeight)
+
+		// In case all reward votes are inclued we will just pass block author whole reward, this should improve rounding issues
+		if maxVotesWeigh == rewardsStats.TotalVotesWeight {
+			blockAuthorReward = bonusReward
+		} else {
+			twoTPlusOne := maxVotesWeigh*2/3 + 1
+			bonusVotesWeight := rewardsStats.TotalVotesWeight - twoTPlusOne
+			blockAuthorReward = bigutil.Div(bigutil.Mul(bonusReward, big.NewInt(int64(bonusVotesWeight))), big.NewInt(int64(maxVotesWeigh-twoTPlusOne)))
 		}
 	}
 
@@ -538,20 +542,20 @@ func (self *Contract) DistributeRewards(BlockAuthorAddr *common.Address, rewards
 	totalVoteWeightCheck := uint64(0)
 	totalRewardCheck := bigutil.Big0
 	// Add reward to the author for additional included votes
-	if authorReward.Cmp(bigutil.Big0) == 1 {
-		block_author := self.validators.GetValidator(BlockAuthorAddr)
+	if blockAuthorReward.Cmp(bigutil.Big0) == 1 {
+		block_author := self.validators.GetValidator(blockAuthorAddr)
 		if block_author == nil {
 			panic("DistributeRewards - non existent block author")
 		}
 
-		validatorCommission := bigutil.Div(bigutil.Mul(authorReward, big.NewInt(int64(block_author.Commission))), Big10000)
-		delegatorsRewards := bigutil.Sub(authorReward, validatorCommission)
+		commission := bigutil.Div(bigutil.Mul(blockAuthorReward, big.NewInt(int64(block_author.Commission))), Big10000)
+		delegatorsRewards := bigutil.Sub(blockAuthorReward, commission)
 
-		block_author.CommissionRewardsPool = bigutil.Add(block_author.CommissionRewardsPool, validatorCommission)
+		block_author.CommissionRewardsPool = bigutil.Add(block_author.CommissionRewardsPool, commission)
 		block_author.RewardsPool = bigutil.Add(block_author.RewardsPool, delegatorsRewards)
 
-		totalRewardCheck = bigutil.Add(totalRewardCheck, authorReward)
-		self.validators.ModifyValidator(BlockAuthorAddr, block_author)
+		totalRewardCheck = bigutil.Add(totalRewardCheck, blockAuthorReward)
+		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
 	// Calculates validators rewards
@@ -1353,4 +1357,11 @@ func getDelta(x, y uint16) uint16 {
 	} else {
 		return x - y
 	}
+}
+
+func Max(x, y uint64) uint64 {
+	if x < y {
+		return y
+	}
+	return x
 }

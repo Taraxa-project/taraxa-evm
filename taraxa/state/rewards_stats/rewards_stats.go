@@ -24,9 +24,6 @@ type RewardsStats struct {
 	// Total weight of votes in block
 	TotalVotesWeight uint64
 
-	// Bonus weight of votes in block
-	BonusVotesWeight uint64
-
 	// Max weight of votes in block
 	MaxVotesWeight uint64
 }

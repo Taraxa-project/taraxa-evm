@@ -229,7 +229,6 @@ func TestRewardsAndCommission(t *testing.T) {
 	tmp_rewards_stats.TotalUniqueTxsCount = validator1_stats.UniqueTxsCount + validator2_stats.UniqueTxsCount
 	tmp_rewards_stats.TotalVotesWeight = 7
 	tmp_rewards_stats.MaxVotesWeight = 8
-	tmp_rewards_stats.BonusVotesWeight = 1
 
 	// Advance block
 	test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards)
@@ -243,12 +242,14 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_trx_reward)
 
 	// Vote bonus rewards - aka Author reward
-	maxBonusVotes := tmp_rewards_stats.MaxVotesWeight / 3
-	authorRewardRatio := tmp_rewards_stats.BonusVotesWeight * 100 / maxBonusVotes
-	bonus_vote_reward := bigutil.Mul(big.NewInt(int64(tmp_rewards_stats.BonusVotesWeight)), expected_vote_reward)
-	bonus_vote_reward = bigutil.Div(bonus_vote_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
-	author_reward := bigutil.Div(bigutil.Mul(bonus_vote_reward, big.NewInt(int64(authorRewardRatio))), dpos.Big100)
-	expected_vote_reward = bigutil.Sub(expected_vote_reward, author_reward)
+	// MaxBlockAuthorReward = 10
+	bonus_reward := bigutil.Div(bigutil.Mul(expected_vote_reward, big.NewInt(int64(10))), dpos.Big100)
+	expected_vote_reward = bigutil.Sub(expected_vote_reward, bonus_reward)
+
+	// Vote bonus rewards - aka Author reward
+	max_votes_weigh := dpos.Max(tmp_rewards_stats.MaxVotesWeight, tmp_rewards_stats.TotalVotesWeight)
+	two_t_plus_one := max_votes_weigh*2/3 + 1
+	author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight - two_t_plus_one))), big.NewInt(int64(max_votes_weigh-two_t_plus_one)))
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_txs * blockReward) / total_txs
