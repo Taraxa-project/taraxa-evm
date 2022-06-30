@@ -106,6 +106,7 @@ type StateTransition interface {
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
 	AddTxFeeToBalance(account *common.Address, tx_fee *big.Int)
 	GetChainConfig() *chain_config.ChainConfig
+	GetEvmState() *state_evm.EVMState
 	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards)
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)

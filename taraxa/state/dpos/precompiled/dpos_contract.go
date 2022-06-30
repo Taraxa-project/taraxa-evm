@@ -199,6 +199,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "isValidatorEligible":
 	case "getTotalEligibleVotesCount":
 	case "getValidatorEligibleVotesCount":
+	case "getValidator":
 		return DposGetMethodsGas
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
@@ -331,6 +332,7 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 
 	self.EndBlockCall()
 	self.storage.IncrementNonce(contract_address)
+
 	return nil
 }
 
@@ -629,6 +631,7 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 	validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
 	self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
 	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1104,7 +1107,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorIn
 
 	validator_info := self.validators.GetValidatorInfo(&args.Validator)
 	if validator_info == nil {
-		return ErrNonExistentValidator
+		panic("setValidatorInfo: ErrNonExistentValidator")
 	}
 
 	validator_info.Description = args.Description
@@ -1233,7 +1236,7 @@ func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations [
 
 // Returns batch of undelegation from queue for given address
 func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (undelegations []sol.DposInterfaceUndelegationData, end bool) {
-	undelegations_addresses, end := self.undelegations.GetUndelegations(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
+	undelegations_addresses, end := self.undelegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
 
 	// Reserve slice capacity
 	undelegations = make([]sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))

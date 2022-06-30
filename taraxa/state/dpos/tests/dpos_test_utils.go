@@ -48,6 +48,10 @@ type GetDelegationsRet struct {
 	End         bool
 }
 
+type GetValidatorRet struct {
+	ValidatorInfo sol.DposInterfaceValidatorBasicInfo
+}
+
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
@@ -138,7 +142,7 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.DelegationLockingPeriod = DefaultChainCfg.DPOS.DelegationLockingPeriod
 	new_cfg.DPOS.DelegationDelay = DefaultChainCfg.DPOS.DelegationDelay
 	new_cfg.DPOS.EligibilityBalanceThreshold = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
-	new_cfg.DPOS.VoteEligibilityBalanceStep = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
+	new_cfg.DPOS.VoteEligibilityBalanceStep = DefaultChainCfg.DPOS.VoteEligibilityBalanceStep
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators

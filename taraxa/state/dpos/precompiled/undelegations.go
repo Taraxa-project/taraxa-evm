@@ -14,9 +14,6 @@ type Undelegation struct {
 
 	// Block number when the withdrawal be ready
 	Block types.BlockNum
-
-	// TODO: we will needed it for slashing
-	Validator *common.Address
 }
 
 type Undelegations struct {
@@ -64,7 +61,6 @@ func (self *Undelegations) CreateUndelegation(delegator_address *common.Address,
 	undelegation := new(Undelegation)
 	undelegation.Amount = amount
 	undelegation.Block = block
-	undelegation.Validator = validator_address
 
 	undelegation_key := self.genUndelegationKey(delegator_address, validator_address)
 	self.storage.Put(undelegation_key, rlp.MustEncodeToBytes(undelegation))
@@ -85,8 +81,8 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 	}
 }
 
-// Returns all undelegations for given address
-func (self *Undelegations) GetUndelegations(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
+// Returns all addressess of validators, from which is delegator <delegator_address> currently undelegating
+func (self *Undelegations) GetDelegatorValidatorsAddresses(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
 	undelegations_list := self.getDelegatorUndelegationsList(delegator_address)
 	return undelegations_list.GetAccounts(batch, count)
 }

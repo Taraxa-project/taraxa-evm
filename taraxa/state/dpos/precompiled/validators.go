@@ -89,7 +89,7 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 
 func (self *Validators) ModifyValidator(validator_address *common.Address, validator *Validator) {
 	if validator == nil {
-		panic("ModifyDelegation: validator cannot be nil")
+		panic("ModifyValidator: validator cannot be nil")
 	}
 
 	// This could happen only due to some serious logic bug
