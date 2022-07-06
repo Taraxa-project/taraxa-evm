@@ -176,8 +176,8 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
-	self.trx = tx
+func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+	self.trx = trx
 
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&self.trx.From)
@@ -198,12 +198,17 @@ func (self *EVM) Main(tx *Transaction, opts ExecutionOpts) (ret ExecutionResult)
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	gas_left := gas_cap
 	contract_creation := self.trx.To == nil
-
-	if !BalanceGTE(caller, gas_fee) {
-		ret.ConsensusErr = ErrInsufficientBalanceForGas
-		return
+	
+	// This will happen when we use eth_call
+	if self.trx.From == common.ZeroAddress {
+		gas_left = uint64(math.MaxUint64)
+	} else {
+		if !BalanceGTE(caller, gas_fee) {
+			ret.ConsensusErr = ErrInsufficientBalanceForGas
+			return
+		}
+		caller.SubBalance(gas_fee)
 	}
-	caller.SubBalance(gas_fee)
 
 	var err error
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
