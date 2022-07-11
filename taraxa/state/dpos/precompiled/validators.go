@@ -50,15 +50,23 @@ type Validators struct {
 	validator_vrf_key_field []byte
 }
 
+var (
+	main_index = []byte{0}
+	info_index = []byte{1}
+	owner_index = []byte{2}
+	vrf_index = []byte{3}
+	list_index = []byte{4}
+)
+
 func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Validators storage fields keys - relative to the prefix
-	self.validators_field = append(prefix, []byte{0}...)
-	self.validators_info_field = append(prefix, []byte{1}...)
-	self.validator_owner_field = append(prefix, []byte{2}...)
-	self.validator_vrf_key_field = append(prefix, []byte{3}...)
-	validators_list_field := append(prefix, []byte{4}...)
+	self.validators_field = append(prefix, main_index...)
+	self.validators_info_field = append(prefix, info_index...)
+	self.validator_owner_field = append(prefix, owner_index...)
+	self.validator_vrf_key_field = append(prefix, vrf_index...)
+	validators_list_field := append(prefix, list_index...)
 
 	self.validators_list.Init(self.storage, validators_list_field)
 }
