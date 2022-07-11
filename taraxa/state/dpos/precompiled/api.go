@@ -43,6 +43,7 @@ type ConfigWithBlock struct {
 type GenesisValidator struct {
 	Address     common.Address
 	Owner       common.Address
+	VrfKey      []byte
 	Commission  uint16
 	Endpoint    string
 	Description string
@@ -50,6 +51,7 @@ type GenesisValidator struct {
 }
 
 func (self *GenesisValidator) gen_register_validator_args() (vi sol.RegisterValidatorArgs) {
+	vi.VrfKey = self.VrfKey
 	vi.Commission = self.Commission
 	vi.Description = self.Description
 	vi.Endpoint = self.Endpoint
