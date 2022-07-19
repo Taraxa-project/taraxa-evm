@@ -528,7 +528,6 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 			pc++
 		}
 	}
-	return nil, nil
 }
 
 func (self *EVM) analyze_jumpdests(code CodeAndHash) (analysis bitvec, cached bool) {

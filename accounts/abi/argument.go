@@ -156,6 +156,8 @@ func unpack(t *Type, dst interface{}, src interface{}) error {
 			}
 		}
 		dstVal.Set(array)
+	default:
+		return fmt.Errorf("abi: invalid type provided %s", t.stringKind)
 	}
 	return nil
 }

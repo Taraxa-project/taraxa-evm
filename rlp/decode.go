@@ -184,8 +184,9 @@ func wrapStreamError(err error, typ reflect.Type) error {
 		return &decodeError{msg: "input string too long", typ: typ}
 	case errNotAtEOL:
 		return &decodeError{msg: "input list has too many elements", typ: typ}
+	default:
+		return err
 	}
-	return err
 }
 
 func addErrorContext(err error, ctx string) error {

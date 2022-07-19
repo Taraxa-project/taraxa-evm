@@ -118,8 +118,9 @@ func DEC_b_endian_compact_64(b []byte) uint64 {
 	case 8:
 		return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
 			uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+	default:
+		panic("impossible")
 	}
-	panic("impossible")
 }
 
 func SizeInBytes(i uint64) byte {
