@@ -126,6 +126,8 @@ func (abi *ABI) UnmarshalJSON(data []byte) error {
 				Anonymous: field.Anonymous,
 				Inputs:    field.Inputs,
 			}
+		default:
+			return fmt.Errorf("no constructor/function/event provided")
 		}
 	}
 
