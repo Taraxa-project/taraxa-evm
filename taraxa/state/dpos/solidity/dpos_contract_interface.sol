@@ -85,6 +85,7 @@ interface DposInterface {
     function registerValidator(
         address validator,
         bytes memory proof,
+        bytes memory vrf_key,
         uint16 commission,
         string calldata description,
         string calldata endpoint

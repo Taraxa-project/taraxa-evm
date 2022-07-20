@@ -79,6 +79,7 @@ var (
 	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
 	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
+	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		ExecutionOptions: vm.ExecutionOpts{

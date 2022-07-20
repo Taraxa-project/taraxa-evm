@@ -44,19 +44,29 @@ type Validators struct {
 	storage         *StorageWrapper
 	validators_list IterableMap
 
-	validators_field      []byte
-	validators_info_field []byte
-	validator_owner_field []byte
+	validators_field        []byte
+	validators_info_field   []byte
+	validator_owner_field   []byte
+	validator_vrf_key_field []byte
 }
+
+var (
+	main_index = []byte{0}
+	info_index = []byte{1}
+	owner_index = []byte{2}
+	vrf_index = []byte{3}
+	list_index = []byte{4}
+)
 
 func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Validators storage fields keys - relative to the prefix
-	self.validators_field = append(prefix, []byte{0}...)
-	self.validators_info_field = append(prefix, []byte{1}...)
-	self.validator_owner_field = append(prefix, []byte{2}...)
-	validators_list_field := append(prefix, []byte{3}...)
+	self.validators_field = append(prefix, main_index...)
+	self.validators_info_field = append(prefix, info_index...)
+	self.validator_owner_field = append(prefix, owner_index...)
+	self.validator_vrf_key_field = append(prefix, vrf_index...)
+	validators_list_field := append(prefix, list_index...)
 
 	self.validators_list.Init(self.storage, validators_list_field)
 }
@@ -69,6 +79,15 @@ func (self *Validators) CheckValidatorOwner(owner, validator *common.Address) bo
 		saved_addr = common.BytesToAddress(bytes)
 	})
 	return *owner == saved_addr
+}
+
+// Returns public vrf key for validator
+func (self *Validators) GetVrfKey(validator *common.Address) (ret []byte) {
+	key := stor_k_1(self.validator_vrf_key_field, validator[:])
+	self.storage.Get(key, func(bytes []byte) {
+		ret = bytes
+	})
+	return
 }
 
 // Checks is validator exists
@@ -101,7 +120,7 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 	self.storage.Put(key, rlp.MustEncodeToBytes(validator))
 }
 
-func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
+func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
 	// Creates Validator object in storage
 	validator := new(Validator)
 	validator.CommissionRewardsPool = bigutil.Big0
@@ -124,6 +143,9 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 
 	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
 	self.storage.Put(validator_owner_key, owner_address.Bytes())
+
+	validator_vrf_key := stor_k_1(self.validator_vrf_key_field, validator_address[:])
+	self.storage.Put(validator_vrf_key, vrf_key)
 
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)

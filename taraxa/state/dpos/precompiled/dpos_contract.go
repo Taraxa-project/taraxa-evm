@@ -71,6 +71,7 @@ var (
 	ErrCallIsNotToplevel            = util.ErrorString("only top-level calls are allowed")
 	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recoverd")
 	ErrWrongOwnerAcc                = util.ErrorString("This account is not owner of specified validator")
+	ErrWrongVrfKey                  = util.ErrorString("Wrong vrf key specified in validator argumetns")
 	ErrForbiddenCommissionChange    = util.ErrorString("Forbidden commission change")
 	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
 	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
@@ -82,6 +83,9 @@ const (
 
 	// Max num of characters in description
 	MaxDescriptionLength = 100
+
+	// Length of vrf public key
+	VrfKeyLength = 32
 
 	// Maximum number of validators per batch returned by getValidators call
 	GetValidatorsMaxCount = 20
@@ -1038,6 +1042,9 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	if len(args.Description) > MaxDescriptionLength {
 		return ErrMaxDescriptionLengthExceeded
 	}
+	if len(args.VrfKey) != VrfKeyLength {
+		return ErrWrongVrfKey
+	}
 
 	if self.validators.ValidatorExists(&args.Validator) {
 		return ErrExistentValidator
@@ -1063,7 +1070,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	state.RewardsPer1Stake = bigutil.Big0
 
 	// Creates validator related objects in storage
-	validator := self.validators.CreateValidator(owner_address, &args.Validator, block, args.Commission, args.Description, args.Endpoint)
+	validator := self.validators.CreateValidator(owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 
 	if ctx.Value.Cmp(bigutil.Big0) == 1 {
