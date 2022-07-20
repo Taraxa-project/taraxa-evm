@@ -16,8 +16,9 @@ func IsReallyNil(value Any) bool {
 	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr,
 		reflect.UnsafePointer, reflect.Interface, reflect.Slice:
 		return reflectValue.IsNil()
+	default:
+		return false
 	}
-	return false
 }
 
 func MaxU64(x, y uint64) uint64 {

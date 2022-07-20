@@ -125,8 +125,9 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 			}
 		}
 		return n
+	default:
+		panic("impossible")
 	}
-	panic("impossible")
 }
 
 func (self *Writer) Put(db_tx IO, k *common.Hash, v Value) {

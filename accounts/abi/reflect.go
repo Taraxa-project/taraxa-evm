@@ -55,8 +55,9 @@ func reflectIntKindAndType(unsigned bool, size int) (reflect.Kind, reflect.Type)
 			return reflect.Uint64, uint64T
 		}
 		return reflect.Int64, int64T
+	default:
+		return reflect.Ptr, bigT
 	}
-	return reflect.Ptr, bigT
 }
 
 // mustArrayToBytesSlice creates a new byte slice with the exact same size as value
