@@ -21,7 +21,10 @@ func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func
 	blk_n_actual := blk_n
 	if uint64(self.cfg.DelegationDelay) < blk_n {
 		blk_n_actual -= uint64(self.cfg.DelegationDelay)
+	} else {
+		blk_n_actual = 0
 	}
+
 	self.storage = new(StorageReaderWrapper).Init(storage_factory(blk_n_actual))
 	return self
 }
