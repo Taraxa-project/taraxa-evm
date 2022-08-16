@@ -18,11 +18,9 @@ type Reader struct {
 
 func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
 	self.cfg = cfg
-	blk_n_actual := blk_n
+	blk_n_actual := uint64(0)
 	if uint64(self.cfg.DelegationDelay) < blk_n {
-		blk_n_actual -= uint64(self.cfg.DelegationDelay)
-	} else {
-		blk_n_actual = 0
+		blk_n_actual = blk_n - uint64(self.cfg.DelegationDelay)
 	}
 
 	self.storage = new(StorageReaderWrapper).Init(storage_factory(blk_n_actual))
