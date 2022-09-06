@@ -115,7 +115,7 @@ func (c ecrecover) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 	pubKey, err := crypto.Ecrecover(input[:32], append(input[64:128], v))
 	// make sure the public key is a valid one
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	// the first byte of pubkey is bitcoin heritage
