@@ -120,9 +120,6 @@ func main() {
 					DisableBlockRewards:         true,
 					DisableContractDistribution: true,
 				},
-				ETHChainConfig: params.ChainConfig{
-					DAOForkBlock: types.BlockNumberNIL,
-				},
 				GenesisBalances: core.BalanceMap{
 					tests.Addr(1): root_genesis_bal,
 				},
