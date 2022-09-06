@@ -5,7 +5,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
-	"github.com/Taraxa-project/taraxa-evm/consensus/misc"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
@@ -102,10 +101,6 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
-	}
-	if self.chain_config.ETHChainConfig.IsDAOFork(blk_n) {
-		misc.ApplyDAOHardFork(&self.evm_state)
-		self.evm_state_checkpoint()
 	}
 }
 

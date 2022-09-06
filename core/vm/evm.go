@@ -198,7 +198,7 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	gas_left := gas_cap
 	contract_creation := self.trx.To == nil
-	
+
 	// This will happen when we use eth_call
 	if self.trx.From == common.ZeroAddress {
 		gas_left = uint64(math.MaxUint64)
@@ -294,13 +294,17 @@ func (self *EVM) create(
 	// only.
 	contract := NewContract(CallFrame{caller, new_acc, nil, gas, value}, code)
 	ret, err = self.run(&contract, false)
-	// check whether the max code size has been exceeded
-	maxCodeSizeExceeded := self.rules.IsEIP158 && len(ret) > MaxCodeSize
+
+	// Check whether the max code size has been exceeded, assign err if the case.
+	if err == nil && self.rules.IsEIP158 && len(ret) > MaxCodeSize {
+		err = errMaxCodeSizeExceeded
+	}
+	
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled
 	// by the error checking condition below.
-	if err == nil && !maxCodeSizeExceeded {
+	if err == nil {
 		createDataGas := uint64(len(ret)) * CreateDataGas
 		if contract.UseGas(createDataGas) {
 			new_acc.SetCode(ret)
@@ -311,15 +315,11 @@ func (self *EVM) create(
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
-	if maxCodeSizeExceeded || (err != nil && (self.rules.IsHomestead || err != ErrCodeStoreOutOfGas)) {
+	if err != nil && (self.rules.IsHomestead || err != ErrCodeStoreOutOfGas) {
 		self.state.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
-	}
-	// Assign err if contract code size exceeds the max while the err is still empty.
-	if maxCodeSizeExceeded && err == nil {
-		err = errMaxCodeSizeExceeded
 	}
 	gas_left = contract.Gas
 	return

@@ -1,7 +1,9 @@
 package state_evm
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math"
+	"math/big"
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
@@ -17,7 +19,11 @@ var hashkey = func() (ret [4]uintptr) {
 }()
 
 func rand_uintptr() uintptr {
-	return uintptr(rand.Uint64() % uint64(^uintptr(0)))
+	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(math.MaxInt64)))
+	if err != nil {
+		panic(err)
+	}
+	return uintptr(nBig.Uint64() % uint64(^uintptr(0)))
 }
 
 func hash_addr(a *common.Address, seed uintptr) uintptr {

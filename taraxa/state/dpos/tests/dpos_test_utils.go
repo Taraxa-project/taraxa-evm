@@ -29,7 +29,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 )
 
@@ -90,9 +89,6 @@ var (
 			DisableBlockRewards:         false,
 			DisableContractDistribution: false,
 		},
-		ETHChainConfig: params.ChainConfig{
-			DAOForkBlock: types.BlockNumberNIL,
-		},
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
 		DPOS: &dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
@@ -126,8 +122,6 @@ func CopyDefaulChainConfig() chain_config.ChainConfig {
 
 	new_cfg.BlockRewardsOptions.DisableBlockRewards = DefaultChainCfg.BlockRewardsOptions.DisableBlockRewards
 	new_cfg.BlockRewardsOptions.DisableContractDistribution = DefaultChainCfg.BlockRewardsOptions.DisableContractDistribution
-
-	new_cfg.ETHChainConfig.DAOForkBlock = DefaultChainCfg.ETHChainConfig.DAOForkBlock
 
 	new_cfg.GenesisBalances = make(GenesisBalances)
 	for k, v := range DefaultChainCfg.GenesisBalances {

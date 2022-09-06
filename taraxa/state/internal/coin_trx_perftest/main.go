@@ -32,7 +32,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/files"
 	"github.com/linxGnu/grocksdb"
@@ -119,9 +118,6 @@ func main() {
 				BlockRewardsOptions: chain_config.BlockRewardsOpts{
 					DisableBlockRewards:         true,
 					DisableContractDistribution: true,
-				},
-				ETHChainConfig: params.ChainConfig{
-					DAOForkBlock: types.BlockNumberNIL,
 				},
 				GenesisBalances: core.BalanceMap{
 					tests.Addr(1): root_genesis_bal,
