@@ -52,14 +52,14 @@ func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) 
 		return
 	}
 	ret = self[last_byte-1]
-	if ret != nil && bytes.Compare(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) != 0 {
+	if ret != nil && !bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) {
 		ret = nil
 	}
 	return
 }
 
 func (self *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
-	asserts.Holds(bytes.Compare(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) == 0)
+	asserts.Holds(bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix))
 	last_addr_byte := address[common.AddressLength-1]
 	asserts.Holds(last_addr_byte != 0)
 	pos := last_addr_byte - 1
