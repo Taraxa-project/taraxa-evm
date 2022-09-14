@@ -360,12 +360,6 @@ func taraxa_evm_state_api_db_snapshot(
 	util.PanicIfNotNil(db.Snapshot(dir, log_size_for_flush))
 }
 
-//export taraxa_evm_state_api_dpos_contract_addr
-func taraxa_evm_state_api_dpos_contract_addr() (ret C.taraxa_evm_Addr) {
-	*(*common.Address)(unsafe.Pointer(&ret.Val)) = dpos.ContractAddress()
-	return
-}
-
 type state_API_ptr = byte
 
 const state_API_max_instances = ^state_API_ptr(0)
