@@ -182,20 +182,23 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&self.trx.From)
 	if !opts.DisableNonceCheck {
-		nonce := caller.GetNonce()
+		sender_nonce := caller.GetNonce()
+
+		// Check if tx.nonce <= sender_nonce
+		if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
+			ret.ConsensusErr = ErrNonceTooLow
+			return
+		}
+
 		if !opts.EnableNonceSkipping {
-			noncePlusOne := big.NewInt(1)
-			noncePlusOne.Add(nonce, big.NewInt(1))
-			if noncePlusOne.Cmp(self.trx.Nonce) < 0 {
+			// Check if tx.nonce > sender_nonce + 1
+			if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, bigutil.Big1)) == 1 {
 				ret.ConsensusErr = ErrNonceTooHigh
 				return
 			}
 		}
-		if nonce.Cmp(self.trx.Nonce) >= 0 {
-			ret.ConsensusErr = ErrNonceTooLow
-			return
-		}
 	}
+
 	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	gas_left := gas_cap
