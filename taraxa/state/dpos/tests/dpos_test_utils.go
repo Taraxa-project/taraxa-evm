@@ -114,7 +114,7 @@ func init_test(t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, te
 
 // When running test suite, it is somehow overriding default config so it must be copied...
 // TODO: fix this
-func CopyDefaulChainConfig() chain_config.ChainConfig {
+func CopyDefaultChainConfig() chain_config.ChainConfig {
 	var new_cfg chain_config.ChainConfig
 
 	new_cfg.ExecutionOptions.DisableNonceCheck = DefaultChainCfg.ExecutionOptions.DisableNonceCheck

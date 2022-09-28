@@ -95,6 +95,10 @@ func (self *StateTransition) evm_state_checkpoint() {
 	self.evm_state.CommitTransaction(&self.trie_sink, self.evm.GetRules().IsEIP158)
 }
 
+func (self *StateTransition) BlockNumber() types.BlockNum {
+	return self.pending_blk_state.GetNumber()
+}
+
 func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()

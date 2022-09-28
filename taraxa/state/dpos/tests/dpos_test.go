@@ -34,7 +34,7 @@ func TestProof(t *testing.T) {
 }
 
 func TestRegisterValidator(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	validator1_owner := addr(1)
@@ -54,7 +54,7 @@ func TestRegisterValidator(t *testing.T) {
 }
 
 func TestDelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -66,7 +66,7 @@ func TestDelegate(t *testing.T) {
 }
 
 func TestDelegateMinMax(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_addr, proof := generateAddrAndProof()
@@ -79,7 +79,7 @@ func TestDelegateMinMax(t *testing.T) {
 }
 
 func TestRedelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	validator1_owner := addr(1)
@@ -113,7 +113,7 @@ func TestRedelegate(t *testing.T) {
 }
 
 func TestRedelegateMinMax(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	validator1_addr, validator1_proof := generateAddrAndProof()
@@ -133,7 +133,7 @@ func TestRedelegateMinMax(t *testing.T) {
 }
 
 func TestUndelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -157,7 +157,7 @@ func TestUndelegate(t *testing.T) {
 }
 
 func TestConfirmUndelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -185,7 +185,7 @@ func TestConfirmUndelegate(t *testing.T) {
 }
 
 func TestCancelUndelegate(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -230,7 +230,7 @@ func TestCancelUndelegate(t *testing.T) {
 }
 
 func TestUndelegateMin(t *testing.T) {
-	_, test := init_test(t, CopyDefaulChainConfig())
+	_, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_addr, proof := generateAddrAndProof()
@@ -243,7 +243,7 @@ func TestUndelegateMin(t *testing.T) {
 }
 
 func TestRewardsAndCommission(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	txFee := bigutil.Div(TaraPrecision, big.NewInt(1000)) //  0.001 TARA
@@ -357,7 +357,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(dpos.Big100, big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
 	// Spliting block rewards between votes and blocks
-	expected_trx_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.VotesToTrasnactionsRatio), dpos.Big100)
+	expected_trx_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.TransactionsRewardPercentage), dpos.Big100)
 	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_trx_reward)
 
 	// Vote bonus rewards - aka Author reward
@@ -460,7 +460,7 @@ func TestRewardsAndCommission(t *testing.T) {
 }
 
 func TestGenesis(t *testing.T) {
-	cfg := CopyDefaulChainConfig()
+	cfg := CopyDefaultChainConfig()
 
 	delegator := addr(1)
 
@@ -486,7 +486,7 @@ func TestGenesis(t *testing.T) {
 }
 
 func TestSetValidatorInfo(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -524,7 +524,7 @@ func TestSetValidatorInfo(t *testing.T) {
 }
 
 func TestSetCommission(t *testing.T) {
-	cfg := CopyDefaulChainConfig()
+	cfg := CopyDefaultChainConfig()
 	cfg.DPOS.CommissionChangeDelta = 5
 	cfg.DPOS.CommissionChangeFrequency = 4
 
@@ -575,7 +575,7 @@ func TestGetValidators(t *testing.T) {
 	}
 
 	// Set some balance to validators
-	cfg := CopyDefaulChainConfig()
+	cfg := CopyDefaultChainConfig()
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
@@ -659,7 +659,7 @@ func TestGetDelegations(t *testing.T) {
 	}
 
 	// Set some balance to validators
-	cfg := CopyDefaulChainConfig()
+	cfg := CopyDefaultChainConfig()
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
@@ -753,7 +753,7 @@ func TestGetUndelegations(t *testing.T) {
 	}
 
 	// Set some balance to validators
-	cfg := CopyDefaulChainConfig()
+	cfg := CopyDefaultChainConfig()
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
@@ -833,7 +833,7 @@ func TestGetUndelegations(t *testing.T) {
 }
 
 func TestGetValidator(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -862,7 +862,7 @@ func TestGetValidator(t *testing.T) {
 }
 
 func TestGetTotalEligibleVotesCount(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -922,7 +922,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 }
 
 func TestGetValidatorEligibleVotesCount(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -953,7 +953,7 @@ func TestGetValidatorEligibleVotesCount(t *testing.T) {
 }
 
 func TestIsValidatorEligible(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -985,7 +985,7 @@ func TestIsValidatorEligible(t *testing.T) {
 }
 
 func TestIterableMapClass(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1055,7 +1055,7 @@ func TestIterableMapClass(t *testing.T) {
 }
 
 func TestValidatorsClass(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1124,7 +1124,7 @@ func TestValidatorsClass(t *testing.T) {
 }
 
 func TestDelegationsClass(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1193,7 +1193,7 @@ func TestDelegationsClass(t *testing.T) {
 }
 
 func TestUndelegationsClass(t *testing.T) {
-	tc, test := init_test(t, CopyDefaulChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
