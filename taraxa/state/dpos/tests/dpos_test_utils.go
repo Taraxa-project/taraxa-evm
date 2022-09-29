@@ -67,11 +67,6 @@ type DposTest struct {
 }
 
 var (
-	Big0                               = big.NewInt(0)
-	Big1                               = big.NewInt(1)
-	Big5                               = big.NewInt(5)
-	Big10                              = big.NewInt(10)
-	Big50                              = big.NewInt(50)
 	TaraPrecision                      = big.NewInt(1e+18)
 	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
 	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
@@ -165,6 +160,9 @@ func (self *DposTest) init(t *tests.TestCtx, cfg chain_config.ChainConfig) {
 }
 
 func (self *DposTest) execute(from common.Address, value *big.Int, input []byte) vm.ExecutionResult {
+	senderNonce := self.GetNonce(from)
+	senderNonce.Add(senderNonce, big.NewInt(1))
+
 	self.blk_n++
 	self.st.BeginBlock(&vm.BlockInfo{})
 
@@ -174,7 +172,8 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 		From:     from,
 		Input:    input,
 		Gas:      1000000,
-		GasPrice: bigutil.Big0,
+		GasPrice: big.NewInt(0),
+		Nonce:    senderNonce,
 	})
 
 	self.st.EndBlock(nil, nil, nil)
@@ -199,6 +198,14 @@ func (self *DposTest) GetBalance(account common.Address) *big.Int {
 		bal_actual = account.Balance
 	})
 	return bal_actual
+}
+
+func (self *DposTest) GetNonce(account common.Address) *big.Int {
+	nonce := big.NewInt(0)
+	self.SUT.ReadBlock(self.blk_n).GetAccount(&account, func(account state_db.Account) {
+		nonce = account.Nonce
+	})
+	return nonce
 }
 
 func (self *DposTest) GetDPOSReader() dpos.Reader {

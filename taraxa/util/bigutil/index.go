@@ -10,28 +10,18 @@ import (
 
 const WordSize = int(unsafe.Sizeof(big.Word(0)))
 
-var cache = func() (ret [256 + 1]*big.Int) {
-	for i := range ret {
-		ret[i] = big.NewInt(int64(i))
-	}
-	return
-}()
-var Big0 = cache[0]
-var Big1 = cache[1]
-var Big32 = cache[32]
-var Big256 = cache[256]
 var MaxU256 = new(big.Int).SetBytes(bytes.Repeat([]byte{math.MaxUint8}, 32))
 
 func FromByte(b byte) *big.Int {
-	return cache[b]
+	return big.NewInt(int64(b))
 }
 
 func FromBytes(bytes []byte) *big.Int {
 	switch len(bytes) {
 	case 0:
-		return Big0
+		return big.NewInt(0)
 	case 1:
-		return cache[bytes[0]]
+		return big.NewInt(int64(bytes[0]))
 	default:
 		return new(big.Int).SetBytes(bytes)
 	}
@@ -43,7 +33,7 @@ func IsZero(x *big.Int) bool {
 
 func ZeroIfNIL(x *big.Int) *big.Int {
 	if x == nil {
-		return Big0
+		return big.NewInt(0)
 	}
 	return x
 }
@@ -70,7 +60,7 @@ type UnsignedStr string
 func (self UnsignedStr) Int() *big.Int {
 	h := (*reflect.StringHeader)(unsafe.Pointer(&self))
 	if h.Len == 0 {
-		return Big0
+		return big.NewInt(0)
 	}
 	l := h.Len / WordSize
 	return new(big.Int).SetBits(*(*[]big.Word)(unsafe.Pointer(&reflect.SliceHeader{h.Data, l, l})))

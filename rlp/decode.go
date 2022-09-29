@@ -27,8 +27,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 )
 
@@ -95,9 +93,9 @@ type Decoder interface {
 // rules for the field such that input values of size zero decode as a nil
 // pointer. This tag can be useful when decoding recursive types.
 //
-//     type StructWithEmptyOK struct {
-//         Foo *[20]byte `rlp:"nil"`
-//     }
+//	type StructWithEmptyOK struct {
+//	    Foo *[20]byte `rlp:"nil"`
+//	}
 //
 // To decode into a slice, the input must be a list and the resulting
 // slice will contain the input elements in order. For byte slices,
@@ -117,8 +115,8 @@ type Decoder interface {
 // To decode into an interface value, Decode stores one of these
 // in the value:
 //
-//	  []interface{}, for RLP lists
-//	  []byte, for RLP strings
+//	[]interface{}, for RLP lists
+//	[]byte, for RLP strings
 //
 // Non-empty interface types are not supported, nor are booleans,
 // signed integers, floating point numbers, maps, channels and
@@ -128,7 +126,7 @@ type Decoder interface {
 // and may be vulnerable to panics cause by huge value sizes. If
 // you need an input limit, use
 //
-//     NewStream(r, limit).Decode(val)
+//	NewStream(r, limit).Decode(val)
 func Decode(r io.Reader, val interface{}) error {
 	// TODO: this could use a Stream from a pool.
 	return NewStream(r, 0).Decode(val)
@@ -301,7 +299,7 @@ func decodeBigInt(s *Stream, val reflect.Value) error {
 	}
 	if i := val.Interface().(*big.Int); len(b) == 0 {
 		if i.Sign() != 0 {
-			i.Set(bigutil.Big0)
+			i.Set(big.NewInt(0))
 		}
 	} else {
 		i.SetBytes(b)

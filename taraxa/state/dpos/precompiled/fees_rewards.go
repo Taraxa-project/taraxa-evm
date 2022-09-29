@@ -29,7 +29,7 @@ func (self *FeesRewards) GetTxsFeesReward(account common.Address) *big.Int {
 	if feeRewardExists {
 		return feesReward
 	} else {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 }
 

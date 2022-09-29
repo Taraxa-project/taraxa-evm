@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 )
 
 type Validator struct {
@@ -51,11 +50,11 @@ type Validators struct {
 }
 
 var (
-	main_index = []byte{0}
-	info_index = []byte{1}
+	main_index  = []byte{0}
+	info_index  = []byte{1}
 	owner_index = []byte{2}
-	vrf_index = []byte{3}
-	list_index = []byte{4}
+	vrf_index   = []byte{3}
+	list_index  = []byte{4}
 )
 
 func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
@@ -123,8 +122,8 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
 	// Creates Validator object in storage
 	validator := new(Validator)
-	validator.CommissionRewardsPool = bigutil.Big0
-	validator.RewardsPool = bigutil.Big0
+	validator.CommissionRewardsPool = big.NewInt(0)
+	validator.RewardsPool = big.NewInt(0)
 	validator.Commission = commission
 	validator.TotalStake = big.NewInt(0)
 	validator.LastCommissionChange = block

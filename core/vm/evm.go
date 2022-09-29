@@ -192,7 +192,7 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 
 		if !opts.EnableNonceSkipping {
 			// Check if tx.nonce > sender_nonce + 1
-			if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, bigutil.Big1)) == 1 {
+			if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) == 1 {
 				ret.ConsensusErr = ErrNonceTooHigh
 				return
 			}
@@ -231,12 +231,7 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
 		acc_to := self.state.GetAccount(self.trx.To)
-		// This is left here only because during dpos_test runs `self.trx.Nonce == nil`
-		if self.trx.Nonce == nil {
-			caller.IncrementNonce()
-		} else {
-			caller.SetNonce(self.trx.Nonce)
-		}
+		caller.SetNonce(self.trx.Nonce)
 		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
@@ -425,8 +420,8 @@ func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
 	snapshot := self.state.Snapshot()
-	callee.AddBalance(bigutil.Big0)
-	return self.call_end(CallFrame{caller.Account, callee, input, gas, bigutil.Big0}, callee, snapshot, true)
+	callee.AddBalance(big.NewInt(0))
+	return self.call_end(CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
 }
 
 // loops and evaluates the contract's code with the given input data and returns
