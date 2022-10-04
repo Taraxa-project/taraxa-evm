@@ -182,18 +182,23 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	defer func() { self.trx, self.jumpdests = nil, nil }()
 	caller := self.state.GetAccount(&self.trx.From)
 	if !opts.DisableNonceCheck {
-		nonce := caller.GetNonce()
+		sender_nonce := caller.GetNonce()
+
+		// Check if tx.nonce <= sender_nonce
+		if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
+			ret.ConsensusErr = ErrNonceTooLow
+			return
+		}
+
 		if !opts.EnableNonceSkipping {
-			if nonce.Cmp(self.trx.Nonce) < 0 {
+			// Check if tx.nonce > sender_nonce + 1
+			if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) == 1 {
 				ret.ConsensusErr = ErrNonceTooHigh
 				return
 			}
 		}
-		if nonce.Cmp(self.trx.Nonce) > 0 {
-			ret.ConsensusErr = ErrNonceTooLow
-			return
-		}
 	}
+
 	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	gas_left := gas_cap
@@ -207,32 +212,37 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 			ret.ConsensusErr = ErrInsufficientBalanceForGas
 			return
 		}
-		caller.SubBalance(gas_fee)
 	}
 
-	var err error
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
 	if err != nil {
 		ret.ConsensusErr = util.ErrorString(err.Error())
 		return
 	}
+
 	if gas_left < gas_intrinsic {
 		ret.ConsensusErr = ErrIntrinsicGas
 		return
 	}
+
+	if self.trx.From != common.ZeroAddress {
+		caller.SubBalance(gas_fee)
+	}
+	gas_left_original := gas_left
 	gas_left -= gas_intrinsic
 
 	if contract_creation {
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
 		acc_to := self.state.GetAccount(self.trx.To)
-		caller.IncrementNonce()
+		caller.SetNonce(self.trx.Nonce)
 		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
+			// set it back to original as we have ConsensusErr here
+			gas_left = gas_left_original
 			ret.ConsensusErr = err_str
-			return
 		} else {
 			ret.ExecutionErr = err_str
 		}
@@ -299,7 +309,7 @@ func (self *EVM) create(
 	if err == nil && self.rules.IsEIP158 && len(ret) > MaxCodeSize {
 		err = errMaxCodeSizeExceeded
 	}
-	
+
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled
@@ -415,8 +425,8 @@ func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte
 	// but is the correct thing to do and matters on other networks, in tests, and potential
 	// future scenarios
 	snapshot := self.state.Snapshot()
-	callee.AddBalance(bigutil.Big0)
-	return self.call_end(CallFrame{caller.Account, callee, input, gas, bigutil.Big0}, callee, snapshot, true)
+	callee.AddBalance(big.NewInt(0))
+	return self.call_end(CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
 }
 
 // loops and evaluates the contract's code with the given input data and returns

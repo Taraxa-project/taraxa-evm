@@ -24,8 +24,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
@@ -171,13 +169,13 @@ func (c dataCopy) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 type bigModExp struct{}
 
 var (
-	big1      = bigutil.Big1
-	big4      = bigutil.FromByte(4)
-	big8      = bigutil.FromByte(8)
-	big16     = bigutil.FromByte(16)
-	big32     = bigutil.Big32
-	big64     = bigutil.FromByte(64)
-	big96     = bigutil.FromByte(96)
+	big1      = big.NewInt(1)
+	big4      = big.NewInt(4)
+	big8      = big.NewInt(8)
+	big16     = big.NewInt(16)
+	big32     = big.NewInt(32)
+	big64     = big.NewInt(64)
+	big96     = big.NewInt(96)
 	big480    = big.NewInt(480)
 	big1024   = big.NewInt(1024)
 	big3072   = big.NewInt(3072)

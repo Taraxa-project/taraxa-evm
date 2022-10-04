@@ -23,7 +23,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -146,8 +145,8 @@ func opSignExtend(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 	if back.Cmp(big.NewInt(31)) < 0 {
 		bit := uint(back.Uint64()*8 + 7)
 		num := stack.pop()
-		mask := back.Lsh(bigutil.Big1, bit)
-		mask.Sub(mask, bigutil.Big1)
+		mask := back.Lsh(big.NewInt(1), bit)
+		mask.Sub(mask, big.NewInt(1))
 		if num.Bit(int(bit)) > 0 {
 			num.Or(num, mask.Not(mask))
 		} else {
@@ -284,7 +283,7 @@ func opXor(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opByte(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	th, val := stack.pop(), stack.peek()
-	if th.Cmp(bigutil.Big32) < 0 {
+	if th.Cmp(big.NewInt(32)) < 0 {
 		b := math.Byte(val, 32, int(th.Int64()))
 		val.SetUint64(uint64(b))
 	} else {
@@ -328,7 +327,7 @@ func opSHL(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	shift, value := math.U256(stack.pop()), math.U256(stack.peek())
 	defer evm.int_pool.put(shift) // First operand back into the pool
 
-	if shift.Cmp(bigutil.Big256) >= 0 {
+	if shift.Cmp(big.NewInt(256)) >= 0 {
 		value.SetUint64(0)
 		return nil, nil
 	}
@@ -346,7 +345,7 @@ func opSHR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	shift, value := math.U256(stack.pop()), math.U256(stack.peek())
 	defer evm.int_pool.put(shift) // First operand back into the pool
 
-	if shift.Cmp(bigutil.Big256) >= 0 {
+	if shift.Cmp(big.NewInt(256)) >= 0 {
 		value.SetUint64(0)
 		return nil, nil
 	}
@@ -364,7 +363,7 @@ func opSAR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	shift, value := math.U256(stack.pop()), math.S256(stack.pop())
 	defer evm.int_pool.put(shift) // First operand back into the pool
 
-	if shift.Cmp(bigutil.Big256) >= 0 {
+	if shift.Cmp(big.NewInt(256)) >= 0 {
 		if value.Sign() >= 0 {
 			value.SetUint64(0)
 		} else {
@@ -503,16 +502,21 @@ func opExtCodeCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 // opExtCodeHash returns the code hash of a specified account.
 // There are several cases when the function is called, while we can relay everything
 // to `state.GetCodeHash` function to ensure the correctness.
-//   (1) Caller tries to get the code hash of a normal contract account, state
+//
+//	(1) Caller tries to get the code hash of a normal contract account, state
+//
 // should return the relative code hash and set it as the result.
 //
-//   (2) Caller tries to get the code hash of a non-existent account, state should
+//	(2) Caller tries to get the code hash of a non-existent account, state should
+//
 // return common.Hash{} and zero will be set as the result.
 //
-//   (3) Caller tries to get the code hash for an account without contract code,
+//	(3) Caller tries to get the code hash for an account without contract code,
+//
 // state should return emptyCodeHash(0xc5d246...) as the result.
 //
-//   (4) Caller tries to get the code hash of a precompiled account, the result
+//	(4) Caller tries to get the code hash of a precompiled account, the result
+//
 // should be zero or emptyCodeHash.
 //
 // It is worth noting that in order to avoid unnecessary create and clean,
@@ -521,10 +525,12 @@ func opExtCodeCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 // If the precompile account is not transferred any amount on a private or
 // customized chain, the return value will be zero.
 //
-//   (5) Caller tries to get the code hash for an account which is marked as suicided
+//	(5) Caller tries to get the code hash for an account which is marked as suicided
+//
 // in the current transaction, the code hash of this account should be returned.
 //
-//   (6) Caller tries to get the code hash for an account which is marked as deleted,
+//	(6) Caller tries to get the code hash for an account which is marked as deleted,
+//
 // this account should be regarded as a non-existent account and zero should be returned.
 func opExtCodeHash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	slot := stack.peek()

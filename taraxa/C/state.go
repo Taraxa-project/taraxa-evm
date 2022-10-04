@@ -245,7 +245,7 @@ func taraxa_evm_state_api_transition_state(
 			st.AddTxFeeToBalance(&params.Blk.Author, txFee)
 		} else {
 			// Reward dag block author, who included specified tx as first
-			feesRewards.AddTxFeeReward(params.TxsValidators[i], txFee)
+			feesRewards.AddTrxFeeReward(params.TxsValidators[i], txFee)
 		}
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)

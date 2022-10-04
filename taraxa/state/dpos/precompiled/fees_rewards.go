@@ -15,7 +15,7 @@ func (self *FeesRewards) Init() {
 	self.feesRewards = make(map[common.Address]*big.Int)
 }
 
-func (self *FeesRewards) AddTxFeeReward(account common.Address, reward *big.Int) {
+func (self *FeesRewards) AddTrxFeeReward(account common.Address, reward *big.Int) {
 	feesReward, feesRewardExists := self.feesRewards[account]
 	if feesRewardExists {
 		self.feesRewards[account] = bigutil.Add(feesReward, reward)
@@ -24,12 +24,12 @@ func (self *FeesRewards) AddTxFeeReward(account common.Address, reward *big.Int)
 	}
 }
 
-func (self *FeesRewards) GetTxsFeesReward(account common.Address) *big.Int {
+func (self *FeesRewards) GetTrxsFeesReward(account common.Address) *big.Int {
 	feesReward, feeRewardExists := self.feesRewards[account]
 	if feeRewardExists {
 		return feesReward
 	} else {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 }
 

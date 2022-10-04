@@ -20,8 +20,6 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
@@ -72,7 +70,7 @@ func CreateAddress2(b *common.Address, salt *common.Hash, inithash []byte) (ret 
 // ValidateSignatureValues verifies whether the signature values are valid with
 // the given chain rules. The v value is assumed to be either 0 or 1.
 func ValidateSignatureValues(v byte, r, s *big.Int, homestead bool) bool {
-	if r.Cmp(bigutil.Big1) < 0 || s.Cmp(bigutil.Big1) < 0 {
+	if r.Cmp(big.NewInt(1)) < 0 || s.Cmp(big.NewInt(1)) < 0 {
 		return false
 	}
 	// reject upper range of s values (ECDSA malleability)

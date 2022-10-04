@@ -103,6 +103,7 @@ func (self *API) Close() {
 
 type StateTransition interface {
 	BeginBlock(*vm.BlockInfo)
+	BlockNumber() types.BlockNum
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
 	AddTxFeeToBalance(account *common.Address, tx_fee *big.Int)
 	GetChainConfig() *chain_config.ChainConfig

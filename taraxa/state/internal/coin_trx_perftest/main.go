@@ -145,7 +145,7 @@ func main() {
 				From:     tests.Addr(1),
 				To:       tests.AddrP(2 + blk_n*addr_per_blk + j),
 				Value:    target_bal_per_addr,
-				GasPrice: bigutil.Big0,
+				GasPrice: big.NewInt(0),
 				Gas:      trx_gas,
 			})
 			batch_size++
@@ -234,8 +234,8 @@ func main() {
 				trx := vm.Transaction{
 					From:     from,
 					To:       &to,
-					Value:    bigutil.Big1,
-					GasPrice: bigutil.Big0,
+					Value:    big.NewInt(1),
+					GasPrice: big.NewInt(0),
 					Gas:      trx_gas,
 				}
 				st.ExecuteTransaction(&trx)

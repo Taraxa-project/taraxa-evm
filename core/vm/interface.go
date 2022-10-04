@@ -54,6 +54,7 @@ type StateAccount interface {
 	AddBalance(*big.Int)
 	SubBalance(*big.Int)
 	IncrementNonce()
+	SetNonce(*big.Int)
 	SetState(*big.Int, *big.Int)
 	Suicide(*common.Address)
 }

@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -78,7 +77,7 @@ func (self *API) Init(cfg Config) *API {
 	// ValidatorMaximumStake must be:
 	//     > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
 	//     ValidatorMaximumStake * theoretical_max_reward_pool cannot overflow unit256
-	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(bigutil.Big0) == 1)
+	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(big.NewInt(0)) == 1)
 	// max uint256 == 2^256 == *10^77. Let ValidatorMaximumStake be half of that -> 10^38
 	num_1e38 := big.NewInt(0)
 	num_1e38.SetString("4B3B4CA85A86C47A098A224000000000", 16) // 10^38

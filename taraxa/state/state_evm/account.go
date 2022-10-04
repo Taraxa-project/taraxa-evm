@@ -45,14 +45,14 @@ func (self *Account) IsEIP161Empty() bool {
 
 func (self *Account) GetBalance() *big.Int {
 	if !self.IsNotNIL() {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 	return self.Balance
 }
 
 func (self *Account) GetNonce() *big.Int {
 	if !self.IsNotNIL() {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 	return self.Nonce
 }
@@ -89,7 +89,7 @@ func (self *Account) GetCodeSize() uint64 {
 
 func (self *Account) GetState(key *big.Int) (ret *big.Int) {
 	if !self.IsNotNIL() {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 	key_b := bigutil.UnsafeUnsignedBytes(key)
 	if value, present := self.StorageDirty[bigutil.UnsignedStr(key_b)]; present {
@@ -120,16 +120,16 @@ func (self *Account) SetState(key, value *big.Int) {
 
 func (self *Account) get_committed_state(key *big.Int, key_b bigutil.UnsignedBytes) *big.Int {
 	if !self.IsNotNIL() {
-		return bigutil.Big0
+		return big.NewInt(0)
 	}
 	if self.storage_origin == nil {
 		if self.StorageRootHash == nil {
-			return bigutil.Big0
+			return big.NewInt(0)
 		}
 	} else if ret, present := self.storage_origin[bigutil.UnsignedStr(key_b)]; present {
 		return ret
 	}
-	ret, key_h := bigutil.Big0, self.host.bigconv.ToHash(key)
+	ret, key_h := big.NewInt(0), self.host.bigconv.ToHash(key)
 	self.host.GetAccountStorageFromDB(self.Address(), key_h, func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
@@ -179,10 +179,21 @@ func (self *Account) set_balance(amount *big.Int) {
 	})
 }
 
+func (self *Account) SetNonce(nonce *big.Int) {
+	self.ensure_exists()
+	// will be uncommented in next PR
+	// asserts.Holds(nonce.Cmp(self.Nonce) > 0, "SetNonce: value to set should be > current nonce")
+	nonce_prev := self.Nonce
+	self.Nonce = nonce
+	self.register_change(func() {
+		self.Nonce = nonce_prev
+	})
+}
+
 func (self *Account) IncrementNonce() {
 	self.ensure_exists()
 	nonce_prev := self.Nonce
-	self.Nonce = new(big.Int).Add(self.Nonce, bigutil.Big1)
+	self.Nonce = new(big.Int).Add(self.Nonce, big.NewInt(1))
 	self.register_change(func() {
 		self.Nonce = nonce_prev
 	})
@@ -213,7 +224,7 @@ func (self *Account) SetStateRawIrreversibly(key *common.Hash, value []byte) {
 func (self *Account) Suicide(newAddr *common.Address) {
 	new_acc := self.host.GetAccountConcrete(newAddr)
 	if !self.IsNotNIL() {
-		new_acc.AddBalance(bigutil.Big0)
+		new_acc.AddBalance(big.NewInt(0))
 		return
 	}
 	new_acc.AddBalance(self.Balance)
@@ -221,7 +232,7 @@ func (self *Account) Suicide(newAddr *common.Address) {
 	self.register_change(func() {
 		self.suicided, self.Balance = suicided, balance_prev
 	})
-	self.suicided, self.Balance = true, bigutil.Big0
+	self.suicided, self.Balance = true, big.NewInt(0)
 }
 
 func (self *Account) ensure_exists() {
@@ -229,8 +240,8 @@ func (self *Account) ensure_exists() {
 		return
 	}
 	self.AccountBody = new(AccountBody)
-	self.AccountBody.Balance = bigutil.Big0
-	self.AccountBody.Nonce = bigutil.Big0
+	self.AccountBody.Balance = big.NewInt(0)
+	self.AccountBody.Nonce = big.NewInt(0)
 	was_deleted := self.deleted
 	self.deleted = false
 	self.register_change(func() {

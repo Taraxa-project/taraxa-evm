@@ -20,8 +20,6 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 )
@@ -49,9 +47,9 @@ func packElement(t Type, reflectValue reflect.Value) []byte {
 		return common.LeftPadBytes(reflectValue.Bytes(), 32)
 	case BoolTy:
 		if reflectValue.Bool() {
-			return math.PaddedBigBytes(bigutil.Big1, 32)
+			return math.PaddedBigBytes(big.NewInt(1), 32)
 		}
-		return math.PaddedBigBytes(bigutil.Big0, 32)
+		return math.PaddedBigBytes(big.NewInt(0), 32)
 	case BytesTy:
 		if reflectValue.Kind() == reflect.Array {
 			reflectValue = mustArrayToByteSlice(reflectValue)

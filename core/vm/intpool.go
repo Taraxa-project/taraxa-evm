@@ -49,7 +49,7 @@ func (p *int_pool) get() *big.Int {
 // a new one if the pool is empty.
 func (p *int_pool) getZero() *big.Int {
 	if p.pool.len() > 0 {
-		return p.pool.pop().Set(bigutil.Big0)
+		return p.pool.pop().Set(big.NewInt(0))
 	}
 	return new(big.Int)
 }

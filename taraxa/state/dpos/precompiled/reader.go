@@ -39,7 +39,7 @@ func (self Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
 }
 
 func (self Reader) TotalAmountDelegated() (ret *big.Int) {
-	ret = bigutil.Big0
+	ret = big.NewInt(0)
 	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
@@ -51,7 +51,7 @@ func (self Reader) IsEligible(address *common.Address) bool {
 }
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
-	ret = bigutil.Big0
+	ret = big.NewInt(0)
 	self.storage.Get(stor_k_1(field_validators, main_index, addr[:]), func(bytes []byte) {
 		validator := new(Validator)
 		rlp.MustDecodeBytes(bytes, validator)
