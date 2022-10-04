@@ -516,12 +516,12 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 	votesReward := big.NewInt(0)
 	blockAuthorReward := big.NewInt(0)
-	txsReward := blockReward
+	trxsReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions
-		txsReward = bigutil.Div(bigutil.Mul(blockReward, TransactionsRewardPercentage), big.NewInt(100))
-		votesReward = bigutil.Sub(blockReward, txsReward)
+		trxsReward = bigutil.Div(bigutil.Mul(blockReward, TransactionsRewardPercentage), big.NewInt(100))
+		votesReward = bigutil.Sub(blockReward, trxsReward)
 
 		// Calculate bonus reward based on MaxBlockAuthorReward and subtract from total votes reward
 		bonusReward := bigutil.Div(bigutil.Mul(votesReward, big.NewInt(int64(self.cfg.MaxBlockAuthorReward))), big.NewInt(100))
@@ -559,7 +559,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
-	totalUniqueTxsCountCheck := uint32(0)
+	totalUniqueTrxsCountCheck := uint32(0)
 	totalVoteWeightCheck := uint64(0)
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
@@ -581,10 +581,10 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		validatorReward := big.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
 		// Reward for unique transactions
-		if validatorStats.UniqueTxsCount > 0 {
-			totalUniqueTxsCountCheck += validatorStats.UniqueTxsCount
-			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTxsCount)), txsReward)
-			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTxsCount)))
+		if validatorStats.UniqueTrxsCount > 0 {
+			totalUniqueTrxsCountCheck += validatorStats.UniqueTrxsCount
+			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTrxsCount)), trxsReward)
+			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTrxsCount)))
 		}
 
 		// Add reward for voting
@@ -600,7 +600,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		totalRewardCheck = bigutil.Add(totalRewardCheck, validatorReward)
 
 		// Adds fees for all txs that validator added in his blocks as first
-		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTxsFeesReward(validatorAddress))
+		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
 
 		validatorCommission := bigutil.Div(bigutil.Mul(validatorReward, big.NewInt(int64(validator.Commission))), big.NewInt(10000))
 		delegatorsRewards := bigutil.Sub(validatorReward, validatorCommission)
@@ -612,8 +612,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	}
 
 	// TODO: debug check - can be deleted for release
-	if totalUniqueTxsCountCheck != rewardsStats.TotalUniqueTxsCount {
-		errorString := fmt.Sprintf("TotalUniqueTxsCount (%d) based on validators stats != rewardsStats.TotalUniqueTxsCount (%d)", totalUniqueTxsCountCheck, rewardsStats.TotalUniqueTxsCount)
+	if totalUniqueTrxsCountCheck != rewardsStats.TotalUniqueTrxsCount {
+		errorString := fmt.Sprintf("TotalUniqueTrxsCount (%d) based on validators stats != rewardsStats.TotalUniqueTrxsCount (%d)", totalUniqueTrxsCountCheck, rewardsStats.TotalUniqueTrxsCount)
 		panic(errorString)
 	}
 

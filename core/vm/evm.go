@@ -204,6 +204,16 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	gas_left := gas_cap
 	contract_creation := self.trx.To == nil
 
+	// This will happen when we use eth_call
+	if self.trx.From == common.ZeroAddress {
+		gas_left = uint64(math.MaxUint64)
+	} else {
+		if !BalanceGTE(caller, gas_fee) {
+			ret.ConsensusErr = ErrInsufficientBalanceForGas
+			return
+		}
+	}
+
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
 	if err != nil {
 		ret.ConsensusErr = util.ErrorString(err.Error())
@@ -215,16 +225,10 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 		return
 	}
 
-	// This will happen when we use eth_call
-	if self.trx.From == common.ZeroAddress {
-		gas_left = uint64(math.MaxUint64)
-	} else {
-		if !BalanceGTE(caller, gas_fee) {
-			ret.ConsensusErr = ErrInsufficientBalanceForGas
-			return
-		}
+	if self.trx.From != common.ZeroAddress {
 		caller.SubBalance(gas_fee)
 	}
+	gas_left_original := gas_left
 	gas_left -= gas_intrinsic
 
 	if contract_creation {
@@ -236,7 +240,8 @@ func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
-			gas_left = 0
+			// set it back to original as we have ConsensusErr here
+			gas_left = gas_left_original
 			ret.ConsensusErr = err_str
 		} else {
 			ret.ExecutionErr = err_str
