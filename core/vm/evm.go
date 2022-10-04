@@ -95,9 +95,6 @@ type Transaction struct {
 	Gas      uint64
 	Input    []byte
 }
-type ExecutionOpts struct {
-	DisableNonceCheck, EnableNonceSkipping bool
-}
 type ExecutionResult struct {
 	CodeRetval      []byte
 	NewContractAddr common.Address
@@ -176,27 +173,24 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func (self *EVM) Main(trx *Transaction, opts ExecutionOpts) (ret ExecutionResult) {
+func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	self.trx = trx
 
 	defer func() { self.trx, self.jumpdests = nil, nil }()
+
 	caller := self.state.GetAccount(&self.trx.From)
-	if !opts.DisableNonceCheck {
-		sender_nonce := caller.GetNonce()
+	sender_nonce := caller.GetNonce()
 
-		// Check if tx.nonce <= sender_nonce
-		if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
-			ret.ConsensusErr = ErrNonceTooLow
-			return
-		}
+	// Check if tx.nonce <= sender_nonce
+	if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
+		ret.ConsensusErr = ErrNonceTooLow
+		return
+	}
 
-		if !opts.EnableNonceSkipping {
-			// Check if tx.nonce > sender_nonce + 1
-			if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) == 1 {
-				ret.ConsensusErr = ErrNonceTooHigh
-				return
-			}
-		}
+	// Check if tx.nonce > sender_nonce + 1
+	if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) > 0 {
+		ret.ConsensusErr = ErrNonceTooHigh
+		return
 	}
 
 	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice

@@ -112,9 +112,6 @@ func main() {
 			db,
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			&chain_config.ChainConfig{
-				ExecutionOptions: vm.ExecutionOpts{
-					DisableNonceCheck: true,
-				},
 				BlockRewardsOptions: chain_config.BlockRewardsOpts{
 					DisableBlockRewards:         true,
 					DisableContractDistribution: true,
