@@ -278,7 +278,7 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 	return sig, nil
 }
 
-func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, txsCount uint32) {
+func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, trxsCount uint32) {
 	for i := uint32(0); i < trxsCount; i++ {
 		feesRewards.AddTrxFeeReward(validator, trxFee)
 	}
