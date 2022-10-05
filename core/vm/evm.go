@@ -29,7 +29,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -187,11 +186,12 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 		return
 	}
 
+	// Nonce skipping is permanently enabled now. Uncomment this part to have strict nonce ordering
 	// Check if tx.nonce > sender_nonce + 1
-	if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) > 0 {
-		ret.ConsensusErr = ErrNonceTooHigh
-		return
-	}
+	// if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) > 0 {
+	// 	ret.ConsensusErr = ErrNonceTooHigh
+	// 	return
+	// }
 
 	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
