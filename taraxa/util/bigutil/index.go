@@ -38,6 +38,14 @@ func ZeroIfNIL(x *big.Int) *big.Int {
 	return x
 }
 
+func Min(x, y *big.Int) *big.Int {
+	if x.Cmp(y) < 0 {
+		return x
+	}
+
+	return y
+}
+
 func Add(x, y *big.Int) *big.Int {
 	return new(big.Int).Add(ZeroIfNIL(x), ZeroIfNIL(y))
 }
