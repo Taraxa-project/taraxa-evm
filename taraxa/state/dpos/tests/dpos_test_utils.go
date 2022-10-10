@@ -76,10 +76,6 @@ var (
 	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
 
 	DefaultChainCfg = chain_config.ChainConfig{
-		ExecutionOptions: vm.ExecutionOpts{
-			DisableNonceCheck:   true,
-			EnableNonceSkipping: true,
-		},
 		BlockRewardsOptions: chain_config.BlockRewardsOpts{
 			DisableBlockRewards:         false,
 			DisableContractDistribution: false,
@@ -111,9 +107,6 @@ func init_test(t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, te
 // TODO: fix this
 func CopyDefaultChainConfig() chain_config.ChainConfig {
 	var new_cfg chain_config.ChainConfig
-
-	new_cfg.ExecutionOptions.DisableNonceCheck = DefaultChainCfg.ExecutionOptions.DisableNonceCheck
-	new_cfg.ExecutionOptions.EnableNonceSkipping = DefaultChainCfg.ExecutionOptions.EnableNonceSkipping
 
 	new_cfg.BlockRewardsOptions.DisableBlockRewards = DefaultChainCfg.BlockRewardsOptions.DisableBlockRewards
 	new_cfg.BlockRewardsOptions.DisableContractDistribution = DefaultChainCfg.BlockRewardsOptions.DisableContractDistribution

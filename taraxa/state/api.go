@@ -121,8 +121,8 @@ func (self *API) GetCommittedStateDescriptor() state_db.StateDescriptor {
 	return self.db.GetLatestState().GetCommittedDescriptor()
 }
 
-func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction, opts *vm.ExecutionOpts) vm.ExecutionResult {
-	return self.dry_runner.Apply(blk, trx, opts)
+func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction) vm.ExecutionResult {
+	return self.dry_runner.Apply(blk, trx)
 }
 
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {

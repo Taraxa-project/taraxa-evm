@@ -181,8 +181,7 @@ func (self *Account) set_balance(amount *big.Int) {
 
 func (self *Account) SetNonce(nonce *big.Int) {
 	self.ensure_exists()
-	// will be uncommented in next PR
-	// asserts.Holds(nonce.Cmp(self.Nonce) > 0, "SetNonce: value to set should be > current nonce")
+	asserts.Holds(nonce.Cmp(self.Nonce) > 0, "SetNonce: value to set should be > current nonce")
 	nonce_prev := self.Nonce
 	self.Nonce = nonce
 	self.register_change(func() {
