@@ -197,6 +197,7 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	} else {
 		if !BalanceGTE(caller, gas_fee) {
 			caller_balance := caller.GetBalance()
+			// Not Sub whole balance to have transaction sender balance difference match `gas_used * gas_price`. So balance after SubBalance should be smaller than gas_price
 			availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
 			caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
 
