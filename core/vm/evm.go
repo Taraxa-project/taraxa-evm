@@ -342,7 +342,7 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 		if self.rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			return nil, gas, nil
 		}
-	} else if !BalanceGTE(caller, value) {
+	} else if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
 	snapshot := self.state.Snapshot()
