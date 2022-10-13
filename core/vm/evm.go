@@ -279,7 +279,7 @@ func (self *EVM) create(
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	if !BalanceGTE(caller, value) {
+	if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
 	// TODO This should go after the state snapshot, but this is how it works in ETH
@@ -345,7 +345,7 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 		if self.rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			return nil, gas, nil
 		}
-	} else if !BalanceGTE(caller, value) {
+	} else if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
 	snapshot := self.state.Snapshot()
