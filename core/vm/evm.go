@@ -21,6 +21,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -172,6 +173,12 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
+func consensusErr(trxGas uint64, err util.ErrorString) (ret ExecutionResult) {
+	ret.GasUsed = trxGas
+	ret.ConsensusErr = err
+	return
+}
+
 func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	self.trx = trx
 
@@ -179,19 +186,6 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 
 	caller := self.state.GetAccount(&self.trx.From)
 	sender_nonce := caller.GetNonce()
-
-	// Check if tx.nonce <= sender_nonce
-	if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
-		ret.ConsensusErr = ErrNonceTooLow
-		return
-	}
-
-	// Nonce skipping is permanently enabled now. Uncomment this part to have strict nonce ordering
-	// Check if tx.nonce > sender_nonce + 1
-	// if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) > 0 {
-	// 	ret.ConsensusErr = ErrNonceTooHigh
-	// 	return
-	// }
 
 	gas_cap, gas_price := self.trx.Gas, self.trx.GasPrice
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
@@ -202,24 +196,35 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 		gas_cap = uint64(math.MaxUint64)
 	} else {
 		if !BalanceGTE(caller, gas_fee) {
-			ret.ConsensusErr = ErrInsufficientBalanceForGas
-			return
+			caller_balance := caller.GetBalance()
+			// Not Sub whole balance to have transaction sender balance difference match `gas_used * gas_price`. So balance after SubBalance should be smaller than gas_price
+			availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
+			caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
+
+			return consensusErr(availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 		}
+		caller.SubBalance(gas_fee)
 	}
+
+	// Check if tx.nonce <= sender_nonce
+	if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
+		return consensusErr(gas_cap, ErrNonceTooLow)
+	}
+
+	// Nonce skipping is permanently enabled now. Uncomment this part to have strict nonce ordering
+	// Check if tx.nonce > sender_nonce + 1
+	// if self.trx.Nonce.Cmp(bigutil.Add(sender_nonce, big.NewInt(1))) > 0 {
+	// 	ret.ConsensusErr = ErrNonceTooHigh
+	// 	return
+	// }
 
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
 	if err != nil {
-		ret.ConsensusErr = util.ErrorString(err.Error())
-		return
+		return consensusErr(gas_cap, util.ErrorString(err.Error()))
 	}
 
 	if gas_cap < gas_intrinsic {
-		ret.ConsensusErr = ErrIntrinsicGas
-		return
-	}
-
-	if self.trx.From != common.ZeroAddress {
-		caller.SubBalance(gas_fee)
+		return consensusErr(gas_cap, ErrIntrinsicGas)
 	}
 
 	gas_left := gas_cap
@@ -234,9 +239,7 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
-			// set it back to original as we have ConsensusErr here
-			gas_left = gas_cap
-			ret.ConsensusErr = err_str
+			return consensusErr(gas_cap, err_str)
 		} else {
 			ret.ExecutionErr = err_str
 		}
