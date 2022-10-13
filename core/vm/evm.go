@@ -276,7 +276,7 @@ func (self *EVM) create(
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	if !BalanceGTE(caller, value) {
+	if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
 	// TODO This should go after the state snapshot, but this is how it works in ETH
