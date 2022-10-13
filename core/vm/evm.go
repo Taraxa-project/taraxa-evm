@@ -198,13 +198,9 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	contract_creation := self.trx.To == nil
 
 	// This will happen when we use eth_call
-	if self.trx.From == common.ZeroAddress {
-		gas_cap = uint64(math.MaxUint64)
-	} else {
-		if !BalanceGTE(caller, gas_fee) {
-			ret.ConsensusErr = ErrInsufficientBalanceForGas
-			return
-		}
+	if self.trx.From != common.ZeroAddress && !BalanceGTE(caller, gas_fee) {
+		ret.ConsensusErr = ErrInsufficientBalanceForGas
+		return
 	}
 
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
