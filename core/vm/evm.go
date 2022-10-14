@@ -191,20 +191,16 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	gas_fee := new(big.Int).Mul(new(big.Int).SetUint64(gas_cap), gas_price)
 	contract_creation := self.trx.To == nil
 
-	// This will happen when we use eth_call
-	if self.trx.From == common.ZeroAddress {
-		gas_cap = uint64(math.MaxUint64)
-	} else {
-		if !BalanceGTE(caller, gas_fee) {
-			caller_balance := caller.GetBalance()
-			// Not Sub whole balance to have transaction sender balance difference match `gas_used * gas_price`. So balance after SubBalance should be smaller than gas_price
-			availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
-			caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
+	if self.trx.From != common.ZeroAddress && !BalanceGTE(caller, gas_fee) {
+		caller_balance := caller.GetBalance()
+		// Not Sub whole balance to have transaction sender balance difference match `gas_used * gas_price`. So balance after SubBalance should be smaller than gas_price
+		availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
+		caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
 
-			return consensusErr(availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
-		}
-		caller.SubBalance(gas_fee)
+		return consensusErr(availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 	}
+
+	caller.SubBalance(gas_fee)
 
 	// Check if tx.nonce <= sender_nonce
 	if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
@@ -355,7 +351,8 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 
 func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
 	gas_left = frame.Gas
-	if precompiled := self.precompiles.Get(code_owner.Address()); precompiled != nil {
+	precompiled := self.precompiles.Get(code_owner.Address())
+	if precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
 			ret, err = precompiled.Run(frame, self)
@@ -369,7 +366,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 	}
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
-		if err != errExecutionReverted {
+		if err != errExecutionReverted && precompiled == nil {
 			gas_left = 0
 		}
 	}
