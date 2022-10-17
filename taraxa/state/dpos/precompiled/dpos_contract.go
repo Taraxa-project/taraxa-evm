@@ -563,7 +563,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
-	totalUniqueTrxsCountCheck := uint32(0)
+	TotalDagBlocksCountCheck := uint32(0)
 	totalVoteWeightCheck := uint64(0)
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
@@ -571,11 +571,11 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and totalRewardCheck might not pass
 		validatorReward := big.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
-		// Reward for unique transactions
-		if validatorStats.UniqueTrxsCount > 0 {
-			totalUniqueTrxsCountCheck += validatorStats.UniqueTrxsCount
-			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTrxsCount)), trxsReward)
-			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTrxsCount)))
+		// Reward for DAG blocks with at least one unique transaction
+		if validatorStats.DagBlocksCount > 0 {
+			TotalDagBlocksCountCheck += validatorStats.DagBlocksCount
+			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.DagBlocksCount)), trxsReward)
+			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalDagBlocksCount)))
 		}
 
 		// Add reward for voting
@@ -619,8 +619,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	}
 
 	// TODO: debug check - can be deleted for release
-	if totalUniqueTrxsCountCheck != rewardsStats.TotalUniqueTrxsCount {
-		errorString := fmt.Sprintf("TotalUniqueTrxsCount (%d) based on validators stats != rewardsStats.TotalUniqueTrxsCount (%d)", totalUniqueTrxsCountCheck, rewardsStats.TotalUniqueTrxsCount)
+	if TotalDagBlocksCountCheck != rewardsStats.TotalDagBlocksCount {
+		errorString := fmt.Sprintf("TotalDagBlocksCount (%d) based on validators stats != rewardsStats.TotalDagBlocksCount (%d)", TotalDagBlocksCountCheck, rewardsStats.TotalDagBlocksCount)
 		panic(errorString)
 	}
 
