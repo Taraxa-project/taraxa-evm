@@ -561,20 +561,28 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 	totalUniqueTrxsCountCheck := uint32(0)
 	totalVoteWeightCheck := uint64(0)
+	ignoreTotalRewardCheck := false
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
-			// This should never happen. Validator must exist(be eligible) either now or at least in delayed storage
-			if !self.delayedStorage.IsEligible(&validatorAddress) {
-				panic("DistributeRewards - non existent validator")
-			}
-
 			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
 			// checking it during consensus. If everyone undelegates from validator and also he claims his commission rewards
 			// during the the period of time, which is < then delay we use, he is deleted from contract storage, but he will be
 			// able to propose few more blocks. This situation is extremely unlikely, but technically possible.
 			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
+
+			// Validator must exist(be eligible) either now or at least in delayed storage
+			if !self.delayedStorage.IsEligible(&validatorAddress) {
+				panic("DistributeRewards - non existent validator")
+			}
+
+			// In this edge case scenario, we are not rewarding the validator for some additional blocks/votes he created but
+			// overall rewards per vote & unique tx were already calculated so we must adjust rewardsStats to make it pass the
+			// totalUniqueTrxsCountCheck & totalVoteWeightCheck checks
+			rewardsStats.TotalUniqueTrxsCount -= validatorStats.UniqueTrxsCount
+			rewardsStats.TotalVotesWeight -= validatorStats.VoteWeight
+			ignoreTotalRewardCheck = true
 			continue
 		}
 
@@ -622,7 +630,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		panic(errorString)
 	}
 
-	if totalRewardCheck.Cmp(blockReward) == 1 {
+	if !ignoreTotalRewardCheck && totalRewardCheck.Cmp(blockReward) == 1 {
 		errorString := fmt.Sprintf("totalRewardCheck (%d) is more then blockReward (%d)", totalRewardCheck, blockReward)
 		panic(errorString)
 	}
