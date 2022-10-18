@@ -563,21 +563,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	totalVoteWeightCheck := uint64(0)
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
-		validator := self.validators.GetValidator(&validatorAddress)
-		if validator == nil {
-			// This should never happen. Validator must exist(be eligible) either now or at least in delayed storage
-			if !self.delayedStorage.IsEligible(&validatorAddress) {
-				panic("DistributeRewards - non existent validator")
-			}
-
-			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
-			// checking it during consensus. If everyone undelegates from validator and also he claims his commission rewards
-			// during the the period of time, which is < then delay we use, he is deleted from contract storage, but he will be
-			// able to propose few more blocks. This situation is extremely unlikely, but technically possible.
-			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
-			continue
-		}
-
+		// We need to calculate validator reward even though in some edge cases this validator might not exist in contract anymore
+		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and totalRewardCheck might not pass
 		validatorReward := big.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
 		// Reward for DAG blocks with at least one unique transaction
@@ -598,6 +585,22 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 		// Add reward for for final check
 		totalRewardCheck = bigutil.Add(totalRewardCheck, validatorReward)
+
+		validator := self.validators.GetValidator(&validatorAddress)
+		if validator == nil {
+			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
+			// checking it during consensus. If everyone undelegates from validator and also he claims his commission rewards
+			// during the the period of time, which is < then delay we use, he is deleted from contract storage, but he will be
+			// able to propose few more blocks. This situation is extremely unlikely, but technically possible.
+			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
+
+			// Validator must exist(be eligible) either now or at least in delayed storage
+			if !self.delayedStorage.IsEligible(&validatorAddress) {
+				panic("DistributeRewards - non existent validator")
+			}
+
+			continue
+		}
 
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
