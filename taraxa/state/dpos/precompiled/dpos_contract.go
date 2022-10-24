@@ -108,8 +108,9 @@ var (
 	field_amount_delegated    = []byte{5}
 )
 
-// This will split block reward 8:2 (8 - transactions, 2 - votes)
-var TransactionsRewardPercentage = big.NewInt(80)
+// Percentage of block reward that is going to DAG block proposers.
+// Rest is going to voters and PBFT block proposer for bonus votes that he is included
+var DAGRewardPercentage = big.NewInt(50)
 
 // State of the rewards distribution algorithm
 type State struct {
@@ -516,16 +517,20 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 	votesReward := big.NewInt(0)
 	blockAuthorReward := big.NewInt(0)
-	trxsReward := blockReward
+	DAGProposersReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions
-		trxsReward = bigutil.Div(bigutil.Mul(blockReward, TransactionsRewardPercentage), big.NewInt(100))
-		votesReward = bigutil.Sub(blockReward, trxsReward)
+		DAGProposersReward = bigutil.Div(bigutil.Mul(blockReward, DAGRewardPercentage), big.NewInt(100))
+		votesReward = bigutil.Sub(blockReward, DAGProposersReward)
 
 		// Calculate bonus reward based on MaxBlockAuthorReward and subtract from total votes reward
 		bonusReward := bigutil.Div(bigutil.Mul(votesReward, big.NewInt(int64(self.cfg.MaxBlockAuthorReward))), big.NewInt(100))
 		votesReward = bigutil.Sub(votesReward, bonusReward)
+
+		if bigutil.Add(bigutil.Add(DAGProposersReward, bonusReward), votesReward).Cmp(blockReward) != 0 {
+			panic("DistributeRewards - wrong reward parts calculations")
+		}
 
 		// As MaxVotesWeight is just theoretical value we need to have use max of those
 		maxVotesWeigh := Max(rewardsStats.MaxVotesWeight, rewardsStats.TotalVotesWeight)
@@ -570,7 +575,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		// Reward for DAG blocks with at least one unique transaction
 		if validatorStats.DagBlocksCount > 0 {
 			TotalDagBlocksCountCheck += validatorStats.DagBlocksCount
-			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.DagBlocksCount)), trxsReward)
+			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.DagBlocksCount)), DAGProposersReward)
 			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalDagBlocksCount)))
 		}
 
