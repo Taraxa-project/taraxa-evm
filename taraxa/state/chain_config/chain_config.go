@@ -19,5 +19,5 @@ type ChainConfig struct {
 	ETHChainConfig      params.ChainConfig
 	BlockRewardsOptions BlockRewardsOpts
 	GenesisBalances     core.BalanceMap
-	DPOS                *dpos.Config `rlp:"nil"`
+	DPOS                dpos.Config
 }
