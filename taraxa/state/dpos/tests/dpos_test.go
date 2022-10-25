@@ -356,13 +356,13 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
-	// Spliting block rewards between votes and blocks
-	expected_trx_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.DAGRewardPercentage), big.NewInt(100))
-	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_trx_reward)
+	// Splitting block rewards between votes and blocks
+	expected_dag_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.DagRewardPercentage), big.NewInt(100))
+	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_dag_reward)
 
 	// Vote bonus rewards - aka Author reward
-	// MaxBlockAuthorReward = 10
-	bonus_reward := bigutil.Div(bigutil.Mul(expected_vote_reward, big.NewInt(10)), big.NewInt(100))
+	maxBlockAuthorReward := big.NewInt(int64(DefaultChainCfg.DPOS.MaxBlockAuthorReward))
+	bonus_reward := bigutil.Div(bigutil.Mul(expected_block_reward, maxBlockAuthorReward), big.NewInt(100))
 	expected_vote_reward = bigutil.Sub(expected_vote_reward, bonus_reward)
 
 	// Vote bonus rewards - aka Author reward
@@ -372,7 +372,7 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_trxs * blockReward) / total_trxs
-	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator1_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
+	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator1_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
 	validator1_total_reward = bigutil.Add(validator1_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator1_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward := bigutil.Mul(big.NewInt(int64(validator1_stats.VoteWeight)), expected_vote_reward)
@@ -388,7 +388,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_validator1_commission_reward = bigutil.Add(expected_validator1_commission_reward, author_commission_reward)
 
 	// validator2_rewards = (validator2_trxs * blockReward) / total_trxs
-	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_trx_reward, big.NewInt(int64(validator2_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
+	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator2_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
 	validator2_total_reward = bigutil.Add(validator2_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator2_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator2_stats.VoteWeight)), expected_vote_reward)
@@ -412,10 +412,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	// delegator 3 gets 80 % from validator2_rewards
 	expected_delegator3_reward := bigutil.Div(bigutil.Mul(expected_validator2_delegators_reward, big.NewInt(80)), big.NewInt(100))
 
-	// expected_trx_rewardPlusFees := bigutil.Add(expected_trx_reward, bigutil.Mul(trxFee, big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount))))
+	// expected_dag_rewardPlusFees := bigutil.Add(expected_dag_reward, bigutil.Mul(trxFee, big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount))))
 	// expectedDelegatorsRewards := bigutil.Add(expected_delegator1_reward, bigutil.Add(expected_delegator2_reward, expected_delegator3_reward))
 	// // Last digit is removed due to rounding error that makes these values unequal
-	// tc.Assert.Equal(bigutil.Div(expected_trx_rewardPlusFees, big.NewInt(1)0), bigutil.Div(expectedDelegatorsRewards, big.NewInt(1)0))
+	// tc.Assert.Equal(bigutil.Div(expected_dag_rewardPlusFees, big.NewInt(1)0), bigutil.Div(expectedDelegatorsRewards, big.NewInt(1)0))
 
 	// ErrNonExistentDelegation
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
