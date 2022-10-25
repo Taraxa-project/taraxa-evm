@@ -26,6 +26,7 @@ type Config = struct {
 	ValidatorMaximumStake       *big.Int
 	MinimumDeposit              *big.Int
 	MaxBlockAuthorReward        uint16
+	DagProposersReward          uint16
 	CommissionChangeDelta       uint16
 	CommissionChangeFrequency   uint32 // [number of blocks]
 	DelegationDelay             uint32 // [number of blocks]

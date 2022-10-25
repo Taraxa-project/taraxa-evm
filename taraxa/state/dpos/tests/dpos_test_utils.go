@@ -87,6 +87,7 @@ var (
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
 			MinimumDeposit:              DefaultMinimumDeposit,
 			MaxBlockAuthorReward:        10,
+			DagProposersReward:          50,
 			CommissionChangeDelta:       0,
 			CommissionChangeFrequency:   0,
 			DelegationDelay:             2,
@@ -118,6 +119,7 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 
 	new_cfg.DPOS = new(dpos.Config)
 	new_cfg.DPOS.MaxBlockAuthorReward = DefaultChainCfg.DPOS.MaxBlockAuthorReward
+	new_cfg.DPOS.DagProposersReward = DefaultChainCfg.DPOS.DagProposersReward
 	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
 	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
 	new_cfg.DPOS.ValidatorMaximumStake = DefaultChainCfg.DPOS.ValidatorMaximumStake

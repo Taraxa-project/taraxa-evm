@@ -357,7 +357,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
 	// Splitting block rewards between votes and blocks
-	expected_dag_reward := bigutil.Div(bigutil.Mul(expected_block_reward, dpos.DagRewardPercentage), big.NewInt(100))
+	expected_dag_reward := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(test.Chain_cfg.DPOS.DagProposersReward))), big.NewInt(100))
 	expected_vote_reward := bigutil.Sub(expected_block_reward, expected_dag_reward)
 
 	// Vote bonus rewards - aka Author reward
