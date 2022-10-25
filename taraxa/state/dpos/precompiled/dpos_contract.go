@@ -112,10 +112,6 @@ var (
 	field_amount_delegated    = []byte{5}
 )
 
-// Percentage of block reward that is going to DAG block proposers.
-// Rest is going to voters and PBFT block proposer for bonus votes that he is included
-var DagRewardPercentage = big.NewInt(50)
-
 // State of the rewards distribution algorithm
 type State struct {
 	// represents number of rewards per 1 stake
@@ -525,7 +521,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions
-		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, DagRewardPercentage), big.NewInt(100))
+		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, big.NewInt(int64(self.cfg.DagProposersReward))), big.NewInt(100))
 		votesReward = bigutil.Sub(blockReward, dagProposersReward)
 
 		// Calculate bonus reward as part of blockReward multiplied by MaxBlockAuthorReward and subtract it from total votes reward part. As the reward part of Dag defined above and it should not change
