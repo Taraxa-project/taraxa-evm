@@ -80,6 +80,15 @@ func (self *Validators) CheckValidatorOwner(owner, validator *common.Address) bo
 	return *owner == saved_addr
 }
 
+// Checks if correct account is trying to access validator object
+func (self *Validators) GetValidatorOwner(validator *common.Address) (ret common.Address) {
+	key := stor_k_1(self.validator_owner_field, validator[:])
+	self.storage.Get(key, func(bytes []byte) {
+		ret = common.BytesToAddress(bytes)
+	})
+	return
+}
+
 // Returns public vrf key for validator
 func (self *Validators) GetVrfKey(validator *common.Address) (ret []byte) {
 	key := stor_k_1(self.validator_vrf_key_field, validator[:])

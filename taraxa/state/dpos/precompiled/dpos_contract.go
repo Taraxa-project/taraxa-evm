@@ -1171,6 +1171,8 @@ func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInter
 
 	result.Commission = validator.Commission
 	result.CommissionReward = validator.CommissionRewardsPool
+	result.LastCommissionChange = validator.LastCommissionChange
+	result.Owner = self.validators.GetValidatorOwner(&args.Validator)
 	result.TotalStake = validator.TotalStake
 	result.Endpoint = validator_info.Endpoint
 	result.Description = validator_info.Description
