@@ -1200,6 +1200,8 @@ func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []so
 		validator_data.Account = validator_address
 		validator_data.Info.Commission = validator.Commission
 		validator_data.Info.CommissionReward = validator.CommissionRewardsPool
+		validator_data.Info.LastCommissionChange = validator.LastCommissionChange
+		validator_data.Info.Owner = self.validators.GetValidatorOwner(&validator_address)
 		validator_data.Info.TotalStake = validator.TotalStake
 		validator_data.Info.Endpoint = validator_info.Endpoint
 		validator_data.Info.Description = validator_info.Description
