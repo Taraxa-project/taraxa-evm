@@ -11,6 +11,10 @@ interface DposInterface {
         uint256 commission_reward;
         // Validator's commission - max value 1000(precision up to 0.1%)
         uint16 commission;
+        // Block number of last commission change
+        uint64 last_commission_change;
+        // Validator's owner account
+        address owner;
         // Validators description/name
         string description;
         // Validators website endpoint

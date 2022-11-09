@@ -848,6 +848,7 @@ func TestGetValidator(t *testing.T) {
 	validator := new(GetValidatorRet)
 	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
 	tc.Assert.Equal(DefaultMinimumDeposit, validator.ValidatorInfo.TotalStake)
+	tc.Assert.Equal(val_owner, validator.ValidatorInfo.Owner)
 
 	// Undelegate
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
