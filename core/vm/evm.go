@@ -202,8 +202,8 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 
 	caller.SubBalance(gas_fee)
 
-	// Check if tx.nonce <= sender_nonce
-	if self.trx.Nonce.Cmp(sender_nonce) <= 0 {
+	// Check if tx.nonce < sender_nonce
+	if self.trx.Nonce.Cmp(sender_nonce) < 0 {
 		return consensusErr(gas_cap, ErrNonceTooLow)
 	}
 
@@ -227,10 +227,12 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	gas_left -= gas_intrinsic
 
 	if contract_creation {
+		// setting nonce to current trx nonce to generate correct address for new contract. Nonce incremented inside of `create` later
+		caller.SetNonce(self.trx.Nonce)
 		ret.CodeRetval, ret.NewContractAddr, gas_left, err = self.create_1(caller, self.trx.Input, gas_left, self.trx.Value)
 	} else {
 		acc_to := self.state.GetAccount(self.trx.To)
-		caller.SetNonce(self.trx.Nonce)
+		caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
 		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
