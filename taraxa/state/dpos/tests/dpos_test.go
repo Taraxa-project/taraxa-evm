@@ -544,6 +544,7 @@ func TestSetCommission(t *testing.T) {
 	test.AdvanceBlock(nil, nil, nil)
 	test.AdvanceBlock(nil, nil, nil)
 
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(dpos.MaxCommission+1)), dpos.ErrCommissionOverflow, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(11)), util.ErrorString(""), util.ErrorString(""))
 
 	//Advance 4 rounds
