@@ -69,10 +69,11 @@ var (
 	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
 	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
 	ErrCallIsNotToplevel            = util.ErrorString("only top-level calls are allowed")
-	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recoverd")
+	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recovered")
 	ErrWrongOwnerAcc                = util.ErrorString("This account is not owner of specified validator")
-	ErrWrongVrfKey                  = util.ErrorString("Wrong vrf key specified in validator argumetns")
+	ErrWrongVrfKey                  = util.ErrorString("Wrong vrf key specified in validator arguments")
 	ErrForbiddenCommissionChange    = util.ErrorString("Forbidden commission change")
+	ErrCommissionOverflow           = util.ErrorString("Commission is bigger than maximum value")
 	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
 	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
 )
@@ -83,6 +84,9 @@ const (
 
 	// Max num of characters in description
 	MaxDescriptionLength = 100
+
+	// Maximal commission  [%] * 100 so 1% is 100 & 100% is 10000
+	MaxCommission = 10000
 
 	// Length of vrf public key
 	VrfKeyLength = 32
@@ -546,7 +550,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 			panic("DistributeRewards - non existent block author")
 		}
 
-		commission := bigutil.Div(bigutil.Mul(blockAuthorReward, big.NewInt(int64(block_author.Commission))), big.NewInt(10000))
+		commission := bigutil.Div(bigutil.Mul(blockAuthorReward, big.NewInt(int64(block_author.Commission))), big.NewInt(MaxCommission))
 		delegatorsRewards := bigutil.Sub(blockAuthorReward, commission)
 
 		block_author.CommissionRewardsPool = bigutil.Add(block_author.CommissionRewardsPool, commission)
@@ -602,7 +606,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
 
-		validatorCommission := bigutil.Div(bigutil.Mul(validatorReward, big.NewInt(int64(validator.Commission))), big.NewInt(10000))
+		validatorCommission := bigutil.Div(bigutil.Mul(validatorReward, big.NewInt(int64(validator.Commission))), big.NewInt(MaxCommission))
 		delegatorsRewards := bigutil.Sub(validatorReward, validatorCommission)
 
 		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, validatorCommission)
@@ -1047,6 +1051,9 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	if len(args.VrfKey) != VrfKeyLength {
 		return ErrWrongVrfKey
 	}
+	if MaxCommission < args.Commission {
+		return ErrCommissionOverflow
+	}
 
 	if self.validators.ValidatorExists(&args.Validator) {
 		return ErrExistentValidator
@@ -1131,6 +1138,10 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorIn
 func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args sol.SetCommissionArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrWrongOwnerAcc
+	}
+
+	if MaxCommission < args.Commission {
+		return ErrCommissionOverflow
 	}
 
 	validator := self.validators.GetValidator(&args.Validator)
