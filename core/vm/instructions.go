@@ -381,7 +381,7 @@ func opSAR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opSha3(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
-	data := memory.Get(offset.Int64(), size.Int64())
+	data := memory.GetPtr(offset.Int64(), size.Int64())
 	hash := keccak256.HashAndReturnByValue(data)
 	stack.push(evm.int_pool.get().SetBytes(hash[:]))
 	evm.int_pool.put(offset, size)
@@ -590,11 +590,9 @@ func opPop(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 }
 
 func opMload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	offset := stack.pop()
-	val := evm.int_pool.get().SetBytes(memory.Get(offset.Int64(), 32))
-	stack.push(val)
-
-	evm.int_pool.put(offset)
+	v := stack.peek()
+	offset := v.Int64()
+	v.SetBytes(memory.GetPtr(offset, 32))
 	return nil, nil
 }
 
@@ -679,7 +677,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	var (
 		value        = stack.pop()
 		offset, size = stack.pop(), stack.pop()
-		input        = memory.Get(offset.Int64(), size.Int64())
+		input        = memory.GetCopy(offset.Int64(), size.Int64())
 		gas          = contract.Gas
 	)
 	if evm.rules.IsEIP150 {
@@ -713,7 +711,7 @@ func opCreate2(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 		endowment    = stack.pop()
 		offset, size = stack.pop(), stack.pop()
 		salt         = stack.pop()
-		input        = memory.Get(offset.Int64(), size.Int64())
+		input        = memory.GetCopy(offset.Int64(), size.Int64())
 		gas          = contract.Gas
 	)
 
@@ -744,7 +742,7 @@ func opCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	addr, value, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
 	value = math.U256(value)
 	// Get the arguments from the memory.
-	args := memory.Get(inOffset.Int64(), inSize.Int64())
+	args := memory.GetPtr(inOffset.Int64(), inSize.Int64())
 
 	if value.Sign() != 0 {
 		gas += CallStipend
@@ -772,7 +770,7 @@ func opCallCode(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	addr, value, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
 	value = math.U256(value)
 	// Get arguments from the memory.
-	args := memory.Get(inOffset.Int64(), inSize.Int64())
+	args := memory.GetPtr(inOffset.Int64(), inSize.Int64())
 
 	if value.Sign() != 0 {
 		gas += CallStipend
@@ -799,7 +797,7 @@ func opDelegateCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 	// Pop other call parameters.
 	addr, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
 	// Get arguments from the memory.
-	args := memory.Get(inOffset.Int64(), inSize.Int64())
+	args := memory.GetPtr(inOffset.Int64(), inSize.Int64())
 
 	ret, returnGas, err := evm.call_delegate(contract, evm.get_account(addr), args, gas)
 	if err != nil {
@@ -823,7 +821,7 @@ func opStaticCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 	// Pop other call parameters.
 	addr, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
 	// Get arguments from the memory.
-	args := memory.Get(inOffset.Int64(), inSize.Int64())
+	args := memory.GetPtr(inOffset.Int64(), inSize.Int64())
 
 	ret, returnGas, err := evm.call_static(contract, evm.get_account(addr), args, gas)
 	if err != nil {
@@ -842,7 +840,7 @@ func opStaticCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 
 func opReturn(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
-	ret := memory.Get(offset.Int64(), size.Int64())
+	ret := memory.GetCopy(offset.Int64(), size.Int64())
 
 	evm.int_pool.put(offset, size)
 	return ret, nil
@@ -850,7 +848,7 @@ func opReturn(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 
 func opRevert(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.pop()
-	ret := memory.Get(offset.Int64(), size.Int64())
+	ret := memory.GetPtr(offset.Int64(), size.Int64())
 
 	evm.int_pool.put(offset, size)
 	return ret, nil
@@ -875,7 +873,7 @@ func makeLog(size int) executionFunc {
 		for i := 0; i < size; i++ {
 			topics[i].SetBytes(stack.pop().Bytes())
 		}
-		data := memory.Get(mStart.Int64(), mSize.Int64())
+		data := memory.GetCopy(mStart.Int64(), mSize.Int64())
 		evm.state.AddLog(LogRecord{*contract.Account.Address(), topics, data})
 		evm.int_pool.put(mStart, mSize)
 		return nil, nil
