@@ -6,7 +6,7 @@ require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/dot v1.0.0
-	github.com/linxGnu/grocksdb v1.6.36
+	github.com/linxGnu/grocksdb v1.6.48
 	github.com/otiai10/copy v1.7.0
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.8.0
@@ -23,3 +23,5 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/linxGnu/grocksdb v1.6.48 => github.com/MatusKysel/grocksdb v1.6.48-taraxa
