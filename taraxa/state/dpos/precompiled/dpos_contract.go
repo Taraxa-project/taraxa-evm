@@ -142,6 +142,8 @@ type Contract struct {
 	amount_delegated         *big.Int
 	blocks_per_year          *big.Int
 	yield_percentage         *big.Int
+	dag_proposers_reward     *big.Int
+	max_block_author_reward  *big.Int
 
 	lazy_init_done bool
 }
@@ -278,6 +280,9 @@ func (self *Contract) lazy_init() {
 
 	self.blocks_per_year = big.NewInt(int64(self.cfg.BlocksPerYear))
 	self.yield_percentage = big.NewInt(int64(self.cfg.YieldPercentage))
+
+	self.dag_proposers_reward = big.NewInt(int64(self.cfg.DagProposersReward))
+	self.max_block_author_reward = big.NewInt(int64(self.cfg.MaxBlockAuthorReward))
 
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
@@ -520,12 +525,13 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	dagProposersReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate propotion between votes and transactions
-		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, big.NewInt(int64(self.cfg.DagProposersReward))), big.NewInt(100))
+		// Calculate propotion between votes and transactions\
+
+		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, self.dag_proposers_reward), big.NewInt(100))
 		votesReward = bigutil.Sub(blockReward, dagProposersReward)
 
 		// Calculate bonus reward as part of blockReward multiplied by MaxBlockAuthorReward and subtract it from total votes reward part. As the reward part of Dag defined above and it should not change
-		bonusReward := bigutil.Div(bigutil.Mul(blockReward, big.NewInt(int64(self.cfg.MaxBlockAuthorReward))), big.NewInt(100))
+		bonusReward := bigutil.Div(bigutil.Mul(blockReward, self.max_block_author_reward), big.NewInt(100))
 		votesReward = bigutil.Sub(votesReward, bonusReward)
 
 		// As MaxVotesWeight is just theoretical value we need to have use max of those
