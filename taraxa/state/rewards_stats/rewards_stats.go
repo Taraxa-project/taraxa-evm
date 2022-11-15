@@ -8,7 +8,7 @@ type ValidatorStats struct {
 	// Unique transactions counter -> how many unique txs validator included in his dag blocks
 	// Unique txs is what defines quality of block -> block with 10 unique transactions is 10 times more valuable
 	// than block with single unique transaction.
-	UniqueTrxsCount uint32
+	DagBlocksCount uint32
 
 	// Validator cert voted block weight
 	VoteWeight uint64
@@ -19,7 +19,7 @@ type RewardsStats struct {
 	ValidatorsStats map[common.Address]ValidatorStats
 
 	// Total unique transactions counter
-	TotalUniqueTrxsCount uint32
+	TotalDagBlocksCount uint32
 
 	// Total weight of votes in block
 	TotalVotesWeight uint64

@@ -112,9 +112,6 @@ var (
 	field_amount_delegated    = []byte{5}
 )
 
-// This will split block reward 8:2 (8 - transactions, 2 - votes)
-var TransactionsRewardPercentage = big.NewInt(80)
-
 // State of the rewards distribution algorithm
 type State struct {
 	// represents number of rewards per 1 stake
@@ -145,6 +142,8 @@ type Contract struct {
 	amount_delegated         *big.Int
 	blocks_per_year          *big.Int
 	yield_percentage         *big.Int
+	dag_proposers_reward     *big.Int
+	max_block_author_reward  *big.Int
 
 	lazy_init_done bool
 }
@@ -281,6 +280,9 @@ func (self *Contract) lazy_init() {
 
 	self.blocks_per_year = big.NewInt(int64(self.cfg.BlocksPerYear))
 	self.yield_percentage = big.NewInt(int64(self.cfg.YieldPercentage))
+
+	self.dag_proposers_reward = big.NewInt(int64(self.cfg.DagProposersReward))
+	self.max_block_author_reward = big.NewInt(int64(self.cfg.MaxBlockAuthorReward))
 
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
@@ -520,15 +522,16 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 	votesReward := big.NewInt(0)
 	blockAuthorReward := big.NewInt(0)
-	trxsReward := blockReward
+	dagProposersReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate propotion between votes and transactions
-		trxsReward = bigutil.Div(bigutil.Mul(blockReward, TransactionsRewardPercentage), big.NewInt(100))
-		votesReward = bigutil.Sub(blockReward, trxsReward)
+		// Calculate propotion between votes and transactions\
 
-		// Calculate bonus reward based on MaxBlockAuthorReward and subtract from total votes reward
-		bonusReward := bigutil.Div(bigutil.Mul(votesReward, big.NewInt(int64(self.cfg.MaxBlockAuthorReward))), big.NewInt(100))
+		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, self.dag_proposers_reward), big.NewInt(100))
+		votesReward = bigutil.Sub(blockReward, dagProposersReward)
+
+		// Calculate bonus reward as part of blockReward multiplied by MaxBlockAuthorReward and subtract it from total votes reward part. As the reward part of Dag defined above and it should not change
+		bonusReward := bigutil.Div(bigutil.Mul(blockReward, self.max_block_author_reward), big.NewInt(100))
 		votesReward = bigutil.Sub(votesReward, bonusReward)
 
 		// As MaxVotesWeight is just theoretical value we need to have use max of those
@@ -563,7 +566,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
-	totalUniqueTrxsCountCheck := uint32(0)
+	TotalDagBlocksCountCheck := uint32(0)
 	totalVoteWeightCheck := uint64(0)
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
@@ -571,11 +574,11 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and totalRewardCheck might not pass
 		validatorReward := big.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
-		// Reward for unique transactions
-		if validatorStats.UniqueTrxsCount > 0 {
-			totalUniqueTrxsCountCheck += validatorStats.UniqueTrxsCount
-			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.UniqueTrxsCount)), trxsReward)
-			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalUniqueTrxsCount)))
+		// Reward for DAG blocks with at least one unique transaction
+		if validatorStats.DagBlocksCount > 0 {
+			TotalDagBlocksCountCheck += validatorStats.DagBlocksCount
+			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.DagBlocksCount)), dagProposersReward)
+			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalDagBlocksCount)))
 		}
 
 		// Add reward for voting
@@ -619,8 +622,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	}
 
 	// TODO: debug check - can be deleted for release
-	if totalUniqueTrxsCountCheck != rewardsStats.TotalUniqueTrxsCount {
-		errorString := fmt.Sprintf("TotalUniqueTrxsCount (%d) based on validators stats != rewardsStats.TotalUniqueTrxsCount (%d)", totalUniqueTrxsCountCheck, rewardsStats.TotalUniqueTrxsCount)
+	if TotalDagBlocksCountCheck != rewardsStats.TotalDagBlocksCount {
+		errorString := fmt.Sprintf("TotalDagBlocksCount (%d) based on validators stats != rewardsStats.TotalDagBlocksCount (%d)", TotalDagBlocksCountCheck, rewardsStats.TotalDagBlocksCount)
 		panic(errorString)
 	}
 
