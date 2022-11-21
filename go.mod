@@ -24,4 +24,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/linxGnu/grocksdb v1.6.48 => github.com/MatusKysel/grocksdb v1.6.48-taraxa
+replace github.com/linxGnu/grocksdb v1.6.48 => github.com/Taraxa-project/grocksdb v1.6.48-taraxa
