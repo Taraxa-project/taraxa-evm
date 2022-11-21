@@ -76,10 +76,6 @@ var (
 	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
 
 	DefaultChainCfg = chain_config.ChainConfig{
-		BlockRewardsOptions: chain_config.BlockRewardsOpts{
-			DisableBlockRewards:         false,
-			DisableContractDistribution: false,
-		},
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
 		DPOS: dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
@@ -108,9 +104,6 @@ func init_test(t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, te
 // TODO: fix this
 func CopyDefaultChainConfig() chain_config.ChainConfig {
 	var new_cfg chain_config.ChainConfig
-
-	new_cfg.BlockRewardsOptions.DisableBlockRewards = DefaultChainCfg.BlockRewardsOptions.DisableBlockRewards
-	new_cfg.BlockRewardsOptions.DisableContractDistribution = DefaultChainCfg.BlockRewardsOptions.DisableContractDistribution
 
 	new_cfg.GenesisBalances = make(GenesisBalances)
 	for k, v := range DefaultChainCfg.GenesisBalances {
