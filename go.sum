@@ -1,5 +1,5 @@
-github.com/MatusKysel/grocksdb v1.6.48-taraxa h1:SeD2OpY6z9Bj7m0zJgC4Z3x+zQGCZd3CkVAFlVwbwmY=
-github.com/MatusKysel/grocksdb v1.6.48-taraxa/go.mod h1:JcMMDBFaDNhRXFYcYXmgQwb/RarSld1PulTI7UzE+w0=
+github.com/Taraxa-project/grocksdb v1.6.48-taraxa h1:lhV27xSdIUnI2jn5DQW9m19lMrrIQqvgF65GBRYQWzM=
+github.com/Taraxa-project/grocksdb v1.6.48-taraxa/go.mod h1:JcMMDBFaDNhRXFYcYXmgQwb/RarSld1PulTI7UzE+w0=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/btcsuite/btcd v0.20.1-beta h1:Ik4hyJqN8Jfyv3S4AGBOmyouMsYE3EdYODkMbQjwPGw=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
