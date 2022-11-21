@@ -33,8 +33,8 @@ func taraxa_evm_keccak256_init_pool(size C.uint64_t) {
 	keccak256.InitPool(uint64(size))
 }
 
-//export taraxa_evm_mainnet_genesis_balances
-func taraxa_evm_mainnet_genesis_balances() C.taraxa_evm_Bytes {
+//export taraxa_evm_mainnet_initial_balances
+func taraxa_evm_mainnet_initial_balances() C.taraxa_evm_Bytes {
 	return go_bytes_to_c(bin.BytesView(core.MainnetAllocData))
 }
 

@@ -81,7 +81,7 @@ var (
 			DisableContractDistribution: false,
 		},
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: &dpos.Config{
+		DPOS: dpos.Config{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -117,7 +117,6 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 		new_cfg.GenesisBalances[k] = v
 	}
 
-	new_cfg.DPOS = new(dpos.Config)
 	new_cfg.DPOS.MaxBlockAuthorReward = DefaultChainCfg.DPOS.MaxBlockAuthorReward
 	new_cfg.DPOS.DagProposersReward = DefaultChainCfg.DPOS.DagProposersReward
 	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta

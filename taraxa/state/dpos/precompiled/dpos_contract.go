@@ -525,8 +525,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	dagProposersReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate propotion between votes and transactions\
-
+		// Calculate propotion between votes and transactions
 		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, self.dag_proposers_reward), big.NewInt(100))
 		votesReward = bigutil.Sub(blockReward, dagProposersReward)
 
