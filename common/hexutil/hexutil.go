@@ -223,6 +223,7 @@ func mapError(err error) error {
 			return ErrUint64Range
 		case strconv.ErrSyntax:
 			return ErrSyntax
+		default:
 		}
 	}
 	if _, ok := err.(hex.InvalidByteError); ok {
