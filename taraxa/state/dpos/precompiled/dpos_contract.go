@@ -239,6 +239,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
 		return undelegations_count * DposBatchGetMethodsGas
+	default:
 	}
 
 	return DefaultDposMethodGas
@@ -496,6 +497,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegations(args))
+	default:
 	}
 
 	return nil, nil

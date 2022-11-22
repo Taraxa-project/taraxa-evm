@@ -194,6 +194,7 @@ func (self *Writer) mpt_insert(db_tx Input, n node, keypos int, value value_node
 		return self.mpt_insert(db_tx, self.resolve(db_tx, n, self.kbuf_0[:keypos]), keypos, value)
 	case nil:
 		return &short_node{key_part: common.CopyBytes(self.kbuf_0[keypos:]), val: value}
+	default:
 	}
 	panic("impossible")
 }
@@ -254,6 +255,7 @@ func (self *Writer) mpt_del(db_tx Input, n node, keypos int) node {
 		return self.mpt_del(db_tx, self.resolve(db_tx, n, self.kbuf_0[:keypos]), keypos)
 	case nil:
 		panic(mpt_del_not_found)
+	default:
 	}
 	panic("impossible")
 }

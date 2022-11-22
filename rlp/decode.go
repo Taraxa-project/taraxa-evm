@@ -446,6 +446,7 @@ func decodeByteArray(s *Stream, val reflect.Value) error {
 		}
 	case List:
 		return wrapStreamError(ErrExpectedString, val.Type())
+	default:
 	}
 	return nil
 }
