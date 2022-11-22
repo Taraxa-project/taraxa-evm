@@ -4,7 +4,6 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
@@ -124,20 +123,12 @@ func (self *StateTransition) GetEvmState() *state_evm.EVMState {
 }
 
 func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
-	if !self.chain_config.BlockRewardsOptions.DisableBlockRewards {
+	if self.chain_config.RewardsEnabled() && rewardsStats != nil && feesRewards != nil {
 		evm_block := self.evm.GetBlock()
-		if self.chain_config.BlockRewardsOptions.DisableContractDistribution {
-			ethash.AccumulateRewards(
-				self.evm.GetRules(),
-				ethash.BlockNumAndCoinbase{evm_block.Number, evm_block.Author},
-				uncles,
-				&self.evm_state)
-		} else if rewardsStats != nil && feesRewards != nil {
-			if self.dpos_contract == nil {
-				panic("Stats rewards enabled but no dpos contract registered")
-			}
-			self.dpos_contract.DistributeRewards(&evm_block.Author, rewardsStats, feesRewards)
+		if self.dpos_contract == nil {
+			panic("Stats rewards enabled but no dpos contract registered")
 		}
+		self.dpos_contract.DistributeRewards(&evm_block.Author, rewardsStats, feesRewards)
 		self.evm_state_checkpoint()
 	}
 	self.LastBlockNum = self.evm.GetBlock().Number

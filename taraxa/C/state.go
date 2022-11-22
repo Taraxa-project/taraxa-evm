@@ -221,7 +221,7 @@ func taraxa_evm_state_api_transition_state(
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
 
-	disabled_contract_distribution := st.GetChainConfig().BlockRewardsOptions.DisableContractDistribution
+	disabled_contract_distribution := st.GetChainConfig().RewardsEnabled()
 	if !disabled_contract_distribution && len(params.Txs) != len(params.TxsValidators) {
 		errorString := fmt.Sprintf("Number of txs (%d) != number of txs validators (%d)", len(params.Txs), len(params.TxsValidators))
 		panic(errorString)

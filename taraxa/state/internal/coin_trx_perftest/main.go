@@ -112,10 +112,6 @@ func main() {
 			db,
 			func(num types.BlockNum) *big.Int { panic("unexpected") },
 			&chain_config.ChainConfig{
-				BlockRewardsOptions: chain_config.BlockRewardsOpts{
-					DisableBlockRewards:         true,
-					DisableContractDistribution: true,
-				},
 				GenesisBalances: core.BalanceMap{
 					tests.Addr(1): root_genesis_bal,
 				},

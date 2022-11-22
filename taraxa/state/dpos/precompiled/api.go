@@ -84,10 +84,6 @@ func (self *API) Init(cfg Config) *API {
 	num_1e38.SetString("4B3B4CA85A86C47A098A224000000000", 16) // 10^38
 	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(num_1e38) == -1)
 
-	// Both YieldPercentage & BlocksPerYear must be > 0 due to possible division by 0
-	asserts.Holds(cfg.YieldPercentage > 0)
-	asserts.Holds(cfg.BlocksPerYear > 0)
-
 	//MaxBlockAuthorReward is in %
 	asserts.Holds(cfg.MaxBlockAuthorReward <= 100)
 
