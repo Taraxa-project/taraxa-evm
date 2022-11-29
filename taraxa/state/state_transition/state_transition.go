@@ -50,9 +50,6 @@ func (self *StateTransition) Init(
 	self.get_reader = get_reader
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
-		U256PoolSize:           32 * vm.StackLimit,
-		NumStacksToPreallocate: vm.StackLimit,
-		PreallocatedStackSize:  vm.StackLimit,
 		PreallocatedMem:        8 * 1024 * 1024,
 	})
 	state_desc := state.GetCommittedDescriptor()

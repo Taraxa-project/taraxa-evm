@@ -22,9 +22,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
-
+	"github.com/holiman/uint256"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -32,8 +30,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
-
-// TODO OF TODOS: migrate away from big.Int to a fixed u256 library
 
 // EVM is the Ethereum Virtual Machine base object and provides
 // the necessary tools to run a contract on the given state with
@@ -54,9 +50,7 @@ type EVM struct {
 	trx               *Transaction
 	depth             uint16
 	// tech stuff
-	preallocated_stacks []Stack
 	mem_pool            MemoryPool
-	int_pool            int_pool
 	bigconv             bigconv.BigConv
 	jumpdests           map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
 	// call_gas_tmp holds the gas available for the current call. This is needed because the
@@ -67,9 +61,6 @@ type EVM struct {
 	last_retval  []byte // Last CALL's return data for subsequent reuse
 }
 type Opts = struct {
-	U256PoolSize           uint32
-	NumStacksToPreallocate uint16
-	PreallocatedStackSize  uint16
 	PreallocatedMem        uint64
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
@@ -105,16 +96,9 @@ type ExecutionResult struct {
 }
 
 func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
-	asserts.Holds(opts.NumStacksToPreallocate <= StackLimit)
-	asserts.Holds(opts.PreallocatedStackSize <= StackLimit)
 	self.get_hash = get_hash
 	self.state = state
 	self.mem_pool.Init(opts.PreallocatedMem)
-	self.int_pool.Init(int(opts.U256PoolSize))
-	self.preallocated_stacks = make([]Stack, opts.NumStacksToPreallocate)
-	for i := range self.preallocated_stacks {
-		self.preallocated_stacks[i].Init(int(opts.PreallocatedStackSize))
-	}
 	return self
 }
 
@@ -435,15 +419,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 	var mem Memory
 	mem.Init(&self.mem_pool)
 	defer mem.Release()
-	var stack *Stack
-	if self.depth < uint16(len(self.preallocated_stacks)) {
-		stack = &self.preallocated_stacks[self.depth]
-		defer stack.reset()
-	} else {
-		stack = new(Stack).Init(StackLimit)
-	}
-	// Reclaim the stack as an int pool when the execution stops
-	defer func() { self.int_pool.put(stack.data...) }()
+	stack := newstack()
 	// Increment the call depth which is restricted to 1024
 	self.depth++
 	defer func() { self.depth-- }()
@@ -497,7 +473,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		// calculate the new memory size and expand the memory to fit
 		// the operation
 		if operation.memorySize != nil {
-			memSize, overflow := bigUint64(operation.memorySize(stack))
+			memSize, overflow := operation.memorySize(stack).Uint64WithOverflow()
 			if overflow {
 				return nil, errGasUintOverflow
 			}
@@ -557,6 +533,7 @@ func (self *EVM) transfer(from, to StateAccount, amount *big.Int) {
 	to.AddBalance(amount)
 }
 
-func (self *EVM) get_account(addr_as_big *big.Int) StateAccount {
-	return self.state.GetAccount(self.bigconv.ToAddr(addr_as_big))
+func (self *EVM) get_account(addr_as_u256 *uint256.Int) StateAccount {
+	address := common.Address(addr_as_u256.Bytes20())
+	return self.state.GetAccount(&address)
 }

@@ -2,11 +2,9 @@ package vm
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
-
-	"github.com/Taraxa-project/taraxa-evm/common/math"
+	"github.com/holiman/uint256"
 )
 
 type MemoryPool struct {
@@ -65,16 +63,16 @@ func (m *Memory) Set(offset, size uint64, value []byte) {
 
 // Set32 sets the 32 bytes starting at offset to the value of val, left-padded with zeroes to
 // 32 bytes.
-func (m *Memory) Set32(offset uint64, val *big.Int) {
+func (m *Memory) Set32(offset uint64, val *uint256.Int) {
 	// length of store may never be less than offset + size.
 	// The store should be resized PRIOR to setting the memory
 	end := offset + 32
 	if end > m.Len() {
 		panic("invalid memory: store empty")
 	}
-	chunk := m.store[offset:end]
 	// Fill in relevant bits, zero the memory area
-	bin.ZFill_1(chunk[:math.ReadBits(val, chunk)])
+	bin.ZFill_1(m.store[offset:end])
+	val.WriteToSlice(m.store[offset:])
 }
 
 // Resize resizes the memory to size

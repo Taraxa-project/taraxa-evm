@@ -40,3 +40,4 @@ func makeDupStackFunc(n int) stackValidationFunc {
 func makeSwapStackFunc(n int) stackValidationFunc {
 	return makeStackFunc(n, n)
 }
+	

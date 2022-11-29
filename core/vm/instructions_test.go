@@ -18,21 +18,17 @@ package vm
 
 import (
 	"bytes"
-	"math/big"
 	"testing"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/holiman/uint256"
 )
 
 type twoOperandTest struct {
 	x        string
 	y        string
 	expected string
-}
-
-func newstack() *Stack {
-	return new(Stack).Init(0)
 }
 
 func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error)) {
@@ -42,36 +38,59 @@ func testTwoOperandOp(t *testing.T, tests []twoOperandTest, opFn func(pc *uint64
 		pc    = uint64(0)
 	)
 
-	evm.int_pool.Init(StackLimit)
 	for i, test := range tests {
-		x := new(big.Int).SetBytes(common.Hex2Bytes(test.x))
-		shift := new(big.Int).SetBytes(common.Hex2Bytes(test.y))
-		expected := new(big.Int).SetBytes(common.Hex2Bytes(test.expected))
+		x := new(uint256.Int).SetBytes(common.Hex2Bytes(test.x))
+		y := new(uint256.Int).SetBytes(common.Hex2Bytes(test.y))
+		expected := new(uint256.Int).SetBytes(common.Hex2Bytes(test.expected))
 		stack.push(x)
-		stack.push(shift)
+		stack.push(y)
 		opFn(&pc, &evm, nil, nil, stack)
+		if len(stack.data) != 1 {
+			t.Errorf("Expected one item on stack got %d: ", len(stack.data))
+		}
 		actual := stack.pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %v, got %v", i, expected, actual)
 		}
-		// Check pool usage
-		// 1.pool is not allowed to contain anything on the stack
-		// 2.pool is not allowed to contain the same pointers twice
-		if evm.int_pool.pool.len() > 0 {
-
-			poolvals := make(map[*big.Int]struct{})
-			poolvals[actual] = struct{}{}
-
-			for evm.int_pool.pool.len() > 0 {
-				key := evm.int_pool.get()
-				if _, exist := poolvals[key]; exist {
-					t.Errorf("Testcase %d, pool contains double-entry", i)
-				}
-				poolvals[key] = struct{}{}
-			}
-		}
 	}
 
+}
+
+func TestAddMod(t *testing.T) {
+	var (
+		evm   EVM
+		stack = newstack()
+		pc             = uint64(0)
+	)
+	tests := []struct {
+		x        string
+		y        string
+		z        string
+		expected string
+	}{
+		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+			"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+		},
+	}
+	// x + y = 0x1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd
+	// in 256 bit repr, fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd
+
+	for i, test := range tests {
+		x := new(uint256.Int).SetBytes(common.Hex2Bytes(test.x))
+		y := new(uint256.Int).SetBytes(common.Hex2Bytes(test.y))
+		z := new(uint256.Int).SetBytes(common.Hex2Bytes(test.z))
+		expected := new(uint256.Int).SetBytes(common.Hex2Bytes(test.expected))
+		stack.push(z)
+		stack.push(y)
+		stack.push(x)
+		opAddmod(&pc, &evm, nil, nil, stack)
+		actual := stack.pop()
+		if actual.Cmp(expected) != 0 {
+			t.Errorf("Testcase %d, expected  %x, got %x", i, expected, actual)
+		}
+	}
 }
 
 func TestByteOp(t *testing.T) {
@@ -79,26 +98,24 @@ func TestByteOp(t *testing.T) {
 		evm   EVM
 		stack = newstack()
 	)
-
-	evm.int_pool.Init(StackLimit)
 	tests := []struct {
 		v        string
 		th       uint64
-		expected *big.Int
+		expected *uint256.Int
 	}{
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 0, big.NewInt(0xAB)},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 1, big.NewInt(0xCD)},
-		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 0, big.NewInt(0x00)},
-		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 1, big.NewInt(0xCD)},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 31, big.NewInt(0x30)},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 30, big.NewInt(0x20)},
-		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 32, big.NewInt(0x0)},
-		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0xFFFFFFFFFFFFFFFF, big.NewInt(0x0)},
+		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 0, new(uint256.Int).SetUint64(0xAB)},
+		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 1, new(uint256.Int).SetUint64(0xCD)},
+		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 0, new(uint256.Int).SetUint64(0x00)},
+		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 1, new(uint256.Int).SetUint64(0xCD)},
+		{"0000000000000000000000000000000000000000000000000000000000102030", 31, new(uint256.Int).SetUint64(0x30)},
+		{"0000000000000000000000000000000000000000000000000000000000102030", 30, new(uint256.Int).SetUint64(0x20)},
+		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 32, new(uint256.Int).SetUint64(0x0)},
+		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0xFFFFFFFFFFFFFFFF, new(uint256.Int).SetUint64(0x0)},
 	}
 	pc := uint64(0)
 	for _, test := range tests {
-		val := new(big.Int).SetBytes(common.Hex2Bytes(test.v))
-		th := new(big.Int).SetUint64(test.th)
+		val := new(uint256.Int).SetBytes(common.Hex2Bytes(test.v))
+		th := new(uint256.Int).SetUint64(test.th)
 		stack.push(val)
 		stack.push(th)
 		opByte(&pc, &evm, nil, nil, stack)
@@ -212,8 +229,6 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contrac
 		evm   EVM
 		stack = newstack()
 	)
-
-	evm.int_pool.Init(StackLimit)
 	// convert args
 	byteArgs := make([][]byte, len(args))
 	for i, arg := range args {
@@ -223,7 +238,7 @@ func opBenchmark(bench *testing.B, op func(pc *uint64, interpreter *EVM, contrac
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		for _, arg := range byteArgs {
-			a := new(big.Int).SetBytes(arg)
+			a := new(uint256.Int).SetBytes(arg)
 			stack.push(a)
 		}
 		op(&pc, &evm, nil, nil, stack)
@@ -451,16 +466,15 @@ func TestOpMstore(t *testing.T) {
 		mem   = NewMemory()
 	)
 
-	evm.int_pool.Init(StackLimit)
 	mem.Resize(64)
 	pc := uint64(0)
 	v := "abcdef00000000000000abba000000000deaf000000c0de00100000000133700"
-	stack.pushN(new(big.Int).SetBytes(common.Hex2Bytes(v)), big.NewInt(0))
+	stack.pushN(*new(uint256.Int).SetBytes(common.Hex2Bytes(v)), *new(uint256.Int))
 	opMstore(&pc, &evm, nil, mem, stack)
 	if got := common.Bytes2Hex(mem.GetCopy(0, 32)); got != v {
 		t.Fatalf("Mstore fail, got %v, expected %v", got, v)
 	}
-	stack.pushN(big.NewInt(0x1), big.NewInt(0))
+	stack.pushN(*new(uint256.Int).SetUint64(0x1), *new(uint256.Int))
 	opMstore(&pc, &evm, nil, mem, stack)
 	if common.Bytes2Hex(mem.GetCopy(0, 32)) != "0000000000000000000000000000000000000000000000000000000000000001" {
 		t.Fatalf("Mstore failed to overwrite previous value")
@@ -474,16 +488,14 @@ func BenchmarkOpMstore(bench *testing.B) {
 		stack = newstack()
 		mem   = NewMemory()
 	)
-
-	evm.int_pool.Init(StackLimit)
 	mem.Resize(64)
 	pc := uint64(0)
-	memStart := big.NewInt(0)
-	value := big.NewInt(0x1337)
+	memStart := new(uint256.Int)
+	value := new(uint256.Int).SetUint64(0x1337)
 
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
-		stack.pushN(value, memStart)
+		stack.pushN(*value, *memStart)
 		opMstore(&pc, &evm, nil, mem, stack)
 	}
 
@@ -495,14 +507,13 @@ func BenchmarkOpSHA3(bench *testing.B) {
 		stack = newstack()
 		mem   = NewMemory()
 	)
-	evm.int_pool.Init(StackLimit)
 	mem.Resize(32)
 	pc := uint64(0)
-	start := big.NewInt(0)
+	start := new(uint256.Int)
 
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
-		stack.pushN(big.NewInt(32), start)
+		stack.pushN(*new(uint256.Int).SetUint64(32), *start)
 		opSha3(&pc, &evm, nil, mem, stack)
 	}
 

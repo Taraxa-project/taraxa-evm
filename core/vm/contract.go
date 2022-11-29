@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/holiman/uint256"
 )
 
 // Contract represents an ethereum contract in the state database. It contains
@@ -57,14 +58,11 @@ func (self *Contract) GetCode() []byte {
 }
 
 // TODO optimize and refactor
-func (self *Contract) ValidJumpdest(evm *EVM, dest *big.Int) bool {
+func (self *Contract) ValidJumpdest(evm *EVM, dest *uint256.Int) bool {
 	// PC cannot go beyond len(code) and certainly can't be bigger than 63bits.
 	// Don't bother checking for JUMPDEST in that case.
-	if !dest.IsUint64() {
-		return false
-	}
-	udest := dest.Uint64()
-	if self.GetOp(udest) != JUMPDEST {
+	udest, overflow := dest.Uint64WithOverflow()
+	if overflow || self.GetOp(udest) != JUMPDEST {
 		return false
 	}
 	analysis := self.code_jumpdest_analysis
