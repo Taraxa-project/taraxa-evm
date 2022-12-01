@@ -17,9 +17,8 @@
 package vm
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common/math"
+	"github.com/holiman/uint256"
 )
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
@@ -69,7 +68,7 @@ const (
 //
 // The cost of gas was changed during the homestead price change HF. To allow for EIP150
 // to be implemented. The returned gas is gas - base * 63 / 64.
-func callGas(gasTable GasTable, availableGas, base uint64, callCost *big.Int) (uint64, error) {
+func callGas(gasTable GasTable, availableGas, base uint64, callCost *uint256.Int) (uint64, error) {
 	if gasTable.CreateBySuicide > 0 {
 		availableGas = availableGas - base
 		gas := availableGas - availableGas/64
@@ -139,7 +138,7 @@ func gasCallDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, me
 		return 0, errGasUintOverflow
 	}
 
-	words, overflow := bigUint64(stack.Back(2))
+	words, overflow := stack.Back(2).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -165,7 +164,7 @@ func gasReturnDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, 
 		return 0, errGasUintOverflow
 	}
 
-	words, overflow := bigUint64(stack.Back(2))
+	words, overflow := stack.Back(2).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -183,7 +182,9 @@ func gasReturnDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, 
 func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
 		y, x    = stack.Back(1), stack.Back(0)
-		current = contract.Account.GetState(x)
+		y_big   = y.ToBig()
+		x_big   = x.ToBig()
+		current = contract.Account.GetState(x_big)
 	)
 	// The legacy gas metering only takes into consideration the current state
 	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
@@ -218,10 +219,10 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	// 	  2.2.2. If original value equals new value (this storage slot is reset)
 	//       2.2.2.1. If original value is 0, add 19800 gas to refund counter.
 	// 	     2.2.2.2. Otherwise, add 4800 gas to refund counter.
-	if current.Cmp(y) == 0 { // noop (1)
+	if current.Cmp(y_big) == 0 { // noop (1)
 		return NetSstoreNoopGas, nil
 	}
-	original := contract.Account.GetCommittedState(x)
+	original := contract.Account.GetCommittedState(x_big)
 	if original.Cmp(current) == 0 {
 		if original.Sign() == 0 { // create slot (2.1.1)
 			return NetSstoreInitGas, nil
@@ -238,7 +239,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 			evm.state.AddRefund(NetSstoreClearRefund)
 		}
 	}
-	if original.Cmp(y) == 0 {
+	if original.Cmp(y_big) == 0 {
 		if original.Sign() == 0 { // reset to original inexistent slot (2.2.2.1)
 			evm.state.AddRefund(NetSstoreResetClearRefund)
 		} else { // reset to original existing slot (2.2.2.2)
@@ -250,7 +251,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 
 func makeGasLog(n uint64) gasFunc {
 	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-		requestedSize, overflow := bigUint64(stack.Back(1))
+		requestedSize, overflow := stack.Back(1).Uint64WithOverflow()
 		if overflow {
 			return 0, errGasUintOverflow
 		}
@@ -289,7 +290,7 @@ func gasSha3(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 		return 0, errGasUintOverflow
 	}
 
-	wordGas, overflow := bigUint64(stack.Back(1))
+	wordGas, overflow := stack.Back(1).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -313,7 +314,7 @@ func gasCodeCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memory
 		return 0, errGasUintOverflow
 	}
 
-	wordGas, overflow := bigUint64(stack.Back(2))
+	wordGas, overflow := stack.Back(2).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -337,7 +338,7 @@ func gasExtCodeCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, mem
 		return 0, errGasUintOverflow
 	}
 
-	wordGas, overflow := bigUint64(stack.Back(3))
+	wordGas, overflow := stack.Back(3).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -413,7 +414,7 @@ func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	if gas, overflow = math.SafeAdd(gas, Create2Gas); overflow {
 		return 0, errGasUintOverflow
 	}
-	wordGas, overflow := bigUint64(stack.Back(2))
+	wordGas, overflow := stack.Back(2).Uint64WithOverflow()
 	if overflow {
 		return 0, errGasUintOverflow
 	}
@@ -455,7 +456,7 @@ func gasExp(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize 
 func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
 		gas            = evm.gas_table.Calls
-		transfersValue = stack.Back(2).Sign() != 0
+		transfersValue = !stack.Back(2).IsZero()
 		acc            = evm.get_account(stack.Back(1))
 	)
 	if evm.rules.IsEIP158 {

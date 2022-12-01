@@ -18,7 +18,8 @@ package vm
 
 import (
 	"errors"
-	"math/big"
+	
+	"github.com/holiman/uint256"
 )
 
 type InstructionSet = [256]operation
@@ -28,7 +29,7 @@ type (
 	executionFunc       func(*program_counter, *EVM, *Contract, *Memory, *Stack) ([]byte, error)
 	gasFunc             func(*EVM, *Contract, *Stack, *Memory, uint64) (uint64, error) // last parameter is the requested memory size as a uint64
 	stackValidationFunc func(*Stack) error
-	memorySizeFunc      func(*Stack) *big.Int
+	memorySizeFunc      func(*Stack) *uint256.Int
 )
 
 var errGasUintOverflow = errors.New("gas uint64 overflow")

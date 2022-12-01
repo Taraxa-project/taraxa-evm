@@ -17,81 +17,87 @@
 package vm
 
 import (
-	"math/big"
-
-	"github.com/Taraxa-project/taraxa-evm/common/math"
+	"github.com/holiman/uint256"
 )
 
-func memorySha3(stack *Stack) *big.Int {
+func memorySha3(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryCallDataCopy(stack *Stack) *big.Int {
+func memoryCallDataCopy(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryReturnDataCopy(stack *Stack) *big.Int {
+func memoryReturnDataCopy(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryCodeCopy(stack *Stack) *big.Int {
+func memoryCodeCopy(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(2))
 }
 
-func memoryExtCodeCopy(stack *Stack) *big.Int {
+func memoryExtCodeCopy(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(1), stack.Back(3))
 }
 
-func memoryMLoad(stack *Stack) *big.Int {
-	return calcMemSize(stack.Back(0), big.NewInt(32))
+func memoryMLoad(stack *Stack) *uint256.Int {
+	return calcMemSize(stack.Back(0), uint256.NewInt(32))
 }
 
-func memoryMStore8(stack *Stack) *big.Int {
-	return calcMemSize(stack.Back(0), big.NewInt(1))
+func memoryMStore8(stack *Stack) *uint256.Int {
+	return calcMemSize(stack.Back(0), uint256.NewInt(1))
 }
 
-func memoryMStore(stack *Stack) *big.Int {
-	return calcMemSize(stack.Back(0), big.NewInt(32))
+func memoryMStore(stack *Stack) *uint256.Int {
+	return calcMemSize(stack.Back(0), uint256.NewInt(32))
 }
 
-func memoryCreate(stack *Stack) *big.Int {
+func memoryCreate(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(1), stack.Back(2))
 }
 
-func memoryCreate2(stack *Stack) *big.Int {
+func memoryCreate2(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(1), stack.Back(2))
 }
 
-func memoryCall(stack *Stack) *big.Int {
+func memoryCall(stack *Stack) *uint256.Int {
 	x := calcMemSize(stack.Back(5), stack.Back(6))
 	y := calcMemSize(stack.Back(3), stack.Back(4))
 
-	return math.BigMax(x, y)
+	return bigMax(x, y)
 }
 
-func memoryDelegateCall(stack *Stack) *big.Int {
+func memoryDelegateCall(stack *Stack) *uint256.Int {
 	x := calcMemSize(stack.Back(4), stack.Back(5))
 	y := calcMemSize(stack.Back(2), stack.Back(3))
 
-	return math.BigMax(x, y)
+	return bigMax(x, y)
 }
 
-func memoryStaticCall(stack *Stack) *big.Int {
+func memoryStaticCall(stack *Stack) *uint256.Int {
 	x := calcMemSize(stack.Back(4), stack.Back(5))
 	y := calcMemSize(stack.Back(2), stack.Back(3))
 
-	return math.BigMax(x, y)
+	return bigMax(x, y)
 }
 
-func memoryReturn(stack *Stack) *big.Int {
+func memoryReturn(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryRevert(stack *Stack) *big.Int {
+func memoryRevert(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
-func memoryLog(stack *Stack) *big.Int {
+func memoryLog(stack *Stack) *uint256.Int {
 	mSize, mStart := stack.Back(1), stack.Back(0)
 	return calcMemSize(mStart, mSize)
+}
+
+// BigMax returns the larger of x or y.
+func bigMax(x, y *uint256.Int) *uint256.Int {
+	if x.Lt(y) {
+		return y
+	}
+	return x
 }
