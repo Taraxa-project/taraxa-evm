@@ -15,6 +15,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"github.com/holiman/uint256"
 )
 
 func TestProof(t *testing.T) {
@@ -332,13 +333,14 @@ func TestRewardsAndCommission(t *testing.T) {
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.DagBlocksCount = 8
 	validator1_stats.VoteWeight = 1
-	initValidatorTrxsStats(validator1_addr, &fees_rewards, trxFee, validator1_stats.DagBlocksCount)
+	f, _ := uint256.FromBig(trxFee)
+	initValidatorTrxsStats(validator1_addr, &fees_rewards, f, validator1_stats.DagBlocksCount)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.DagBlocksCount = 32
 	validator2_stats.VoteWeight = 5
-	initValidatorTrxsStats(validator2_addr, &fees_rewards, trxFee, validator2_stats.DagBlocksCount)
+	initValidatorTrxsStats(validator2_addr, &fees_rewards, f, validator2_stats.DagBlocksCount)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
 	validator4_stats := rewards_stats.ValidatorStats{}

@@ -1,8 +1,6 @@
 package state_transition
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -14,6 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/holiman/uint256"
 )
 
 type StateTransition struct {
@@ -156,6 +155,6 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	return
 }
 
-func (self *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *big.Int) {
-	self.evm_state.GetAccount(account).AddBalance(tx_fee)
+func (self *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int) {
+	self.evm_state.GetAccount(account).AddBalance(tx_fee.ToBig())
 }

@@ -1,35 +1,33 @@
 package dpos
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/holiman/uint256"
 )
 
 type FeesRewards struct {
-	feesRewards map[common.Address]*big.Int
+	feesRewards map[common.Address]*uint256.Int
 }
 
 func (self *FeesRewards) Init() {
-	self.feesRewards = make(map[common.Address]*big.Int)
+	self.feesRewards = make(map[common.Address]*uint256.Int)
 }
 
-func (self *FeesRewards) AddTrxFeeReward(account common.Address, reward *big.Int) {
+func (self *FeesRewards) AddTrxFeeReward(account common.Address, reward *uint256.Int) {
 	feesReward, feesRewardExists := self.feesRewards[account]
 	if feesRewardExists {
-		self.feesRewards[account] = bigutil.Add(feesReward, reward)
+		self.feesRewards[account].Add(feesReward, reward)
 	} else {
 		self.feesRewards[account] = reward
 	}
 }
 
-func (self *FeesRewards) GetTrxsFeesReward(account common.Address) *big.Int {
+func (self *FeesRewards) GetTrxsFeesReward(account common.Address) *uint256.Int {
 	feesReward, feeRewardExists := self.feesRewards[account]
 	if feeRewardExists {
 		return feesReward
 	} else {
-		return big.NewInt(0)
+		return uint256.NewInt(0)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -86,7 +87,7 @@ const (
 	MaxDescriptionLength = 100
 
 	// Maximal commission  [%] * 100 so 1% is 100 & 100% is 10000
-	MaxCommission = 10000
+	MaxCommission = uint64(10000)
 
 	// Length of vrf public key
 	VrfKeyLength = 32
@@ -138,12 +139,12 @@ type Contract struct {
 	// values for PBFT
 	eligible_vote_count_orig uint64
 	eligible_vote_count      uint64
-	amount_delegated_orig    *big.Int
-	amount_delegated         *big.Int
-	blocks_per_year          *big.Int
-	yield_percentage         *big.Int
-	dag_proposers_reward     *big.Int
-	max_block_author_reward  *big.Int
+	amount_delegated_orig    *uint256.Int
+	amount_delegated         *uint256.Int
+	blocks_per_year          *uint256.Int
+	yield_percentage         *uint256.Int
+	dag_proposers_reward     *uint256.Int
+	max_block_author_reward  *uint256.Int
 
 	lazy_init_done bool
 }
@@ -279,20 +280,20 @@ func (self *Contract) lazy_init() {
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
 
-	self.blocks_per_year = big.NewInt(int64(self.cfg.BlocksPerYear))
-	self.yield_percentage = big.NewInt(int64(self.cfg.YieldPercentage))
+	self.blocks_per_year = uint256.NewInt(uint64(self.cfg.BlocksPerYear))
+	self.yield_percentage = uint256.NewInt(uint64(self.cfg.YieldPercentage))
 
-	self.dag_proposers_reward = big.NewInt(int64(self.cfg.DagProposersReward))
-	self.max_block_author_reward = big.NewInt(int64(self.cfg.MaxBlockAuthorReward))
+	self.dag_proposers_reward = uint256.NewInt(uint64(self.cfg.DagProposersReward))
+	self.max_block_author_reward = uint256.NewInt(uint64(self.cfg.MaxBlockAuthorReward))
 
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_vote_count = self.eligible_vote_count_orig
 
-	self.amount_delegated_orig = big.NewInt(0)
+	self.amount_delegated_orig = uint256.NewInt(0)
 	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
-		self.amount_delegated_orig = bigutil.FromBytes(bytes)
+		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig
 
@@ -519,21 +520,21 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	self.lazy_init()
 
 	// Calculates number of tokens to be generated as block reward
-	blockReward := bigutil.Mul(self.amount_delegated, self.yield_percentage)
-	blockReward = bigutil.Div(blockReward, bigutil.Mul(big.NewInt(100), self.blocks_per_year))
+	blockReward := new(uint256.Int).Mul(self.amount_delegated, self.yield_percentage)
+	blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
 
-	votesReward := big.NewInt(0)
-	blockAuthorReward := big.NewInt(0)
+	votesReward := uint256.NewInt(0)
+	blockAuthorReward := uint256.NewInt(0)
 	dagProposersReward := blockReward
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions
-		dagProposersReward = bigutil.Div(bigutil.Mul(blockReward, self.dag_proposers_reward), big.NewInt(100))
-		votesReward = bigutil.Sub(blockReward, dagProposersReward)
+		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
+		votesReward.Sub(blockReward, dagProposersReward)
 
 		// Calculate bonus reward as part of blockReward multiplied by MaxBlockAuthorReward and subtract it from total votes reward part. As the reward part of Dag defined above and it should not change
-		bonusReward := bigutil.Div(bigutil.Mul(blockReward, self.max_block_author_reward), big.NewInt(100))
-		votesReward = bigutil.Sub(votesReward, bonusReward)
+		bonusReward := new(uint256.Int).Div(new(uint256.Int).Mul(blockReward, self.max_block_author_reward), uint256.NewInt(100))
+		votesReward.Sub(votesReward, bonusReward)
 
 		// As MaxVotesWeight is just theoretical value we need to have use max of those
 		maxVotesWeigh := Max(rewardsStats.MaxVotesWeight, rewardsStats.TotalVotesWeight)
@@ -545,25 +546,25 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 			twoTPlusOne := maxVotesWeigh*2/3 + 1
 			bonusVotesWeight := rewardsStats.TotalVotesWeight - twoTPlusOne
 			// should be zero if rewardsStats.TotalVotesWeight == twoTPlusOne
-			blockAuthorReward = bigutil.Div(bigutil.Mul(bonusReward, big.NewInt(int64(bonusVotesWeight))), big.NewInt(int64(maxVotesWeigh-twoTPlusOne)))
+			blockAuthorReward.Div(new(uint256.Int).Mul(bonusReward, uint256.NewInt(uint64(bonusVotesWeight))), uint256.NewInt(uint64(maxVotesWeigh-twoTPlusOne)))
 		}
 	}
 
-	totalRewardCheck := big.NewInt(0)
+	totalRewardCheck := uint256.NewInt(0)
 	// Add reward to the block author for additional included votes
-	if blockAuthorReward.Cmp(big.NewInt(0)) == 1 {
+	if blockAuthorReward.Cmp(uint256.NewInt(0)) == 1 {
 		block_author := self.validators.GetValidator(blockAuthorAddr)
 		if block_author == nil {
 			panic("DistributeRewards - non existent block author")
 		}
 
-		commission := bigutil.Div(bigutil.Mul(blockAuthorReward, big.NewInt(int64(block_author.Commission))), big.NewInt(MaxCommission))
-		delegatorsRewards := bigutil.Sub(blockAuthorReward, commission)
+		commission := new(uint256.Int).Div(new(uint256.Int).Mul(blockAuthorReward, uint256.NewInt(uint64(block_author.Commission))), uint256.NewInt(MaxCommission))
+		delegatorsRewards := new(uint256.Int).Sub(blockAuthorReward, commission)
 
-		block_author.CommissionRewardsPool = bigutil.Add(block_author.CommissionRewardsPool, commission)
-		block_author.RewardsPool = bigutil.Add(block_author.RewardsPool, delegatorsRewards)
+		block_author.CommissionRewardsPool.Add(block_author.CommissionRewardsPool, commission.ToBig())
+		block_author.RewardsPool.Add(block_author.RewardsPool, delegatorsRewards.ToBig())
 
-		totalRewardCheck = bigutil.Add(totalRewardCheck, blockAuthorReward)
+		totalRewardCheck.Add(totalRewardCheck, blockAuthorReward)
 		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
@@ -573,26 +574,26 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
 		// We need to calculate validator reward even though in some edge cases this validator might not exist in contract anymore
 		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and totalRewardCheck might not pass
-		validatorReward := big.NewInt(0)
+		validatorReward := uint256.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
 		// Reward for DAG blocks with at least one unique transaction
 		if validatorStats.DagBlocksCount > 0 {
 			TotalDagBlocksCountCheck += validatorStats.DagBlocksCount
-			validatorReward = bigutil.Mul(big.NewInt(int64(validatorStats.DagBlocksCount)), dagProposersReward)
-			validatorReward = bigutil.Div(validatorReward, big.NewInt(int64(rewardsStats.TotalDagBlocksCount)))
+			validatorReward.Mul(uint256.NewInt(uint64(validatorStats.DagBlocksCount)), dagProposersReward)
+			validatorReward.Div(validatorReward, uint256.NewInt(uint64(rewardsStats.TotalDagBlocksCount)))
 		}
 
 		// Add reward for voting
 		if validatorStats.VoteWeight > 0 {
 			totalVoteWeightCheck += validatorStats.VoteWeight
 			// total_votes_reward * validator_vote_weight / total_votes_weight
-			validatorVoteReward := bigutil.Mul(big.NewInt(int64(validatorStats.VoteWeight)), votesReward)
-			validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(rewardsStats.TotalVotesWeight)))
-			validatorReward = bigutil.Add(validatorReward, validatorVoteReward)
+			validatorVoteReward := new(uint256.Int).Mul(uint256.NewInt(uint64(validatorStats.VoteWeight)), votesReward)
+			validatorVoteReward.Div(validatorVoteReward, uint256.NewInt(uint64(rewardsStats.TotalVotesWeight)))
+			validatorReward.Add(validatorReward, validatorVoteReward)
 		}
 
 		// Add reward for for final check
-		totalRewardCheck = bigutil.Add(totalRewardCheck, validatorReward)
+		totalRewardCheck.Add(totalRewardCheck, validatorReward)
 
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
@@ -611,13 +612,13 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		}
 
 		// Adds fees for all txs that validator added in his blocks as first
-		validatorReward = bigutil.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
+		validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
 
-		validatorCommission := bigutil.Div(bigutil.Mul(validatorReward, big.NewInt(int64(validator.Commission))), big.NewInt(MaxCommission))
-		delegatorsRewards := bigutil.Sub(validatorReward, validatorCommission)
+		validatorCommission := new(uint256.Int).Div(new(uint256.Int).Mul(validatorReward, uint256.NewInt(uint64(validator.Commission))), uint256.NewInt(MaxCommission))
+		delegatorsRewards := new(uint256.Int).Sub(validatorReward, validatorCommission)
 
-		validator.CommissionRewardsPool = bigutil.Add(validator.CommissionRewardsPool, validatorCommission)
-		validator.RewardsPool = bigutil.Add(validator.RewardsPool, delegatorsRewards)
+		validator.CommissionRewardsPool.Add(validator.CommissionRewardsPool, validatorCommission.ToBig())
+		validator.RewardsPool.Add(validator.RewardsPool, delegatorsRewards.ToBig())
 
 		self.validators.ModifyValidator(&validatorAddress, validator)
 	}
@@ -642,8 +643,9 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Validator, prev_vote_count uint64) {
 	// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
 	ctx.Account.SubBalance(ctx.Value)
-	validator.TotalStake = bigutil.Add(validator.TotalStake, ctx.Value)
-	self.amount_delegated = bigutil.Add(self.amount_delegated, ctx.Value)
+	validator.TotalStake.Add(validator.TotalStake, ctx.Value)
+	v, _ := uint256.FromBig(ctx.Value)
+	self.amount_delegated.Add(self.amount_delegated, v)
 	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 
 	if prev_vote_count != new_vote_count {
@@ -675,7 +677,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		state = new(State)
 		state.RewardsPer1Stake = old_state.RewardsPer1Stake
 		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
-			state.RewardsPer1Stake = bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator.RewardsPool, validator.TotalStake))
+			state.RewardsPer1Stake.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator.RewardsPool, validator.TotalStake))
 		}
 		validator.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
@@ -694,7 +696,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		// ctx.CallerAccount == caller address
 		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
-		delegation.Stake = bigutil.Add(delegation.Stake, ctx.Value)
+		delegation.Stake.Add(delegation.Stake, ctx.Value)
 		delegation.LastUpdated = block
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 	}
@@ -752,8 +754,8 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	// Creating undelegation request
 	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
-	delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
-	validator.TotalStake = bigutil.Sub(validator.TotalStake, args.Amount)
+	delegation.Stake.Sub(delegation.Stake, args.Amount)
+	validator.TotalStake.Sub(validator.TotalStake, args.Amount)
 
 	if delegation.Stake.Cmp(big.NewInt(0)) == 0 {
 		self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -763,7 +765,8 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 	}
 
-	self.amount_delegated = bigutil.Sub(self.amount_delegated, args.Amount)
+	a, _ := uint256.FromBig(args.Amount)
+	self.amount_delegated.Sub(self.amount_delegated, a)
 	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -825,20 +828,21 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, undelegation.Amount)
-		validator.TotalStake = bigutil.Add(validator.TotalStake, undelegation.Amount)
+		validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
-		delegation.Stake = bigutil.Add(delegation.Stake, undelegation.Amount)
+		delegation.Stake.Add(delegation.Stake, undelegation.Amount)
 		delegation.LastUpdated = block
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 
-		validator.TotalStake = bigutil.Add(validator.TotalStake, undelegation.Amount)
+		validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
 	}
-	self.amount_delegated = bigutil.Add(self.amount_delegated, undelegation.Amount)
+	a, _ := uint256.FromBig(undelegation.Amount)
+	self.amount_delegated.Add(self.amount_delegated, a)
 	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -898,8 +902,8 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
-		delegation.Stake = bigutil.Sub(delegation.Stake, args.Amount)
-		validator_from.TotalStake = bigutil.Sub(validator_from.TotalStake, args.Amount)
+		delegation.Stake.Sub(delegation.Stake, args.Amount)
+		validator_from.TotalStake.Sub(validator_from.TotalStake, args.Amount)
 
 		if delegation.Stake.Cmp(big.NewInt(0)) == 0 {
 			self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
@@ -941,18 +945,18 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 		if delegation == nil {
 			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
-			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
+			validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 		} else {
 			// We need to claim rewards first
 			old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
 			reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 			ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
-			delegation.Stake = bigutil.Add(delegation.Stake, args.Amount)
+			delegation.Stake.Add(delegation.Stake, args.Amount)
 			delegation.LastUpdated = block
 			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, delegation)
 
-			validator_to.TotalStake = bigutil.Add(validator_to.TotalStake, args.Amount)
+			validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 		}
 
 		new_vote_count := voteCount(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
@@ -1058,7 +1062,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	if len(args.VrfKey) != VrfKeyLength {
 		return ErrWrongVrfKey
 	}
-	if MaxCommission < args.Commission {
+	if MaxCommission < uint64(args.Commission) {
 		return ErrCommissionOverflow
 	}
 
@@ -1147,7 +1151,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 		return ErrWrongOwnerAcc
 	}
 
-	if MaxCommission < args.Commission {
+	if MaxCommission < uint64(args.Commission) {
 		return ErrCommissionOverflow
 	}
 
