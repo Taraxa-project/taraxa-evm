@@ -295,7 +295,7 @@ func (self *Contract) lazy_init() {
 	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
-	self.amount_delegated = self.amount_delegated_orig
+	self.amount_delegated = self.amount_delegated_orig.Clone()
 
 	self.lazy_init_done = true
 }
@@ -312,7 +312,7 @@ func (self *Contract) EndBlockCall() {
 	}
 	if self.amount_delegated_orig.Cmp(self.amount_delegated) != 0 {
 		self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
-		self.amount_delegated_orig = self.amount_delegated
+		self.amount_delegated_orig = self.amount_delegated.Clone()
 	}
 }
 
@@ -525,7 +525,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 	votesReward := uint256.NewInt(0)
 	blockAuthorReward := uint256.NewInt(0)
-	dagProposersReward := blockReward
+	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
 		// Calculate propotion between votes and transactions

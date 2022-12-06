@@ -266,8 +266,9 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 	return sig, nil
 }
 
-func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *uint256.Int, trxsCount uint32) {
+func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, trxsCount uint32) {
+	f, _ := uint256.FromBig(trxFee)
 	for i := uint32(0); i < trxsCount; i++ {
-		feesRewards.AddTrxFeeReward(validator, trxFee)
+		feesRewards.AddTrxFeeReward(validator, f.Clone())
 	}
 }
