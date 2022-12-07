@@ -13,6 +13,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
+	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
@@ -236,7 +237,9 @@ func taraxa_evm_state_api_transition_state(
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
 
-		txFee := new(big.Int).Mul(new(big.Int).SetUint64(txResult.GasUsed), tx.GasPrice)
+		txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
+		g, _ := uint256.FromBig(tx.GasPrice)
+		txFee.Mul(txFee, g)
 
 		// Contract distribution is disabled - just add fee to the block author balance
 		// TODO: once there is a stabilized version - remove this flag and use only dpos contract

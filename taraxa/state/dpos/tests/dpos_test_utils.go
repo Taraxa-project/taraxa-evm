@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
@@ -266,7 +267,8 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 }
 
 func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, trxsCount uint32) {
+	f, _ := uint256.FromBig(trxFee)
 	for i := uint32(0); i < trxsCount; i++ {
-		feesRewards.AddTrxFeeReward(validator, trxFee)
+		feesRewards.AddTrxFeeReward(validator, f.Clone())
 	}
 }

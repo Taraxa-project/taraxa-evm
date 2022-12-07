@@ -1,7 +1,6 @@
 package state
 
 import (
-	"math/big"
 	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -18,6 +17,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/trie"
+	"github.com/holiman/uint256"
 )
 
 type API struct {
@@ -103,7 +103,7 @@ type StateTransition interface {
 	BeginBlock(*vm.BlockInfo)
 	BlockNumber() types.BlockNum
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
-	AddTxFeeToBalance(account *common.Address, tx_fee *big.Int)
+	AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int)
 	GetChainConfig() *chain_config.ChainConfig
 	GetEvmState() *state_evm.EVMState
 	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards)
