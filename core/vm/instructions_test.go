@@ -501,7 +501,7 @@ func BenchmarkOpMstore(bench *testing.B) {
 
 }
 
-func BenchmarkOpSHA3(bench *testing.B) {
+func BenchmarkOpKeccak256(bench *testing.B) {
 	var (
 		evm   EVM
 		stack = newstack()
@@ -514,7 +514,7 @@ func BenchmarkOpSHA3(bench *testing.B) {
 	bench.ResetTimer()
 	for i := 0; i < bench.N; i++ {
 		stack.pushN(*new(uint256.Int).SetUint64(32), *start)
-		opSha3(&pc, &evm, nil, mem, stack)
+		opKeccak256(&pc, &evm, nil, mem, stack)
 	}
 
 }

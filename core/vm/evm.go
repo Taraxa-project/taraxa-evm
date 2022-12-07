@@ -20,15 +20,15 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-	"github.com/holiman/uint256"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"github.com/holiman/uint256"
 )
 
 // EVM is the Ethereum Virtual Machine base object and provides
@@ -50,9 +50,9 @@ type EVM struct {
 	trx               *Transaction
 	depth             uint16
 	// tech stuff
-	mem_pool            MemoryPool
-	bigconv             bigconv.BigConv
-	jumpdests           map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
+	mem_pool  MemoryPool
+	bigconv   bigconv.BigConv
+	jumpdests map[common.Hash]bitvec // Aggregated result of JUMPDEST analysis.
 	// call_gas_tmp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
@@ -61,7 +61,7 @@ type EVM struct {
 	last_retval  []byte // Last CALL's return data for subsequent reuse
 }
 type Opts = struct {
-	PreallocatedMem        uint64
+	PreallocatedMem uint64
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
 type Rules struct {
@@ -243,7 +243,7 @@ func (self *EVM) create_1(caller StateAccount, code []byte, gas uint64, value *b
 
 // create_2 creates a new contract using code as deployment code.
 //
-// The different between create_2 with create_1 is create_2 uses sha3(0xff ++ msg.sender ++ salt ++ sha3(init_code))[12:]
+// The different between create_2 with create_1 is create_2 uses keccak256(0xff ++ msg.sender ++ salt ++ keccak256(init_code))[12:]
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
 func (self *EVM) create_2(caller StateAccount, code []byte, gas uint64, endowment *big.Int, salt *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	codeAndHash := CodeAndHash{code, keccak256.Hash(code)}

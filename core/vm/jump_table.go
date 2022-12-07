@@ -18,7 +18,7 @@ package vm
 
 import (
 	"errors"
-	
+
 	"github.com/holiman/uint256"
 )
 
@@ -296,11 +296,11 @@ func newFrontierInstructionSet() InstructionSet {
 			validateStack: makeStackFunc(2, 1),
 			valid:         true,
 		},
-		SHA3: {
-			execute:       opSha3,
-			gasCost:       gasSha3,
+		KECCAK256: {
+			execute:       opKeccak256,
+			gasCost:       gasKeccak256,
 			validateStack: makeStackFunc(2, 1),
-			memorySize:    memorySha3,
+			memorySize:    memoryKeccak256,
 			valid:         true,
 		},
 		ADDRESS: {
