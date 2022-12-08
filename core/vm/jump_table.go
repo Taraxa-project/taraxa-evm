@@ -499,6 +499,12 @@ func newFrontierInstructionSet() InstructionSet {
 			validateStack: makeStackFunc(0, 0),
 			valid:         true,
 		},
+		PUSH0: {
+			execute:       opPush0,
+			gasCost:       constGasFunc(GasQuickStep),
+			validateStack: makeStackFunc(0, 1),
+			valid:         true,
+		},
 		PUSH1: {
 			execute:       makePush(1, 1),
 			gasCost:       gasPush,
