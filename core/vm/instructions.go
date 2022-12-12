@@ -568,9 +568,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 		input        = memory.GetCopy(int64(offset.Uint64()), int64(size.Uint64()))
 		gas          = contract.Gas
 	)
-	if evm.rules.IsEIP150 {
-		gas -= gas / 64
-	}
+	gas -= gas / 64
 	// reuse size int for stackvalue
 	stackvalue := size
 
@@ -580,7 +578,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
-	if evm.rules.IsHomestead && suberr == ErrCodeStoreOutOfGas {
+	if suberr == ErrCodeStoreOutOfGas {
 		stackvalue.Clear()
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
 		stackvalue.Clear()

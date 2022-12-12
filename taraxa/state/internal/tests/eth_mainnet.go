@@ -130,7 +130,7 @@ func main() {
 			return new(big.Int).SetBytes(getBlockByNumber(num).Hash[:])
 		},
 		&chain_config.ChainConfig{
-			ETHChainConfig:  *params.MainnetChainConfig,
+			EVMChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},
 		state.APIOpts{

@@ -268,7 +268,7 @@ const (
 	deleted
 )
 
-func (self *Account) flush(out Output, eip158 bool) acc_dirty_status {
+func (self *Account) flush(out Output) acc_dirty_status {
 	if !self.IsNotNIL() {
 		return unmodified
 	}
@@ -277,7 +277,7 @@ func (self *Account) flush(out Output, eip158 bool) acc_dirty_status {
 	if mod_count == 0 {
 		return unmodified
 	}
-	if self.suicided || eip158 && self.IsEIP161Empty() {
+	if self.suicided || self.IsEIP161Empty() {
 		out.Delete(&self.addr)
 		self.set_NIL()
 		return deleted

@@ -338,7 +338,7 @@ var bn256PairingTests = []precompiledTest{
 
 func testPrecompiled(addr string, test precompiledTest, t *testing.T) {
 	a := common.HexToAddress(addr)
-	p := PrecompiledContractsByzantium.Get(&a)
+	p := PrecompiledContractsCalifornicum.Get(&a)
 	in := common.Hex2Bytes(test.input)
 	frame := CallFrame{Input: in}
 	t.Run(fmt.Sprintf("%s-Gas=%d", test.name, p.RequiredGas(frame, nil)), func(t *testing.T) {
@@ -360,7 +360,7 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 		return
 	}
 	a := common.HexToAddress(addr)
-	p := PrecompiledContractsByzantium.Get(&a)
+	p := PrecompiledContractsCalifornicum.Get(&a)
 	in := common.Hex2Bytes(test.input)
 	frame := CallFrame{Input: in}
 

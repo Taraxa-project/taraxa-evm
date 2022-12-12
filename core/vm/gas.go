@@ -22,10 +22,10 @@ import (
 )
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, contractCreation, homestead bool) (uint64, error) {
+func IntrinsicGas(data []byte, contractCreation bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
-	if contractCreation && homestead {
+	if contractCreation {
 		gas = TxGasContractCreation
 	} else {
 		gas = TxGas
@@ -186,25 +186,6 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 		x_big   = x.ToBig()
 		current = contract.Account.GetState(x_big)
 	)
-	// The legacy gas metering only takes into consideration the current state
-	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
-	// OR Constantinople is not active
-	if evm.rules.IsPetersburg || !evm.rules.IsConstantinople {
-		// This checks for 3 scenario's and calculates gas accordingly:
-		//
-		// 1. From a zero-value address to a non-zero value         (NEW VALUE)
-		// 2. From a non-zero value address to a zero-value address (DELETE)
-		// 3. From a non-zero to a non-zero                         (CHANGE)
-		switch {
-		case current.Sign() == 0 && y.Sign() != 0: // 0 => non 0
-			return SstoreSetGas, nil
-		case current.Sign() != 0 && y.Sign() == 0: // non 0 => 0
-			evm.state.AddRefund(SstoreRefundGas)
-			return SstoreClearGas, nil
-		default: // non 0 => non 0 (or 0 => 0)
-			return SstoreResetGas, nil
-		}
-	}
 	// The new gas metering is based on net gas costs (EIP-1283):
 	//
 	// 1. If current value equals new value (this is a no-op), 200 gas is deducted.
@@ -459,11 +440,7 @@ func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 		transfersValue = !stack.Back(2).IsZero()
 		acc            = evm.get_account(stack.Back(1))
 	)
-	if evm.rules.IsEIP158 {
-		if transfersValue && acc.IsEIP161Empty() {
-			gas += CallNewAccountGas
-		}
-	} else if !acc.IsNotNIL() {
+	if transfersValue && acc.IsEIP161Empty() {
 		gas += CallNewAccountGas
 	}
 	if transfersValue {
@@ -523,16 +500,11 @@ func gasRevert(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 func gasSuicide(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
-	if evm.rules.IsEIP150 {
-		gas = evm.gas_table.Suicide
-		new_acc := evm.get_account(stack.Back(0))
-		if evm.rules.IsEIP158 {
-			if new_acc.IsEIP161Empty() && contract.Account.GetBalance().Sign() != 0 {
-				gas += evm.gas_table.CreateBySuicide
-			}
-		} else if !new_acc.IsNotNIL() {
-			gas += evm.gas_table.CreateBySuicide
-		}
+	gas = evm.gas_table.Suicide
+	new_acc := evm.get_account(stack.Back(0))
+
+	if new_acc.IsEIP161Empty() && contract.Account.GetBalance().Sign() != 0 {
+		gas += evm.gas_table.CreateBySuicide
 	}
 
 	if !contract.Account.HasSuicided() {

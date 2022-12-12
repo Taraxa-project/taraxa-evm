@@ -39,10 +39,10 @@ import (
 // specific errors should ever be performed. The interpreter makes
 // sure that any errors generated are to be considered faulty code.
 type EVM struct {
-	get_hash          GetHashFunc
-	state             State
-	block             Block
-	rules             Rules
+	get_hash GetHashFunc
+	state    State
+	block    Block
+	// rules             Rules
 	rules_initialized bool
 	precompiles       Precompiles
 	instruction_set   InstructionSet
@@ -64,9 +64,10 @@ type Opts = struct {
 	PreallocatedMem uint64
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
-type Rules struct {
-	IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg bool
-}
+
+//	type Rules struct {
+//		IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg bool
+//	}
 type Block struct {
 	Number types.BlockNum
 	BlockInfo
@@ -102,9 +103,9 @@ func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
 	return self
 }
 
-func (self *EVM) GetRules() Rules {
-	return self.rules
-}
+// func (self *EVM) GetRules() Rules {
+// 	return self.rules
+// }
 
 func (self *EVM) GetDepth() uint16 {
 	return self.depth
@@ -114,42 +115,26 @@ func (self *EVM) GetBlock() Block {
 	return self.block
 }
 
-func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
+func (self *EVM) SetBlock(blk *Block /*, rules Rules*/) (rules_changed bool) {
 	self.block = *blk
 	if self.rules_initialized {
-		if self.rules == rules {
-			return false
-		}
+		// if self.rules == rules {
+		return false
+		// }
 	} else {
 		self.rules_initialized = true
 	}
-	switch {
-	case rules.IsConstantinople:
-		self.precompiles = PrecompiledContractsByzantium
-		self.instruction_set = constantinopleInstructionSet
-		self.gas_table = GasTableConstantinople
-	case rules.IsByzantium:
-		self.precompiles = PrecompiledContractsByzantium
-		self.instruction_set = byzantiumInstructionSet
-		self.gas_table = GasTableEIP158
-	case rules.IsEIP158:
-		self.precompiles = PrecompiledContractsHomestead
-		self.instruction_set = homesteadInstructionSet
-		self.gas_table = GasTableEIP158
-	case rules.IsEIP150:
-		self.precompiles = PrecompiledContractsHomestead
-		self.instruction_set = homesteadInstructionSet
-		self.gas_table = GasTableEIP150
-	case rules.IsHomestead:
-		self.precompiles = PrecompiledContractsHomestead
-		self.instruction_set = homesteadInstructionSet
-		self.gas_table = GasTableHomestead
-	default:
-		self.precompiles = PrecompiledContractsHomestead
-		self.instruction_set = frontierInstructionSet
-		self.gas_table = GasTableHomestead
-	}
-	self.rules = rules
+	// switch {
+	// case rules.IsTODO:
+	// 	self.precompiles = PrecompiledContractsHomestead
+	// 	self.instruction_set = homesteadInstructionSet
+	// 	self.gas_table = GasTableHomestead
+	// default:
+	self.precompiles = PrecompiledContractsCalifornicum
+	self.instruction_set = californicumInstructionSet
+	self.gas_table = GasTableCalifornicum
+	// }
+	// self.rules = rules
 	return true
 }
 
@@ -198,7 +183,7 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	// 	return
 	// }
 
-	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation, self.rules.IsHomestead)
+	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation)
 	if err != nil {
 		return consensusErr(gas_cap, util.ErrorString(err.Error()))
 	}
@@ -274,9 +259,7 @@ func (self *EVM) create(
 	}
 	// create a new account on the state
 	snapshot := self.state.Snapshot()
-	if self.rules.IsEIP158 {
-		new_acc.IncrementNonce()
-	}
+	new_acc.IncrementNonce()
 	self.transfer(caller, new_acc, value)
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
@@ -285,7 +268,7 @@ func (self *EVM) create(
 	ret, err = self.run(&contract, false)
 
 	// Check whether the max code size has been exceeded, assign err if the case.
-	if err == nil && self.rules.IsEIP158 && len(ret) > MaxCodeSize {
+	if err == nil && len(ret) > MaxCodeSize {
 		err = errMaxCodeSizeExceeded
 	}
 
@@ -304,7 +287,7 @@ func (self *EVM) create(
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
-	if err != nil && (self.rules.IsHomestead || err != ErrCodeStoreOutOfGas) {
+	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -324,7 +307,7 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 		return nil, gas, ErrDepth
 	}
 	if value.Sign() == 0 {
-		if self.rules.IsEIP158 && !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+		if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			return nil, gas, nil
 		}
 	} else if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
@@ -457,16 +440,14 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 			return nil, err
 		}
 		// If the operation is valid, enforce and write restrictions
-		if self.rules.IsByzantium {
-			if self.read_only {
-				// If the interpreter is operating in readonly mode, make sure no
-				// state-modifying operation is performed. The 3rd stack item
-				// for a call operation is the value. Transferring value from one
-				// account to the others means the state is modified and should also
-				// return with an error.
-				if operation.writes || (op == CALL && stack.Back(2).BitLen() > 0) {
-					return nil, errWriteProtection
-				}
+		if self.read_only {
+			// If the interpreter is operating in readonly mode, make sure no
+			// state-modifying operation is performed. The 3rd stack item
+			// for a call operation is the value. Transferring value from one
+			// account to the others means the state is modified and should also
+			// return with an error.
+			if operation.writes || (op == CALL && stack.Back(2).BitLen() > 0) {
+				return nil, errWriteProtection
 			}
 		}
 		var memorySize uint64
