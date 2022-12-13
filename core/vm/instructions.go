@@ -239,7 +239,7 @@ func opSAR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	return nil, nil
 }
 
-func opSha3(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+func opKeccak256(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	offset, size := stack.pop(), stack.peek()
 	data := memory.GetPtr(int64(offset.Uint64()), int64(size.Uint64()))
 	hash := keccak256.HashAndReturnByValue(data)
@@ -538,6 +538,11 @@ func opJumpi(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 }
 
 func opJumpdest(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	return nil, nil
+}
+
+func opPush0(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	stack.push(new(uint256.Int))
 	return nil, nil
 }
 

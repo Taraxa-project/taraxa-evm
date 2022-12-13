@@ -279,14 +279,14 @@ func makeGasLog(n uint64) gasFunc {
 	}
 }
 
-func gasSha3(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
+func gasKeccak256(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var overflow bool
 	gas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
 	}
 
-	if gas, overflow = math.SafeAdd(gas, Sha3Gas); overflow {
+	if gas, overflow = math.SafeAdd(gas, Keccak256WordGas); overflow {
 		return 0, errGasUintOverflow
 	}
 
@@ -294,7 +294,7 @@ func gasSha3(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 	if overflow {
 		return 0, errGasUintOverflow
 	}
-	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), Sha3WordGas); overflow {
+	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), Keccak256WordGas); overflow {
 		return 0, errGasUintOverflow
 	}
 	if gas, overflow = math.SafeAdd(gas, wordGas); overflow {
@@ -418,7 +418,7 @@ func gasCreate2(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	if overflow {
 		return 0, errGasUintOverflow
 	}
-	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), Sha3WordGas); overflow {
+	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), Keccak256WordGas); overflow {
 		return 0, errGasUintOverflow
 	}
 	if gas, overflow = math.SafeAdd(gas, wordGas); overflow {

@@ -20,7 +20,7 @@ import (
 	"github.com/holiman/uint256"
 )
 
-func memorySha3(stack *Stack) *uint256.Int {
+func memoryKeccak256(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), stack.Back(1))
 }
 
