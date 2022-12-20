@@ -34,6 +34,8 @@ type GasTable struct {
 	// to call. May be left nil. Nil means
 	// not charged.
 	CreateBySuicide uint64
+	// EIP1153
+	WarmStorageReadCost uint64
 }
 
 // Variables containing gas prices for different ethereum phases.
@@ -51,5 +53,6 @@ var (
 		ExpByte:     50,
 
 		CreateBySuicide: 25000,
+		WarmStorageReadCost: 100,
 	}
 )

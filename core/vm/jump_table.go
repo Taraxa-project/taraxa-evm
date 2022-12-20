@@ -791,6 +791,16 @@ func newCalifornicumInstructionSet() InstructionSet {
 			memorySize:    memoryLog,
 			writes:        true,
 		},
+		TLOAD: {
+			execute:       opTload,
+			gasCost:       gasTLoad,
+			validateStack: makeStackFunc(1, 1),
+		},
+		TSTORE: {
+			execute:       opTstore,
+			gasCost:       gasTLoad,
+			validateStack: makeStackFunc(2, 0),
+		},
 		CREATE: {
 			execute:       opCreate,
 			gasCost:       gasCreate,

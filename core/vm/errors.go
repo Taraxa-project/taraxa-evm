@@ -32,4 +32,5 @@ var (
 	ErrInsufficientBalanceForGas      = util.ErrorString("insufficient balance to pay for gas")
 	ErrNonceTooHigh                   = util.ErrorString("nonce too high")
 	ErrNonceTooLow                    = util.ErrorString("nonce too low")
+	ErrWriteProtection                = util.ErrorString("write protection")
 )

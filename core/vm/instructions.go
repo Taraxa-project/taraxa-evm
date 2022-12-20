@@ -572,6 +572,26 @@ func opGas(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	return nil, nil
 }
 
+// opTload implements TLOAD opcode
+func opTload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	loc := stack.peek()
+	hash := common.Hash(loc.Bytes32())
+	val := evm.state.GetTransientState(contract.Address(), hash)
+	loc.SetBytes(val.Bytes())
+	return nil, nil
+}
+
+// opTstore implements TSTORE opcode
+func opTstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	if evm.read_only {
+		return nil, ErrWriteProtection
+	}
+	loc := stack.pop()
+	val := stack.pop()
+	evm.state.SetTransientState(contract.Address(), loc.Bytes32(), val.Bytes32())
+	return nil, nil
+}
+
 func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	var (
 		value        = stack.pop()
