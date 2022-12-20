@@ -1,6 +1,0 @@
-/home/oleg/.gvm/gos/go1.15/bin/go tool test2json -t /tmp/___TestEthMainnetSmoke_in_github_com_Taraxa_project_taraxa_evm_taraxa_state -test.v -test.run ^\QTestEthMainnetSmoke\E$
-=== RUN   TestEthMainnetSmoke
- 100% |█████████████████████████████████████| (49909/300001, 2910 it/s) [17s:0s]
---- FAIL: TestEthMainnetSmoke (23.90s)
-panic: 0x32d2d4b69423f3b793fa27c0f6831e33dfb6924163617ddb96fcd24235c906ba != 0xdba9f57d891cc587f00802b49359a86453a362a70e0db13de66236206e590555 [recovered]
-	panic: 0x32d2d4b69423f3b793fa27c0f6831e33dfb6924163617ddb96fcd24235c906ba != 0xdba9f57d891cc587f00802b49359a86453a362a70e0db13de66236206e590555

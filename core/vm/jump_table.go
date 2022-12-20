@@ -409,6 +409,12 @@ func newCalifornicumInstructionSet() InstructionSet {
 			validateStack: makeStackFunc(0, 1),
 			valid:         true,
 		},
+		CHAINID: {
+			execute:       opChainID,
+			gasCost:       constGasFunc(GasQuickStep),
+			validateStack: makeStackFunc(0, 1),
+			valid:         true,
+		},
 		POP: {
 			execute:       opPop,
 			gasCost:       constGasFunc(GasQuickStep),

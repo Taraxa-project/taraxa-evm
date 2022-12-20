@@ -100,6 +100,7 @@ const (
 	NUMBER     OpCode = 0x43
 	DIFFICULTY OpCode = 0x44
 	GASLIMIT   OpCode = 0x45
+	CHAINID    OpCode = 0x46
 )
 
 // 0x50 range - 'storage' and execution.
@@ -279,6 +280,7 @@ var opCodeToString = map[OpCode]string{
 	NUMBER:     "NUMBER",
 	DIFFICULTY: "DIFFICULTY",
 	GASLIMIT:   "GASLIMIT",
+	CHAINID:    "CHAINID",
 
 	// 0x50 range - 'storage' and execution.
 	POP: "POP",
