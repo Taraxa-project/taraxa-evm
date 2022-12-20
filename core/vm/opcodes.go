@@ -94,13 +94,14 @@ const (
 
 // 0x40 range - block operations.
 const (
-	BLOCKHASH  OpCode = 0x40
-	COINBASE   OpCode = 0x41
-	TIMESTAMP  OpCode = 0x42
-	NUMBER     OpCode = 0x43
-	DIFFICULTY OpCode = 0x44
-	GASLIMIT   OpCode = 0x45
-	CHAINID    OpCode = 0x46
+	BLOCKHASH   OpCode = 0x40
+	COINBASE    OpCode = 0x41
+	TIMESTAMP   OpCode = 0x42
+	NUMBER      OpCode = 0x43
+	DIFFICULTY  OpCode = 0x44
+	GASLIMIT    OpCode = 0x45
+	CHAINID     OpCode = 0x46
+	SELFBALANCE OpCode = 0x47
 )
 
 // 0x50 range - 'storage' and execution.
@@ -274,13 +275,14 @@ var opCodeToString = map[OpCode]string{
 	EXTCODEHASH:    "EXTCODEHASH",
 
 	// 0x40 range - block operations.
-	BLOCKHASH:  "BLOCKHASH",
-	COINBASE:   "COINBASE",
-	TIMESTAMP:  "TIMESTAMP",
-	NUMBER:     "NUMBER",
-	DIFFICULTY: "DIFFICULTY",
-	GASLIMIT:   "GASLIMIT",
-	CHAINID:    "CHAINID",
+	BLOCKHASH:   "BLOCKHASH",
+	COINBASE:    "COINBASE",
+	TIMESTAMP:   "TIMESTAMP",
+	NUMBER:      "NUMBER",
+	DIFFICULTY:  "DIFFICULTY",
+	GASLIMIT:    "GASLIMIT",
+	CHAINID:     "CHAINID",
+	SELFBALANCE: "SELFBALANCE",
 
 	// 0x50 range - 'storage' and execution.
 	POP: "POP",

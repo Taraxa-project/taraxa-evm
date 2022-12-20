@@ -360,6 +360,11 @@ func newCalifornicumInstructionSet() InstructionSet {
 			gasCost:       constGasFunc(GasQuickStep),
 			validateStack: makeStackFunc(0, 1),
 		},
+		SELFBALANCE: {
+			execute:       opSelfBalance,
+			gasCost:       constGasFunc(GasFastStep),
+			validateStack: makeStackFunc(0, 1),
+		},
 		POP: {
 			execute:       opPop,
 			gasCost:       constGasFunc(GasQuickStep),

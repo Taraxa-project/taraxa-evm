@@ -43,9 +43,9 @@ var (
 	GasTableCalifornicum = GasTable{
 		ExtcodeSize: 700,
 		ExtcodeCopy: 700,
-		ExtcodeHash: 400,
-		Balance:     400,
-		SLoad:       200,
+		ExtcodeHash: 700,
+		Balance:     700,
+		SLoad:       800,
 		Calls:       700,
 		Suicide:     5000,
 		ExpByte:     50,
