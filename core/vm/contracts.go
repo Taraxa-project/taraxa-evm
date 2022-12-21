@@ -65,18 +65,9 @@ func (self *Precompiles) Put(address *common.Address, contract PrecompiledContra
 	self[pos] = contract
 }
 
-// PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
-// contracts used in the Frontier and Homestead releases.
-var PrecompiledContractsHomestead = Precompiles{
-	ecrecover{},
-	sha256hash{},
-	ripemd160hash{},
-	dataCopy{},
-}
-
-// PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
+// PrecompiledContractsCalifornicum contains the default set of pre-compiled Ethereum
 // contracts used in the Byzantium release.
-var PrecompiledContractsByzantium = Precompiles{
+var PrecompiledContractsCalifornicum = Precompiles{
 	ecrecover{},
 	sha256hash{},
 	ripemd160hash{},

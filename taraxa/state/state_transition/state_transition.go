@@ -48,7 +48,7 @@ func (self *StateTransition) Init(
 	self.get_reader = get_reader
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
-		PreallocatedMem:        8 * 1024 * 1024,
+		PreallocatedMem: 8 * 1024 * 1024,
 	})
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
@@ -87,7 +87,7 @@ func (self *StateTransition) begin_block() {
 }
 
 func (self *StateTransition) evm_state_checkpoint() {
-	self.evm_state.CommitTransaction(&self.trie_sink, self.evm.GetRules().IsEIP158)
+	self.evm_state.CommitTransaction(&self.trie_sink)
 }
 
 func (self *StateTransition) BlockNumber() types.BlockNum {
@@ -97,7 +97,7 @@ func (self *StateTransition) BlockNumber() types.BlockNum {
 func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	self.begin_block()
 	blk_n := self.pending_blk_state.GetNumber()
-	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info}, self.chain_config.ETHChainConfig.Rules(blk_n))
+	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info} /*self.chain_config.EVMChainConfig.Rules(blk_n)*/)
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}

@@ -129,13 +129,13 @@ func (self *EVMState) register_change(revert func()) {
 	self.reverts = append(self.reverts, revert)
 }
 
-func (self *EVMState) CommitTransaction(db_writer Output, eip158 bool) {
+func (self *EVMState) CommitTransaction(db_writer Output) {
 	for _, acc := range self.accounts_in_curr_ver {
 		acc.in_curr_version = false
 		if acc.deleted {
 			continue
 		}
-		status := acc.flush(db_writer, eip158)
+		status := acc.flush(db_writer)
 		acc.deleted = status == deleted
 		if !acc.in_dirties && (status == updated || acc.deleted && acc.loaded_from_db) {
 			acc.in_dirties = true

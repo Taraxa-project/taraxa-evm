@@ -7,7 +7,7 @@ import (
 )
 
 type ChainConfig struct {
-	ETHChainConfig  params.ChainConfig
+	EVMChainConfig  params.ChainConfig
 	GenesisBalances core.BalanceMap
 	DPOS            dpos.Config
 }

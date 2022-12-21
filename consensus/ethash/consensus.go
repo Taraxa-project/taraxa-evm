@@ -25,9 +25,7 @@ import (
 )
 
 var (
-	FrontierBlockReward       = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
-	ByzantiumBlockReward      = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
-	ConstantinopleBlockReward = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from Constantinople
+	CalifornicumBlockReward = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from CalifornicumBlockReward
 )
 
 // Some weird constants to avoid constant memory allocs for them.
@@ -45,18 +43,12 @@ type BlockNumAndCoinbase = struct {
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func AccumulateRewards(
-	rules vm.Rules,
+	// rules vm.Rules,
 	header BlockNumAndCoinbase,
 	uncles []BlockNumAndCoinbase,
 	state vm.State) {
 	// Select the correct block reward based on chain progression
-	blockReward := FrontierBlockReward
-	if rules.IsByzantium {
-		blockReward = ByzantiumBlockReward
-	}
-	if rules.IsConstantinople {
-		blockReward = ConstantinopleBlockReward
-	}
+	blockReward := CalifornicumBlockReward
 	// Accumulate the rewards for the miner and any included uncles
 	header_num_big := new(big.Int).SetUint64(header.Number)
 	reward := new(big.Int).Set(blockReward)

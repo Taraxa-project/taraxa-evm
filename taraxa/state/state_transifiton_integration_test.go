@@ -34,7 +34,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 			return new(big.Int).SetBytes(blocks[num].Hash[:])
 		},
 		&chain_config.ChainConfig{
-			ETHChainConfig:  *params.MainnetChainConfig,
+			EVMChainConfig:  *params.MainnetChainConfig,
 			GenesisBalances: core.MainnetGenesisBalances(),
 		},
 		APIOpts{
