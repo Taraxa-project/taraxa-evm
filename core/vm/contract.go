@@ -90,3 +90,8 @@ func (self *Contract) UseGas(gas uint64) (ok bool) {
 	self.Gas -= gas
 	return true
 }
+
+// Address returns the contracts address
+func (c *Contract) Address() *common.Address {
+	return c.CallFrame.Account.Address()
+}

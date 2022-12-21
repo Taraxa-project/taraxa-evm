@@ -49,7 +49,7 @@ func (self *StateTransition) Init(
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
 		PreallocatedMem: 8 * 1024 * 1024,
-	})
+	}, self.chain_config.EVMChainConfig)
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {

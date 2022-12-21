@@ -24,6 +24,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/params"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -42,6 +43,7 @@ type EVM struct {
 	get_hash GetHashFunc
 	state    State
 	block    Block
+	config   params.ChainConfig
 	// rules             Rules
 	rules_initialized bool
 	precompiles       Precompiles
@@ -96,7 +98,7 @@ type ExecutionResult struct {
 	ConsensusErr    util.ErrorString
 }
 
-func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts) *EVM {
+func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts, config params.ChainConfig) *EVM {
 	self.get_hash = get_hash
 	self.state = state
 	self.mem_pool.Init(opts.PreallocatedMem)
@@ -433,7 +435,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(pc)
 		operation := self.instruction_set[op]
-		if !operation.valid {
+		if operation == nil {
 			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
 		}
 		if err = operation.validateStack(stack); err != nil {

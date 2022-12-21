@@ -475,6 +475,17 @@ func opGasLimit(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	return nil, nil
 }
 
+func opChainID(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	stack.push(new(uint256.Int).SetUint64(evm.config.ChainId))
+	return nil, nil
+}
+
+func opSelfBalance(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	balance, _ := uint256.FromBig(evm.state.GetAccount(contract.Address()).GetBalance())
+	stack.push(balance)
+	return nil, nil
+}
+
 func opPop(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	stack.pop()
 	return nil, nil
