@@ -1160,6 +1160,7 @@ func TestDelegationsClass(t *testing.T) {
 	// Creates 2 delegations
 	delegations.CreateDelegation(&delegator1_addr, &validator1_addr, 0, big.NewInt(50))
 	delegations.CreateDelegation(&delegator1_addr, &validator2_addr, 0, big.NewInt(50))
+	tc.Assert.Equal(delegations.GetDelegatorsCount(), uint32(1))
 
 	// Check GetDelegationsCount + DelegationExists
 	tc.Assert.Equal(uint32(2), delegations.GetDelegationsCount(&delegator1_addr))
@@ -1192,6 +1193,50 @@ func TestDelegationsClass(t *testing.T) {
 	tc.Assert.Equal(delegation_nil_ptr, delegation_ret)
 	tc.Assert.Equal(uint32(1), delegations.GetDelegationsCount(&delegator1_addr))
 	tc.Assert.Equal(false, delegations.DelegationExists(&delegator1_addr, &validator1_addr))
+
+	// Creating some delegations
+	for i := uint64(1); i <= 100; i++ {
+		delegator_addr := addr(i)
+		validator_addr := addr(i + 1)
+		delegations.CreateDelegation(&delegator_addr, &validator_addr, 0, big.NewInt(50))
+	}
+
+	tc.Assert.Equal(delegations.GetDelegatorsCount(), uint32(100))
+
+	// Check GetDelegatorsAddresses
+	batch_size := uint32(10)
+	for i := uint32(0); i < 9; i++ {
+		delegators, end := delegations.GetDelegatorsAddresses(i, batch_size)
+		tc.Assert.Equal(batch_size, uint32(len(delegators)))
+		tc.Assert.Equal(addr(uint64(i*batch_size+1)), delegators[0])
+		tc.Assert.Equal(addr(uint64((i+1)*batch_size)), delegators[len(delegators)-1])
+		tc.Assert.Equal(false, end)
+	}
+	// last available batch, so delegators count == 0 batch_size and end == true
+	{
+		i := uint32(9)
+		delegators, end := delegations.GetDelegatorsAddresses(i, batch_size)
+		tc.Assert.Equal(batch_size, uint32(len(delegators)))
+		tc.Assert.Equal(true, end)
+	}
+	// trying to get over size, so end == true and delegators count == 0
+	{
+		i := uint32(10)
+		delegators, end := delegations.GetDelegatorsAddresses(i, batch_size)
+		tc.Assert.Equal(uint32(0), uint32(len(delegators)))
+		tc.Assert.Equal(true, end)
+	}
+	{
+		delegator_addr := addr(150)
+		validator_addr := addr(151)
+		delegations.CreateDelegation(&delegator_addr, &validator_addr, 0, big.NewInt(50))
+
+		i := uint32(10)
+		delegators, end := delegations.GetDelegatorsAddresses(i, batch_size)
+		tc.Assert.Equal(uint32(1), uint32(len(delegators)))
+		tc.Assert.Equal(delegator_addr, delegators[0])
+		tc.Assert.Equal(true, end)
+	}
 }
 
 func TestUndelegationsClass(t *testing.T) {

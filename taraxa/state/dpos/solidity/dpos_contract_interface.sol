@@ -137,7 +137,7 @@ interface DposInterface {
     /**
      * @notice Returns list of registered validators
      *
-     * @param batch        Batch number to be fetched. If the list is too big it cannot return all validators in one call. Instead, users are fetching batches of 100 account at a time
+     * @param batch        Batch number to be fetched. If the list is too big it cannot return all validators in one call. Instead, users are fetching batches of 20 accounts at a time
      *
      * @return validators  Batch of N validators basic info
      * @return end         Flag if there are no more accounts left. To get all accounts, caller should fetch all batches until he sees end == true
@@ -146,6 +146,19 @@ interface DposInterface {
         external
         view
         returns (ValidatorData[] memory validators, bool end);
+
+    /**
+     * @notice Returns list of all delegators addresses
+     *
+     * @param batch        Batch number to be fetched. If the list is too big it can't be returned in one call. Instead, users are fetching batches of 200 addresses at a time
+     *
+     * @return delegators  Batch of N delegators addresses
+     * @return end         Flag if there are no more accounts left. To get all addresses, caller should fetch all batches until he sees end == true
+     **/
+    function getDelegatorsAddresses(uint32 batch)
+        external
+        view
+        returns (address[] memory delegators, bool end);
 
     /**
      * @notice Returns list of delegations for specified delegator - which validators delegator delegated to

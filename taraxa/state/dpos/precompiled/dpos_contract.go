@@ -95,6 +95,9 @@ const (
 	GetValidatorsMaxCount = 20
 
 	// Maximum number of validators per batch returned by getDelegations call
+	GetDelegatorsAddressesMaxCount = 200
+
+	// Maximum number of validators per batch returned by getDelegations call
 	GetDelegationsMaxCount = 20
 
 	// Maximum number of validators per batch returned by getUndelegations call
@@ -203,11 +206,12 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getTotalEligibleVotesCount":
 	case "getValidatorEligibleVotesCount":
 	case "getValidator":
+	case "getDelegatorsAddresses":
 		return DposGetMethodsGas
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
-		var args sol.GetValidatorsArgs
+		var args sol.SimpleBatchArgs
 		if err := method.Inputs.Unpack(&args, input); err != nil {
 			// args parsing will fail also during Run() so the tx wont get executed
 			return 0
@@ -474,12 +478,19 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(result)
 
 	case "getValidators":
-		var args sol.GetValidatorsArgs
+		var args sol.SimpleBatchArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getValidators(args))
+
+	case "getDelegatorsAddresses":
+		var args sol.SimpleBatchArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			return nil, err
+		}
+		return method.Outputs.Pack(self.getDelegatorsAddresses(args))
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -1194,7 +1205,7 @@ func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInter
 }
 
 // Returns batch of validators
-func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
+func (self *Contract) getValidators(args sol.SimpleBatchArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
@@ -1226,6 +1237,11 @@ func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []so
 		validators = append(validators, validator_data)
 	}
 	return
+}
+
+// Returns batch of delegators addresses
+func (self *Contract) getDelegatorsAddresses(args sol.SimpleBatchArgs) (delegators []common.Address, end bool) {
+	return self.delegations.GetDelegatorsAddresses(args.Batch, GetDelegatorsAddressesMaxCount)
 }
 
 // Returns batch of delegations for specified address
