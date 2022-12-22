@@ -2,7 +2,6 @@ package dpos
 
 import (
 	"math/big"
-	"sort"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -25,8 +24,11 @@ type Delegations struct {
 	// <delegator addres -> list of validators> as each delegator can delegate to multiple validators
 	delegators_validators map[common.Address]*IterableMap
 
+	delegators_list IterableMap
+
 	delegations_field                  []byte
 	delegators_validators_field_prefix []byte
+	delegators_list_field              []byte
 }
 
 func (self *Delegations) Init(stor *StorageWrapper, prefix []byte) {
@@ -35,6 +37,9 @@ func (self *Delegations) Init(stor *StorageWrapper, prefix []byte) {
 	// Init Delegations storage fields keys - relative to the prefix
 	self.delegations_field = append(prefix, []byte{0}...)
 	self.delegators_validators_field_prefix = append(prefix, []byte{1}...)
+	self.delegators_list_field = append(prefix, []byte{2}...)
+
+	self.delegators_list.Init(self.storage, self.delegators_list_field)
 }
 
 // Checks if delegation exists
@@ -47,11 +52,6 @@ func (self *Delegations) DelegationExists(delegator_address *common.Address, val
 func (self *Delegations) GetDelegationsCount(delegator_address *common.Address) uint32 {
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
 	return delegator_validators.GetCount()
-}
-
-// Returns number of delegators
-func (self *Delegations) GetDelegatorsCount() uint32 {
-	return uint32(len(self.delegators_validators))
 }
 
 // Gets delegation
@@ -93,6 +93,9 @@ func (self *Delegations) CreateDelegation(delegator_address *common.Address, val
 	// Adds validator into delegator's validators list
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
 	delegator_validators.CreateAccount(validator_address)
+	if !self.delegators_list.AccountExists(delegator_address) {
+		self.delegators_list.CreateAccount(delegator_address)
+	}
 }
 
 func (self *Delegations) RemoveDelegation(delegator_address *common.Address, validator_address *common.Address) {
@@ -133,35 +136,11 @@ func (self *Delegations) genDelegationKey(delegator_address *common.Address, val
 	return stor_k_2(self.delegations_field, validator_address[:], delegator_address[:])
 }
 
-func (self *Delegations) GetDelegatorsAddresses(batch uint32, count uint32) (delegators []common.Address, end bool) {
-	delegators_count := self.GetDelegatorsCount()
-	if delegators_count == 0 {
-		end = true
-		return
-	}
+// Returns number of delegators
+func (self *Delegations) GetDelegatorsCount() uint32 {
+	return self.delegators_list.GetCount()
+}
 
-	all_delegators := make([]common.Address, delegators_count)
-	i := uint32(0)
-	for delegator_address := range self.delegators_validators {
-		all_delegators[i] = delegator_address
-		i++
-	}
-	sort.SliceStable(all_delegators, func(i, j int) bool {
-		return all_delegators[i].Big().Cmp(all_delegators[j].Big()) < 0
-	})
-
-	start_idx := batch * count
-	end_idx := (batch + 1) * count
-	if start_idx >= delegators_count {
-		end = true
-		return
-	}
-
-	if delegators_count <= end_idx {
-		end_idx = delegators_count
-		end = true
-	}
-
-	delegators = all_delegators[start_idx:end_idx]
-	return
+func (self *Delegations) GetDelegatorsAddresses(batch uint32, count uint32) ([]common.Address, bool) {
+	return self.delegators_list.GetAccounts(batch, count)
 }

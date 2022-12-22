@@ -1208,8 +1208,6 @@ func TestDelegationsClass(t *testing.T) {
 	for i := uint32(0); i < 9; i++ {
 		delegators, end := delegations.GetDelegatorsAddresses(i, batch_size)
 		tc.Assert.Equal(batch_size, uint32(len(delegators)))
-		tc.Assert.Equal(addr(uint64(i*batch_size+1)), delegators[0])
-		tc.Assert.Equal(addr(uint64((i+1)*batch_size)), delegators[len(delegators)-1])
 		tc.Assert.Equal(false, end)
 	}
 	// last available batch, so delegators count == 0 batch_size and end == true
