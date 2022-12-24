@@ -602,9 +602,9 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
 
 			// Validator must exist(be eligible) either now or at least in delayed storage
-			if !self.delayedStorage.IsEligible(&validatorAddress) {
-				panic("DistributeRewards - non existent validator")
-			}
+			// if !self.delayedStorage.IsEligible(&validatorAddress) {
+			// 	panic("DistributeRewards - non existent validator")
+			// }
 
 			continue
 		}
