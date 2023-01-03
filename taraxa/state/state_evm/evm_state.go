@@ -24,6 +24,7 @@ type EVMState struct {
 	logs                          []vm.LogRecord
 	refund                        uint64
 	bigconv                       bigconv.BigConv
+	transientStorage              state_db.TransientStorage
 }
 type EVMStateAccountHeader struct {
 	host            *EVMState
@@ -157,6 +158,8 @@ func (self *EVMState) CommitTransaction(db_writer Output) {
 	self.reverts = self.reverts_original
 	self.logs = nil
 	self.refund = 0
+	// Reset transient storage
+	self.transientStorage = nil
 }
 
 func (self *EVMState) Commit() {
@@ -171,4 +174,34 @@ func (self *EVMState) Commit() {
 		len(self.dirties),
 		unsafe.Sizeof(self.dirties[0]))
 	self.dirties = self.dirties_original
+}
+
+func (self *EVMState) initTransientState() {
+	if self.transientStorage == nil {
+		self.transientStorage = make(state_db.TransientStorage)
+	}
+}
+
+// SetTransientState sets transient storage for a given account. It
+// adds the change to the journal so that it can be rolled back
+// to its previous value if there is a revert.
+func (self *EVMState) SetTransientState(addr *common.Address, key, value common.Hash) {
+	self.initTransientState()
+	prev := self.GetTransientState(addr, key)
+	if prev == value {
+		return
+	}
+	self.setTransientState(addr, key, value)
+}
+
+// setTransientState is a lower level setter for transient storage. It
+// is called during a revert to prevent modifications to the journal.
+func (self *EVMState) setTransientState(addr *common.Address, key, value common.Hash) {
+	self.transientStorage.Set(*addr, key, value)
+}
+
+// GetTransientState gets transient storage for a given account.
+func (self *EVMState) GetTransientState(addr *common.Address, key common.Hash) common.Hash {
+	self.initTransientState()
+	return self.transientStorage.Get(*addr, key)
 }

@@ -32,6 +32,9 @@ type State interface {
 	GetRefund() uint64
 	RevertToSnapshot(int)
 	Snapshot() int
+	// EIP1153
+	GetTransientState(addr *common.Address, key common.Hash) common.Hash
+	SetTransientState(addr *common.Address, key, value common.Hash)
 }
 
 type StateAccount interface {
