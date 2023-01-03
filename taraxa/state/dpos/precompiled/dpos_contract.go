@@ -555,17 +555,19 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	if blockAuthorReward.Cmp(uint256.NewInt(0)) == 1 {
 		block_author := self.validators.GetValidator(blockAuthorAddr)
 		if block_author == nil {
-			panic("DistributeRewards - non existent block author")
+			// TODO[133]: Shouldn't happen. Log this properly, not panic
+			fmt.Println("DistributeRewards - non existent block author")
+			// panic("DistributeRewards - non existent block author")
+		} else {
+			commission := new(uint256.Int).Div(new(uint256.Int).Mul(blockAuthorReward, uint256.NewInt(uint64(block_author.Commission))), uint256.NewInt(MaxCommission))
+			delegatorsRewards := new(uint256.Int).Sub(blockAuthorReward, commission)
+
+			block_author.CommissionRewardsPool.Add(block_author.CommissionRewardsPool, commission.ToBig())
+			block_author.RewardsPool.Add(block_author.RewardsPool, delegatorsRewards.ToBig())
+
+			totalRewardCheck.Add(totalRewardCheck, blockAuthorReward)
+			self.validators.ModifyValidator(blockAuthorAddr, block_author)
 		}
-
-		commission := new(uint256.Int).Div(new(uint256.Int).Mul(blockAuthorReward, uint256.NewInt(uint64(block_author.Commission))), uint256.NewInt(MaxCommission))
-		delegatorsRewards := new(uint256.Int).Sub(blockAuthorReward, commission)
-
-		block_author.CommissionRewardsPool.Add(block_author.CommissionRewardsPool, commission.ToBig())
-		block_author.RewardsPool.Add(block_author.RewardsPool, delegatorsRewards.ToBig())
-
-		totalRewardCheck.Add(totalRewardCheck, blockAuthorReward)
-		self.validators.ModifyValidator(blockAuthorAddr, block_author)
 	}
 
 	TotalDagBlocksCountCheck := uint32(0)
@@ -602,12 +604,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 			// during the the period of time, which is < then delay we use, he is deleted from contract storage, but he will be
 			// able to propose few more blocks. This situation is extremely unlikely, but technically possible.
 			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
-
-			// Validator must exist(be eligible) either now or at least in delayed storage
-			if !self.delayedStorage.IsEligible(&validatorAddress) {
-				panic("DistributeRewards - non existent validator")
-			}
-
+			// We shouldn't really check if validator was eligible before. Because there is a possibility to include some old DAG block anytime(not only at this few blocks old)
 			continue
 		}
 
@@ -626,17 +623,23 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	// TODO: debug check - can be deleted for release
 	if TotalDagBlocksCountCheck != rewardsStats.TotalDagBlocksCount {
 		errorString := fmt.Sprintf("TotalDagBlocksCount (%d) based on validators stats != rewardsStats.TotalDagBlocksCount (%d)", TotalDagBlocksCountCheck, rewardsStats.TotalDagBlocksCount)
-		panic(errorString)
+		// TODO[133]: Shouldn't happen. Log this properly, not panic
+		fmt.Println(errorString)
+		// panic(errorString)
 	}
 
 	if totalVoteWeightCheck != rewardsStats.TotalVotesWeight {
 		errorString := fmt.Sprintf("TotalVotesWeight (%d) based on validators stats != rewardsStats.TotalVotesWeight (%d)", totalVoteWeightCheck, rewardsStats.TotalVotesWeight)
-		panic(errorString)
+		// TODO[133]: Shouldn't happen. Log this properly, not panic
+		fmt.Println(errorString)
+		// panic(errorString)
 	}
 
 	if totalRewardCheck.Cmp(blockReward) == 1 {
 		errorString := fmt.Sprintf("totalRewardCheck (%d) is more then blockReward (%d)", totalRewardCheck, blockReward)
-		panic(errorString)
+		// TODO[133]: shouldn't happen. Log this properly, not panic
+		fmt.Println(errorString)
+		// panic(errorString)
 	}
 }
 
@@ -1074,7 +1077,9 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	delegation := self.delegations.GetDelegation(owner_address, &args.Validator)
 	if delegation != nil {
 		// This could happen only due some serious logic bug
-		panic("registerValidator: delegation already exists")
+		// TODO[133]: Log properly, not panic
+		// panic("registerValidator: delegation already exists")
+		return util.ErrorString("registerValidatorWithoutChecks: Delegation already exist")
 	}
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
