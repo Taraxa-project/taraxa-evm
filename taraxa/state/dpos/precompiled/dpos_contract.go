@@ -177,7 +177,11 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
 	self.lazy_init()
-	method, _ := self.Abi.MethodById(ctx.Input)
+	
+	method, err := self.Abi.MethodById(ctx.Input)
+	if err != nil {
+		return 0
+	}
 
 	switch method.Name {
 	case "delegate":
