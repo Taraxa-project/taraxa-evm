@@ -37,6 +37,8 @@ const (
 	HashLength = 32
 	// AddressLength is the expected length of the address
 	AddressLength = 20
+	// VersionedKeyLength is the expected length of the versioned key
+	VersionedKeyLength = 40
 )
 
 var (
