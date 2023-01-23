@@ -70,6 +70,32 @@ func (self Reader) ForEach(db_tx Input, root_hash *common.Hash, with_values bool
 	self.for_each(db_tx, (*node_hash)(root_hash), with_values, cb, kbuf[:0])
 }
 
+func (self Reader) ForEachNodeHash(db_tx Input, root_hash *common.Hash, cb func(*common.Hash)) {
+	var kbuf hex_key
+	self.for_each_node_hash(db_tx, (*node_hash)(root_hash), cb, kbuf[:0])
+}
+
+func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash), prefix []byte) {
+	switch n := n.(type) {
+	case *node_hash:
+		self.for_each_node_hash(db_tx, self.resolve(db_tx, n, prefix), cb, prefix)
+		cb(n.common_hash())
+	case *short_node:
+		key_extended := append(prefix, n.key_part...)
+		if _, has_val := n.val.(value_node); !has_val {
+			self.for_each_node_hash(db_tx, n.val, cb, key_extended)
+		}
+	case *full_node:
+		for i := 0; i < full_node_child_cnt; i++ {
+			if c := n.children[i]; c != nil {
+				self.for_each_node_hash(db_tx, c, cb, append(prefix, byte(i)))
+			}
+		}
+	default:
+		panic("impossible")
+	}
+}
+
 func (self Reader) for_each(db_tx Input, n node, with_values bool, cb KVCallback, prefix []byte) {
 	switch n := n.(type) {
 	case *node_hash:

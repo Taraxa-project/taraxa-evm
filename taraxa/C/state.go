@@ -362,6 +362,22 @@ func taraxa_evm_state_api_db_snapshot(
 	util.PanicIfNotNil(db.Snapshot(dir, log_size_for_flush))
 }
 
+//export taraxa_evm_state_api_prune
+func taraxa_evm_state_api_prune(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		StateRootToKeep  common.Hash
+		StateRootToPrune []common.Hash
+		BlkNum           types.BlockNum
+	}
+	dec_rlp(params_enc, &params)
+	state_API_instances[ptr].db.Prune(params.StateRootToKeep, params.StateRootToPrune, params.BlkNum)
+}
+
 type state_API_ptr = byte
 
 const state_API_max_instances = ^state_API_ptr(0)
