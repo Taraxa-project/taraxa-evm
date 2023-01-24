@@ -105,6 +105,10 @@ func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts, config param
 	return self
 }
 
+func (self *EVM) AddLog(log LogRecord) {
+	self.state.AddLog(log)
+}
+
 // func (self *EVM) GetRules() Rules {
 // 	return self.rules
 // }

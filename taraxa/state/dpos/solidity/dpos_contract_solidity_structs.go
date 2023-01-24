@@ -2,14 +2,14 @@
 //
 // For automatic generation & copy paste struct:
 //		 1. To generate ABI:
-//			  a) run solc --abi --overwrite --optimize dpos_contract_interface.sol --output-dir .
+//			  a) run `solc --abi --overwrite --optimize dpos_contract_interface.sol --output-dir .`
 //				b) replace " by \" and copy&paste the ABI string into the TaraxaDposClientMetaData
-//				c) remove generated file rm DposInterface.abi
+//				c) remove generated file `rm DposInterface.abi`
 //
-//		 2. To generate dolidity interfacee related structs:
-//		 		a) run abigen --abi=abi/DposInterface.abi --pkg=taraxaDposClient --out=dpos_contract_interface.go
+//		 2. To generate solidity interface related structs:
+//		 		a) run `abigen --abi=abi/DposInterface.abi --pkg=taraxaDposClient --out=dpos_contract_interface.go`
 //		    b) copy selected structs into this file
-// 		    c) remove generated file rm dpos_contract_interface.go
+// 		    c) remove generated file `rm dpos_contract_interface.go`
 
 package sol
 

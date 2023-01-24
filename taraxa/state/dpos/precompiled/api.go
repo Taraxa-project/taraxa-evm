@@ -9,6 +9,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
 func ContractAddress() common.Address {
@@ -111,8 +112,8 @@ func (self *API) UpdateConfig(blk_n types.BlockNum, cfg Config) {
 	self.cfg = cfg
 }
 
-func (self *API) NewContract(storage Storage, reader Reader) *Contract {
-	return new(Contract).Init(self.cfg, storage, reader)
+func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contract {
+	return new(Contract).Init(self.cfg, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {

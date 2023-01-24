@@ -200,7 +200,7 @@ func (self *DposTest) GetDPOSReader() dpos.Reader {
 	return self.SUT.DPOSReader(self.blk_n)
 }
 
-func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err util.ErrorString, cons_err util.ErrorString) vm.ExecutionResult {
+func (self *DposTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err, cons_err util.ErrorString) vm.ExecutionResult {
 	res := self.execute(from, value, input)
 	self.tc.Assert.Equal(cons_err, res.ConsensusErr)
 	self.tc.Assert.Equal(exe_err, res.ExecutionErr)

@@ -53,7 +53,7 @@ func (self *StateTransition) Init(
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
-		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum))
+		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum), &self.evm)
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
