@@ -19,6 +19,7 @@ package vm
 import (
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
@@ -32,6 +33,14 @@ import (
 	"github.com/holiman/uint256"
 )
 
+// Config are the configuration options for the Interpreter
+type Config struct {
+	// Debug enabled debugging Interpreter options
+	Debug bool
+	// Tracer is the op code logger
+	Tracer Tracer
+}
+
 // EVM is the Ethereum Virtual Machine base object and provides
 // the necessary tools to run a contract on the given state with
 // the provided context. It should be noted that any error
@@ -43,7 +52,9 @@ type EVM struct {
 	get_hash GetHashFunc
 	state    State
 	block    Block
-	config   params.ChainConfig
+	// virtual machine configuration options used to initialize the evm
+	vmConfig    Config
+	chainConfig params.ChainConfig
 	// rules             Rules
 	rules_initialized bool
 	precompiles       Precompiles
@@ -98,9 +109,11 @@ type ExecutionResult struct {
 	ConsensusErr    util.ErrorString
 }
 
-func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts, config params.ChainConfig) *EVM {
+func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts, chainConfig params.ChainConfig, vmConfig Config) *EVM {
 	self.get_hash = get_hash
 	self.state = state
+	self.chainConfig = chainConfig
+	self.vmConfig = vmConfig
 	self.mem_pool.Init(opts.PreallocatedMem)
 	return self
 }
@@ -267,6 +280,9 @@ func (self *EVM) create(
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(CallFrame{caller, new_acc, nil, gas, value}, code)
+
+	start := time.Now()
+
 	ret, err = self.run(&contract, false)
 
 	// Check whether the max code size has been exceeded, assign err if the case.
@@ -295,6 +311,9 @@ func (self *EVM) create(
 			contract.UseGas(contract.Gas)
 		}
 	}
+	if self.vmConfig.Debug && self.depth == 0 {
+		self.vmConfig.Tracer.CaptureEnd(ret, gas-contract.Gas, time.Since(start), err)
+	}
 	gas_left = contract.Gas
 	return
 }
@@ -310,6 +329,10 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 	}
 	if value.Sign() == 0 {
 		if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+			// Calling a non existing account, don't do anything, but ping the tracer
+			if self.vmConfig.Debug && self.depth == 0 {
+				self.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+			}
 			return nil, gas, nil
 		}
 	} else if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
@@ -322,10 +345,19 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 
 func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
 	gas_left = frame.Gas
+	gas_copy := frame.Gas
 	precompiled := self.precompiles.Get(code_owner.Address())
+	start := time.Now()
+	// Capture the tracer start/end events in debug mode
+	if self.vmConfig.Debug && self.depth == 0 {
+		defer func() { // Lazy evaluation of the parameters
+			self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
+		}()
+	}
 	if precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
+			gas_copy = gas_required
 			ret, err = precompiled.Run(frame, self)
 		} else {
 			err = ErrOutOfGas
@@ -334,6 +366,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		contract := NewContract(frame, CodeAndHash{code, code_owner.GetCodeHash()})
 		ret, err = self.run(&contract, read_only)
 		gas_left = contract.Gas
+		gas_copy = contract.Gas
 	}
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
@@ -422,15 +455,29 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
 		// to be uint256. Practically much less so feasible.
-		pc   = uint64(0) // program counter
-		cost uint64
-		res  []byte // result of the opcode execution function
+		pc      = uint64(0) // program counter
+		cost    uint64
+		pcCopy  uint64 // needed for the deferred Tracer
+		gasCopy uint64 // for Tracer to log gas remaining before execution
+		res     []byte // result of the opcode execution function
 	)
 	// The Interpreter main run loop (contextual). This loop runs until either an
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
+	if self.vmConfig.Debug {
+		defer func() {
+			if err != nil {
+				self.vmConfig.Tracer.CaptureState(self, pcCopy, op, gasCopy, cost, &mem, stack, contract, self.depth, err)
+			}
+		}()
+	}
+
 	for {
+		if self.vmConfig.Debug {
+			// Capture pre-execution values for tracing.
+			pcCopy, gasCopy = pc, contract.Gas
+		}
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
 		op = contract.GetOp(pc)
@@ -475,6 +522,11 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		if memorySize > 0 {
 			mem.Resize(memorySize)
 		}
+
+		if self.vmConfig.Debug {
+			self.vmConfig.Tracer.CaptureState(self, pc, op, gasCopy, cost, &mem, stack, contract, self.depth, err)
+		}
+
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, &mem, stack)
 		// if the operation clears the return data (e.g. it has returning data)

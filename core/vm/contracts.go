@@ -66,7 +66,7 @@ func (self *Precompiles) Put(address *common.Address, contract PrecompiledContra
 }
 
 // PrecompiledContractsCalifornicum contains the default set of pre-compiled Ethereum
-// contracts used in the Byzantium release.
+// contracts used in the Californicum release.
 var PrecompiledContractsCalifornicum = Precompiles{
 	ecrecover{},
 	sha256hash{},

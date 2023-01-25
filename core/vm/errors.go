@@ -33,4 +33,5 @@ var (
 	ErrNonceTooHigh                   = util.ErrorString("nonce too high")
 	ErrNonceTooLow                    = util.ErrorString("nonce too low")
 	ErrWriteProtection                = util.ErrorString("write protection")
+	ErrTraceLimitReached              = util.ErrorString("the number of logs reached the specified limit")
 )
