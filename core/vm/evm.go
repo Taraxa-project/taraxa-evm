@@ -280,7 +280,13 @@ func (self *EVM) create(
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
 	contract := NewContract(CallFrame{caller, new_acc, nil, gas, value}, code)
-
+	if self.vmConfig.Debug {
+		if self.depth == 0 {
+			self.vmConfig.Tracer.CaptureStart(self, caller.Address(), address, false /* precompile */, true /* create */, code.Code, gas, value, nil)
+		} else {
+			self.vmConfig.Tracer.CaptureEnter(CREATE, caller.Address(), address, false /* precompile */, true /* create */, code.Code, gas, value, nil)
+		}
+	}
 	start := time.Now()
 
 	ret, err = self.run(&contract, false)
@@ -311,8 +317,12 @@ func (self *EVM) create(
 			contract.UseGas(contract.Gas)
 		}
 	}
-	if self.vmConfig.Debug && self.depth == 0 {
-		self.vmConfig.Tracer.CaptureEnd(ret, gas-contract.Gas, time.Since(start), err)
+	if self.vmConfig.Debug {
+		if self.depth == 0 {
+			self.vmConfig.Tracer.CaptureEnd(ret, gas-contract.Gas, time.Since(start), err)
+		} else {
+			self.vmConfig.Tracer.CaptureExit(ret, gas-contract.Gas, time.Since(start), err)
+		}
 	}
 	gas_left = contract.Gas
 	return
@@ -330,8 +340,14 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 	if value.Sign() == 0 {
 		if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 			// Calling a non existing account, don't do anything, but ping the tracer
-			if self.vmConfig.Debug && self.depth == 0 {
-				self.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+			if self.vmConfig.Debug {
+				if self.depth == 0 {
+					self.vmConfig.Tracer.CaptureStart(self, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
+					self.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+				} else {
+					self.vmConfig.Tracer.CaptureEnter(CALL, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
+					self.vmConfig.Tracer.CaptureExit(ret, 0, 0, nil)
+				}
 			}
 			return nil, gas, nil
 		}
@@ -348,12 +364,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 	gas_copy := frame.Gas
 	precompiled := self.precompiles.Get(code_owner.Address())
 	start := time.Now()
-	// Capture the tracer start/end events in debug mode
-	if self.vmConfig.Debug && self.depth == 0 {
-		defer func() { // Lazy evaluation of the parameters
-			self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
-		}()
-	}
+	var code_copy []byte
 	if precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
@@ -363,6 +374,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 			err = ErrOutOfGas
 		}
 	} else if code := code_owner.GetCode(); len(code) != 0 {
+		code_copy = code
 		contract := NewContract(frame, CodeAndHash{code, code_owner.GetCodeHash()})
 		ret, err = self.run(&contract, read_only)
 		gas_left = contract.Gas
@@ -372,6 +384,19 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		self.state.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted && precompiled == nil {
 			gas_left = 0
+		}
+	}
+	if self.vmConfig.Debug {
+		if self.depth == 0 {
+			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
+			defer func() { // Lazy evaluation of the parameters
+				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
+		} else {
+			self.vmConfig.Tracer.CaptureEnter(CALL, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
+			defer func() { // Lazy evaluation of the parameters
+				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
 		}
 	}
 	return

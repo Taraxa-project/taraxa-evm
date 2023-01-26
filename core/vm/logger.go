@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 	"time"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -98,9 +99,11 @@ func (s *StructLog) ErrorString() string {
 // Note that reference types are actual VM data structures; make copies
 // if you need to retain them beyond the current call.
 type Tracer interface {
-	CaptureStart(from common.Address, to common.Address, precompile bool, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) error
+	CaptureStart(env *EVM, from *common.Address, to *common.Address, precompile bool, create bool, input []byte, gas uint64, value *big.Int, code []byte) error
+	CaptureEnter(op OpCode, from *common.Address, to *common.Address, precompile bool, create bool, input []byte, gas uint64, value *big.Int, code []byte) error
 	CaptureState(env *EVM, pc uint64, op OpCode, gas, cost uint64, memory *Memory, stack *Stack, contract *Contract, depth uint16, err error) error
 	CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error) error
+	CaptureExit(output []byte, gasUsed uint64, t time.Duration, err error) error
 }
 
 // StructLogger is an EVM state logger and implements Tracer.
@@ -128,7 +131,15 @@ func NewStructLogger(cfg *LogConfig) *StructLogger {
 	return logger
 }
 
-func (l *StructLogger) CaptureStart(from common.Address, to common.Address, precompile bool, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) error {
+func (l *StructLogger) CaptureStart(env *EVM, from *common.Address, to *common.Address, precompile bool, create bool, input []byte, gas uint64, value *big.Int, code []byte) error {
+	return nil
+}
+
+func (l *StructLogger) CaptureEnter(op OpCode, from *common.Address, to *common.Address, precompile bool, create bool, input []byte, gas uint64, value *big.Int, code []byte) error {
+	return nil
+}
+
+func (l *StructLogger) CaptureExit(output []byte, gasUsed uint64, t time.Duration, err error) error {
 	return nil
 }
 
@@ -245,4 +256,55 @@ func WriteLogs(writer io.Writer, logs []*types.Log) {
 		fmt.Fprint(writer, hex.Dump(log.Data))
 		fmt.Fprintln(writer)
 	}
+}
+
+// StructLogRes stores a structured log emitted by the EVM while replaying a
+// transaction in debug mode
+type StructLogRes struct {
+	Pc      uint64             `json:"pc"`
+	Op      string             `json:"op"`
+	Gas     uint64             `json:"gas"`
+	GasCost uint64             `json:"gasCost"`
+	Depth   uint16             `json:"depth"`
+	Error   error              `json:"error,omitempty"`
+	Stack   *[]string          `json:"stack,omitempty"`
+	Memory  *[]string          `json:"memory,omitempty"`
+	Storage *map[string]string `json:"storage,omitempty"`
+}
+
+// FormatLogs formats EVM returned structured logs for json output
+func FormatLogs(logs []StructLog) []StructLogRes {
+	formatted := make([]StructLogRes, len(logs))
+	for index, trace := range logs {
+		formatted[index] = StructLogRes{
+			Pc:      trace.Pc,
+			Op:      trace.Op.String(),
+			Gas:     trace.Gas,
+			GasCost: trace.GasCost,
+			Depth:   trace.Depth,
+			Error:   trace.Err,
+		}
+		if trace.Stack != nil {
+			stack := make([]string, len(trace.Stack))
+			for i, stackValue := range trace.Stack {
+				stack[i] = fmt.Sprintf("%x", stackValue.PaddedBytes(32))
+			}
+			formatted[index].Stack = &stack
+		}
+		if trace.Memory != nil {
+			memory := make([]string, 0, (len(trace.Memory)+31)/32)
+			for i := 0; i+32 <= len(trace.Memory); i += 32 {
+				memory = append(memory, fmt.Sprintf("%x", trace.Memory[i:i+32]))
+			}
+			formatted[index].Memory = &memory
+		}
+		if trace.Storage != nil {
+			storage := make(map[string]string)
+			for i, storageValue := range trace.Storage {
+				storage[fmt.Sprintf("%x", i)] = fmt.Sprintf("%x", storageValue)
+			}
+			formatted[index].Storage = &storage
+		}
+	}
+	return formatted
 }
