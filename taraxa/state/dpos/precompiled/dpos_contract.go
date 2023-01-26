@@ -129,9 +129,9 @@ type Contract struct {
 	// delayed storage for PBFT
 	delayedStorage Reader
 	// ABI of the contract
-	Abi abi.ABI
-
-	evm *vm.EVM
+	Abi  abi.ABI
+	logs Logs
+	evm  *vm.EVM
 
 	// Iterable storages
 	validators    Validators
@@ -282,6 +282,7 @@ func (self *Contract) lazy_init() {
 	}
 
 	self.Abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
+	self.logs = *new(Logs).Init(self.Abi.Events)
 
 	self.validators.Init(&self.storage, field_validators)
 	self.delegations.Init(&self.storage, field_delegations)
@@ -715,7 +716,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
-	self.evm.AddLog(MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
+	self.evm.AddLog(self.logs.MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
 
 	return nil
 }
@@ -792,7 +793,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(&args.Validator, validator)
 	}
-	self.evm.AddLog(MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
+	self.evm.AddLog(self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
 
 	return nil
 }
@@ -810,7 +811,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	// TODO slashing of balance
 	ctx.CallerAccount.AddBalance(undelegation.Amount)
-	self.evm.AddLog(MakeUndelegateConfirmedLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
+	self.evm.AddLog(self.logs.MakeUndelegateConfirmedLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
 
 	return nil
 }
@@ -866,7 +867,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
-	self.evm.AddLog(MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
+	self.evm.AddLog(self.logs.MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
 
 	return nil
 }
@@ -983,7 +984,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.ValidatorTo, validator_to)
-	self.evm.AddLog(MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
+	self.evm.AddLog(self.logs.MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
 	return nil
 }
 
@@ -1018,7 +1019,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.evm.AddLog(MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
+	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
@@ -1043,7 +1044,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	} else {
 		self.validators.ModifyValidator(&args.Validator, validator)
 	}
-	self.evm.AddLog(MakeComissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
+	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
@@ -1111,10 +1112,10 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	// Creates validator related objects in storage
 	validator := self.validators.CreateValidator(owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
-	self.evm.AddLog(MakeValidatorRegisteredLog(&args.Validator))
+	self.evm.AddLog(self.logs.MakeValidatorRegisteredLog(&args.Validator))
 
 	if ctx.Value.Cmp(big.NewInt(0)) == 1 {
-		self.evm.AddLog(MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
+		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
 		self.delegate_update_values(ctx, validator, 0)
 		self.validators.ModifyValidator(&args.Validator, validator)
@@ -1162,7 +1163,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorIn
 	validator_info.Endpoint = args.Endpoint
 
 	self.validators.ModifyValidatorInfo(&args.Validator, validator_info)
-	self.evm.AddLog(MakeValidatorInfoSetLog(&args.Validator))
+	self.evm.AddLog(self.logs.MakeValidatorInfoSetLog(&args.Validator))
 
 	return nil
 }
@@ -1193,7 +1194,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 	validator.Commission = args.Commission
 	validator.LastCommissionChange = block
 	self.validators.ModifyValidator(&args.Validator, validator)
-	self.evm.AddLog(MakeCommissionSetLog(&args.Validator, args.Commission))
+	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
 }

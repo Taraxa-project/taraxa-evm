@@ -3,130 +3,98 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
-func getEventHash(str string) *common.Hash {
-	return keccak256.Hash([]byte(str))
+func checkError(log *vm.LogRecord, err error) *vm.LogRecord {
+	if err != nil {
+		panic("Update logs methods to correspond ABI: " + err.Error())
+	}
+	return log
 }
 
+type Logs struct {
+	Events map[string]abi.Event
+}
+
+func (self *Logs) Init(events map[string]abi.Event) *Logs {
+	self.Events = events
+
+	return self
+}
+
+// All Make functions below are making log records for events.
+// All hashes and data types should be the same as we have in solidity interface in ../solidity/dpos_contract_interface.sol
+// If some event will be added or changed TestMakeLogsCheckTopics test should be modified
+
 // event Delegated(address indexed delegator, address indexed validator, uint256 amount);
-var DelegatedEventHash = getEventHash("Delegated(address,address,uint256)")
+func (self *Logs) MakeDelegatedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
+	event := self.Events["Delegated"]
 
-func MakeDelegatedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *DelegatedEventHash
-	topics[1] = delegator.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: amount.Bytes()}
+	return *checkError(event.MakeLog(delegator, validator, amount))
 }
 
 // event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
-var UndelegatedEventHash = getEventHash("Undelegated(address,address,uint256)")
+func (self *Logs) MakeUndelegatedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
+	event := self.Events["Undelegated"]
 
-func MakeUndelegatedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *UndelegatedEventHash
-	topics[1] = delegator.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: amount.Bytes()}
+	return *checkError(event.MakeLog(delegator, validator, amount))
 }
 
 // event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
-var UndelegateConfirmedEventHash = getEventHash("UndelegateConfirmed(address,uint256)")
+func (self *Logs) MakeUndelegateConfirmedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
+	event := self.Events["UndelegateConfirmed"]
 
-func MakeUndelegateConfirmedLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *UndelegateConfirmedEventHash
-	topics[1] = delegator.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: amount.Bytes()}
+	return *checkError(event.MakeLog(delegator, validator, amount))
 }
 
 // event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
-var UndelegateCanceledEventHash = getEventHash("UndelegateCanceled(address,uint256)")
+func (self *Logs) MakeUndelegateCanceledLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
+	event := self.Events["UndelegateCanceled"]
 
-func MakeUndelegateCanceledLog(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *UndelegateCanceledEventHash
-	topics[1] = delegator.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: amount.Bytes()}
+	return *checkError(event.MakeLog(delegator, validator, amount))
 }
 
 // event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
-var RedelegatedEventHash = getEventHash("UndelegateCanceled(address,address,address,uint256)")
+func (self *Logs) MakeRedelegatedLog(delegator, from, to *common.Address, amount *big.Int) vm.LogRecord {
+	event := self.Events["Redelegated"]
 
-func MakeRedelegatedLog(delegator, from, to *common.Address, amount *big.Int) vm.LogRecord {
-	topics := make([]common.Hash, 4)
-	topics[0] = *RedelegatedEventHash
-	topics[1] = delegator.Hash()
-	topics[2] = from.Hash()
-	topics[3] = to.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: amount.Bytes()}
+	return *checkError(event.MakeLog(delegator, from, to, amount))
 }
 
 // event RewardsClaimed(address indexed account, address indexed validator);
-var RewardsClaimedEventHash = getEventHash("RewardsClaimed(address,address)")
+func (self *Logs) MakeRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
+	event := self.Events["RewardsClaimed"]
 
-func MakeRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *RewardsClaimedEventHash
-	topics[1] = account.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: []byte{}}
+	return *checkError(event.MakeLog(account, validator))
 }
 
 // event CommissionRewardsClaimed(address indexed account, address indexed validator);
-var ComissionRewardsClaimedEventHash = getEventHash("CommissionRewardsClaimed(address,address)")
+func (self *Logs) MakeCommissionRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
+	event := self.Events["CommissionRewardsClaimed"]
 
-func MakeComissionRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
-	topics := make([]common.Hash, 3)
-	topics[0] = *ComissionRewardsClaimedEventHash
-	topics[1] = account.Hash()
-	topics[2] = validator.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: []byte{}}
+	return *checkError(event.MakeLog(account, validator))
 }
 
-// event CommissionSet(address indexed validator, uint16 comission);
-var CommissionSetEventHash = getEventHash("CommissionSet(address,uint16)")
+// event CommissionSet(address indexed validator, uint16 commission);
+func (self *Logs) MakeCommissionSetLog(account *common.Address, amount uint16) vm.LogRecord {
+	event := self.Events["CommissionSet"]
 
-func MakeCommissionSetLog(account *common.Address, amount uint16) vm.LogRecord {
-	topics := make([]common.Hash, 2)
-	topics[0] = *CommissionSetEventHash
-	topics[1] = account.Hash()
-
-	big_amount := big.NewInt(int64(amount))
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: big_amount.Bytes()}
+	return *checkError(event.MakeLog(account, amount))
 }
 
 // event ValidatorRegistered(address indexed validator);
-var ValidatorRegisteredEventHash = getEventHash("ValidatorRegistered(address)")
+func (self *Logs) MakeValidatorRegisteredLog(account *common.Address) vm.LogRecord {
+	event := self.Events["ValidatorRegistered"]
 
-func MakeValidatorRegisteredLog(account *common.Address) vm.LogRecord {
-	topics := make([]common.Hash, 2)
-	topics[0] = *ValidatorRegisteredEventHash
-	topics[1] = account.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: []byte{}}
+	return *checkError(event.MakeLog(account))
 }
 
 // event ValidatorInfoSet(address indexed validator);
-var ValidatorInfoSetEventHash = getEventHash("ValidatorInfoSet(address)")
+func (self *Logs) MakeValidatorInfoSetLog(account *common.Address) vm.LogRecord {
+	event := self.Events["ValidatorInfoSet"]
 
-func MakeValidatorInfoSetLog(account *common.Address) vm.LogRecord {
-	topics := make([]common.Hash, 2)
-	topics[0] = *ValidatorInfoSetEventHash
-	topics[1] = account.Hash()
-
-	return vm.LogRecord{Address: *contract_address, Topics: topics, Data: []byte{}}
+	return *checkError(event.MakeLog(account))
 }
