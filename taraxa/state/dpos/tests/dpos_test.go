@@ -4,18 +4,34 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 )
+
+// This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
+var DelegatedEventHash = *keccak256.Hash([]byte("Delegated(address,address,uint256)"))
+var UndelegatedEventHash = *keccak256.Hash([]byte("Undelegated(address,address,uint256)"))
+var UndelegateConfirmedEventHash = *keccak256.Hash([]byte("UndelegateConfirmed(address,address,uint256)"))
+var UndelegateCanceledEventHash = *keccak256.Hash([]byte("UndelegateCanceled(address,address,uint256)"))
+var RedelegatedEventHash = *keccak256.Hash([]byte("Redelegated(address,address,address,uint256)"))
+var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address)"))
+var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address)"))
+var CommissionSetEventHash = *keccak256.Hash([]byte("CommissionSet(address,uint16)"))
+var ValidatorRegisteredEventHash = *keccak256.Hash([]byte("ValidatorRegistered(address)"))
+var ValidatorInfoSetEventHash = *keccak256.Hash([]byte("ValidatorInfoSet(address)"))
 
 func TestProof(t *testing.T) {
 	pubkey, seckey := generateKeyPair()
@@ -79,7 +95,7 @@ func TestDelegateMinMax(t *testing.T) {
 }
 
 func TestRedelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaultChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	validator1_owner := addr(1)
@@ -88,9 +104,16 @@ func TestRedelegate(t *testing.T) {
 	validator2_owner := addr(2)
 	validator2_addr, validator2_proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	reg_res := test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(reg_res.Logs), 2)
+	tc.Assert.Equal(reg_res.Logs[0].Topics[0], ValidatorRegisteredEventHash)
+	tc.Assert.Equal(reg_res.Logs[1].Topics[0], DelegatedEventHash)
+
 	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	redelegate_res := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(redelegate_res.Logs), 1)
+	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RedelegatedEventHash)
+
 	//Validator 1 does not exist as we withdraw all stake
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
@@ -108,7 +131,7 @@ func TestRedelegate(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// OK
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
-	// Validator 1 does not exist as we widthrawl all stake
+	// Validator 1 does not exist as we withdraw all stake
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
 
@@ -133,7 +156,7 @@ func TestRedelegateMinMax(t *testing.T) {
 }
 
 func TestUndelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaultChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -141,7 +164,9 @@ func TestUndelegate(t *testing.T) {
 	delegator_addr := addr(2)
 
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(undelegate_res.Logs), 1)
+	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], UndelegatedEventHash)
 	// NonExistentValidator as it was deleted
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
@@ -157,7 +182,7 @@ func TestUndelegate(t *testing.T) {
 }
 
 func TestConfirmUndelegate(t *testing.T) {
-	_, test := init_test(t, CopyDefaultChainConfig())
+	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
 
 	val_owner := addr(1)
@@ -178,7 +203,9 @@ func TestConfirmUndelegate(t *testing.T) {
 	test.AdvanceBlock(nil, nil, nil)
 	test.AdvanceBlock(nil, nil, nil)
 
-	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	confirm_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(confirm_res.Logs), 1)
+	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
 
 	// ErrNonExistentDelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
@@ -218,7 +245,9 @@ func TestCancelUndelegate(t *testing.T) {
 	tc.Assert.Equal(DefaultMinimumDeposit, validator.ValidatorInfo.TotalStake)
 
 	// Cancel undelegate and check if validator's total stake was increased again
-	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	cancel_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(cancel_res.Logs), 1)
+	tc.Assert.Equal(cancel_res.Logs[0].Topics[0], UndelegateCanceledEventHash)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator = new(GetValidatorRet)
@@ -428,8 +457,12 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+	{
+		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+		clam_res := test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+		tc.Assert.Equal(len(clam_res.Logs), 1)
+		tc.Assert.Equal(clam_res.Logs[0].Topics[0], RewardsClaimedEventHash)
+	}
 
 	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
 	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
@@ -448,7 +481,11 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+	{
+		claim_res := test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+		tc.Assert.Equal(len(claim_res.Logs), 1)
+		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
+	}
 
 	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
 	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
@@ -501,7 +538,11 @@ func TestSetValidatorInfo(t *testing.T) {
 	tc.Assert.Equal("test_endpoint", validator.ValidatorInfo.Endpoint)
 
 	// Change description & endpoint and see it getValidator returns changed values
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setValidatorInfo", val_addr, "modified_description", "modified_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	{
+		set_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setValidatorInfo", val_addr, "modified_description", "modified_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		tc.Assert.Equal(len(set_res.Logs), 1)
+		tc.Assert.Equal(set_res.Logs[0].Topics[0], ValidatorInfoSetEventHash)
+	}
 	validator_raw = test.ExecuteAndCheck(val_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator = new(GetValidatorRet)
 	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
@@ -1252,4 +1293,66 @@ func TestUndelegationsClass(t *testing.T) {
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsCount(&delegator1_addr))
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr))
+}
+
+func TestMakeLogsCheckTopics(t *testing.T) {
+	tc := tests.NewTestCtx(t)
+	amount := big.NewInt(0)
+
+	Abi, _ := abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
+	logs := *new(dpos.Logs).Init(Abi.Events)
+
+	count := 0
+	{
+		log := logs.MakeDelegatedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		tc.Assert.Equal(log.Topics[0], DelegatedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		tc.Assert.Equal(log.Topics[0], UndelegatedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		tc.Assert.Equal(log.Topics[0], UndelegateConfirmedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		tc.Assert.Equal(log.Topics[0], UndelegateCanceledEventHash)
+		count++
+	}
+	{
+		log := logs.MakeRedelegatedLog(&common.ZeroAddress, &common.ZeroAddress, &common.ZeroAddress, amount)
+		tc.Assert.Equal(log.Topics[0], RedelegatedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress)
+		tc.Assert.Equal(log.Topics[0], RewardsClaimedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeCommissionRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress)
+		tc.Assert.Equal(log.Topics[0], CommissionRewardsClaimedEventHash)
+		count++
+	}
+	{
+		log := logs.MakeCommissionSetLog(&common.ZeroAddress, 0)
+		tc.Assert.Equal(log.Topics[0], CommissionSetEventHash)
+		count++
+	}
+	{
+		log := logs.MakeValidatorRegisteredLog(&common.ZeroAddress)
+		tc.Assert.Equal(log.Topics[0], ValidatorRegisteredEventHash)
+		count++
+	}
+	{
+		log := logs.MakeValidatorInfoSetLog(&common.ZeroAddress)
+		tc.Assert.Equal(log.Topics[0], ValidatorInfoSetEventHash)
+		count++
+	}
+	// Check that we tested all events from the ABI
+	tc.Assert.Equal(count, len(Abi.Events))
 }

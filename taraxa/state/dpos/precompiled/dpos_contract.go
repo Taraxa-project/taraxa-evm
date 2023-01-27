@@ -129,7 +129,9 @@ type Contract struct {
 	// delayed storage for PBFT
 	delayedStorage Reader
 	// ABI of the contract
-	Abi abi.ABI
+	Abi  abi.ABI
+	logs Logs
+	evm  *vm.EVM
 
 	// Iterable storages
 	validators    Validators
@@ -150,10 +152,11 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader) *Contract {
+func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
+	self.evm = evm
 	return self
 }
 
@@ -177,7 +180,7 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
 	self.lazy_init()
-	
+
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		return 0
@@ -279,6 +282,7 @@ func (self *Contract) lazy_init() {
 	}
 
 	self.Abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
+	self.logs = *new(Logs).Init(self.Abi.Events)
 
 	self.validators.Init(&self.storage, field_validators)
 	self.delegations.Init(&self.storage, field_delegations)
@@ -432,7 +436,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.setCommission(ctx, evm.GetBlock().Number, args)
 
 	case "registerValidator":
-
 		var args sol.RegisterValidatorArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse registerValidator input args: ", err)
@@ -713,6 +716,8 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
+	self.evm.AddLog(self.logs.MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
+
 	return nil
 }
 
@@ -788,11 +793,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(&args.Validator, validator)
 	}
+	self.evm.AddLog(self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
 
 	return nil
 }
 
-// Removes undelegation from queue and moves staked toknes back to delegator
+// Removes undelegation from queue and moves staked tokens back to delegator
 // This only works after lock-up period expires
 func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
@@ -805,6 +811,8 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	// TODO slashing of balance
 	ctx.CallerAccount.AddBalance(undelegation.Amount)
+	self.evm.AddLog(self.logs.MakeUndelegateConfirmedLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
+
 	return nil
 }
 
@@ -859,6 +867,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	state.Count++
 	self.state_put(&state_k, state)
 	self.validators.ModifyValidator(&args.Validator, validator)
+	self.evm.AddLog(self.logs.MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
+
 	return nil
 }
 
@@ -937,45 +947,44 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	}
 
 	// Now we delegate
-	{
-		state, state_k := self.state_get(args.ValidatorTo[:], BlockToBytes(block))
-		if state == nil {
-			old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(validator_to.LastUpdated))
-			state = new(State)
-			state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_to.RewardsPool, validator_to.TotalStake))
-			validator_to.RewardsPool = big.NewInt(0)
-			validator_to.LastUpdated = block
-			state.Count++
-		}
-
-		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo)
-
-		if delegation == nil {
-			self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
-			validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
-		} else {
-			// We need to claim rewards first
-			old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
-			reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-			ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-
-			delegation.Stake.Add(delegation.Stake, args.Amount)
-			delegation.LastUpdated = block
-			self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, delegation)
-
-			validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
-		}
-
-		new_vote_count := voteCount(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
-		if prev_vote_count_to != new_vote_count {
-			self.eligible_vote_count -= prev_vote_count_to
-			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
-		}
-
+	state, state_k := self.state_get(args.ValidatorTo[:], BlockToBytes(block))
+	if state == nil {
+		old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(validator_to.LastUpdated))
+		state = new(State)
+		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_to.RewardsPool, validator_to.TotalStake))
+		validator_to.RewardsPool = big.NewInt(0)
+		validator_to.LastUpdated = block
 		state.Count++
-		self.state_put(&state_k, state)
-		self.validators.ModifyValidator(&args.ValidatorTo, validator_to)
 	}
+
+	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo)
+
+	if delegation == nil {
+		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
+		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
+	} else {
+		// We need to claim rewards first
+		old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
+		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
+		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+
+		delegation.Stake.Add(delegation.Stake, args.Amount)
+		delegation.LastUpdated = block
+		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, delegation)
+
+		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
+	}
+
+	new_vote_count := voteCount(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	if prev_vote_count_to != new_vote_count {
+		self.eligible_vote_count -= prev_vote_count_to
+		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
+	}
+
+	state.Count++
+	self.state_put(&state_k, state)
+	self.validators.ModifyValidator(&args.ValidatorTo, validator_to)
+	self.evm.AddLog(self.logs.MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
 	return nil
 }
 
@@ -1010,6 +1019,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 
 	state.Count++
 	self.state_put(&state_k, state)
+	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
@@ -1034,6 +1044,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	} else {
 		self.validators.ModifyValidator(&args.Validator, validator)
 	}
+	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
@@ -1101,8 +1112,10 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	// Creates validator related objects in storage
 	validator := self.validators.CreateValidator(owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
+	self.evm.AddLog(self.logs.MakeValidatorRegisteredLog(&args.Validator))
 
 	if ctx.Value.Cmp(big.NewInt(0)) == 1 {
+		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
 		self.delegate_update_values(ctx, validator, 0)
 		self.validators.ModifyValidator(&args.Validator, validator)
@@ -1150,6 +1163,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorIn
 	validator_info.Endpoint = args.Endpoint
 
 	self.validators.ModifyValidatorInfo(&args.Validator, validator_info)
+	self.evm.AddLog(self.logs.MakeValidatorInfoSetLog(&args.Validator))
 
 	return nil
 }
@@ -1180,6 +1194,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 	validator.Commission = args.Commission
 	validator.LastCommissionChange = block
 	self.validators.ModifyValidator(&args.Validator, validator)
+	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
 }

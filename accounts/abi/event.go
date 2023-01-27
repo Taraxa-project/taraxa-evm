@@ -18,9 +18,11 @@ package abi
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
@@ -54,4 +56,30 @@ func (e Event) Id() common.Hash {
 		i++
 	}
 	return common.BytesToHash(crypto.Keccak256([]byte(fmt.Sprintf("%v(%v)", e.Name, strings.Join(types, ",")))))
+}
+
+func (e Event) MakeLog(args ...interface{}) (*vm.LogRecord, error) {
+	if len(e.Inputs) != len(args) {
+		return nil, fmt.Errorf("MakeLog: %v: expected %v arguments, but got %v", e.Name, len(e.Inputs), len(args))
+	}
+	log := new(vm.LogRecord)
+	log.Topics = append(log.Topics, e.Id())
+	data_set := false
+	for index, input := range e.Inputs {
+		bytes, err := input.Type.pack(reflect.ValueOf(args[index]))
+		if err != nil {
+			return nil, err
+		}
+		if input.Indexed {
+			log.Topics = append(log.Topics, common.BytesToHash(bytes))
+		} else {
+			if data_set {
+				return nil, fmt.Errorf("Only one not indexed param is supported right now")
+			}
+			data_set = true
+			log.Data = bytes
+		}
+
+	}
+	return log, nil
 }

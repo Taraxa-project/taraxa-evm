@@ -4,6 +4,18 @@
 pragma solidity >=0.8.0;
 
 interface DposInterface {
+
+    event Delegated(address indexed delegator, address indexed validator, uint256 amount);
+    event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
+    event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
+    event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
+    event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
+    event RewardsClaimed(address indexed account, address indexed validator);
+    event CommissionRewardsClaimed(address indexed account, address indexed validator);
+    event CommissionSet(address indexed validator, uint16 comission);
+    event ValidatorRegistered(address indexed validator);
+    event ValidatorInfoSet(address indexed validator);
+
     struct ValidatorBasicInfo {
         // Total number of delegated tokens to the validator
         uint256 total_stake;
