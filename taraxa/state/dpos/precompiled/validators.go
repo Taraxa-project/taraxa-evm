@@ -32,6 +32,17 @@ type Validator struct {
 
 	// Block number pointing to latest state
 	LastUpdated types.BlockNum
+
+	// Set of delegators
+	Delegators map[common.Address]struct{}
+}
+
+func (self *Validator) AddDelegator(delegator *common.Address) {
+	self.Delegators[*delegator] = struct{}{}
+}
+
+func (self *Validator) RemoveDelegator(delegator *common.Address) {
+	delete(self.Delegators, *delegator)
 }
 
 type ValidatorInfo struct {
@@ -168,6 +179,7 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 	rewards_key := stor_k_1(self.validator_rewards_field, validator_address[:])
 	self.storage.Put(rewards_key, rlp.MustEncodeToBytes(rewards))
 
+	validator.Delegators = make(map[common.Address]struct{})
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
 	return validator

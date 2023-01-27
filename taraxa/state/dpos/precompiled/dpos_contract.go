@@ -483,6 +483,25 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 		return method.Outputs.Pack(result)
 
+	case "getValidatorDelegators":
+		var args sol.ValidatorAddressArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getValidatorDelegators input args: ", err)
+			return nil, err
+		}
+		validator := self.validators.GetValidator(&args.Validator)
+		if validator == nil {
+			return nil, ErrNonExistentValidator
+		}
+		delegators := make([]common.Address, len(validator.Delegators))
+
+		i := 0
+		for k := range validator.Delegators {
+			delegators[i] = k
+			i++
+		}
+		return method.Outputs.Pack(delegators)
+
 	case "getValidators":
 		var args sol.GetValidatorsArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -694,6 +713,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
+		validator.AddDelegator(ctx.CallerAccount.Address())
 	} else {
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
@@ -769,6 +789,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	if delegation.Stake.Cmp(big.NewInt(0)) == 0 {
 		self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator)
+		validator.RemoveDelegator(ctx.CallerAccount.Address())
 	} else {
 		delegation.LastUpdated = block
 		state.Count++
@@ -843,6 +864,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, undelegation.Amount)
+		validator.AddDelegator(ctx.CallerAccount.Address())
 		validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
 	} else {
 		// We need to claim rewards first
@@ -927,6 +949,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 		if delegation.Stake.Cmp(big.NewInt(0)) == 0 {
 			self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
+			validator_from.RemoveDelegator(ctx.CallerAccount.Address())
 		} else {
 			delegation.LastUpdated = block
 			state.Count++
@@ -965,6 +988,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.ValidatorTo, block, args.Amount)
+		validator_to.AddDelegator(ctx.CallerAccount.Address())
 		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 	} else {
 		// We need to claim rewards first
@@ -1126,6 +1150,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	if ctx.Value.Cmp(big.NewInt(0)) == 1 {
 		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
+		validator.AddDelegator(owner_address)
 		self.delegate_update_values(ctx, validator, 0)
 		self.validators.ModifyValidator(&args.Validator, validator)
 		state.Count++

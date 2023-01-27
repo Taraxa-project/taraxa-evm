@@ -94,6 +94,27 @@ func TestDelegateMinMax(t *testing.T) {
 	test.ExecuteAndCheck(addr(2), DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 }
 
+func TestValidatorDelegations(t *testing.T) {
+	tc, test := init_test(t, CopyDefaultChainConfig())
+	defer test.end()
+
+	val_addr, proof := generateAddrAndProof()
+	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	count := 3
+	for i := 0; i < count; i++ {
+		test.ExecuteAndCheck(addr(uint64(i+1)), DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	validator_delegators_raw := test.ExecuteAndCheck(addr(1), big.NewInt(0), test.pack("getValidatorDelegators", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator_delegators := []common.Address{}
+	test.unpack(&validator_delegators, "getValidatorDelegators", validator_delegators_raw.CodeRetval)
+	tc.Assert.Equal(count, len(validator_delegators))
+
+	for i := 0; i < count; i++ {
+		tc.Assert.Equal(addr(uint64(i+1)), validator_delegators[i])
+	}
+}
+
 func TestRedelegate(t *testing.T) {
 	tc, test := init_test(t, CopyDefaultChainConfig())
 	defer test.end()
