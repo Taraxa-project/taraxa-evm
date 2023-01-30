@@ -8,6 +8,18 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
+type Rewards struct {
+	// Rewards accumulated
+	RewardsPool *big.Int
+
+	// Rewards accumulated
+	CommissionRewardsPool *big.Int
+}
+
+func (self *Rewards) Empty() bool {
+	return (self.RewardsPool.Cmp(big.NewInt(0)) == 0) && (self.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0)
+}
+
 type Validator struct {
 	// TotalStake == sum of all delegated tokens to the validator
 	TotalStake *big.Int
@@ -15,16 +27,10 @@ type Validator struct {
 	// Commission
 	Commission uint16
 
-	// Rewards accumulated
-	RewardsPool *big.Int
-
-	// Rewards accumulated
-	CommissionRewardsPool *big.Int
-
 	// Block number related to commission
 	LastCommissionChange types.BlockNum
 
-	// Block number poiting to latest state
+	// Block number pointing to latest state
 	LastUpdated types.BlockNum
 }
 
@@ -47,14 +53,16 @@ type Validators struct {
 	validators_info_field   []byte
 	validator_owner_field   []byte
 	validator_vrf_key_field []byte
+	validator_rewards_field []byte
 }
 
 var (
-	main_index  = []byte{0}
-	info_index  = []byte{1}
-	owner_index = []byte{2}
-	vrf_index   = []byte{3}
-	list_index  = []byte{4}
+	main_index    = []byte{0}
+	info_index    = []byte{1}
+	owner_index   = []byte{2}
+	vrf_index     = []byte{3}
+	rewards_index = []byte{4}
+	list_index    = []byte{5}
 )
 
 func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
@@ -65,6 +73,7 @@ func (self *Validators) Init(stor *StorageWrapper, prefix []byte) {
 	self.validators_info_field = append(prefix, info_index...)
 	self.validator_owner_field = append(prefix, owner_index...)
 	self.validator_vrf_key_field = append(prefix, vrf_index...)
+	self.validator_rewards_field = append(prefix, rewards_index...)
 	validators_list_field := append(prefix, list_index...)
 
 	self.validators_list.Init(self.storage, validators_list_field)
@@ -131,8 +140,6 @@ func (self *Validators) ModifyValidator(validator_address *common.Address, valid
 func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
 	// Creates Validator object in storage
 	validator := new(Validator)
-	validator.CommissionRewardsPool = big.NewInt(0)
-	validator.RewardsPool = big.NewInt(0)
 	validator.Commission = commission
 	validator.TotalStake = big.NewInt(0)
 	validator.LastCommissionChange = block
@@ -155,6 +162,12 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 	validator_vrf_key := stor_k_1(self.validator_vrf_key_field, validator_address[:])
 	self.storage.Put(validator_vrf_key, vrf_key)
 
+	rewards := new(Rewards)
+	rewards.RewardsPool = big.NewInt(0)
+	rewards.CommissionRewardsPool = big.NewInt(0)
+	rewards_key := stor_k_1(self.validator_rewards_field, validator_address[:])
+	self.storage.Put(rewards_key, rlp.MustEncodeToBytes(rewards))
+
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
 	return validator
@@ -169,6 +182,12 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 
 	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
 	self.storage.Put(validator_owner_key, nil)
+
+	validator_vrf_key := stor_k_1(self.validator_vrf_key_field, validator_address[:])
+	self.storage.Put(validator_vrf_key, nil)
+
+	rewards_key := stor_k_1(self.validator_rewards_field, validator_address[:])
+	self.storage.Put(rewards_key, nil)
 
 	// Removes validator into the list of all validators
 	self.validators_list.RemoveAccount(validator_address)
@@ -204,4 +223,40 @@ func (self *Validators) GetValidatorsAddresses(batch uint32, count uint32) ([]co
 
 func (self *Validators) GetValidatorsCount() uint32 {
 	return self.validators_list.GetCount()
+}
+
+func (self *Validators) GetValidatorRewards(validator_address *common.Address) (rewards *Rewards) {
+	key := stor_k_1(self.validator_rewards_field, validator_address[:])
+	self.storage.Get(key, func(bytes []byte) {
+		rewards = new(Rewards)
+		rlp.MustDecodeBytes(bytes, rewards)
+	})
+
+	return
+}
+
+func (self *Validators) ModifyValidatorRewards(validator_address *common.Address, rewards *Rewards) {
+	if rewards == nil {
+		panic("ModifyValidatorRewards: rewards cannot be nil")
+	}
+
+	// This could happen only due to some serious logic bug
+	if self.ValidatorExists(validator_address) == false {
+		panic("ModifyValidatorRewards: non existent validator")
+	}
+
+	key := stor_k_1(self.validator_rewards_field, validator_address[:])
+	self.storage.Put(key, rlp.MustEncodeToBytes(rewards))
+}
+
+func (self *Validators) AddValidatorRewards(validator_address *common.Address, commission_reward, reward *big.Int) {
+	// This could happen only due to some serious logic bug
+	if self.ValidatorExists(validator_address) == false {
+		panic("AddValidatorRewards: non existent validator")
+	}
+	rewards := self.GetValidatorRewards(validator_address)
+	rewards.CommissionRewardsPool.Add(rewards.CommissionRewardsPool, commission_reward)
+	rewards.RewardsPool.Add(rewards.RewardsPool, reward)
+
+	self.ModifyValidatorRewards(validator_address, rewards)
 }
