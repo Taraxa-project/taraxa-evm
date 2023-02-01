@@ -52,7 +52,7 @@ func (self Reader) IsEligible(address *common.Address) bool {
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = big.NewInt(0)
-	self.storage.Get(stor_k_1(field_validators, main_index, addr[:]), func(bytes []byte) {
+	self.storage.Get(stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
 		validator := new(Validator)
 		rlp.MustDecodeBytes(bytes, validator)
 		ret = validator.TotalStake
@@ -61,7 +61,7 @@ func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 }
 
 func (self Reader) GetVrfKey(addr *common.Address) (ret []byte) {
-	self.storage.Get(stor_k_1(field_validators, vrf_index, addr[:]), func(bytes []byte) {
+	self.storage.Get(stor_k_1(field_validators, validator_vrf_index, addr[:]), func(bytes []byte) {
 		ret = bytes
 	})
 	return
