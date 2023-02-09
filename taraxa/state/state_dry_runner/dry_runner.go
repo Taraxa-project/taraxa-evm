@@ -48,7 +48,7 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionRes
 	// we don't need to specify nonce for eth_call. So set correct one
 	trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
 	var evm vm.EVM
-	evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig)
+	evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{})
 	evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)

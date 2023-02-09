@@ -25,6 +25,7 @@ type API struct {
 	db               state_db.DB
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
+	trace_runner	 state_dry_runner.TraceRunner
 	dpos             *dpos.API
 	config           *chain_config.ChainConfig
 }
@@ -81,6 +82,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 			},
 		})
 	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
+	self.trace_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
 	return self
 }
 
@@ -88,6 +90,7 @@ func (self *API) UpdateConfig(chain_cfg *chain_config.ChainConfig) {
 	self.config = chain_cfg
 	self.state_transition.UpdateConfig(self.config)
 	self.dry_runner.UpdateConfig(self.config)
+	self.trace_runner.UpdateConfig(self.config)
 	config_update_block_num := self.state_transition.LastBlockNum + 1
 	self.dpos.UpdateConfig(config_update_block_num, self.config.DPOS)
 	self.rocksdb.SaveDPOSConfigChange(config_update_block_num, rlp.MustEncodeToBytes(self.config.DPOS))
@@ -121,6 +124,10 @@ func (self *API) GetCommittedStateDescriptor() state_db.StateDescriptor {
 
 func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction) vm.ExecutionResult {
 	return self.dry_runner.Apply(blk, trx)
+}
+
+func (self *API) TraceTransaction(blk *vm.Block, trx *vm.Transaction, conf *vm.TracingConfig) []byte {
+	return self.trace_runner.Trace(blk, trx, conf)
 }
 
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {

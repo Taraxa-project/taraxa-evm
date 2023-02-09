@@ -24,6 +24,9 @@ var (
 	MainnetChainConfig = &ChainConfig{
 		ChainId: 841,
 	}
+	TestChainConfig = ChainConfig{
+		ChainId: 666,
+	}
 )
 
 type ChainConfig struct {

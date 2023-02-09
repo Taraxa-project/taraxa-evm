@@ -476,7 +476,7 @@ func opGasLimit(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 }
 
 func opChainID(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(new(uint256.Int).SetUint64(evm.config.ChainId))
+	stack.push(new(uint256.Int).SetUint64(evm.chainConfig.ChainId))
 	return nil, nil
 }
 
