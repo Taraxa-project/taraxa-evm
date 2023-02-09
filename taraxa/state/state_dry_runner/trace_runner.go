@@ -61,7 +61,7 @@ func (self *TraceRunner) Trace(blk *vm.Block, trx *vm.Transaction, conf *vm.Trac
 	evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
 	evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
 	if self.dpos_api != nil {
-		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number)).Register(evm.RegisterPrecompiledContract)
+		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
 
 	ret := evm.Main(trx)
@@ -80,8 +80,8 @@ func (self *TraceRunner) Trace(blk *vm.Block, trx *vm.Transaction, conf *vm.Trac
 
 	case *vm.OeTracer:
 		tracer.SetRetCode(ret.CodeRetval)
-		 out, _ := json.Marshal(tracer.GetResult())
-		 return out
+		out, _ := json.Marshal(tracer.GetResult())
+		return out
 	default:
 		panic(fmt.Sprintf("bad tracer type %T", tracer))
 	}
