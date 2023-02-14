@@ -165,6 +165,20 @@ interface DposInterface {
         returns (ValidatorData[] memory validators, bool end);
 
     /**
+     * @notice Returns list of validators owned by an address
+     *
+     * @param owner        Owner address
+     * @param batch        Batch number to be fetched. If the list is too big it cannot return all validators in one call. Instead, users are fetching batches of 100 account at a time
+     *
+     * @return validators  Batch of N validators basic info
+     * @return end         Flag if there are no more accounts left. To get all accounts, caller should fetch all batches until he sees end == true
+     **/
+    function getValidatorsFor(address owner, uint32 batch)
+        external
+        view
+        returns (ValidatorData[] memory validators, bool end);
+
+    /**
      * @notice Returns list of delegations for specified delegator - which validators delegator delegated to
      *
      * @param delegator     delegator account address

@@ -42,19 +42,19 @@ var contract_address = new(common.Address).SetBytes(common.FromHex("0x0000000000
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
 const (
-	RegisterValidatorGas     uint64 = 80000
-	SetCommissionGas         uint64 = 20000
-	DelegateGas              uint64 = 40000
-	UndelegateGas            uint64 = 60000
-	ConfirmUndelegateGas     uint64 = 20000
-	CancelUndelegateGas      uint64 = 60000
-	ReDelegateGas            uint64 = 80000
-	ClaimRewardsGas          uint64 = 40000
-	ClaimCommisionRewardsGas uint64 = 20000
-	SetValidatorInfoGas      uint64 = 20000
-	DposGetMethodsGas        uint64 = 5000
-	DposBatchGetMethodsGas   uint64 = 5000
-	DefaultDposMethodGas     uint64 = 20000
+	RegisterValidatorGas      uint64 = 80000
+	SetCommissionGas          uint64 = 20000
+	DelegateGas               uint64 = 40000
+	UndelegateGas             uint64 = 60000
+	ConfirmUndelegateGas      uint64 = 20000
+	CancelUndelegateGas       uint64 = 60000
+	ReDelegateGas             uint64 = 80000
+	ClaimRewardsGas           uint64 = 40000
+	ClaimCommissionRewardsGas uint64 = 20000
+	SetValidatorInfoGas       uint64 = 20000
+	DposGetMethodsGas         uint64 = 5000
+	DposBatchGetMethodsGas    uint64 = 5000
+	DefaultDposMethodGas      uint64 = 20000
 )
 
 // Contract methods error return values
@@ -200,7 +200,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimCommissionRewards":
-		return ClaimCommisionRewardsGas
+		return ClaimCommissionRewardsGas
 	case "setCommission":
 		return SetCommissionGas
 	case "registerValidator":
@@ -211,7 +211,6 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getTotalEligibleVotesCount":
 	case "getValidatorEligibleVotesCount":
 	case "getValidator":
-	case "getValidatorDelegators":
 		return DposGetMethodsGas
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
@@ -224,6 +223,18 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		validators_count := self.batch_items_count(uint64(self.validators.GetValidatorsCount()), uint64(args.Batch), GetValidatorsMaxCount)
 		return validators_count * DposBatchGetMethodsGas
+
+	case "getValidatorsFor":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetValidatorsForArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		// This method is iterating through list of validators, so we charge relatively large fee here
+		return GetValidatorsMaxCount * DposBatchGetMethodsGas
 
 	case "getDelegations":
 		// First 4 bytes is method signature !!!!
@@ -490,6 +501,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getValidators(args))
+
+	case "getValidatorsFor":
+		var args sol.GetValidatorsForArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getValidatorsFor input args: ", err)
+			return nil, err
+		}
+		return method.Outputs.Pack(self.getValidatorsFor(args))
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -1240,6 +1259,31 @@ func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInter
 	return result, nil
 }
 
+func (self *Contract) to_validator_data(validator_address, owner common.Address) (validator_data sol.DposInterfaceValidatorData) {
+	validator := self.validators.GetValidator(&validator_address)
+	if validator == nil {
+		// This should never happen
+		panic("to_validator_data - unable to fetch validator data")
+	}
+
+	validator_info := self.validators.GetValidatorInfo(&validator_address)
+	if validator_info == nil {
+		// This should never happen
+		panic("to_validator_data - unable to fetch validator info data")
+	}
+	validator_rewards := self.validators.GetValidatorRewards(&validator_address)
+
+	validator_data.Account = validator_address
+	validator_data.Info.Commission = validator.Commission
+	validator_data.Info.CommissionReward = validator_rewards.CommissionRewardsPool
+	validator_data.Info.LastCommissionChange = validator.LastCommissionChange
+	validator_data.Info.Owner = self.validators.GetValidatorOwner(&validator_address)
+	validator_data.Info.TotalStake = validator.TotalStake
+	validator_data.Info.Endpoint = validator_info.Endpoint
+	validator_data.Info.Description = validator_info.Description
+	return validator_data
+}
+
 // Returns batch of validators
 func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
@@ -1248,31 +1292,40 @@ func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []so
 	validators = make([]sol.DposInterfaceValidatorData, 0, len(validators_addresses))
 
 	for _, validator_address := range validators_addresses {
-		validator := self.validators.GetValidator(&validator_address)
-		if validator == nil {
-			// This should never happen
-			panic("getValidators - unable to fetch validator data")
-		}
-
-		validator_info := self.validators.GetValidatorInfo(&validator_address)
-		if validator_info == nil {
-			// This should never happen
-			panic("getValidators - unable to fetch validator info data")
-		}
-		validator_rewards := self.validators.GetValidatorRewards(&validator_address)
-
-		var validator_data sol.DposInterfaceValidatorData
-		validator_data.Account = validator_address
-		validator_data.Info.Commission = validator.Commission
-		validator_data.Info.CommissionReward = validator_rewards.CommissionRewardsPool
-		validator_data.Info.LastCommissionChange = validator.LastCommissionChange
-		validator_data.Info.Owner = self.validators.GetValidatorOwner(&validator_address)
-		validator_data.Info.TotalStake = validator.TotalStake
-		validator_data.Info.Endpoint = validator_info.Endpoint
-		validator_data.Info.Description = validator_info.Description
-
-		validators = append(validators, validator_data)
+		validators = append(validators, self.to_validator_data(validator_address, self.validators.GetValidatorOwner(&validator_address)))
 	}
+	return
+}
+
+// Returns batch of validators for specified owner
+func (self *Contract) getValidatorsFor(args sol.GetValidatorsForArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
+	validators_addresses, _ := self.validators.GetValidatorsAddresses(0, self.validators.GetValidatorsCount())
+
+	// Reserve slice capacity
+	validators = make([]sol.DposInterfaceValidatorData, 0, GetValidatorsMaxCount)
+	skipped := uint32(0)
+	to_skip := args.Batch * GetValidatorsMaxCount
+	full := false
+
+	for _, validator_address := range validators_addresses {
+		owner := self.validators.GetValidatorOwner(&validator_address)
+		if owner != args.Owner {
+			continue
+		}
+		if skipped < to_skip {
+			skipped++
+			continue
+		}
+
+		if !full {
+			validators = append(validators, self.to_validator_data(validator_address, owner))
+			full = len(validators) == GetValidatorsMaxCount
+		} else { // we found one more owner validator that belongs to the next batch.
+			end = false
+			return
+		}
+	}
+	end = true
 	return
 }
 
