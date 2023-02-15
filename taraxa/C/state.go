@@ -255,6 +255,7 @@ func taraxa_evm_state_api_transition_state(
 	var retval struct {
 		ExecutionResults []vm.ExecutionResult
 		StateRoot        common.Hash
+		TotalReward      *big.Int
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
@@ -289,9 +290,12 @@ func taraxa_evm_state_api_transition_state(
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
 	}
-
-	st.EndBlock(params.Uncles, &params.Rewards_stats, &feesRewards)
+	totalReward := st.EndBlock(params.Uncles, &params.Rewards_stats, &feesRewards)
+	if totalReward != nil {
+		retval.TotalReward = totalReward.ToBig()
+	}
 	retval.StateRoot = st.PrepareCommit()
+
 	enc_rlp(&retval, cb)
 }
 

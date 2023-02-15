@@ -25,7 +25,7 @@ type API struct {
 	db               state_db.DB
 	state_transition state_transition.StateTransition
 	dry_runner       state_dry_runner.DryRunner
-	trace_runner	 state_dry_runner.TraceRunner
+	trace_runner     state_dry_runner.TraceRunner
 	dpos             *dpos.API
 	config           *chain_config.ChainConfig
 }
@@ -109,7 +109,7 @@ type StateTransition interface {
 	AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int)
 	GetChainConfig() *chain_config.ChainConfig
 	GetEvmState() *state_evm.EVMState
-	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards)
+	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards) *uint256.Int
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)
 }
