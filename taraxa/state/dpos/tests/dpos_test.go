@@ -681,6 +681,76 @@ func TestGetValidators(t *testing.T) {
 	tc.Assert.Equal(true, batch3_parsed_result.End)
 }
 
+func TestGetValidatorsFor(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	val_owner := addr(uint64(1000))
+	gen_validators_num := 3*dpos.GetValidatorsMaxCount - 1
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := CopyDefaultChainConfig()
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = DefaultBalance
+	}
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	// Register validators
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	intristic_gas_batch0 := 21656
+	intristic_gas_batch1 := 21720
+
+	// Get first batch of validators from contract
+	batch0_result := test.ExecuteAndCheck(addr(1), big.NewInt(0), test.pack("getValidatorsFor", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(GetValidatorsRet)
+	test.unpack(batch0_parsed_result, "getValidatorsFor", batch0_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch0), batch0_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount, len(batch0_parsed_result.Validators))
+	tc.Assert.Equal(false, batch0_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(dpos.GetValidatorsMaxCount)+"_description", batch0_parsed_result.Validators[len(batch0_parsed_result.Validators)-1].Info.Description)
+
+	// Get first batch of validators from contract
+	batch1_result := test.ExecuteAndCheck(addr(1), big.NewInt(0), test.pack("getValidatorsFor", val_owner, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch1_parsed_result := new(GetValidatorsRet)
+	test.unpack(batch1_parsed_result, "getValidatorsFor", batch1_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*dpos.GetValidatorsMaxCount+uint64(intristic_gas_batch1), batch1_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount, len(batch1_parsed_result.Validators))
+	tc.Assert.Equal(false, batch1_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(2*dpos.GetValidatorsMaxCount)+"_description", batch1_parsed_result.Validators[len(batch1_parsed_result.Validators)-1].Info.Description)
+
+	// Get first batch of validators from contract
+	batch2_result := test.ExecuteAndCheck(addr(1), big.NewInt(0), test.pack("getValidatorsFor", val_owner, uint32(2) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch2_parsed_result := new(GetValidatorsRet)
+	test.unpack(batch2_parsed_result, "getValidatorsFor", batch2_result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*(dpos.GetValidatorsMaxCount)+uint64(intristic_gas_batch1), batch2_result.GasUsed)
+	// Checks if number of returned validators is == dpos.GetValidatorsMaxCount
+	tc.Assert.Equal(dpos.GetValidatorsMaxCount-1, len(batch2_parsed_result.Validators))
+	tc.Assert.Equal(true, batch2_parsed_result.End)
+	// Checks if last returned validator in this batch is the right one based on description with idx of validator
+	tc.Assert.Equal("validator_"+fmt.Sprint(3*dpos.GetValidatorsMaxCount-1)+"_description", batch2_parsed_result.Validators[len(batch2_parsed_result.Validators)-1].Info.Description)
+}
+
 func TestGetDelegations(t *testing.T) {
 	type GenValidator struct {
 		address common.Address
