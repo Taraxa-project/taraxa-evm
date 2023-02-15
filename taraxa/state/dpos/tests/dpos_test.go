@@ -1108,7 +1108,7 @@ func TestValidatorsClass(t *testing.T) {
 	evm_state := test.st.GetEvmState()
 	storage.Init(dpos.EVMStateStorage{evm_state})
 
-	validators := dpos.Validators{}
+	validators := new(dpos.Validators).Init(&storage, []byte{})
 	field_validators := []byte{0}
 	validators.Init(&storage, field_validators)
 
@@ -1126,24 +1126,25 @@ func TestValidatorsClass(t *testing.T) {
 	validators.CreateValidator(&validator2_owner, &validator2_addr, DefaultVrfKey, 0, 2, "validator2_description", "validator2_endpoint")
 	validators.CheckValidatorOwner(&validator2_owner, &validator2_addr)
 	tc.Assert.Equal(uint32(2), validators.GetValidatorsCount())
+	{
+		// Checks GetValidator & GetValidatorInfo
+		validator1 := validators.GetValidator(&validator1_addr)
+		tc.Assert.Equal(uint16(1), validator1.Commission)
+		validator1_info := validators.GetValidatorInfo(&validator1_addr)
+		tc.Assert.Equal("validator1_description", validator1_info.Description)
+		tc.Assert.Equal("validator1_endpoint", validator1_info.Endpoint)
 
-	// Checks GetValidator & GetValidatorInfo
+		// Checks ModifyValidator & ModifyValidatorInfo
+		validator1.Commission = 11
+		validator1_info.Description = "validator1_description_modified"
+		validator1_info.Endpoint = "validator1_endpoint_modified"
+		validators.ModifyValidator(&validator1_addr, validator1)
+		validators.ModifyValidatorInfo(&validator1_addr, validator1_info)
+	}
+
 	validator1 := validators.GetValidator(&validator1_addr)
-	tc.Assert.Equal(uint16(1), validator1.Commission)
-	validator1_info := validators.GetValidatorInfo(&validator1_addr)
-	tc.Assert.Equal("validator1_description", validator1_info.Description)
-	tc.Assert.Equal("validator1_endpoint", validator1_info.Endpoint)
-
-	// Checks ModifyValidator & ModifyValidatorInfo
-	validator1.Commission = 11
-	validator1_info.Description = "validator1_description_modified"
-	validator1_info.Endpoint = "validator1_endpoint_modified"
-	validators.ModifyValidator(&validator1_addr, validator1)
-	validators.ModifyValidatorInfo(&validator1_addr, validator1_info)
-
-	validator1 = validators.GetValidator(&validator1_addr)
 	tc.Assert.Equal(uint16(11), validator1.Commission)
-	validator1_info = validators.GetValidatorInfo(&validator1_addr)
+	validator1_info := validators.GetValidatorInfo(&validator1_addr)
 	tc.Assert.Equal("validator1_description_modified", validator1_info.Description)
 	tc.Assert.Equal("validator1_endpoint_modified", validator1_info.Endpoint)
 
@@ -1162,8 +1163,8 @@ func TestValidatorsClass(t *testing.T) {
 	tc.Assert.Equal(uint32(1), validators.GetValidatorsCount())
 
 	validator3_addr := addr(3)
-	tc.Assert.PanicsWithValue("ModifyValidator: non existent validator", func() { validators.ModifyValidator(&validator3_addr, validator1) })
-	tc.Assert.PanicsWithValue("ModifyValidatorInfo: non existent validator", func() { validators.ModifyValidatorInfo(&validator3_addr, validator1_info) })
+	tc.Assert.PanicsWithValue("Modify: non existent validator", func() { validators.ModifyValidator(&validator3_addr, validator1) })
+	tc.Assert.PanicsWithValue("Modify: non existent validator", func() { validators.ModifyValidatorInfo(&validator3_addr, validator1_info) })
 }
 
 func TestDelegationsClass(t *testing.T) {
