@@ -542,7 +542,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // - If less reward votes are included, rest of the bonus reward it is just burned
 // - Then for each validator vote and transaction proportion rewards are calculated and distributed
 
-func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) {
+func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 
@@ -670,6 +670,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		fmt.Println(errorString)
 		// panic(errorString)
 	}
+
+	return totalRewardCheck
 }
 
 func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Validator, prev_vote_count uint64) {
