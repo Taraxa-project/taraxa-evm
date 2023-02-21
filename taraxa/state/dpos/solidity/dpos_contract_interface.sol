@@ -146,11 +146,6 @@ interface DposInterface {
         view
         returns (ValidatorBasicInfo memory validator_info);
 
-    // Returns validator delegators list
-    function getValidatorDelegators(address validator)
-        external
-        view
-        returns (address[] memory delegators);
     /**
      * @notice Returns list of registered validators
      *
