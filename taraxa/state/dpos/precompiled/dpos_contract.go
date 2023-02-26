@@ -572,7 +572,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		} else {
 			twoTPlusOne := maxVotesWeigh*2/3 + 1
 			bonusVotesWeight := uint64(0)
-			if rewardsStats.TotalVotesWeight > twoTPlusOne {
+			if rewardsStats.TotalVotesWeight >= twoTPlusOne {
 				bonusVotesWeight = rewardsStats.TotalVotesWeight - twoTPlusOne
 			} else {
 				errorString := fmt.Sprintf("DistributeRewards - TotalVotesWeight (%d) is smaller than two twoTPlusOne (%d)", rewardsStats.TotalVotesWeight, twoTPlusOne)
