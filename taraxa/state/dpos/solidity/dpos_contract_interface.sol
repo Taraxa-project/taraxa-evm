@@ -69,7 +69,10 @@ interface DposInterface {
         uint256 stake;
         // block number when it will be unlocked
         uint64 block;
+        // Validator address
         address validator;
+        // Flag if validator still exists - in case he has 0 stake and 0 rewards, validator is deleted from memory & db
+        bool validator_exists;
     }
 
     // Delegates tokens to specified validator
