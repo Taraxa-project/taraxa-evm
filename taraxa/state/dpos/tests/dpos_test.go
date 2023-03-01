@@ -870,7 +870,7 @@ func TestGetUndelegations(t *testing.T) {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
 
-	// Generate  delegator and set some balance to him
+	// Generate 2 delegators and set some balance to them
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
 	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
 
@@ -942,6 +942,21 @@ func TestGetUndelegations(t *testing.T) {
 	// Checks if number of returned undelegations is == 0
 	tc.Assert.Equal(0, len(batch3_parsed_result.Undelegations))
 	tc.Assert.Equal(true, batch3_parsed_result.End)
+
+	// Test if validator is marked as deleted after all of the delegators undelegate from him
+	undelegations1_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	undelegations1_parsed_result := new(GetUndelegationsRet)
+	test.unpack(undelegations1_parsed_result, "getUndelegations", undelegations1_result.CodeRetval)
+	tc.Assert.Equal(false, undelegations1_parsed_result.End)
+	tc.Assert.Equal(true, undelegations1_parsed_result.Undelegations[0].ValidatorExists)
+	// Last delegator undelegates from gen_validators[0].address
+	test.ExecuteAndCheck(gen_validators[0].owner, DefaultMinimumDeposit, test.pack("undelegate", gen_validators[0].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegations2_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	undelegations2_parsed_result := new(GetUndelegationsRet)
+	test.unpack(undelegations2_parsed_result, "getUndelegations", undelegations2_result.CodeRetval)
+	tc.Assert.Equal(false, undelegations2_parsed_result.End)
+	tc.Assert.Equal(len(undelegations1_parsed_result.Undelegations), len(undelegations2_parsed_result.Undelegations))
+	tc.Assert.Equal(false, undelegations2_parsed_result.Undelegations[0].ValidatorExists)
 }
 
 func TestGetValidator(t *testing.T) {

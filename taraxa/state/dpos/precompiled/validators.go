@@ -166,7 +166,7 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 	rewards_key := stor_k_1(self.validator_rewards_field, validator_address[:])
 	self.storage.Put(rewards_key, nil)
 
-	// Removes validator into the list of all validators
+	// Removes validator from the list of all validators
 	self.validators_list.RemoveAccount(validator_address)
 }
 

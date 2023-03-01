@@ -1384,6 +1384,8 @@ func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (undelegat
 
 		var undelegation_data sol.DposInterfaceUndelegationData
 		undelegation_data.Validator = validator_address
+		// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
+		undelegation_data.ValidatorExists = self.validators.ValidatorExists(&validator_address)
 		undelegation_data.Stake = undelegation.Amount
 		undelegation_data.Block = undelegation.Block
 
