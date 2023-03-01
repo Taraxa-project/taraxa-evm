@@ -58,11 +58,12 @@ func (e Event) Id() common.Hash {
 	return common.BytesToHash(crypto.Keccak256([]byte(fmt.Sprintf("%v(%v)", e.Name, strings.Join(types, ",")))))
 }
 
-func (e Event) MakeLog(args ...interface{}) (*vm.LogRecord, error) {
+func (e Event) MakeLog(contract_address *common.Address, args ...interface{}) (*vm.LogRecord, error) {
 	if len(e.Inputs) != len(args) {
 		return nil, fmt.Errorf("MakeLog: %v: expected %v arguments, but got %v", e.Name, len(e.Inputs), len(args))
 	}
 	log := new(vm.LogRecord)
+	log.Address = *contract_address
 	log.Topics = append(log.Topics, e.Id())
 	data_set := false
 	for index, input := range e.Inputs {
