@@ -92,6 +92,9 @@ const (
 	// Length of vrf public key
 	VrfKeyLength = 32
 
+	// Maximum number of validators per batch that delegator get claim rewards from
+	ClaimAllRewardsMaxCount = 10
+
 	// Maximum number of validators per batch returned by getValidators call
 	GetValidatorsMaxCount = 20
 
@@ -197,8 +200,6 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return CancelUndelegateGas
 	case "reDelegate":
 		return ReDelegateGas
-	case "claimRewards":
-		return ClaimRewardsGas
 	case "claimCommissionRewards":
 		return ClaimCommissionRewardsGas
 	case "setCommission":
@@ -212,6 +213,19 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getValidatorEligibleVotesCount":
 	case "getValidator":
 		return DposGetMethodsGas
+	case "claimRewards":
+		return ClaimRewardsGas
+	case "claimAllRewards":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.ClaimAllRewardsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
+		return delegations_count * ClaimRewardsGas
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
@@ -430,6 +444,19 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
+
+	case "claimAllRewards":
+		var args sol.ClaimAllRewardsArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse claimAllRewards input args: ", err)
+			return nil, err
+		}
+
+		result, err := self.claimAllRewards(ctx, evm.GetBlock().Number, args)
+		if err != nil {
+			return nil, err
+		}
+		return method.Outputs.Pack(result)
 
 	case "claimCommissionRewards":
 		var args sol.ValidatorAddressArgs
@@ -1049,6 +1076,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+	fmt.Println("claimed: ", self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 	delegation.LastUpdated = block
 	self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
@@ -1058,6 +1086,25 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
+}
+
+// Pays off accumulated rewards back to delegator address from multiple validators at a time
+func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ClaimAllRewardsArgs) (end bool, err error) {
+	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
+	fmt.Println("len(delegator_validators_addresses): ", len(delegator_validators_addresses))
+	var tmp_claim_rewards_args sol.ValidatorAddressArgs
+	for _, validator_address := range delegator_validators_addresses {
+		tmp_claim_rewards_args.Validator = validator_address
+
+		tmp_err := self.claimRewards(ctx, block, tmp_claim_rewards_args)
+		if tmp_err != nil {
+			err = util.ErrorString(tmp_err.Error() + " -> validator: " + validator_address.String())
+			return
+		}
+	}
+
+	err = nil
+	return
 }
 
 // Pays off rewards from commission back to validator owner address
