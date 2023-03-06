@@ -225,7 +225,9 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		}
 
 		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
-		return delegations_count * ClaimRewardsGas
+		// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
+		// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
+		return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
