@@ -1076,7 +1076,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-	fmt.Println("claimed: ", self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 	delegation.LastUpdated = block
 	self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
@@ -1091,7 +1090,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 // Pays off accumulated rewards back to delegator address from multiple validators at a time
 func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ClaimAllRewardsArgs) (end bool, err error) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
-	fmt.Println("len(delegator_validators_addresses): ", len(delegator_validators_addresses))
 	var tmp_claim_rewards_args sol.ValidatorAddressArgs
 	for _, validator_address := range delegator_validators_addresses {
 		tmp_claim_rewards_args.Validator = validator_address
