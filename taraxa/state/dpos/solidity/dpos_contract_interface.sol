@@ -94,8 +94,16 @@ interface DposInterface {
         uint256 amount
     ) external;
 
-    // Claims tokens from staking rewards based on delegation to <validator>
+    // Claims staking rewards from <validator>
     function claimRewards(address validator) external;
+
+    /**
+     * @notice Claims staking rewards from all validators (limited by batch) that caller has delegated to
+     *
+     * @param batch Batch number - there is a limit of 10 validators per batch that delegator can claim rewards from in single tranaction
+     * @return end  Flag if there are no more validators left that delegator can claim rewards from
+     **/
+    function claimAllRewards(uint32 batch) external returns (bool end);
 
     // Claims tokens from validator's commission rewards
     function claimCommissionRewards(address validator) external;
