@@ -137,7 +137,6 @@ func (self *DB) Prune(state_root_to_keep common.Hash, state_root_to_prune []comm
 	}
 
 	//Select main trie values to prune/remove
-	set_value_to_keep := make(map[string]struct{})
 	set_value_to_prune := make(map[string]struct{})
 	set_storage_root_to_keep := make(map[common.Hash]struct{})
 	set_storage_root_to_prune := make(map[common.Hash]struct{})
@@ -145,14 +144,13 @@ func (self *DB) Prune(state_root_to_keep common.Hash, state_root_to_prune []comm
 	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_value])
 	itr.SeekToFirst()
 	prev_key := make([]byte, common.VersionedKeyLength)
+	last_acc_to_keep := make([]byte, common.HashLength)
 	for itr.Valid() {
 		account := state_db.DecodeAccountFromTrie(itr.Value().Data())
 		copy(prev_key, itr.Key().Data())
 		itr.Next()
 		keep := true
 		if itr.Valid() {
-			acc := make([]byte, common.HashLength)
-			copy(acc, itr.Key().Data()[0:common.HashLength])
 			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
 			if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
 				//Only prune the previous value if current value for the same account is below blk_num
@@ -161,10 +159,14 @@ func (self *DB) Prune(state_root_to_keep common.Hash, state_root_to_prune []comm
 				}
 			}
 		}
+
 		if keep {
-			set_value_to_keep[string(prev_key)] = member
-			if account.StorageRootHash != nil {
-				set_storage_root_to_keep[*account.StorageRootHash] = member
+			//Only save the storage root hash of smallest block number to keep
+			if bytes.Compare(prev_key[0:common.HashLength], last_acc_to_keep) != 0 {
+				copy(last_acc_to_keep, prev_key[0:common.HashLength])
+				if account.StorageRootHash != nil {
+					set_storage_root_to_keep[*account.StorageRootHash] = member
+				}
 			}
 		} else {
 			set_value_to_prune[string(prev_key)] = member
@@ -203,8 +205,6 @@ func (self *DB) Prune(state_root_to_keep common.Hash, state_root_to_prune []comm
 		itr.Next()
 		keep := true
 		if itr.Valid() {
-			acc := make([]byte, common.HashLength)
-			copy(acc, itr.Key().Data()[0:common.HashLength])
 			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
 
 			if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
