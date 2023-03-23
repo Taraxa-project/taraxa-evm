@@ -169,15 +169,16 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	return res
 }
 
-func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) {
+func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (ret *uint256.Int) {
 	self.blk_n++
 	if author == nil {
 		self.st.BeginBlock(&vm.BlockInfo{})
 	} else {
 		self.st.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
 	}
-	self.st.EndBlock(nil, rewardsStats, feesRewards)
+	ret = self.st.EndBlock(nil, rewardsStats, feesRewards)
 	self.st.Commit()
+	return
 }
 
 func (self *DposTest) GetBalance(account common.Address) *big.Int {
@@ -186,6 +187,14 @@ func (self *DposTest) GetBalance(account common.Address) *big.Int {
 		bal_actual = account.Balance
 	})
 	return bal_actual
+}
+
+func (self *DposTest) CheckContractBalance(balance *big.Int) {
+	var bal_actual *big.Int
+	self.SUT.ReadBlock(self.blk_n).GetAccount(&self.dpos_addr, func(account state_db.Account) {
+		bal_actual = account.Balance
+	})
+	self.tc.Assert.Equal(balance, bal_actual)
 }
 
 func (self *DposTest) GetNonce(account common.Address) *big.Int {

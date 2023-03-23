@@ -60,6 +60,7 @@ func TestRegisterValidator(t *testing.T) {
 	validator2_addr, validator2_proof := generateAddrAndProof()
 
 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Try to register same validator twice
 	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
@@ -75,10 +76,12 @@ func TestDelegate(t *testing.T) {
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Try to delegate to not existent validator
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("delegate", addr(2)), dpos.ErrNonExistentValidator, util.ErrorString(""))
 	// OK
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit))
 }
 
 func TestDelegateMinMax(t *testing.T) {
@@ -87,11 +90,19 @@ func TestDelegateMinMax(t *testing.T) {
 
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	test.ExecuteAndCheck(addr(1), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Sub(DefaultBalance, DefaultMinimumDeposit)
+	totalBalance.Add(totalBalance, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultMinimumDeposit, big.NewInt(1)), test.pack("delegate", val_addr), dpos.ErrInsufficientDelegation, util.ErrorString(""))
 	test.ExecuteAndCheck(addr(3), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, bigutil.Sub(DefaultBalance, DefaultMinimumDeposit))
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.pack("delegate", val_addr), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
 	test.ExecuteAndCheck(addr(2), DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestRedelegate(t *testing.T) {
@@ -108,17 +119,23 @@ func TestRedelegate(t *testing.T) {
 	tc.Assert.Equal(len(reg_res.Logs), 2)
 	tc.Assert.Equal(reg_res.Logs[0].Topics[0], ValidatorRegisteredEventHash)
 	tc.Assert.Equal(reg_res.Logs[1].Topics[0], DelegatedEventHash)
+	test.CheckContractBalance(DefaultMinimumDeposit)
 
 	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	redelegate_res := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(redelegate_res.Logs), 1)
 	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RedelegatedEventHash)
+	test.CheckContractBalance(totalBalance)
 
 	//Validator 1 does not exist as we withdraw all stake
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	vali1_new_delegation := bigutil.Mul(DefaultMinimumDeposit, big.NewInt(2))
 	test.ExecuteAndCheck(validator1_owner, vali1_new_delegation, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, vali1_new_delegation)
+	test.CheckContractBalance(totalBalance)
 	// Validator to does not exist
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, addr(3), DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 	// Validator from does not exist
@@ -133,6 +150,7 @@ func TestRedelegate(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// Validator 1 does not exist as we withdraw all stake
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestRedelegateMinMax(t *testing.T) {
@@ -149,10 +167,18 @@ func TestRedelegateMinMax(t *testing.T) {
 
 	test.ExecuteAndCheck(validator1_owner, init_stake, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(validator2_owner, init_stake, test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(init_stake, init_stake)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, bigutil.Add(DefaultMinimumDeposit, big.NewInt(1))), dpos.ErrInsufficientDelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator2_owner, bigutil.Sub(DefaultBalance, init_stake), test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, bigutil.Sub(DefaultBalance, init_stake))
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(addr(3), DefaultBalance, test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, DefaultBalance)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, big.NewInt(1)), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestUndelegate(t *testing.T) {
@@ -164,12 +190,16 @@ func TestUndelegate(t *testing.T) {
 	delegator_addr := addr(2)
 
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(undelegate_res.Logs), 1)
 	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], UndelegatedEventHash)
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// NonExistentValidator as it was deleted
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	//Check from same undelegate request
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrExistentUndelegation, util.ErrorString(""))
 	// NonExistentValidator
@@ -178,7 +208,10 @@ func TestUndelegate(t *testing.T) {
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 	// ErrInsufficientDelegation
 	test.ExecuteAndCheck(delegator_addr, DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, bigutil.Add(DefaultMinimumDeposit, big.NewInt(1))), dpos.ErrInsufficientDelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestConfirmUndelegate(t *testing.T) {
@@ -191,24 +224,31 @@ func TestConfirmUndelegate(t *testing.T) {
 	delegator_addr := addr(2)
 
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// ErrNonExistentUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("confirmUndelegate", val_addr), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.ExecuteAndCheck(delegator_addr, DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 	// ErrLockedUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("confirmUndelegate", val_addr), dpos.ErrLockedUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 
 	// Advance 2 more rounds - delegation locking periods == 4
 	test.AdvanceBlock(nil, nil, nil)
 	test.AdvanceBlock(nil, nil, nil)
 
 	confirm_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Sub(totalBalance, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
 
 	// ErrNonExistentDelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestCancelUndelegate(t *testing.T) {
@@ -224,12 +264,14 @@ func TestCancelUndelegate(t *testing.T) {
 	test.AdvanceBlock(nil, nil, nil)
 
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// ErrNonExistentUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("cancelUndelegate", val_addr), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
-
+	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Undelegate and check if validator's total stake was increased
 	test.ExecuteAndCheck(delegator_addr, DefaultMinimumDeposit, test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator_raw := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator := new(GetValidatorRet)
@@ -238,6 +280,7 @@ func TestCancelUndelegate(t *testing.T) {
 
 	// Undelegate and check if validator's total stake was decreased
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator = new(GetValidatorRet)
@@ -246,6 +289,7 @@ func TestCancelUndelegate(t *testing.T) {
 
 	// Cancel undelegate and check if validator's total stake was increased again
 	cancel_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(cancel_res.Logs), 1)
 	tc.Assert.Equal(cancel_res.Logs[0].Topics[0], UndelegateCanceledEventHash)
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
@@ -256,6 +300,7 @@ func TestCancelUndelegate(t *testing.T) {
 
 	// ErrNonExistentUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("cancelUndelegate", val_addr), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
 }
 
 func TestUndelegateMin(t *testing.T) {
@@ -354,6 +399,8 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator5_stake)
 
+	test.CheckContractBalance(total_stake)
+
 	// Simulated rewards statistics
 	tmp_rewards_stats := rewards_stats.NewRewardsStats()
 	fees_rewards := dpos.NewFeesRewards()
@@ -379,7 +426,12 @@ func TestRewardsAndCommission(t *testing.T) {
 	tmp_rewards_stats.MaxVotesWeight = 8
 
 	// Advance block
-	test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards)
+	reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards).ToBig()
+	totalBalance := bigutil.Add(total_stake, reward)
+	numberOfTrxs := new(big.Int)
+	numberOfTrxs.SetUint64(uint64(tmp_rewards_stats.TotalDagBlocksCount))
+	totalBalance.Add(totalBalance, bigutil.Mul(trxFee, numberOfTrxs))
+	test.CheckContractBalance(totalBalance)
 
 	// Expected block reward
 	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
@@ -494,6 +546,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
 	tc.Assert.Equal(big.NewInt(0).Cmp(actual_validator4_commission_reward), 0)
+	contractBalance := test.GetBalance(dpos.ContractAddress())
+	if contractBalance.Cmp(total_stake) == -1 {
+		t.Errorf("Balance left %d expected: %d", contractBalance, total_stake)
+	}
 }
 
 func TestGenesis(t *testing.T) {
@@ -513,6 +569,7 @@ func TestGenesis(t *testing.T) {
 	defer test.end()
 
 	totalAmountDelegated := bigutil.Mul(DefaultEligibilityBalanceThreshold, big.NewInt(4))
+	test.CheckContractBalance(totalAmountDelegated)
 
 	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(delegator))
 	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().EligibleVoteCount())
