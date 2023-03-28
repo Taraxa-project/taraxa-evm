@@ -31,9 +31,9 @@ type Contract struct {
 	code_jumpdest_analysis bitvec
 }
 type CallFrame = struct {
-	// CallerAddress is the result of the caller which initialised this
+	// CallerAddress is the result of the caller which initialized this
 	// contract. However when the "call method" is delegated this value
-	// needs to be initialised to that of the caller's caller.
+	// needs to be initialized to that of the caller's caller.
 	CallerAccount StateAccount
 	Account       StateAccount
 	Input         []byte

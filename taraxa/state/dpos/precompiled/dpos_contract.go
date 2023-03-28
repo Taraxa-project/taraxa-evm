@@ -579,6 +579,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	blockReward := new(uint256.Int).Mul(self.amount_delegated, self.yield_percentage)
 	blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
 
+	totalReward := uint256.NewInt(0)
 	votesReward := uint256.NewInt(0)
 	blockAuthorReward := uint256.NewInt(0)
 	dagProposersReward := blockReward.Clone()
@@ -614,7 +615,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		}
 	}
 
-	totalRewardCheck := uint256.NewInt(0)
+	newMintedRewards := uint256.NewInt(0)
 	// Add reward to the block author for additional included votes
 	if blockAuthorReward.Cmp(uint256.NewInt(0)) == 1 {
 		block_author := self.validators.GetValidator(blockAuthorAddr)
@@ -626,8 +627,8 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 			commission := new(uint256.Int).Div(new(uint256.Int).Mul(blockAuthorReward, uint256.NewInt(uint64(block_author.Commission))), uint256.NewInt(MaxCommission))
 			delegatorsRewards := new(uint256.Int).Sub(blockAuthorReward, commission)
 			self.validators.AddValidatorRewards(blockAuthorAddr, commission.ToBig(), delegatorsRewards.ToBig())
-
-			totalRewardCheck.Add(totalRewardCheck, blockAuthorReward)
+			newMintedRewards.Add(newMintedRewards, blockAuthorReward)
+			totalReward.Add(totalReward, blockAuthorReward)
 		}
 	}
 
@@ -636,7 +637,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	// Calculates validators rewards (for dpos blocks producers, block voters)
 	for validatorAddress, validatorStats := range rewardsStats.ValidatorsStats {
 		// We need to calculate validator reward even though in some edge cases this validator might not exist in contract anymore
-		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and totalRewardCheck might not pass
+		// If we would not calculate it, totalUniqueTrxsCountCheck, totalVoteWeightCheck and newMintedRewards might not pass
 		validatorReward := uint256.NewInt(0)
 		// Calculate it like this to eliminate rounding error as much as possible
 		// Reward for DAG blocks with at least one unique transaction
@@ -656,7 +657,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		}
 
 		// Add reward for for final check
-		totalRewardCheck.Add(totalRewardCheck, validatorReward)
+		newMintedRewards.Add(newMintedRewards, validatorReward)
 
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
@@ -671,6 +672,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
+		totalReward.Add(totalReward, validatorReward)
 
 		validatorCommission := new(uint256.Int).Div(new(uint256.Int).Mul(validatorReward, uint256.NewInt(uint64(validator.Commission))), uint256.NewInt(MaxCommission))
 		delegatorsRewards := new(uint256.Int).Sub(validatorReward, validatorCommission)
@@ -693,19 +695,19 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		// panic(errorString)
 	}
 
-	if totalRewardCheck.Cmp(blockReward) == 1 {
-		errorString := fmt.Sprintf("totalRewardCheck (%d) is more then blockReward (%d)", totalRewardCheck, blockReward)
+	if newMintedRewards.Cmp(blockReward) == 1 {
+		errorString := fmt.Sprintf("newMintedRewards (%d) is more then blockReward (%d)", newMintedRewards, blockReward)
 		// TODO[133]: shouldn't happen. Log this properly, not panic
 		fmt.Println(errorString)
 		// panic(errorString)
 	}
 
-	return totalRewardCheck
+	self.storage.AddBalance(contract_address, totalReward.ToBig())
+
+	return newMintedRewards
 }
 
 func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Validator, prev_vote_count uint64) {
-	// ctx.Account == contract address. Substract tokens that were sent to the contract as delegation
-	ctx.Account.SubBalance(ctx.Value)
 	validator.TotalStake.Add(validator.TotalStake, ctx.Value)
 	v, _ := uint256.FromBig(ctx.Value)
 	self.amount_delegated.Add(self.amount_delegated, v)
@@ -757,8 +759,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
-		// ctx.CallerAccount == caller address
-		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 		delegation.Stake.Add(delegation.Stake, ctx.Value)
 		delegation.LastUpdated = block
@@ -818,7 +819,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
-	ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+	transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 	// Creating undelegation request
 	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
@@ -867,7 +868,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	}
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	// TODO slashing of balance
-	ctx.CallerAccount.AddBalance(undelegation.Amount)
+	transferContractBalance(&ctx, undelegation.Amount)
 	self.evm.AddLog(self.logs.MakeUndelegateConfirmedLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
 
 	return nil
@@ -906,7 +907,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 		delegation.Stake.Add(delegation.Stake, undelegation.Amount)
 		delegation.LastUpdated = block
@@ -978,7 +979,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.ValidatorFrom[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 		delegation.Stake.Sub(delegation.Stake, args.Amount)
 		validator_from.TotalStake.Sub(validator_from.TotalStake, args.Amount)
@@ -1028,7 +1029,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-		ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 		delegation.Stake.Add(delegation.Stake, args.Amount)
 		delegation.LastUpdated = block
@@ -1077,7 +1078,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-	ctx.CallerAccount.AddBalance(self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+	transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
 
 	delegation.LastUpdated = block
 	self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
@@ -1119,7 +1120,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		return ErrNonExistentValidator
 	}
 
-	ctx.CallerAccount.AddBalance(validator_rewards.CommissionRewardsPool)
+	transferContractBalance(&ctx, validator_rewards.CommissionRewardsPool)
 	validator_rewards.CommissionRewardsPool = big.NewInt(0)
 
 	if validator.TotalStake.Cmp(big.NewInt(0)) == 0 {
@@ -1508,6 +1509,17 @@ func (self *Contract) calculateRewardPer1Stake(rewardsPool *big.Int, stake *big.
 
 func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *big.Int) *big.Int {
 	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.ValidatorMaximumStake)
+}
+
+func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {
+	// ctx.Account == contract address
+	// ctx.CallerAccount == caller address
+	if availableBalance := ctx.Account.GetBalance(); availableBalance.Cmp(balance) == -1 {
+		errorString := fmt.Sprintf("Contract balance (%d) is smaller than required amount (%d)", availableBalance, balance)
+		panic(errorString)
+	}
+	ctx.Account.SubBalance(balance)
+	ctx.CallerAccount.AddBalance(balance)
 }
 
 // Returns block number as bytes
