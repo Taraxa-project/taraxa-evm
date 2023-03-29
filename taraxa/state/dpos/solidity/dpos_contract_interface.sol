@@ -21,7 +21,7 @@ interface DposInterface {
         uint256 total_stake;
         // Validator's reward from delegators rewards commission
         uint256 commission_reward;
-        // Validator's commission - max value 10000(precision up to 0.1%)
+        // Validator's commission - max value 10000(precision up to 0.01%)
         uint16 commission;
         // Block number of last commission change
         uint64 last_commission_change;
