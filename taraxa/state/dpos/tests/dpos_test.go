@@ -27,8 +27,8 @@ var UndelegatedEventHash = *keccak256.Hash([]byte("Undelegated(address,address,u
 var UndelegateConfirmedEventHash = *keccak256.Hash([]byte("UndelegateConfirmed(address,address,uint256)"))
 var UndelegateCanceledEventHash = *keccak256.Hash([]byte("UndelegateCanceled(address,address,uint256)"))
 var RedelegatedEventHash = *keccak256.Hash([]byte("Redelegated(address,address,address,uint256)"))
-var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address)"))
-var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address)"))
+var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address,uint256)"))
+var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address,uint256)"))
 var CommissionSetEventHash = *keccak256.Hash([]byte("CommissionSet(address,uint16)"))
 var ValidatorRegisteredEventHash = *keccak256.Hash([]byte("ValidatorRegistered(address)"))
 var ValidatorInfoSetEventHash = *keccak256.Hash([]byte("ValidatorInfoSet(address)"))
@@ -125,9 +125,8 @@ func TestRedelegate(t *testing.T) {
 	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
 	test.CheckContractBalance(totalBalance)
 	redelegate_res := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
-	tc.Assert.Equal(len(redelegate_res.Logs), 2)
-	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RewardsClaimedEventHash)
-	tc.Assert.Equal(redelegate_res.Logs[1].Topics[0], RedelegatedEventHash)
+	tc.Assert.Equal(len(redelegate_res.Logs), 1)
+	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RedelegatedEventHash)
 	test.CheckContractBalance(totalBalance)
 
 	//Validator 1 does not exist as we withdraw all stake
@@ -193,9 +192,8 @@ func TestUndelegate(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
-	tc.Assert.Equal(len(undelegate_res.Logs), 2)
-	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], RewardsClaimedEventHash)
-	tc.Assert.Equal(undelegate_res.Logs[1].Topics[0], UndelegatedEventHash)
+	tc.Assert.Equal(len(undelegate_res.Logs), 1)
+	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], UndelegatedEventHash)
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// NonExistentValidator as it was deleted
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
@@ -508,14 +506,16 @@ func TestRewardsAndCommission(t *testing.T) {
 	delegator2_old_balance := test.GetBalance(delegator2_addr)
 	delegator3_old_balance := test.GetBalance(delegator3_addr)
 	delegator4_old_balance := test.GetBalance(delegator4_addr)
+	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	{
 		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-		clam_res := test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
-		tc.Assert.Equal(len(clam_res.Logs), 1)
+		clam_res := test.ExecuteAndCheck(delegator4_addr, DefaultMinimumDeposit, test.pack("delegate", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+		tc.Assert.Equal(len(clam_res.Logs), 2)
 		tc.Assert.Equal(clam_res.Logs[0].Topics[0], RewardsClaimedEventHash)
+		tc.Assert.Equal(clam_res.Logs[1].Topics[0], DelegatedEventHash)
 	}
 
 	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
@@ -1459,12 +1459,12 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 		count++
 	}
 	{
-		log := logs.MakeRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress)
+		log := logs.MakeRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(111))
 		tc.Assert.Equal(log.Topics[0], RewardsClaimedEventHash)
 		count++
 	}
 	{
-		log := logs.MakeCommissionRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress)
+		log := logs.MakeCommissionRewardsClaimedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(222))
 		tc.Assert.Equal(log.Topics[0], CommissionRewardsClaimedEventHash)
 		count++
 	}

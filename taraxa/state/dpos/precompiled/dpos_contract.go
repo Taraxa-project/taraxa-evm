@@ -730,8 +730,11 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
-		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
+		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
+			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+		}
 
 		delegation.Stake.Add(delegation.Stake, ctx.Value)
 		delegation.LastUpdated = block
@@ -791,8 +794,11 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
-	transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
+	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+	if reward.Cmp(big.NewInt(0)) > 0 {
+		transferContractBalance(&ctx, reward)
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+	}
 
 	// Creating undelegation request
 	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
@@ -880,8 +886,12 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
+
+		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
+			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+		}
 
 		delegation.Stake.Add(delegation.Stake, undelegation.Amount)
 		delegation.LastUpdated = block
@@ -953,8 +963,12 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.ValidatorFrom[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom))
+
+		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
+			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, reward))
+		}
 
 		delegation.Stake.Sub(delegation.Stake, args.Amount)
 		validator_from.TotalStake.Sub(validator_from.TotalStake, args.Amount)
@@ -1005,8 +1019,11 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
-		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorTo))
+		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
+			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorTo, reward))
+		}
 
 		delegation.Stake.Add(delegation.Stake, args.Amount)
 		delegation.LastUpdated = block
@@ -1055,14 +1072,18 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 
 	old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
-	transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+
+	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+	if reward.Cmp(big.NewInt(0)) > 0 {
+		transferContractBalance(&ctx, reward)
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+	}
 
 	delegation.LastUpdated = block
 	self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
@@ -1080,6 +1101,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	}
 
 	transferContractBalance(&ctx, validator_rewards.CommissionRewardsPool)
+	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, validator_rewards.CommissionRewardsPool))
 	validator_rewards.CommissionRewardsPool = big.NewInt(0)
 
 	if validator.TotalStake.Cmp(big.NewInt(0)) == 0 {
@@ -1089,7 +1111,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		self.validators.ModifyValidator(&args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
-	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	return nil
 }
