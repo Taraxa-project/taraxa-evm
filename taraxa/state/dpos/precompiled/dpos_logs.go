@@ -65,17 +65,17 @@ func (self *Logs) MakeRedelegatedLog(delegator, from, to *common.Address, amount
 }
 
 // event RewardsClaimed(address indexed account, address indexed validator);
-func (self *Logs) MakeRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
+func (self *Logs) MakeRewardsClaimedLog(account, validator *common.Address, amount *big.Int) vm.LogRecord {
 	event := self.Events["RewardsClaimed"]
 
-	return *checkError(event.MakeLog(contract_address, account, validator))
+	return *checkError(event.MakeLog(contract_address, account, validator, amount))
 }
 
 // event CommissionRewardsClaimed(address indexed account, address indexed validator);
-func (self *Logs) MakeCommissionRewardsClaimedLog(account, validator *common.Address) vm.LogRecord {
+func (self *Logs) MakeCommissionRewardsClaimedLog(account, validator *common.Address, amount *big.Int) vm.LogRecord {
 	event := self.Events["CommissionRewardsClaimed"]
 
-	return *checkError(event.MakeLog(contract_address, account, validator))
+	return *checkError(event.MakeLog(contract_address, account, validator, amount))
 }
 
 // event CommissionSet(address indexed validator, uint16 commission);

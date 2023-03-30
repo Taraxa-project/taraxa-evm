@@ -10,9 +10,9 @@ interface DposInterface {
     event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
     event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
-    event RewardsClaimed(address indexed account, address indexed validator);
-    event CommissionRewardsClaimed(address indexed account, address indexed validator);
-    event CommissionSet(address indexed validator, uint16 comission);
+    event RewardsClaimed(address indexed account, address indexed validator, uint256 amount);
+    event CommissionRewardsClaimed(address indexed account, address indexed validator, uint256 amount);
+    event CommissionSet(address indexed validator, uint16 commission);
     event ValidatorRegistered(address indexed validator);
     event ValidatorInfoSet(address indexed validator);
 
