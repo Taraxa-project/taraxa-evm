@@ -125,8 +125,9 @@ func TestRedelegate(t *testing.T) {
 	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
 	test.CheckContractBalance(totalBalance)
 	redelegate_res := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
-	tc.Assert.Equal(len(redelegate_res.Logs), 1)
-	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RedelegatedEventHash)
+	tc.Assert.Equal(len(redelegate_res.Logs), 2)
+	tc.Assert.Equal(redelegate_res.Logs[0].Topics[0], RewardsClaimedEventHash)
+	tc.Assert.Equal(redelegate_res.Logs[1].Topics[0], RedelegatedEventHash)
 	test.CheckContractBalance(totalBalance)
 
 	//Validator 1 does not exist as we withdraw all stake
@@ -192,8 +193,9 @@ func TestUndelegate(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
-	tc.Assert.Equal(len(undelegate_res.Logs), 1)
-	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], UndelegatedEventHash)
+	tc.Assert.Equal(len(undelegate_res.Logs), 2)
+	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], RewardsClaimedEventHash)
+	tc.Assert.Equal(undelegate_res.Logs[1].Topics[0], UndelegatedEventHash)
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// NonExistentValidator as it was deleted
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
