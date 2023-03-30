@@ -731,6 +731,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
 		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 		delegation.Stake.Add(delegation.Stake, ctx.Value)
 		delegation.LastUpdated = block
@@ -791,6 +792,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
 	transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+	self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 	// Creating undelegation request
 	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
@@ -879,6 +881,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator))
 
 		delegation.Stake.Add(delegation.Stake, undelegation.Amount)
 		delegation.LastUpdated = block
@@ -951,6 +954,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		old_state := self.state_get_and_decrement(args.ValidatorFrom[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom))
 
 		delegation.Stake.Sub(delegation.Stake, args.Amount)
 		validator_from.TotalStake.Sub(validator_from.TotalStake, args.Amount)
@@ -1000,7 +1004,9 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		// We need to claim rewards first
 		old_state := self.state_get_and_decrement(args.ValidatorTo[:], BlockToBytes(delegation.LastUpdated))
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
+
 		transferContractBalance(&ctx, self.calculateDelegatorReward(reward_per_stake, delegation.Stake))
+		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorTo))
 
 		delegation.Stake.Add(delegation.Stake, args.Amount)
 		delegation.LastUpdated = block
