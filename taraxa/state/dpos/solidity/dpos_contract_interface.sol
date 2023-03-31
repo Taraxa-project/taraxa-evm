@@ -10,9 +10,9 @@ interface DposInterface {
     event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
     event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
-    event RewardsClaimed(address indexed account, address indexed validator);
-    event CommissionRewardsClaimed(address indexed account, address indexed validator);
-    event CommissionSet(address indexed validator, uint16 comission);
+    event RewardsClaimed(address indexed account, address indexed validator, uint256 amount);
+    event CommissionRewardsClaimed(address indexed account, address indexed validator, uint256 amount);
+    event CommissionSet(address indexed validator, uint16 commission);
     event ValidatorRegistered(address indexed validator);
     event ValidatorInfoSet(address indexed validator);
 
@@ -146,19 +146,6 @@ interface DposInterface {
         view
         returns (ValidatorBasicInfo memory validator_info);
 
-    // Returns validator delegators list
-    function getValidatorDelegators(address validator)
-        external
-        view
-        returns (address[] memory delegators);
-    /**
-     * @notice Returns list of registered validators
-     *
-     * @param batch        Batch number to be fetched. If the list is too big it cannot return all validators in one call. Instead, users are fetching batches of 100 account at a time
-     *
-     * @return validators  Batch of N validators basic info
-     * @return end         Flag if there are no more accounts left. To get all accounts, caller should fetch all batches until he sees end == true
-     **/
     function getValidators(uint32 batch)
         external
         view
