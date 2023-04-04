@@ -1381,7 +1381,7 @@ func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations [
 
 		/// Temp values
 		state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
-		old_state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
+		old_state, _ := self.state_get(validator_address[:], BlockToBytes(delegation.LastUpdated))
 		if state == nil || old_state == nil {
 			// This should never happen
 			panic("getDelegations - unable to state data")
