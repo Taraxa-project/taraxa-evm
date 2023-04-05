@@ -564,6 +564,113 @@ func TestRewardsAndCommission(t *testing.T) {
 	}
 }
 
+func TestClaimAllRewards(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.DPOS.MinimumDeposit = big.NewInt(0)
+
+	tc, test := init_test(t, cfg)
+
+	tx_fee := big.NewInt(1)
+	total_stake := big.NewInt(0)
+
+	// Simulated rewards statistics
+	fees_rewards := dpos.NewFeesRewards()
+	tmp_rewards_stats := rewards_stats.NewRewardsStats()
+	tmp_rewards_stats.TotalDagBlocksCount = 0
+	tmp_rewards_stats.TotalVotesWeight = 0
+	tmp_rewards_stats.MaxVotesWeight = 0
+
+	// Create single delegator
+	delegator_addr := addr(1)
+	delegator_stake := DefaultMinimumDeposit
+
+	// Create and register dpos.ClaimAllRewardsMaxCount + 2 validators with 0 stake and 0 commission
+	validators_count := uint64(dpos.ClaimAllRewardsMaxCount + 2)
+	validator_stake := big.NewInt(0)
+	validator_commission := uint16(0) // 0%
+	var block_author common.Address
+
+	// Add 1 extra validator, who is going to be block author with zero delegation
+	for idx := uint64(1); idx <= validators_count+1; idx++ {
+		validator_addr, validator_proof := generateAddrAndProof()
+		validator_owner := addr(idx)
+		test.ExecuteAndCheck(validator_owner, validator_stake, test.pack("registerValidator", validator_addr, validator_proof, DefaultVrfKey, validator_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+		if idx == 1 {
+			block_author = validator_addr
+			continue
+		}
+
+		// Delegate to each new validator
+		test.ExecuteAndCheck(delegator_addr, delegator_stake, test.pack("delegate", validator_addr), util.ErrorString(""), util.ErrorString(""))
+		total_stake = bigutil.Add(total_stake, delegator_stake)
+
+		// Create simulated rewards statistics for each validator
+		validator_stats := rewards_stats.ValidatorStats{}
+		validator_stats.DagBlocksCount = 1
+		validator_stats.VoteWeight = 1
+		initValidatorTrxsStats(validator_addr, &fees_rewards, tx_fee, validator_stats.DagBlocksCount)
+		tmp_rewards_stats.ValidatorsStats[validator_addr] = validator_stats
+
+		tmp_rewards_stats.TotalDagBlocksCount += validator_stats.DagBlocksCount
+		tmp_rewards_stats.TotalVotesWeight += validator_stats.VoteWeight
+		tmp_rewards_stats.MaxVotesWeight += validator_stats.VoteWeight
+	}
+
+	// Advance block
+	test.AdvanceBlock(&block_author, &tmp_rewards_stats, &fees_rewards)
+
+	// Expected block reward
+	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
+	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
+
+	// Vote bonus rewards - aka Author reward
+	maxBlockAuthorReward := big.NewInt(int64(DefaultChainCfg.DPOS.MaxBlockAuthorReward))
+	bonus_reward := bigutil.Div(bigutil.Mul(expected_block_reward, maxBlockAuthorReward), big.NewInt(100))
+
+	// Vote bonus rewards - aka Author reward
+	max_votes_weigh := dpos.Max(tmp_rewards_stats.MaxVotesWeight, tmp_rewards_stats.TotalVotesWeight)
+	two_t_plus_one := max_votes_weigh*2/3 + 1
+	block_author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-two_t_plus_one))), big.NewInt(int64(max_votes_weigh-two_t_plus_one)))
+
+	// adjusted_expected_block_reward = Expected block reward - block author reward
+	adjusted_expected_block_reward := bigutil.Sub(expected_block_reward, block_author_reward)
+	expected_validator_reward := bigutil.Div(adjusted_expected_block_reward, big.NewInt(int64(validators_count)))
+
+	// Claim delegator's all rewards for batch 0
+	delegator_old_balance_batch0 := test.GetBalance(delegator_addr)
+	claim_all_rewards_batch0_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("claimAllRewards", uint32(0)), util.ErrorString(""), util.ErrorString(""))
+	actual_delegator_reward_batch0 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch0)
+
+	tc.Assert.Equal(len(claim_all_rewards_batch0_result.Logs), dpos.ClaimAllRewardsMaxCount)
+	for log_idx := 0; log_idx < len(claim_all_rewards_batch0_result.Logs); log_idx++ {
+		tc.Assert.Equal(claim_all_rewards_batch0_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
+	}
+
+	claim_all_rewards_batch0_parsed := new(ClaimAllRewardsRet)
+	test.unpack(claim_all_rewards_batch0_parsed, "claimAllRewards", claim_all_rewards_batch0_result.CodeRetval)
+	tc.Assert.Equal(false, claim_all_rewards_batch0_parsed.End)
+
+	expected_claimed_reward_batch0 := bigutil.Mul(expected_validator_reward, big.NewInt(dpos.ClaimAllRewardsMaxCount))
+	tc.Assert.Equal(expected_claimed_reward_batch0, actual_delegator_reward_batch0)
+
+	// Claim delegator's all rewards for batch 1
+	delegator_old_balance_batch1 := test.GetBalance(delegator_addr)
+	claim_all_rewards_batch1_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("claimAllRewards", uint32(1)), util.ErrorString(""), util.ErrorString(""))
+	actual_delegator_reward_batch1 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch1)
+
+	tc.Assert.Equal(len(claim_all_rewards_batch1_result.Logs), int(validators_count-dpos.ClaimAllRewardsMaxCount))
+	for log_idx := 0; log_idx < len(claim_all_rewards_batch1_result.Logs); log_idx++ {
+		tc.Assert.Equal(claim_all_rewards_batch1_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
+	}
+
+	claim_all_rewards_batch1_parsed := new(ClaimAllRewardsRet)
+	test.unpack(claim_all_rewards_batch1_parsed, "claimAllRewards", claim_all_rewards_batch1_result.CodeRetval)
+	tc.Assert.Equal(true, claim_all_rewards_batch1_parsed.End)
+
+	expected_claimed_reward_batch1 := bigutil.Mul(expected_validator_reward, big.NewInt(int64(validators_count-dpos.ClaimAllRewardsMaxCount)))
+	tc.Assert.Equal(expected_claimed_reward_batch1, actual_delegator_reward_batch1)
+}
+
 func TestGenesis(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 
@@ -939,7 +1046,7 @@ func TestGetUndelegations(t *testing.T) {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
 
-	// Generate  delegator and set some balance to him
+	// Generate 2 delegators and set some balance to them
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
 	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
 
@@ -1011,6 +1118,21 @@ func TestGetUndelegations(t *testing.T) {
 	// Checks if number of returned undelegations is == 0
 	tc.Assert.Equal(0, len(batch3_parsed_result.Undelegations))
 	tc.Assert.Equal(true, batch3_parsed_result.End)
+
+	// Test if validator is marked as deleted after all of the delegators undelegate from him
+	undelegations1_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	undelegations1_parsed_result := new(GetUndelegationsRet)
+	test.unpack(undelegations1_parsed_result, "getUndelegations", undelegations1_result.CodeRetval)
+	tc.Assert.Equal(false, undelegations1_parsed_result.End)
+	tc.Assert.Equal(true, undelegations1_parsed_result.Undelegations[0].ValidatorExists)
+	// Last delegator undelegates from gen_validators[0].address
+	test.ExecuteAndCheck(gen_validators[0].owner, DefaultMinimumDeposit, test.pack("undelegate", gen_validators[0].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegations2_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	undelegations2_parsed_result := new(GetUndelegationsRet)
+	test.unpack(undelegations2_parsed_result, "getUndelegations", undelegations2_result.CodeRetval)
+	tc.Assert.Equal(false, undelegations2_parsed_result.End)
+	tc.Assert.Equal(len(undelegations1_parsed_result.Undelegations), len(undelegations2_parsed_result.Undelegations))
+	tc.Assert.Equal(false, undelegations2_parsed_result.Undelegations[0].ValidatorExists)
 }
 
 func TestGetValidator(t *testing.T) {

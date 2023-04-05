@@ -62,6 +62,7 @@ var (
 	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
 	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
 	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
+	ErrExistentDelegation           = util.ErrorString("Delegation already exist")
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
@@ -91,6 +92,9 @@ const (
 
 	// Length of vrf public key
 	VrfKeyLength = 32
+
+	// Maximum number of validators per batch that delegator get claim rewards from
+	ClaimAllRewardsMaxCount = 10
 
 	// Maximum number of validators per batch returned by getValidators call
 	GetValidatorsMaxCount = 20
@@ -197,8 +201,6 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return CancelUndelegateGas
 	case "reDelegate":
 		return ReDelegateGas
-	case "claimRewards":
-		return ClaimRewardsGas
 	case "claimCommissionRewards":
 		return ClaimCommissionRewardsGas
 	case "setCommission":
@@ -212,6 +214,21 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "getValidatorEligibleVotesCount":
 	case "getValidator":
 		return DposGetMethodsGas
+	case "claimRewards":
+		return ClaimRewardsGas
+	case "claimAllRewards":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.ClaimAllRewardsArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
+		// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
+		// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
+		return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
@@ -431,6 +448,19 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 		return nil, self.claimRewards(ctx, evm.GetBlock().Number, args)
 
+	case "claimAllRewards":
+		var args sol.ClaimAllRewardsArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse claimAllRewards input args: ", err)
+			return nil, err
+		}
+
+		result, err := self.claimAllRewards(ctx, evm.GetBlock().Number, args)
+		if err != nil {
+			return nil, err
+		}
+		return method.Outputs.Pack(result)
+
 	case "claimCommissionRewards":
 		var args sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -577,9 +607,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 				bonusVotesWeight = rewardsStats.TotalVotesWeight - twoTPlusOne
 			} else {
 				errorString := fmt.Sprintf("DistributeRewards - TotalVotesWeight (%d) is smaller than two twoTPlusOne (%d)", rewardsStats.TotalVotesWeight, twoTPlusOne)
-				// TODO[133]: Shouldn't happen. Log this properly, not panic
 				fmt.Println(errorString)
-				// panic(errorString)
 			}
 			// should be zero if rewardsStats.TotalVotesWeight == twoTPlusOne
 			blockAuthorReward.Div(new(uint256.Int).Mul(bonusReward, uint256.NewInt(uint64(bonusVotesWeight))), uint256.NewInt(uint64(maxVotesWeigh-twoTPlusOne)))
@@ -590,11 +618,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	// Add reward to the block author for additional included votes
 	if blockAuthorReward.Cmp(uint256.NewInt(0)) == 1 {
 		block_author := self.validators.GetValidator(blockAuthorAddr)
-		if block_author == nil {
-			// TODO[133]: Shouldn't happen. Log this properly, not panic
-			fmt.Println("DistributeRewards - non existent block author")
-			// panic("DistributeRewards - non existent block author")
-		} else {
+		if block_author != nil {
 			commission := new(uint256.Int).Div(new(uint256.Int).Mul(blockAuthorReward, uint256.NewInt(uint64(block_author.Commission))), uint256.NewInt(MaxCommission))
 			delegatorsRewards := new(uint256.Int).Sub(blockAuthorReward, commission)
 			self.validators.AddValidatorRewards(blockAuthorAddr, commission.ToBig(), delegatorsRewards.ToBig())
@@ -646,31 +670,24 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 		totalReward.Add(totalReward, validatorReward)
 
 		validatorCommission := new(uint256.Int).Div(new(uint256.Int).Mul(validatorReward, uint256.NewInt(uint64(validator.Commission))), uint256.NewInt(MaxCommission))
-		delegatorsRewards := new(uint256.Int).Sub(validatorReward, validatorCommission)
+		delegatorRewards := new(uint256.Int).Sub(validatorReward, validatorCommission)
 
-		self.validators.AddValidatorRewards(&validatorAddress, validatorCommission.ToBig(), delegatorsRewards.ToBig())
+		self.validators.AddValidatorRewards(&validatorAddress, validatorCommission.ToBig(), delegatorRewards.ToBig())
 	}
 
-	// TODO: debug check - can be deleted for release
 	if TotalDagBlocksCountCheck != rewardsStats.TotalDagBlocksCount {
 		errorString := fmt.Sprintf("TotalDagBlocksCount (%d) based on validators stats != rewardsStats.TotalDagBlocksCount (%d)", TotalDagBlocksCountCheck, rewardsStats.TotalDagBlocksCount)
-		// TODO[133]: Shouldn't happen. Log this properly, not panic
 		fmt.Println(errorString)
-		// panic(errorString)
 	}
 
 	if totalVoteWeightCheck != rewardsStats.TotalVotesWeight {
 		errorString := fmt.Sprintf("TotalVotesWeight (%d) based on validators stats != rewardsStats.TotalVotesWeight (%d)", totalVoteWeightCheck, rewardsStats.TotalVotesWeight)
-		// TODO[133]: Shouldn't happen. Log this properly, not panic
 		fmt.Println(errorString)
-		// panic(errorString)
 	}
 
 	if newMintedRewards.Cmp(blockReward) == 1 {
 		errorString := fmt.Sprintf("newMintedRewards (%d) is more then blockReward (%d)", newMintedRewards, blockReward)
-		// TODO[133]: shouldn't happen. Log this properly, not panic
 		fmt.Println(errorString)
-		// panic(errorString)
 	}
 
 	self.storage.AddBalance(contract_address, totalReward.ToBig())
@@ -1088,6 +1105,24 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	return nil
 }
 
+// Pays off accumulated rewards back to delegator address from multiple validators at a time
+func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ClaimAllRewardsArgs) (end bool, err error) {
+	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
+	var tmp_claim_rewards_args sol.ValidatorAddressArgs
+	for _, validator_address := range delegator_validators_addresses {
+		tmp_claim_rewards_args.Validator = validator_address
+
+		tmp_err := self.claimRewards(ctx, block, tmp_claim_rewards_args)
+		if tmp_err != nil {
+			err = util.ErrorString(tmp_err.Error() + " -> validator: " + validator_address.String())
+			return
+		}
+	}
+
+	err = nil
+	return
+}
+
 // Pays off rewards from commission back to validator owner address
 func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
@@ -1158,9 +1193,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	delegation := self.delegations.GetDelegation(owner_address, &args.Validator)
 	if delegation != nil {
 		// This could happen only due some serious logic bug
-		// TODO[133]: Log properly, not panic
-		// panic("registerValidator: delegation already exists")
-		return util.ErrorString("registerValidatorWithoutChecks: Delegation already exist")
+		return ErrExistentDelegation
 	}
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
@@ -1222,7 +1255,7 @@ func (self *Contract) setValidatorInfo(ctx vm.CallFrame, args sol.SetValidatorIn
 
 	validator_info := self.validators.GetValidatorInfo(&args.Validator)
 	if validator_info == nil {
-		panic("setValidatorInfo: ErrNonExistentValidator")
+		return ErrNonExistentValidator
 	}
 
 	validator_info.Description = args.Description
@@ -1412,6 +1445,8 @@ func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (undelegat
 
 		var undelegation_data sol.DposInterfaceUndelegationData
 		undelegation_data.Validator = validator_address
+		// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
+		undelegation_data.ValidatorExists = self.validators.ValidatorExists(&validator_address)
 		undelegation_data.Stake = undelegation.Amount
 		undelegation_data.Block = undelegation.Block
 

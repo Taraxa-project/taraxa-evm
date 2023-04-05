@@ -52,6 +52,10 @@ type GetValidatorRet struct {
 	ValidatorInfo sol.DposInterfaceValidatorBasicInfo
 }
 
+type ClaimAllRewardsRet struct {
+	End bool
+}
+
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
