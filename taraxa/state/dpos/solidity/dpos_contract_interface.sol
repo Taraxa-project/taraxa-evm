@@ -157,14 +157,6 @@ interface DposInterface {
         view
         returns (ValidatorBasicInfo memory validator_info);
 
-    /**
-     * @notice Returns list of registered validators
-     *
-     * @param batch        Batch number to be fetched. If the list is too big it cannot return all validators in one call. Instead, users are fetching batches of 100 account at a time
-     *
-     * @return validators  Batch of N validators basic info
-     * @return end         Flag if there are no more accounts left. To get all accounts, caller should fetch all batches until he sees end == true
-     **/
     function getValidators(uint32 batch)
         external
         view

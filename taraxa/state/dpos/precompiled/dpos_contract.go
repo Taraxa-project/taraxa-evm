@@ -748,8 +748,8 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
 		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-		transferContractBalance(&ctx, reward)
 		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
 			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
 		}
 
@@ -812,8 +812,8 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
 	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-	transferContractBalance(&ctx, reward)
 	if reward.Cmp(big.NewInt(0)) > 0 {
+		transferContractBalance(&ctx, reward)
 		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
 	}
 
@@ -905,8 +905,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
 		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-		transferContractBalance(&ctx, reward)
 		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
 			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
 		}
 
@@ -982,8 +982,8 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
 		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-		transferContractBalance(&ctx, reward)
 		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
 			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, reward))
 		}
 
@@ -1038,6 +1038,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 		reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
 		if reward.Cmp(big.NewInt(0)) > 0 {
+			transferContractBalance(&ctx, reward)
 			self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.ValidatorTo, reward))
 		}
 
@@ -1090,8 +1091,8 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 
 	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
-	transferContractBalance(&ctx, reward)
 	if reward.Cmp(big.NewInt(0)) > 0 {
+		transferContractBalance(&ctx, reward)
 		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
 	}
 
@@ -1413,7 +1414,7 @@ func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations [
 
 		/// Temp values
 		state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
-		old_state, _ := self.state_get(validator_address[:], BlockToBytes(validator.LastUpdated))
+		old_state, _ := self.state_get(validator_address[:], BlockToBytes(delegation.LastUpdated))
 		if state == nil || old_state == nil {
 			// This should never happen
 			panic("getDelegations - unable to state data")

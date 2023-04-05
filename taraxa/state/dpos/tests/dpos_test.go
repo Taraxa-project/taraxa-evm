@@ -508,6 +508,13 @@ func TestRewardsAndCommission(t *testing.T) {
 	delegator4_old_balance := test.GetBalance(delegator4_addr)
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
+	// Check getter
+	batch0_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getDelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(GetDelegationsRet)
+	test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
+	tc.Assert.Equal(1, len(batch0_parsed_result.Delegations))
+	tc.Assert.Equal(true, batch0_parsed_result.End)
+	// Claims
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	{
@@ -522,6 +529,9 @@ func TestRewardsAndCommission(t *testing.T) {
 	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
 	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
 	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
+
+	//Check claim vs getter result
+	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
 
 	tc.Assert.Equal(expected_delegator1_reward, actual_delegator1_reward)
 	tc.Assert.Equal(expected_delegator2_reward, actual_delegator2_reward)
