@@ -3,12 +3,14 @@ package state_dry_runner
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 )
 
@@ -53,5 +55,12 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionRes
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
-	return evm.Main(trx)
+	ret, err := evm.Main(trx)
+	if err == vm.ErrExecutionReverted {
+		reason, unpack_err := abi.UnpackRevert(ret.CodeRetval)
+		if unpack_err == nil {
+			ret.ExecutionErr += util.ErrorString(": " + reason)
+		}
+	}
+	return ret
 }

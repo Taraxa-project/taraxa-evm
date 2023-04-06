@@ -64,7 +64,7 @@ func (self *TraceRunner) Trace(blk *vm.Block, trx *vm.Transaction, conf *vm.Trac
 		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
 
-	ret := evm.Main(trx)
+	ret, _ := evm.Main(trx)
 
 	// Depending on the tracer type, format and return the output
 	switch tracer := tracer.(type) {

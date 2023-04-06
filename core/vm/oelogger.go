@@ -235,7 +235,7 @@ func (ot *OeTracer) captureStartOrEnter(deep bool, typ OpCode, from *common.Addr
 			vmTrace.Code = code
 		}
 	}
-	if precompile && deep && (value == nil || len(value.Bits()) == 0 ) {
+	if precompile && deep && (value == nil || len(value.Bits()) == 0) {
 		ot.precompile = true
 		return
 	}
@@ -349,7 +349,7 @@ func (ot *OeTracer) captureEndOrExit(deep bool, output []byte, usedGas uint64, e
 		ignoreError = !deep && topTrace.Type == CREATE_string
 	}
 	if err != nil && !ignoreError {
-		if err == errExecutionReverted {
+		if err == ErrExecutionReverted {
 			topTrace.Error = "Reverted"
 			switch topTrace.Type {
 			case CALL_string:
