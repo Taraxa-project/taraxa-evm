@@ -161,13 +161,22 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func consensusErr(trxGas uint64, err util.ErrorString) (ret ExecutionResult) {
+func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.ErrorString) (ret ExecutionResult, err error) {
+	ret = result
 	ret.GasUsed = trxGas
-	ret.ConsensusErr = err
+	ret.ConsensusErr = consensusErr
 	return
 }
 
-func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
+func executionErr(result ExecutionResult, trxGas uint64, execErr error) (ret ExecutionResult, err error) {
+	ret = result
+	ret.GasUsed = trxGas
+	ret.ExecutionErr = util.ErrorString(execErr.Error())
+	err = execErr
+	return
+}
+
+func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 	self.trx = trx
 
 	defer func() { self.trx, self.jumpdests = nil, nil }()
@@ -185,14 +194,14 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 		availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
 		caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
 
-		return consensusErr(availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
+		return consensusErr(ret, availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 	}
 
 	caller.SubBalance(gas_fee)
 
 	// Check if tx.nonce < sender_nonce
 	if self.trx.Nonce.Cmp(sender_nonce) < 0 {
-		return consensusErr(gas_cap, ErrNonceTooLow)
+		return consensusErr(ret, gas_cap, ErrNonceTooLow)
 	}
 
 	// Nonce skipping is permanently enabled now. Uncomment this part to have strict nonce ordering
@@ -204,11 +213,11 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation)
 	if err != nil {
-		return consensusErr(gas_cap, util.ErrorString(err.Error()))
+		return consensusErr(ret, gas_cap, util.ErrorString(err.Error()))
 	}
 
 	if gas_cap < gas_intrinsic {
-		return consensusErr(gas_cap, ErrIntrinsicGas)
+		return consensusErr(ret, gas_cap, ErrIntrinsicGas)
 	}
 
 	gas_left := gas_cap
@@ -225,9 +234,9 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
-			return consensusErr(gas_cap, err_str)
+			return consensusErr(ret, gas_cap, err_str)
 		} else {
-			ret.ExecutionErr = err_str
+			return executionErr(ret, gas_cap, err)
 		}
 	}
 	gas_left += util.MinU64(self.state.GetRefund(), (gas_cap-gas_left)/2)
@@ -317,7 +326,7 @@ func (self *EVM) create(
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
-		if err != errExecutionReverted {
+		if err != ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
@@ -386,7 +395,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 	}
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
-		if err != errExecutionReverted && precompiled == nil {
+		if err != ErrExecutionReverted && precompiled == nil {
 			gas_left = 0
 		}
 	}
@@ -567,7 +576,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		case err != nil:
 			return nil, err
 		case operation.reverts:
-			return res, errExecutionReverted
+			return res, ErrExecutionReverted
 		case operation.halts:
 			return res, nil
 		case !operation.jumps:

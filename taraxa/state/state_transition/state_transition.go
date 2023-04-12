@@ -104,7 +104,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 }
 
 func (self *StateTransition) ExecuteTransaction(tx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret = self.evm.Main(tx)
+	ret, _ = self.evm.Main(tx)
 	self.evm_state_checkpoint()
 	return
 }
