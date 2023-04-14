@@ -10,19 +10,6 @@ import (
 
 type Reader struct{ Schema }
 
-type Proof struct {
-	Value []byte
-	Nodes [][]byte
-}
-
-func (self Reader) Prove(db_tx Input, root_hash *common.Hash, key *common.Hash) (ret Proof) {
-	return
-}
-
-func (self Reader) VerifyProof(db_tx Input, root_hash *common.Hash, key *common.Hash, proof *Proof) bool {
-	return true
-}
-
 func (self Reader) HashFully(db_tx Input, root_hash *common.Hash) *common.Hash {
 	var kbuf hex_key
 	return self.hash_fully(db_tx, (*node_hash)(root_hash), &hash_encoder{}, kbuf[:0]).common_hash()
