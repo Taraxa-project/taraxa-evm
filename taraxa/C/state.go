@@ -92,25 +92,6 @@ func taraxa_evm_state_api_get_last_committed_state_descriptor(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_prove
-func taraxa_evm_state_api_prove(
-	ptr C.taraxa_evm_state_API_ptr,
-	params_enc C.taraxa_evm_Bytes,
-	cb C.taraxa_evm_BytesCallback,
-	cb_err C.taraxa_evm_BytesCallback,
-) {
-	defer handle_err(cb_err)
-	var params struct {
-		BlkNum    types.BlockNum
-		StateRoot common.Hash
-		Addr      common.Address
-		Keys      []common.Hash
-	}
-	dec_rlp(params_enc, &params)
-	ret := state_API_instances[ptr].ReadBlock(params.BlkNum).Prove(&params.StateRoot, &params.Addr, params.Keys...)
-	enc_rlp(&ret, cb)
-}
-
 //export taraxa_evm_state_api_update_state_config
 func taraxa_evm_state_api_update_state_config(
 	ptr C.taraxa_evm_state_API_ptr,
