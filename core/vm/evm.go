@@ -168,14 +168,6 @@ func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.Error
 	return
 }
 
-func executionErr(result ExecutionResult, trxGas uint64, execErr error) (ret ExecutionResult, err error) {
-	ret = result
-	ret.GasUsed = trxGas
-	ret.ExecutionErr = util.ErrorString(execErr.Error())
-	err = execErr
-	return
-}
-
 func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 	self.trx = trx
 
@@ -236,7 +228,8 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
 			return consensusErr(ret, gas_cap, err_str)
 		} else {
-			return executionErr(ret, gas_cap, err)
+			ret.ExecutionErr = util.ErrorString(err.Error())
+			execError = err
 		}
 	}
 	gas_left += util.MinU64(self.state.GetRefund(), (gas_cap-gas_left)/2)
