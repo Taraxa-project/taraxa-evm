@@ -572,9 +572,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // - If less reward votes are included, rest of the bonus reward it is just burned
 // - Then for each validator vote and transaction proportion rewards are calculated and distributed
 
-func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
+func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
+	blockAuthorAddr := &rewardsStats.BlockAuthor
 
 	// Calculates number of tokens to be generated as block reward
 	blockReward := new(uint256.Int).Mul(self.amount_delegated, self.yield_percentage)
