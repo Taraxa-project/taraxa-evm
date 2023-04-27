@@ -362,15 +362,30 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 	}
 	snapshot := self.state.Snapshot()
 	self.transfer(caller, callee, value)
-	return self.call_end(CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
+	return self.call_end(CALL, CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
 }
 
-func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
+func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
 	gas_left = frame.Gas
 	gas_copy := frame.Gas
 	precompiled := self.precompiles.Get(code_owner.Address())
+	code := code_owner.GetCode()
 	start := time.Now()
-	var code_copy []byte
+
+	if self.vmConfig.Debug {
+		if self.depth == 0 {
+			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			defer func() {
+				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
+		} else {
+			self.vmConfig.Tracer.CaptureEnter(typ, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			defer func() {
+				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
+		}
+	}
+
 	if precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
@@ -379,8 +394,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		} else {
 			err = ErrOutOfGas
 		}
-	} else if code := code_owner.GetCode(); len(code) != 0 {
-		code_copy = code
+	} else if len(code) != 0 {
 		contract := NewContract(frame, CodeAndHash{code, code_owner.GetCodeHash()})
 		ret, err = self.run(&contract, read_only)
 		gas_left = contract.Gas
@@ -390,19 +404,6 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		self.state.RevertToSnapshot(snapshot)
 		if err != ErrExecutionReverted && precompiled == nil {
 			gas_left = 0
-		}
-	}
-	if self.vmConfig.Debug {
-		if self.depth == 0 {
-			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
-			defer func() { // Lazy evaluation of the parameters
-				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
-			}()
-		} else {
-			self.vmConfig.Tracer.CaptureEnter(CALL, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
-			defer func() { // Lazy evaluation of the parameters
-				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
-			}()
 		}
 	}
 	return
@@ -424,7 +425,7 @@ func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, 
 	if !BalanceGTE(caller.Account, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
-	return self.call_end(CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
+	return self.call_end(CALLCODE, CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
 }
 
 // call_delegate executes the contract associated with the addr with the given input
@@ -437,7 +438,7 @@ func (self *EVM) call_delegate(caller *Contract, callee StateAccount, input []by
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	return self.call_end(CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
+	return self.call_end(DELEGATECALL, CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
 }
 
 // StaticCall executes the contract associated with the addr with the given input
@@ -455,7 +456,7 @@ func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte
 	// future scenarios
 	snapshot := self.state.Snapshot()
 	callee.AddBalance(big.NewInt(0))
-	return self.call_end(CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
+	return self.call_end(STATICCALL, CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
 }
 
 // loops and evaluates the contract's code with the given input data and returns
