@@ -179,8 +179,8 @@ func taraxa_evm_state_api_dry_run_transaction(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_trace_transaction
-func taraxa_evm_state_api_trace_transaction(
+//export taraxa_evm_state_api_trace_transactions
+func taraxa_evm_state_api_trace_transactions(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -190,16 +190,16 @@ func taraxa_evm_state_api_trace_transaction(
 	var params struct {
 		BlkNum types.BlockNum
 		Blk    vm.BlockInfo
-		Trx    vm.Transaction
+		Trxs   []vm.Transaction
 		Params vm.TracingConfig
 	}
 	dec_rlp(params_enc, &params)
-	ret := state_API_instances[ptr].TraceTransaction(&vm.Block{params.BlkNum, params.Blk}, &params.Trx, &params.Params)
+	ret := state_API_instances[ptr].Trace(&vm.Block{params.BlkNum, params.Blk}, &params.Trxs, &params.Params)
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_debug_transaction
-func taraxa_evm_state_api_debug_transaction(
+//export taraxa_evm_state_api_debug_transactions
+func taraxa_evm_state_api_debug_transactions(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -209,10 +209,10 @@ func taraxa_evm_state_api_debug_transaction(
 	var params struct {
 		BlkNum types.BlockNum
 		Blk    vm.BlockInfo
-		Trx    vm.Transaction
+		Trxs   []vm.Transaction
 	}
 	dec_rlp(params_enc, &params)
-	ret := state_API_instances[ptr].TraceTransaction(&vm.Block{params.BlkNum, params.Blk}, &params.Trx, nil)
+	ret := state_API_instances[ptr].Trace(&vm.Block{params.BlkNum, params.Blk}, &params.Trxs, nil)
 	enc_rlp(&ret, cb)
 }
 
