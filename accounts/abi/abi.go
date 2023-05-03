@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 )
 
@@ -163,8 +162,6 @@ func UnpackRevert(data []byte) (string, error) {
 		return "", errors.New("invalid data for unpacking")
 	}
 	if !bytes.Equal(data[:4], revertSelector) {
-		fmt.Println(common.ToHex(data[:4]), ":", common.ToHex(revertSelector))
-		fmt.Println("second")
 		return "", errors.New("invalid data for unpacking")
 	}
 	typ, err := NewType("string", nil)
