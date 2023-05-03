@@ -282,5 +282,6 @@ func (self *Writer) shift(db_tx Input, n *short_node, new_prefix []byte, pivot b
 }
 
 func (self *Writer) resolve(db_tx Input, hash *node_hash, key_prefix_base []byte, key_prefix_rest ...byte) node {
-	return self.Reader.resolve(db_tx, hash, append(append(self.kbuf_1[:0], key_prefix_base...), key_prefix_rest...))
+	node, _ := self.Reader.resolve(db_tx, hash, append(append(self.kbuf_1[:0], key_prefix_base...), key_prefix_rest...))
+	return node
 }

@@ -55,7 +55,7 @@ func (self ExtendedReader) ForEachStorage(addr *common.Address, f func(*common.H
 	})
 }
 
-func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash)) {
+func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash, []byte)) {
 	if storage_root == nil {
 		return
 	}
@@ -63,19 +63,15 @@ func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Has
 	trie.Reader{AccountTrieSchema{}}.ForEachNodeHash(
 		AccountTrieInputAdapter{&no_addr, self},
 		storage_root,
-		func(hash *common.Hash) {
-			f(hash)
-		})
+		f)
 }
 
-func (self ExtendedReader) ForEachMainNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash)) {
+func (self ExtendedReader) ForEachMainNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash, []byte)) {
 	if storage_root == nil {
 		return
 	}
 	trie.Reader{MainTrieSchema{}}.ForEachNodeHash(
 		MainTrieInputAdapter{self},
 		storage_root,
-		func(hash *common.Hash) {
-			f(hash)
-		})
+		f)
 }

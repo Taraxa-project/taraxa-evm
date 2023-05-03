@@ -374,12 +374,11 @@ func taraxa_evm_state_api_prune(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		StateRootToKeep  common.Hash
-		StateRootToPrune []common.Hash
-		BlkNum           types.BlockNum
+		StateRootToKeep []common.Hash
+		BlkNum          types.BlockNum
 	}
 	dec_rlp(params_enc, &params)
-	state_API_instances[ptr].db.Prune(params.StateRootToKeep, params.StateRootToPrune, params.BlkNum)
+	state_API_instances[ptr].db.Prune(params.StateRootToKeep, params.BlkNum)
 }
 
 type state_API_ptr = byte
