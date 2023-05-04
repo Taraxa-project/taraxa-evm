@@ -27,6 +27,7 @@ type DB struct {
 	latest_state              LatestState
 	maintenance_task_executor goroutines.GoroutineGroup
 	opts                      Opts
+	db_opts                   *grocksdb.Options
 }
 
 const (
@@ -60,6 +61,7 @@ func (self *DB) Init(opts Opts) *DB {
 		//ret.SetUseAdaptiveMutex(true)
 		return ret
 	}
+	self.db_opts = new_db_opts()
 	const real_col_cnt = 1 + col_COUNT
 	cf_opts_default := grocksdb.NewDefaultOptions()
 	defer cf_opts_default.Destroy()
@@ -113,145 +115,131 @@ func (self *DB) Snapshot(dir string, log_size_for_flush uint64) error {
 	return c.CreateCheckpoint(dir, log_size_for_flush)
 }
 
-func (self *DB) Prune(state_root_to_keep common.Hash, state_root_to_prune []common.Hash, blk_num types.BlockNum) {
-	var member struct{}
-	set_node_to_keep := make(map[common.Hash]struct{})
-	set_node_to_remove := make(map[common.Hash]struct{})
-	blk_num_counter := blk_num
-
-	//Select nodes which are not to be deleted
-	set_node_to_keep[state_root_to_keep] = member
-	state_db.GetBlockState(self, blk_num_counter).ForEachMainNodeHashByRoot(&state_root_to_keep, func(h *common.Hash) {
-		set_node_to_keep[*h] = member
-	})
-	blk_num_counter--
-
-	//Select nodes from older blocks to remove only if they are not in set_node_to_keep
-	for _, root_to_prune := range state_root_to_prune {
-		state_db.GetBlockState(self, blk_num_counter).ForEachMainNodeHashByRoot(&root_to_prune, func(h *common.Hash) {
-			if _, ok := set_node_to_keep[*h]; !ok {
-				set_node_to_remove[*h] = member
-			}
-		})
-		blk_num_counter--
-	}
-
-	//Select main trie values to prune/remove
-	set_value_to_prune := make(map[string]struct{})
-	set_storage_root_to_keep := make(map[common.Hash]struct{})
-	set_storage_root_to_prune := make(map[common.Hash]struct{})
-
-	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_value])
-	itr.SeekToFirst()
-	prev_key := make([]byte, common.VersionedKeyLength)
-	last_acc_to_keep := make([]byte, common.HashLength)
-	for itr.Valid() {
-		account := state_db.DecodeAccountFromTrie(itr.Value().Data())
-		copy(prev_key, itr.Key().Data())
-		itr.Next()
-		keep := true
-		if itr.Valid() {
-			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
-			if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
-				//Only prune the previous value if current value for the same account is below blk_num
-				if ver_blk_num < blk_num {
-					keep = false
-				}
-			}
-		}
-
-		if keep {
-			//Only save the storage root hash of smallest block number to keep
-			if bytes.Compare(prev_key[0:common.HashLength], last_acc_to_keep) != 0 {
-				copy(last_acc_to_keep, prev_key[0:common.HashLength])
-				if account.StorageRootHash != nil {
-					set_storage_root_to_keep[*account.StorageRootHash] = member
-				}
-			}
-		} else {
-			set_value_to_prune[string(prev_key)] = member
-			if account.StorageRootHash != nil {
-				set_storage_root_to_prune[*account.StorageRootHash] = member
-			}
-		}
-	}
-
-	//Select account nodes to prune
-	set_account_node_to_keep := make(map[common.Hash]struct{})
-	set_account_node_to_remove := make(map[common.Hash]struct{})
-	for root_to_keep, _ := range set_storage_root_to_keep {
-		set_account_node_to_keep[root_to_keep] = member
-		state_db.GetBlockState(self, blk_num_counter).ForEachAccountNodeHashByRoot(&root_to_keep, func(h *common.Hash) {
-			set_account_node_to_keep[*h] = member
-		})
-	}
-	for root_to_prune, _ := range set_storage_root_to_prune {
-		if _, ok := set_account_node_to_keep[root_to_prune]; !ok {
-			state_db.GetBlockState(self, blk_num_counter).ForEachAccountNodeHashByRoot(&root_to_prune, func(h *common.Hash) {
-				if _, ok := set_account_node_to_keep[*h]; !ok {
-					set_account_node_to_remove[*h] = member
-				}
-			})
-		}
-	}
-
-	//Select account storage values to prune
-	set_account_storage_value_to_keep := make(map[string]struct{})
-	set_account_storage_value_to_prune := make(map[string]struct{})
-	itr = self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_acc_trie_value])
-	itr.SeekToFirst()
-	for itr.Valid() {
-		copy(prev_key, itr.Key().Data())
-		itr.Next()
-		keep := true
-		if itr.Valid() {
-			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
-
-			if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
-				if ver_blk_num < blk_num {
-					keep = false
-				}
-			}
-		}
-		if keep {
-			set_account_storage_value_to_keep[string(prev_key)] = member
-		} else {
-			set_account_storage_value_to_prune[string(prev_key)] = member
-		}
-	}
-
-	//Remove and compact everything we can remove
+func (self *DB) RecreateColumn(column state_db.Column, nodes map[common.Hash][]byte) {
 	range_limit := [common.VersionedKeyLength]byte{255}
 	range32 := grocksdb.Range{
 		Start: make([]byte, common.HashLength),
 		Limit: make([]byte, common.HashLength),
 	}
 	copy(range32.Limit, range_limit[0:common.HashLength])
+	err := self.db.DropColumnFamily(self.cf_handles[column])
+	if err != nil {
+		panic("Could not delete column")
+	}
+	self.cf_handles[column].Destroy()
+	acc_trie_handle, err2 := self.db.CreateColumnFamily(self.db_opts, strconv.Itoa(int(column+1)))
+	if err2 != nil {
+		panic("Could not create column")
+	}
+	self.cf_handles[column] = acc_trie_handle
+
+	for node_to_keep, b := range nodes {
+		self.db.PutCF(grocksdb.NewDefaultWriteOptions(), self.cf_handles[column], node_to_keep[:], b)
+	}
+	self.db.CompactRangeCF(self.cf_handles[column], range32)
+}
+
+func (self *DB) Prune(state_root_to_keep []common.Hash, blk_num types.BlockNum) {
+	var member struct{}
+	current_block_state := state_db.GetBlockState(self, blk_num)
+
+	range_limit := [common.VersionedKeyLength]byte{255}
 	range40 := grocksdb.Range{
 		Start: make([]byte, common.VersionedKeyLength),
 		Limit: make([]byte, common.VersionedKeyLength),
 	}
 	copy(range40.Limit, range_limit[0:common.VersionedKeyLength])
 
-	for node_to_remove, _ := range set_node_to_remove {
-		self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_main_trie_node], node_to_remove[:])
+	//Select nodes which are not to be deleted
+	nodes_to_keep := make(map[common.Hash][]byte)
+	for _, root_to_keep := range state_root_to_keep {
+		current_block_state.ForEachMainNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
+			bytes_s := common.CopyBytes(b)
+			nodes_to_keep[*h] = bytes_s
+		})
 	}
-	self.db.CompactRangeCF(self.cf_handles[state_db.COL_main_trie_node], range32)
+	self.RecreateColumn(state_db.COL_main_trie_node, nodes_to_keep)
 
+	//Select main trie values to prune/remove
+	set_value_to_prune := make(map[string]struct{})
+	set_storage_root_to_keep := make(map[common.Hash]struct{})
+	set_storage_root_to_prune := make(map[common.Hash]struct{})
+
+	//Iterate over all values and select which to keep
+	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_value])
+	itr.SeekToFirst()
+	prev_key := make([]byte, common.VersionedKeyLength)
+	for {
+		copy(prev_key, itr.Key().Data())
+		itr.Key().Free()
+		account := state_db.DecodeAccountFromTrie(itr.Value().Data())
+		itr.Value().Free()
+		itr.Next()
+		if !itr.Valid() {
+			if account.StorageRootHash != nil {
+				set_storage_root_to_keep[*account.StorageRootHash] = member
+			}
+			break
+		}
+		if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
+			//Only prune the previous value if current value for the same account is below blk_num
+			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
+			if ver_blk_num < blk_num {
+				set_value_to_prune[string(prev_key)] = member
+				if account.StorageRootHash != nil {
+					set_storage_root_to_prune[*account.StorageRootHash] = member
+				}
+			} else {
+				if account.StorageRootHash != nil {
+					set_storage_root_to_keep[*account.StorageRootHash] = member
+				}
+			}
+		} else {
+			if account.StorageRootHash != nil {
+				set_storage_root_to_keep[*account.StorageRootHash] = member
+			}
+		}
+	}
+	itr.Close()
 	for value_to_remove, _ := range set_value_to_prune {
 		self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_main_trie_value], []byte(value_to_remove))
 	}
 	self.db.CompactRangeCF(self.cf_handles[state_db.COL_main_trie_value], range40)
 
-	for node_to_remove, _ := range set_account_node_to_remove {
-		self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_node], node_to_remove[:])
+	//Select account nodes to prune
+	account_nodes_to_keep := make(map[common.Hash][]byte)
+	//set_account_node_to_remove := make(map[common.Hash]struct{})
+	for root_to_keep, _ := range set_storage_root_to_keep {
+		current_block_state.ForEachAccountNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
+			b = common.CopyBytes(b)
+			account_nodes_to_keep[*h] = b
+		})
 	}
-	self.db.CompactRangeCF(self.cf_handles[state_db.COL_acc_trie_node], range32)
+	self.RecreateColumn(state_db.COL_acc_trie_node, account_nodes_to_keep)
+
+	//Select account storage values to prune
+	set_account_storage_value_to_prune := make(map[string]struct{})
+	itr = self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_acc_trie_value])
+	itr.SeekToFirst()
+	prev_key = make([]byte, common.VersionedKeyLength)
+	for {
+		copy(prev_key, itr.Key().Data())
+		itr.Key().Free()
+		itr.Next()
+		if !itr.Valid() {
+			break
+		}
+		if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
+			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
+			if ver_blk_num < blk_num {
+				set_account_storage_value_to_prune[string(prev_key)] = member
+			}
+		}
+	}
+	itr.Close()
 
 	for value_to_remove, _ := range set_account_storage_value_to_prune {
-		if _, ok := set_account_storage_value_to_keep[value_to_remove]; !ok {
-			self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_value], []byte(value_to_remove))
-		}
+		self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_value], []byte(value_to_remove))
 	}
 	self.db.CompactRangeCF(self.cf_handles[state_db.COL_acc_trie_value], range40)
 }
