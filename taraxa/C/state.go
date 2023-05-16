@@ -237,7 +237,6 @@ func taraxa_evm_state_api_transition_state(
 	for i := range params.Txs {
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
-
 		txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
 		g, _ := uint256.FromBig(tx.GasPrice)
 		txFee.Mul(txFee, g)

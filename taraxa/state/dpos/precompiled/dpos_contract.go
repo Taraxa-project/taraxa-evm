@@ -606,7 +606,7 @@ func (self *Contract) DistributeRewards(blockAuthorAddr *common.Address, rewards
 	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate propotion between votes and transactions
+		// Calculate proportion between votes and transactions
 		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
 		votesReward.Sub(blockReward, dagProposersReward)
 

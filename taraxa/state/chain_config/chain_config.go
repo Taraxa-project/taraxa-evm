@@ -6,10 +6,15 @@ import (
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 )
 
+type Hardforks struct {
+	FixRedelegateBlockNum uint64
+}
+
 type ChainConfig struct {
 	EVMChainConfig  params.ChainConfig
 	GenesisBalances core.BalanceMap
 	DPOS            dpos.Config
+	Hardforks       Hardforks
 }
 
 func (self *ChainConfig) RewardsEnabled() bool {
