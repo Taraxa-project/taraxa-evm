@@ -224,20 +224,13 @@ func taraxa_evm_state_api_transition_state(
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
 
-		txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
-		g, _ := uint256.FromBig(tx.GasPrice)
-		txFee.Mul(txFee, g)
-
 		// Contract distribution is disabled - just add fee to the block author balance
-		// TODO: once there is a stabilized version - remove this flag and use only dpos contract
-		// rewards are distributed directly to the validator balances
-		if st.GetChainConfig().RewardsEnabled() {
+		if st.BlockNumber() < st.GetChainConfig().Hardforks.FeeRewardsBlockNum {
+			txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
+			g, _ := uint256.FromBig(tx.GasPrice)
+			txFee.Mul(txFee, g)
 			st.AddTxFeeToBalance(&params.Blk.Author, txFee)
 		}
-		// else {
-		// 	// Reward dag block author, who included specified tx as first
-		// 	feesRewards.AddTrxFeeReward(params.Rewards_stats.TxsValidators[i], txFee)
-		// }
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
 	}
