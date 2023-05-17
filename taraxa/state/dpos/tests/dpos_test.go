@@ -1440,11 +1440,11 @@ func TestValidatorsClass(t *testing.T) {
 	validator2_owner := addr(1)
 
 	// Checks CreateValidator & CheckValidatorOwner
-	validators.CreateValidator(&validator1_owner, &validator1_addr, DefaultVrfKey, 0, 1, "validator1_description", "validator1_endpoint")
+	validators.CreateValidator(true, &validator1_owner, &validator1_addr, DefaultVrfKey, 0, 1, "validator1_description", "validator1_endpoint")
 	validators.CheckValidatorOwner(&validator1_owner, &validator1_addr)
 	tc.Assert.Equal(uint32(1), validators.GetValidatorsCount())
 
-	validators.CreateValidator(&validator2_owner, &validator2_addr, DefaultVrfKey, 0, 2, "validator2_description", "validator2_endpoint")
+	validators.CreateValidator(true, &validator2_owner, &validator2_addr, DefaultVrfKey, 0, 2, "validator2_description", "validator2_endpoint")
 	validators.CheckValidatorOwner(&validator2_owner, &validator2_addr)
 	tc.Assert.Equal(uint32(2), validators.GetValidatorsCount())
 	{
@@ -1459,7 +1459,7 @@ func TestValidatorsClass(t *testing.T) {
 		validator1.Commission = 11
 		validator1_info.Description = "validator1_description_modified"
 		validator1_info.Endpoint = "validator1_endpoint_modified"
-		validators.ModifyValidator(&validator1_addr, validator1)
+		validators.ModifyValidator(true, &validator1_addr, validator1)
 		validators.ModifyValidatorInfo(&validator1_addr, validator1_info)
 	}
 
@@ -1484,8 +1484,52 @@ func TestValidatorsClass(t *testing.T) {
 	tc.Assert.Equal(uint32(1), validators.GetValidatorsCount())
 
 	validator3_addr := addr(3)
-	tc.Assert.PanicsWithValue("Modify: non existent validator", func() { validators.ModifyValidator(&validator3_addr, validator1) })
+	tc.Assert.PanicsWithValue("Modify: non existent validator", func() { validators.ModifyValidator(true, &validator3_addr, validator1) })
 	tc.Assert.PanicsWithValue("Modify: non existent validator", func() { validators.ModifyValidatorInfo(&validator3_addr, validator1_info) })
+}
+
+func TestHardfork(t *testing.T) {
+	tc, test := init_test(t, CopyDefaultChainConfig())
+	defer test.end()
+
+	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
+	test.st.BeginBlock(&vm.BlockInfo{})
+
+	var storage dpos.StorageWrapper
+	evm_state := test.st.GetEvmState()
+	storage.Init(dpos.EVMStateStorage{evm_state})
+
+	validators := new(dpos.Validators).Init(&storage, []byte{})
+	field_validators := []byte{0}
+	validators.Init(&storage, field_validators)
+
+	validator1_addr, _ := generateAddrAndProof()
+	validator1_owner := addr(1)
+
+	// Checks CreateValidator & CheckValidatorOwner
+	validators.CreateValidator(false, &validator1_owner, &validator1_addr, DefaultVrfKey, 1, 10, "validator1_description", "validator1_endpoint")
+
+	{
+		// Checks GetValidator & GetValidatorInfo
+		validator1 := validators.GetValidator(&validator1_addr)
+
+		tc.Assert.Equal(uint16(10), validator1.Commission)
+		// validator1_info := validators.GetValidatorInfo(&validator1_addr)
+		// tc.Assert.Equal("validator1_description", validator1_info.Description)
+		// tc.Assert.Equal("validator1_endpoint", validator1_info.Endpoint)
+	}
+
+	// validator1 := validators.GetValidator(true, &validator1_addr)
+	// tc.Assert.Equal(uint16(11), validator1.Commission)
+	// validator1_info := validators.GetValidatorInfo(&validator1_addr)
+	// tc.Assert.Equal("validator1_description_modified", validator1_info.Description)
+	// tc.Assert.Equal("validator1_endpoint_modified", validator1_info.Endpoint)
+
+	// // Checks DeleteValidator
+	// tc.Assert.Equal(true, validators.ValidatorExists(&validator1_addr))
+	// validators.DeleteValidator(&validator1_addr)
+	// tc.Assert.Equal(false, validators.ValidatorExists(&validator1_addr))
+	// tc.Assert.Equal(uint32(0), validators.GetValidatorsCount())
 }
 
 func TestDelegationsClass(t *testing.T) {
