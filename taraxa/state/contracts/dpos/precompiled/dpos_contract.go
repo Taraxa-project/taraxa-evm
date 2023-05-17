@@ -544,7 +544,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidator input args: ", err)
 			return nil, err
 		}
-		result, err := self.getValidator(args)
+		result, err := self.getValidatorInfo(evm.GetBlock().Number, args)
 		if err != nil {
 			return nil, err
 		}
@@ -556,7 +556,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidators(args))
+		return method.Outputs.Pack(self.getValidators(evm.GetBlock().Number, args))
 
 	case "getValidatorsFor":
 		var args dpos_sol.GetValidatorsForArgs
@@ -564,7 +564,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidatorsFor input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidatorsFor(args))
+		return method.Outputs.Pack(self.getValidatorsFor(evm.GetBlock().Number, args))
 
 	case "getTotalDelegation":
 		var args dpos_sol.GetTotalDelegationArgs
@@ -580,7 +580,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegations(args))
+		return method.Outputs.Pack(self.getDelegations(evm.GetBlock().Number, args))
 
 	case "getUndelegations":
 		var args dpos_sol.GetUndelegationsArgs
@@ -1483,7 +1483,7 @@ func (self *Contract) getValidators(args dpos_sol.GetValidatorsArgs) (validators
 	validators = make([]dpos_sol.DposInterfaceValidatorData, 0, len(validators_addresses))
 
 	for _, validator_address := range validators_addresses {
-		validators = append(validators, self.to_validator_data(validator_address, self.validators.GetValidatorOwner(&validator_address)))
+		validators = append(validators, self.to_validator_data(block, validator_address, self.validators.GetValidatorOwner(&validator_address)))
 	}
 	return
 }
@@ -1509,7 +1509,7 @@ func (self *Contract) getValidatorsFor(args dpos_sol.GetValidatorsForArgs) (vali
 		}
 
 		if !full {
-			validators = append(validators, self.to_validator_data(validator_address, owner))
+			validators = append(validators, self.to_validator_data(block, validator_address, owner))
 			full = len(validators) == GetValidatorsMaxCount
 		} else { // we found one more owner validator that belongs to the next batch.
 			end = false
@@ -1678,6 +1678,15 @@ func (self *Contract) modifyValidator(block types.BlockNum, validator_address *c
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= self.hardforks_config.MagnoliaHfBlockNum
+}
+
+func (self *Contract) modifyValidator(block types.BlockNum, validator_address *common.Address, validator *Validator) {
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), validator_address, validator)
+}
+
+func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
+	// TODO: read from config
+	return block >= 1000
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {
