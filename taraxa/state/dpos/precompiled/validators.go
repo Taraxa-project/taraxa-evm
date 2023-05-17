@@ -9,7 +9,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-type Validator struct {
+// Pre-hardfork validstor struct
+type ValidatorV1 struct {
 	// TotalStake == sum of all delegated tokens to the validator
 	TotalStake *big.Int
 
@@ -21,6 +22,13 @@ type Validator struct {
 
 	// Block number pointing to latest state
 	LastUpdated types.BlockNum
+}
+
+type Validator struct {
+	*ValidatorV1
+
+	// Number of ongoing/unclaimed undelegations from the validator
+	UndelegationsCount uint16
 }
 
 type ValidatorInfo struct {
@@ -118,14 +126,21 @@ func (self *Validators) GetValidatorsCount() uint32 {
 	return self.validators_list.GetCount()
 }
 
-func (self *Validators) CreateValidator(owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) *Validator {
+func (self *Validators) CreateValidator(magnolia_hardfork bool, owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) (validator *Validator) {
 	// Creates Validator object in storage
-	validator := new(Validator)
+	validator = new(Validator)
+	validator.ValidatorV1 = new(ValidatorV1)
 	validator.Commission = commission
 	validator.TotalStake = big.NewInt(0)
 	validator.LastCommissionChange = block
 	validator.LastUpdated = block
-	Save(self, validator_address, validator)
+	validator.UndelegationsCount = 0
+
+	if magnolia_hardfork {
+		Save(self, validator_address, validator)
+	} else {
+		Save(self, validator_address, validator.ValidatorV1)
+	}
 
 	// Creates ValidatorInfo object in storage
 	validator_info := new(ValidatorInfo)
@@ -147,7 +162,8 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
-	return validator
+
+	return
 }
 
 func (self *Validators) DeleteValidator(validator_address *common.Address) {
@@ -171,11 +187,60 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 }
 
 func (self *Validators) GetValidator(validator_address *common.Address) (validator *Validator) {
-	return Get[Validator](self, validator_address)
+	key := stor_k_1(self.validator_field, validator_address[:])
+	self.storage.Get(key, func(bytes []byte) {
+		// Try to decode into post-hardfor extented Validator struct first
+		validator = new(Validator)
+		validator.ValidatorV1 = new(ValidatorV1)
+
+		err := rlp.DecodeBytes(bytes, validator)
+		if err != nil {
+			// Try to decode into pre-hardfor ValidatorV1 struct first
+			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
+			validator.UndelegationsCount = 0
+			if err != nil {
+				// This should never happen
+				panic("Unable to decode validator rlp")
+			}
+		}
+	})
+
+	// // TODO: this approach does not work
+	// // TODO: in case validator.TotalStake == 1000000000000000000000, s.List().Size == 13 and not 4...
+	// self.storage.Get(key, func(tmp_bytes []byte) {
+	// 	s := rlp.NewStream(bytes.NewReader(tmp_bytes), uint64(len(tmp_bytes)))
+	// 	size, err := s.List()
+	// 	if err != nil {
+	// 		fmt.Println("Unable to decode validator's rlp: ", err)
+	// 		validator = nil
+	// 		return
+	// 	}
+
+	// 	fmt.Println("size: ", size)
+
+	// 	// ValidatorV1 rlp found -> pre magnolia hardfork
+	// 	if int(size) == reflect.TypeOf(ValidatorV1{}).NumField() {
+	// 		validator = new(Validator)
+	// 		validator.ValidatorV1 = new(ValidatorV1)
+	// 		rlp.MustDecodeBytes(tmp_bytes, validator.ValidatorV1)
+	// 		validator.UndelegationsCount = 0
+	// 	} else { // Validator rlp found -> post magnolia hardfork
+	// 		validator = new(Validator)
+	// 		rlp.MustDecodeBytes(tmp_bytes, validator)
+	// 	}
+
+	// 	return
+	// })
+
+	return
 }
 
-func (self *Validators) ModifyValidator(validator_address *common.Address, validator *Validator) {
-	Modify(self, validator_address, validator)
+func (self *Validators) ModifyValidator(magnolia_hardfork bool, validator_address *common.Address, validator *Validator) {
+	if magnolia_hardfork {
+		Modify(self, validator_address, validator)
+	} else {
+		Modify(self, validator_address, validator.ValidatorV1)
+	}
 }
 
 func (self *Validators) GetValidatorInfo(validator_address *common.Address) (validator_info *ValidatorInfo) {
@@ -207,11 +272,13 @@ func (self *Validators) AddValidatorRewards(validator_address *common.Address, c
 }
 
 type Field interface {
-	Validator | ValidatorInfo | ValidatorRewards
+	ValidatorV1 | Validator | ValidatorInfo | ValidatorRewards
 }
 
 func (self *Validators) getFieldFor(t any) []byte {
 	switch tt := t.(type) {
+	case *ValidatorV1:
+		return self.validator_field
 	case *Validator:
 		return self.validator_field
 	case *ValidatorInfo:
