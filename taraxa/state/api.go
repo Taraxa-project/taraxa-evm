@@ -43,7 +43,6 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 	self.dpos = new(dpos.API).Init(self.config.DPOS)
 	config_changes := self.rocksdb.GetDPOSConfigChanges()
 	if len(config_changes) == 0 {
-
 		bytes := rlp.MustEncodeToBytes(self.config.DPOS)
 		self.rocksdb.SaveDPOSConfigChange(0, bytes)
 		self.dpos.UpdateConfig(0, self.config.DPOS)

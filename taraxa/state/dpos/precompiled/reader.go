@@ -12,18 +12,19 @@ import (
 )
 
 type Reader struct {
-	cfg     *Config
-	storage *StorageReaderWrapper
+	cfg          *Config
+	storage      *StorageReaderWrapper
+	blk_n_actual types.BlockNum
 }
 
 func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
 	self.cfg = cfg
-	blk_n_actual := uint64(0)
+	self.blk_n_actual = uint64(0)
 	if uint64(self.cfg.DelegationDelay) < blk_n {
-		blk_n_actual = blk_n - uint64(self.cfg.DelegationDelay)
+		self.blk_n_actual = blk_n - uint64(self.cfg.DelegationDelay)
 	}
 
-	self.storage = new(StorageReaderWrapper).Init(storage_factory(blk_n_actual))
+	self.storage = new(StorageReaderWrapper).Init(storage_factory(self.blk_n_actual))
 	return self
 }
 
@@ -54,7 +55,16 @@ func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = big.NewInt(0)
 	self.storage.Get(stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
 		validator := new(Validator)
-		rlp.MustDecodeBytes(bytes, validator)
+		validator.ValidatorV1 = new(ValidatorV1)
+
+		// TODO: use hardfork block number from config
+		is_magnolia_hardfork := (self.blk_n_actual >= 1000)
+		if is_magnolia_hardfork {
+			rlp.MustDecodeBytes(bytes, validator)
+		} else {
+			rlp.MustDecodeBytes(bytes, validator.ValidatorV1)
+		}
+
 		ret = validator.TotalStake
 	})
 	return
