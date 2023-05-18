@@ -621,7 +621,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate proportion between votes and transactions
+		// Calculate propotion between votes and transactions
 		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
 		votesReward.Sub(blockReward, dagProposersReward)
 
@@ -1678,15 +1678,6 @@ func (self *Contract) modifyValidator(block types.BlockNum, validator_address *c
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= self.hardforks_config.MagnoliaHfBlockNum
-}
-
-func (self *Contract) modifyValidator(block types.BlockNum, validator_address *common.Address, validator *Validator) {
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), validator_address, validator)
-}
-
-func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
-	// TODO: read from config
-	return block >= 1000
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

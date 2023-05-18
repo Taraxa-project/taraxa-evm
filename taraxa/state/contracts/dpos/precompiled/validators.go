@@ -197,7 +197,7 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 
 		err := rlp.DecodeBytes(bytes, validator)
 		if err != nil {
-			// Try to decode into pre-hardfork ValidatorV1 struct
+			// Try to decode into pre-hardfork ValidatorV1 struct first
 			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
 			validator.UndelegationsCount = 0
 			if err != nil {
