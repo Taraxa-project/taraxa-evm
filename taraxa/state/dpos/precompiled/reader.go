@@ -54,15 +54,19 @@ func (self Reader) IsEligible(address *common.Address) bool {
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = big.NewInt(0)
 	self.storage.Get(stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
+		// Try to decode into post-hardfork extented Validator struct first
 		validator := new(Validator)
 		validator.ValidatorV1 = new(ValidatorV1)
 
-		// TODO: use hardfork block number from config
-		is_magnolia_hardfork := (self.blk_n_actual >= 1000)
-		if is_magnolia_hardfork {
-			rlp.MustDecodeBytes(bytes, validator)
-		} else {
-			rlp.MustDecodeBytes(bytes, validator.ValidatorV1)
+		err := rlp.DecodeBytes(bytes, validator)
+		if err != nil {
+			// Try to decode into pre-hardfork ValidatorV1 struct first
+			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
+			validator.UndelegationsCount = 0
+			if err != nil {
+				// This should never happen
+				panic("Unable to decode validator rlp")
+			}
 		}
 
 		ret = validator.TotalStake

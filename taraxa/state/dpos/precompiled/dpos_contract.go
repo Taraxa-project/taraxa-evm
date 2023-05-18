@@ -618,7 +618,7 @@ func (self *Contract) DistributeRewards(block types.BlockNum, rewardsStats *rewa
 	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate proportion between votes and transactions
+		// Calculate propotion between votes and transactions
 		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
 		votesReward.Sub(blockReward, dagProposersReward)
 
@@ -795,7 +795,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	self.evm.AddLog(self.logs.MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
 
@@ -878,7 +878,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.state_put(&state_k, nil)
 	} else {
 		self.state_put(&state_k, state)
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 	self.evm.AddLog(self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
@@ -977,7 +977,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	self.evm.AddLog(self.logs.MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
 
@@ -1085,7 +1085,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			}
 		} else {
 			self.state_put(&state_k, state)
-			self.modifyValidator(block, &args.ValidatorFrom, validator_from)
+			self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
 			self.validators.ModifyValidatorRewards(&args.ValidatorFrom, validator_rewards_from)
 		}
 
@@ -1138,7 +1138,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.ValidatorTo, validator_to)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorTo, validator_to)
 	self.validators.ModifyValidatorRewards(&args.ValidatorTo, validator_rewards_to)
 	self.evm.AddLog(self.logs.MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
 	return nil
@@ -1164,7 +1164,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1224,7 +1224,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 	} else {
-		self.modifyValidator(block, &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1298,7 +1297,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
 		self.delegate_update_values(ctx, validator, 0)
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		state.Count++
 	}
 
@@ -1372,7 +1371,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 
 	validator.Commission = args.Commission
 	validator.LastCommissionChange = block
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
@@ -1631,8 +1630,7 @@ func (self *Contract) modifyValidator(block types.BlockNum, validator_address *c
 }
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
-	// TODO: read from config
-	return block >= 1000
+	return block >= self.hardforks_config.MagnoliaHfBlockNum
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

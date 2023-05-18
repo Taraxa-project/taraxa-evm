@@ -100,7 +100,7 @@ var (
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
 		},
-		Hardforks: chain_config.Hardforks{FixRedelegateBlockNum:0},
+		Hardforks: chain_config.Hardforks{FixRedelegateBlockNum:0, MagnoliaHfBlockNum: 0},
 	}
 )
 
@@ -133,6 +133,10 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
+
+	new_cfg.Hardforks.RewardsDistributionFrequency = DefaultChainCfg.Hardforks.RewardsDistributionFrequency
+	new_cfg.Hardforks.FeeRewardsBlockNum = DefaultChainCfg.Hardforks.FeeRewardsBlockNum
+	new_cfg.Hardforks.MagnoliaHfBlockNum = DefaultChainCfg.Hardforks.MagnoliaHfBlockNum
 
 	return new_cfg
 }
