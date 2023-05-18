@@ -20,6 +20,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 )
@@ -127,7 +128,10 @@ type State struct {
 
 // Main contract class
 type Contract struct {
-	cfg Config
+	// Configs
+	dpos_config      chain_config.DposConfig
+	hardforks_config chain_config.HardforksConfig
+
 	// current storage
 	storage StorageWrapper
 	// delayed storage for PBFT
@@ -156,8 +160,9 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
-	self.cfg = cfg
+func (self *Contract) Init(dpos_config chain_config.DposConfig, hardforks_config chain_config.HardforksConfig, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
+	self.dpos_config = dpos_config
+	self.hardforks_config = hardforks_config
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
 	self.evm = evm
@@ -170,8 +175,8 @@ func (self *Contract) UpdateStorage(readStorage Reader) {
 }
 
 // Updates config - for HF
-func (self *Contract) UpdateConfig(cfg Config) {
-	self.cfg = cfg
+func (self *Contract) UpdateConfig(dpos_config chain_config.DposConfig) {
+	self.dpos_config = dpos_config
 }
 
 // Register this precompiled contract
@@ -329,11 +334,11 @@ func (self *Contract) lazy_init() {
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
 
-	self.blocks_per_year = uint256.NewInt(uint64(self.cfg.BlocksPerYear))
-	self.yield_percentage = uint256.NewInt(uint64(self.cfg.YieldPercentage))
+	self.blocks_per_year = uint256.NewInt(uint64(self.dpos_config.BlocksPerYear))
+	self.yield_percentage = uint256.NewInt(uint64(self.dpos_config.YieldPercentage))
 
-	self.dag_proposers_reward = uint256.NewInt(uint64(self.cfg.DagProposersReward))
-	self.max_block_author_reward = uint256.NewInt(uint64(self.cfg.MaxBlockAuthorReward))
+	self.dag_proposers_reward = uint256.NewInt(uint64(self.dpos_config.DagProposersReward))
+	self.max_block_author_reward = uint256.NewInt(uint64(self.dpos_config.MaxBlockAuthorReward))
 
 	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
@@ -383,7 +388,7 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 		return
 	}
 
-	for _, entry := range self.cfg.InitialValidators {
+	for _, entry := range self.dpos_config.InitialValidators {
 		self.apply_genesis_entry(&entry, make_context)
 	}
 
@@ -607,7 +612,7 @@ func (self *Contract) DistributeRewards(block types.BlockNum, rewardsStats *rewa
 	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate proportion between votes and transactions
+		// Calculate propotion between votes and transactions
 		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
 		votesReward.Sub(blockReward, dagProposersReward)
 
@@ -720,7 +725,7 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 	validator.TotalStake.Add(validator.TotalStake, ctx.Value)
 	v, _ := uint256.FromBig(ctx.Value)
 	self.amount_delegated.Add(self.amount_delegated, v)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	new_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -738,12 +743,12 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
+	if self.dpos_config.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
-	if delegation == nil && self.cfg.MinimumDeposit.Cmp(ctx.Value) == 1 {
+	if delegation == nil && self.dpos_config.MinimumDeposit.Cmp(ctx.Value) == 1 {
 		return ErrInsufficientDelegation
 	}
 
@@ -760,7 +765,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 		state.Count++
 	}
 
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	prev_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
@@ -784,7 +789,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	self.evm.AddLog(self.logs.MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
 
@@ -813,11 +818,11 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		return ErrInsufficientDelegation
 	}
 
-	if delegation.Stake.Cmp(args.Amount) != 0 && self.cfg.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+	if delegation.Stake.Cmp(args.Amount) != 0 && self.dpos_config.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
 		return ErrInsufficientDelegation
 	}
 
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	prev_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
@@ -840,7 +845,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	}
 
 	// Creating undelegation request
-	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DelegationLockingPeriod), args.Amount)
+	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.dpos_config.DelegationLockingPeriod), args.Amount)
 	delegation.Stake.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake.Sub(validator.TotalStake, args.Amount)
 	validator.UndelegationsCount++
@@ -855,7 +860,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	a, _ := uint256.FromBig(args.Amount)
 	self.amount_delegated.Sub(self.amount_delegated, a)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	new_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -867,7 +872,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.state_put(&state_k, nil)
 	} else {
 		self.state_put(&state_k, state)
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 	self.evm.AddLog(self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
@@ -920,7 +925,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	prev_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -958,7 +963,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 
 	a, _ := uint256.FromBig(undelegation.Amount)
 	self.amount_delegated.Add(self.amount_delegated, a)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	new_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -966,7 +971,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	self.evm.AddLog(self.logs.MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &args.Validator, undelegation.Amount))
 
@@ -987,12 +992,12 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.ValidatorMaximumStake.Cmp(big.NewInt(0)) != 0 && self.cfg.ValidatorMaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
+	if self.dpos_config.ValidatorMaximumStake.Cmp(big.NewInt(0)) != 0 && self.dpos_config.ValidatorMaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
-	prev_vote_count_from := voteCount(validator_from.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
-	prev_vote_count_to := voteCount(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	prev_vote_count_from := voteCount(validator_from.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
+	prev_vote_count_to := voteCount(validator_to.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 	//First we undelegate
 	{
 		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
@@ -1004,7 +1009,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			return ErrInsufficientDelegation
 		}
 
-		if delegation.Stake.Cmp(args.Amount) != 0 && self.cfg.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+		if delegation.Stake.Cmp(args.Amount) != 0 && self.dpos_config.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
 			return ErrInsufficientDelegation
 		}
 
@@ -1045,11 +1050,11 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			}
 		} else {
 			self.state_put(&state_k, state)
-			self.modifyValidator(block, &args.ValidatorFrom, validator_from)
+			self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
 			self.validators.ModifyValidatorRewards(&args.ValidatorFrom, validator_rewards_from)
 		}
 
-		new_vote_count := voteCount(validator_from.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+		new_vote_count := voteCount(validator_from.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 		if prev_vote_count_from != new_vote_count {
 			self.eligible_vote_count -= prev_vote_count_from
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1091,7 +1096,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 	}
 
-	new_vote_count := voteCount(validator_to.TotalStake, self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	new_vote_count := voteCount(validator_to.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 	if prev_vote_count_to != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count_to
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1099,7 +1104,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.modifyValidator(block, &args.ValidatorTo, validator_to)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorTo, validator_to)
 	self.validators.ModifyValidatorRewards(&args.ValidatorTo, validator_rewards_to)
 	self.evm.AddLog(self.logs.MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
 	return nil
@@ -1125,7 +1130,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1185,7 +1190,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 	} else {
-		self.modifyValidator(block, &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1243,7 +1247,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 		return ErrBrokenState
 	}
 
-	if self.cfg.ValidatorMaximumStake.Cmp(ctx.Value) == -1 {
+	if self.dpos_config.ValidatorMaximumStake.Cmp(ctx.Value) == -1 {
 		return ErrValidatorsMaxStakeExceeded
 	}
 
@@ -1259,7 +1263,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
 		self.delegate_update_values(ctx, validator, 0)
-		self.modifyValidator(block, &args.Validator, validator)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		state.Count++
 	}
 
@@ -1273,7 +1277,7 @@ func (self *Contract) registerValidator(ctx vm.CallFrame, block types.BlockNum, 
 		return err
 	}
 
-	if self.cfg.MinimumDeposit.Cmp(ctx.Value) == 1 {
+	if self.dpos_config.MinimumDeposit.Cmp(ctx.Value) == 1 {
 		return ErrInsufficientDelegation
 	}
 
@@ -1323,17 +1327,17 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 		return ErrNonExistentValidator
 	}
 
-	if self.cfg.CommissionChangeFrequency != 0 && uint64(self.cfg.CommissionChangeFrequency) > (block-validator.LastCommissionChange) {
+	if self.dpos_config.CommissionChangeFrequency != 0 && uint64(self.dpos_config.CommissionChangeFrequency) > (block-validator.LastCommissionChange) {
 		return ErrForbiddenCommissionChange
 	}
 
-	if self.cfg.CommissionChangeDelta != 0 && self.cfg.CommissionChangeDelta < getDelta(validator.Commission, args.Commission) {
+	if self.dpos_config.CommissionChangeDelta != 0 && self.dpos_config.CommissionChangeDelta < getDelta(validator.Commission, args.Commission) {
 		return ErrForbiddenCommissionChange
 	}
 
 	validator.Commission = args.Commission
 	validator.LastCommissionChange = block
-	self.modifyValidator(block, &args.Validator, validator)
+	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
@@ -1563,8 +1567,8 @@ func (self *Contract) state_delete(validator_addr, block []byte) {
 	self.storage.Put(key, nil)
 }
 
-func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator, make_context func(caller *common.Address, value *big.Int) vm.CallFrame) {
-	args := validator_info.gen_register_validator_args()
+func (self *Contract) apply_genesis_entry(validator_info *chain_config.GenesisValidator, make_context func(caller *common.Address, value *big.Int) vm.CallFrame) {
+	args := validator_info.Gen_register_validator_args()
 
 	registrationError := self.registerValidatorWithoutChecks(make_context(&validator_info.Owner, big.NewInt(0)), 0, args)
 	if registrationError != nil {
@@ -1585,20 +1589,15 @@ func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator, make
 }
 
 func (self *Contract) calculateRewardPer1Stake(rewardsPool *big.Int, stake *big.Int) *big.Int {
-	return bigutil.Div(bigutil.Mul(rewardsPool, self.cfg.ValidatorMaximumStake), stake)
+	return bigutil.Div(bigutil.Mul(rewardsPool, self.dpos_config.ValidatorMaximumStake), stake)
 }
 
 func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *big.Int) *big.Int {
-	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.ValidatorMaximumStake)
-}
-
-func (self *Contract) modifyValidator(block types.BlockNum, validator_address *common.Address, validator *Validator) {
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), validator_address, validator)
+	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.dpos_config.ValidatorMaximumStake)
 }
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
-	// TODO: read from config
-	return block >= 1000
+	return block >= self.hardforks_config.MagnoliaHfBlockNum
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

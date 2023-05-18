@@ -3,8 +3,7 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/core"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -17,47 +16,14 @@ func ContractAddress() common.Address {
 }
 
 type API struct {
-	cfg_by_block []ConfigWithBlock
-	cfg          Config
-}
-
-type Config = struct {
-	EligibilityBalanceThreshold *big.Int
-	VoteEligibilityBalanceStep  *big.Int
-	ValidatorMaximumStake       *big.Int
-	MinimumDeposit              *big.Int
-	MaxBlockAuthorReward        uint16
-	DagProposersReward          uint16
-	CommissionChangeDelta       uint16
-	CommissionChangeFrequency   uint32 // [number of blocks]
-	DelegationDelay             uint32 // [number of blocks]
-	DelegationLockingPeriod     uint32 // [number of blocks]
-	BlocksPerYear               uint32 // [count]
-	YieldPercentage             uint16 // [%]
-	InitialValidators           []GenesisValidator
+	cfg_by_block     []ConfigWithBlock
+	dpos_config      chain_config.DposConfig
+	hardforks_config chain_config.HardforksConfig
 }
 
 type ConfigWithBlock struct {
-	cfg   Config
+	cfg   chain_config.DposConfig
 	blk_n types.BlockNum
-}
-type GenesisValidator struct {
-	Address     common.Address
-	Owner       common.Address
-	VrfKey      []byte
-	Commission  uint16
-	Endpoint    string
-	Description string
-	Delegations core.BalanceMap
-}
-
-func (self *GenesisValidator) gen_register_validator_args() (vi sol.RegisterValidatorArgs) {
-	vi.VrfKey = self.VrfKey
-	vi.Commission = self.Commission
-	vi.Description = self.Description
-	vi.Endpoint = self.Endpoint
-	vi.Validator = self.Address
-	return
 }
 
 type GenesisTransfer = struct {
@@ -65,7 +31,7 @@ type GenesisTransfer = struct {
 	Value       *big.Int
 }
 
-func (self *API) Init(cfg Config) *API {
+func (self *API) Init(cfg chain_config.DposConfig, hardforks chain_config.HardforksConfig) *API {
 	asserts.Holds(cfg.DelegationDelay <= cfg.DelegationLockingPeriod)
 
 	asserts.Holds(cfg.EligibilityBalanceThreshold != nil)
@@ -88,11 +54,12 @@ func (self *API) Init(cfg Config) *API {
 	//MaxBlockAuthorReward is in %
 	asserts.Holds(cfg.MaxBlockAuthorReward <= 100)
 
-	self.cfg = cfg
+	self.dpos_config = cfg
+	self.hardforks_config = hardforks
 	return self
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64) Config {
+func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DposConfig {
 	for i, e := range self.cfg_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
@@ -104,16 +71,16 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) Config {
 			return e.cfg
 		}
 	}
-	return self.cfg
+	return self.dpos_config
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg Config) {
+func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.DposConfig) {
 	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
-	self.cfg = cfg
+	self.dpos_config = cfg
 }
 
 func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.cfg, storage, reader, evm)
+	return new(Contract).Init(self.dpos_config, self.hardforks_config, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
