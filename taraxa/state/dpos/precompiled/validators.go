@@ -9,7 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-// Pre-hardfork validstor struct
+// Pre-hardfork validator struct without UndelegationsCount member
 type ValidatorV1 struct {
 	// TotalStake == sum of all delegated tokens to the validator
 	TotalStake *big.Int
@@ -126,7 +126,7 @@ func (self *Validators) GetValidatorsCount() uint32 {
 	return self.validators_list.GetCount()
 }
 
-func (self *Validators) CreateValidator(magnolia_hardfork bool, owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) (validator *Validator) {
+func (self *Validators) CreateValidator(extended_validator bool, owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) (validator *Validator) {
 	// Creates Validator object in storage
 	validator = new(Validator)
 	validator.ValidatorV1 = new(ValidatorV1)
@@ -136,7 +136,7 @@ func (self *Validators) CreateValidator(magnolia_hardfork bool, owner_address *c
 	validator.LastUpdated = block
 	validator.UndelegationsCount = 0
 
-	if magnolia_hardfork {
+	if extended_validator {
 		Save(self, validator_address, validator)
 	} else {
 		Save(self, validator_address, validator.ValidatorV1)
@@ -189,13 +189,13 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 func (self *Validators) GetValidator(validator_address *common.Address) (validator *Validator) {
 	key := stor_k_1(self.validator_field, validator_address[:])
 	self.storage.Get(key, func(bytes []byte) {
-		// Try to decode into post-hardfor extented Validator struct first
+		// Try to decode into post-hardfork extented Validator struct first
 		validator = new(Validator)
 		validator.ValidatorV1 = new(ValidatorV1)
 
 		err := rlp.DecodeBytes(bytes, validator)
 		if err != nil {
-			// Try to decode into pre-hardfor ValidatorV1 struct first
+			// Try to decode into pre-hardfork ValidatorV1 struct first
 			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
 			validator.UndelegationsCount = 0
 			if err != nil {
@@ -235,8 +235,8 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 	return
 }
 
-func (self *Validators) ModifyValidator(magnolia_hardfork bool, validator_address *common.Address, validator *Validator) {
-	if magnolia_hardfork {
+func (self *Validators) ModifyValidator(extended_validator bool, validator_address *common.Address, validator *Validator) {
+	if extended_validator {
 		Modify(self, validator_address, validator)
 	} else {
 		Modify(self, validator_address, validator.ValidatorV1)

@@ -82,7 +82,7 @@ var (
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: dpos.Config{
+		DPOS: chain_config.DposConfig{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -95,6 +95,9 @@ var (
 			DelegationLockingPeriod:     4,
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
+		},
+		Hardforks: chain_config.HardforksConfig{
+			MagnoliaHfBlockNum: 0,
 		},
 	}
 )
@@ -128,6 +131,10 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
+
+	new_cfg.Hardforks.RewardsDistributionFrequency = DefaultChainCfg.Hardforks.RewardsDistributionFrequency
+	new_cfg.Hardforks.FeeRewardsBlockNum = DefaultChainCfg.Hardforks.FeeRewardsBlockNum
+	new_cfg.Hardforks.MagnoliaHfBlockNum = DefaultChainCfg.Hardforks.MagnoliaHfBlockNum
 
 	return new_cfg
 }

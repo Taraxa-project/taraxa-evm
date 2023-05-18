@@ -40,7 +40,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 	self.rocksdb = db
 	self.config = chain_cfg
 
-	self.dpos = new(dpos.API).Init(self.config.DPOS)
+	self.dpos = new(dpos.API).Init(self.config.DPOS, self.config.Hardforks)
 	config_changes := self.rocksdb.GetDPOSConfigChanges()
 	if len(config_changes) == 0 {
 		bytes := rlp.MustEncodeToBytes(self.config.DPOS)
@@ -57,7 +57,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		// Decode rlp data from db and apply
 		for _, key := range keys {
 			value := config_changes[key]
-			cfg := new(dpos.Config)
+			cfg := new(chain_config.DposConfig)
 			rlp.MustDecodeBytes(value, cfg)
 			self.dpos.UpdateConfig(key, *cfg)
 		}

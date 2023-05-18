@@ -7,21 +7,22 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 type Reader struct {
-	cfg          *Config
+	dpos_config  *chain_config.DposConfig
 	storage      *StorageReaderWrapper
 	blk_n_actual types.BlockNum
 }
 
-func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
-	self.cfg = cfg
+func (self *Reader) Init(dpos_config *chain_config.DposConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
+	self.dpos_config = dpos_config
 	self.blk_n_actual = uint64(0)
-	if uint64(self.cfg.DelegationDelay) < blk_n {
-		self.blk_n_actual = blk_n - uint64(self.cfg.DelegationDelay)
+	if uint64(self.dpos_config.DelegationDelay) < blk_n {
+		self.blk_n_actual = blk_n - uint64(self.dpos_config.DelegationDelay)
 	}
 
 	self.storage = new(StorageReaderWrapper).Init(storage_factory(self.blk_n_actual))
@@ -36,7 +37,7 @@ func (self Reader) EligibleVoteCount() (ret uint64) {
 }
 
 func (self Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
-	return voteCount(self.GetStakingBalance(addr), self.cfg.EligibilityBalanceThreshold, self.cfg.VoteEligibilityBalanceStep)
+	return voteCount(self.GetStakingBalance(addr), self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 }
 
 func (self Reader) TotalAmountDelegated() (ret *big.Int) {
@@ -48,21 +49,25 @@ func (self Reader) TotalAmountDelegated() (ret *big.Int) {
 }
 
 func (self Reader) IsEligible(address *common.Address) bool {
-	return self.cfg.EligibilityBalanceThreshold.Cmp(self.GetStakingBalance(address)) <= 0
+	return self.dpos_config.EligibilityBalanceThreshold.Cmp(self.GetStakingBalance(address)) <= 0
 }
 
 func (self Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = big.NewInt(0)
 	self.storage.Get(stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
+		// Try to decode into post-hardfork extented Validator struct first
 		validator := new(Validator)
 		validator.ValidatorV1 = new(ValidatorV1)
 
-		// TODO: use hardfork block number from config
-		is_magnolia_hardfork := (self.blk_n_actual >= 1000)
-		if is_magnolia_hardfork {
-			rlp.MustDecodeBytes(bytes, validator)
-		} else {
-			rlp.MustDecodeBytes(bytes, validator.ValidatorV1)
+		err := rlp.DecodeBytes(bytes, validator)
+		if err != nil {
+			// Try to decode into pre-hardfork ValidatorV1 struct first
+			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
+			validator.UndelegationsCount = 0
+			if err != nil {
+				// This should never happen
+				panic("Unable to decode validator rlp")
+			}
 		}
 
 		ret = validator.TotalStake
