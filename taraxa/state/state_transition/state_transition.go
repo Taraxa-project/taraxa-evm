@@ -123,7 +123,7 @@ func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.Rewar
 		if self.dpos_contract == nil {
 			panic("Stats rewards enabled but no dpos contract registered")
 		}
-		totalReward = self.dpos_contract.DistributeRewards(self.state.GetCommittedDescriptor().BlockNum, rewardsStats, feesRewards)
+		totalReward = self.dpos_contract.DistributeRewards(rewardsStats, feesRewards)
 		self.evm_state_checkpoint()
 	}
 
