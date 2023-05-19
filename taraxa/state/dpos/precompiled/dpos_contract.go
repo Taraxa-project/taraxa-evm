@@ -535,7 +535,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidator input args: ", err)
 			return nil, err
 		}
-		result, err := self.getValidatorInfo(evm.GetBlock().Number, args)
+		result, err := self.getValidator(evm.GetBlock().Number, args)
 		if err != nil {
 			return nil, err
 		}
@@ -1344,7 +1344,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 }
 
 // Returns single validator object
-func (self *Contract) getValidatorInfo(block types.BlockNum, args sol.ValidatorAddressArgs) (sol.DposInterfaceValidatorBasicInfo, error) {
+func (self *Contract) getValidator(block types.BlockNum, args sol.ValidatorAddressArgs) (sol.DposInterfaceValidatorBasicInfo, error) {
 	var result sol.DposInterfaceValidatorBasicInfo
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
@@ -1363,6 +1363,7 @@ func (self *Contract) getValidatorInfo(block types.BlockNum, args sol.ValidatorA
 	result.CommissionReward = validator_rewards.CommissionRewardsPool
 	result.LastCommissionChange = validator.LastCommissionChange
 	result.Owner = self.validators.GetValidatorOwner(&args.Validator)
+	result.UndelegationsCount = validator.UndelegationsCount
 	result.TotalStake = validator.TotalStake
 	result.Endpoint = validator_info.Endpoint
 	result.Description = validator_info.Description

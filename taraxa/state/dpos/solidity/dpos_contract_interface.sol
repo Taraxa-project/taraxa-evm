@@ -25,6 +25,8 @@ interface DposInterface {
         uint16 commission;
         // Block number of last commission change
         uint64 last_commission_change;
+        // Number of ongoing undelegations from the validator
+        uint16 undelegations_count;
         // Validator's owner account
         address owner;
         // Validators description/name
