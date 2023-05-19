@@ -163,7 +163,7 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 		if bytes.Compare(prev_key[0:common.HashLength], itr.Key().Data()[0:common.HashLength]) == 0 {
 			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
 			if ver_blk_num < blk_num {
-				set_account_storage_value_to_prune = append(set_account_storage_value_to_prune, prev_key)
+				set_account_storage_value_to_prune = append(set_account_storage_value_to_prune, common.CopyBytes(prev_key))
 			}
 		}
 	}
@@ -181,8 +181,7 @@ func (self *DB) recreateMainTrie(state_root_to_keep *[]common.Hash, blk_num type
 	nodes_to_keep := make(map[common.Hash][]byte)
 	for _, root_to_keep := range *state_root_to_keep {
 		current_block_state.ForEachMainNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
-			bytes_s := common.CopyBytes(b)
-			nodes_to_keep[*h] = bytes_s
+			nodes_to_keep[*h] = common.CopyBytes(b)
 		})
 	}
 	self.RecreateColumn(state_db.COL_main_trie_node, nodes_to_keep)
@@ -221,7 +220,7 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 			//Only prune the previous value if current value for the same account is below blk_num
 			ver_blk_num := binary.BigEndian.Uint64(itr.Key().Data()[common.HashLength:common.VersionedKeyLength])
 			if ver_blk_num < blk_num {
-				set_value_to_prune = append(set_value_to_prune, prev_key)
+				set_value_to_prune = append(set_value_to_prune, common.CopyBytes(prev_key))
 			} else {
 				if account.StorageRootHash != nil {
 					set_storage_root_to_keep = append(set_storage_root_to_keep, *account.StorageRootHash)
@@ -252,8 +251,7 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 		account_nodes_to_keep := make(map[common.Hash][]byte)
 		for _, root_to_keep := range set_storage_root_to_keep {
 			current_block_state.ForEachAccountNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
-				b = common.CopyBytes(b)
-				account_nodes_to_keep[*h] = b
+				account_nodes_to_keep[*h] = common.CopyBytes(b)
 			})
 		}
 		self.RecreateColumn(state_db.COL_acc_trie_node, account_nodes_to_keep)
