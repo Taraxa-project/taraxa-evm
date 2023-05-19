@@ -544,7 +544,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidator input args: ", err)
 			return nil, err
 		}
-		result, err := self.getValidatorInfo(evm.GetBlock().Number, args)
+		result, err := self.getValidator(evm.GetBlock().Number, args)
 		if err != nil {
 			return nil, err
 		}
