@@ -523,7 +523,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidator input args: ", err)
 			return nil, err
 		}
-		result, err := self.getValidator(evm.GetBlock().Number, args)
+		result, err := self.getValidator(args)
 		if err != nil {
 			return nil, err
 		}
@@ -535,7 +535,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidators input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidators(evm.GetBlock().Number, args))
+		return method.Outputs.Pack(self.getValidators(args))
 
 	case "getValidatorsFor":
 		var args sol.GetValidatorsForArgs
@@ -543,7 +543,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getValidatorsFor input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getValidatorsFor(evm.GetBlock().Number, args))
+		return method.Outputs.Pack(self.getValidatorsFor(args))
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -551,7 +551,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse getDelegations input args: ", err)
 			return nil, err
 		}
-		return method.Outputs.Pack(self.getDelegations(evm.GetBlock().Number, args))
+		return method.Outputs.Pack(self.getDelegations(args))
 
 	case "getUndelegations":
 		var args sol.GetUndelegationsArgs
@@ -577,7 +577,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // - If less reward votes are included, rest of the bonus reward it is just burned
 // - Then for each validator vote and transaction proportion rewards are calculated and distributed
 
-func (self *Contract) DistributeRewards(block types.BlockNum, rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
+func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 	blockAuthorAddr := &rewardsStats.BlockAuthor
@@ -1324,7 +1324,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 }
 
 // Returns single validator object
-func (self *Contract) getValidator(block types.BlockNum, args sol.ValidatorAddressArgs) (sol.DposInterfaceValidatorBasicInfo, error) {
+func (self *Contract) getValidator(args sol.ValidatorAddressArgs) (sol.DposInterfaceValidatorBasicInfo, error) {
 	var result sol.DposInterfaceValidatorBasicInfo
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
@@ -1350,7 +1350,7 @@ func (self *Contract) getValidator(block types.BlockNum, args sol.ValidatorAddre
 	return result, nil
 }
 
-func (self *Contract) to_validator_data(block types.BlockNum, validator_address, owner common.Address) (validator_data sol.DposInterfaceValidatorData) {
+func (self *Contract) to_validator_data(validator_address, owner common.Address) (validator_data sol.DposInterfaceValidatorData) {
 	validator := self.validators.GetValidator(&validator_address)
 	if validator == nil {
 		// This should never happen
@@ -1376,20 +1376,20 @@ func (self *Contract) to_validator_data(block types.BlockNum, validator_address,
 }
 
 // Returns batch of validators
-func (self *Contract) getValidators(block types.BlockNum, args sol.GetValidatorsArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
+func (self *Contract) getValidators(args sol.GetValidatorsArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
 	validators_addresses, end := self.validators.GetValidatorsAddresses(args.Batch, GetValidatorsMaxCount)
 
 	// Reserve slice capacity
 	validators = make([]sol.DposInterfaceValidatorData, 0, len(validators_addresses))
 
 	for _, validator_address := range validators_addresses {
-		validators = append(validators, self.to_validator_data(block, validator_address, self.validators.GetValidatorOwner(&validator_address)))
+		validators = append(validators, self.to_validator_data(validator_address, self.validators.GetValidatorOwner(&validator_address)))
 	}
 	return
 }
 
 // Returns batch of validators for specified owner
-func (self *Contract) getValidatorsFor(block types.BlockNum, args sol.GetValidatorsForArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
+func (self *Contract) getValidatorsFor(args sol.GetValidatorsForArgs) (validators []sol.DposInterfaceValidatorData, end bool) {
 	validators_addresses, _ := self.validators.GetValidatorsAddresses(0, self.validators.GetValidatorsCount())
 
 	// Reserve slice capacity
@@ -1409,7 +1409,7 @@ func (self *Contract) getValidatorsFor(block types.BlockNum, args sol.GetValidat
 		}
 
 		if !full {
-			validators = append(validators, self.to_validator_data(block, validator_address, owner))
+			validators = append(validators, self.to_validator_data(validator_address, owner))
 			full = len(validators) == GetValidatorsMaxCount
 		} else { // we found one more owner validator that belongs to the next batch.
 			end = false
@@ -1421,7 +1421,7 @@ func (self *Contract) getValidatorsFor(block types.BlockNum, args sol.GetValidat
 }
 
 // Returns batch of delegations for specified address
-func (self *Contract) getDelegations(block types.BlockNum, args sol.GetDelegationsArgs) (delegations []sol.DposInterfaceDelegationData, end bool) {
+func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations []sol.DposInterfaceDelegationData, end bool) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
 	// Reserve slice capacity
