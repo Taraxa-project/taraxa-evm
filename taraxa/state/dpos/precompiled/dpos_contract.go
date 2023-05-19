@@ -63,6 +63,7 @@ var (
 	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
 	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
 	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
+	ErrNonExistentRewards           = util.ErrorString("Rewards do not exist")
 	ErrExistentDelegation           = util.ErrorString("Delegation already exist")
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
@@ -686,7 +687,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
 			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
-			// checking it during consensus. If everyone undelegates from validator and also he claims his commission rewards
+			// checking it during consensus. If everyone undelegates from validator, confirms undelegation and also he claims commission rewards
 			// during the the period of time, which is < then delay we use, he is deleted from contract storage, but he will be
 			// able to propose few more blocks. This situation is extremely unlikely, but technically possible.
 			// If it happens, validator will simply not receive rewards for those few last blocks/votes he produced
@@ -1154,10 +1155,15 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
 		validator := self.validators.GetValidator(&args.Validator)
-		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 		if validator == nil {
 			return ErrNonExistentValidator
 		}
+
+		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
+		if validator_rewards == nil {
+			return ErrNonExistentRewards
+		}
+
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
 		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
@@ -1211,9 +1217,13 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	}
 
 	validator := self.validators.GetValidator(&args.Validator)
-	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
+	}
+
+	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
+	if validator_rewards == nil {
+		return ErrNonExistentRewards
 	}
 
 	transferContractBalance(&ctx, validator_rewards.CommissionRewardsPool)

@@ -195,7 +195,7 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 
 		err := rlp.DecodeBytes(bytes, validator)
 		if err != nil {
-			// Try to decode into pre-hardfork ValidatorV1 struct first
+			// Try to decode into pre-hardfork ValidatorV1 struct
 			err = rlp.DecodeBytes(bytes, validator.ValidatorV1)
 			validator.UndelegationsCount = 0
 			if err != nil {
@@ -204,33 +204,6 @@ func (self *Validators) GetValidator(validator_address *common.Address) (validat
 			}
 		}
 	})
-
-	// // TODO: this approach does not work
-	// // TODO: in case validator.TotalStake == 1000000000000000000000, s.List().Size == 13 and not 4...
-	// self.storage.Get(key, func(tmp_bytes []byte) {
-	// 	s := rlp.NewStream(bytes.NewReader(tmp_bytes), uint64(len(tmp_bytes)))
-	// 	size, err := s.List()
-	// 	if err != nil {
-	// 		fmt.Println("Unable to decode validator's rlp: ", err)
-	// 		validator = nil
-	// 		return
-	// 	}
-
-	// 	fmt.Println("size: ", size)
-
-	// 	// ValidatorV1 rlp found -> pre magnolia hardfork
-	// 	if int(size) == reflect.TypeOf(ValidatorV1{}).NumField() {
-	// 		validator = new(Validator)
-	// 		validator.ValidatorV1 = new(ValidatorV1)
-	// 		rlp.MustDecodeBytes(tmp_bytes, validator.ValidatorV1)
-	// 		validator.UndelegationsCount = 0
-	// 	} else { // Validator rlp found -> post magnolia hardfork
-	// 		validator = new(Validator)
-	// 		rlp.MustDecodeBytes(tmp_bytes, validator)
-	// 	}
-
-	// 	return
-	// })
 
 	return
 }
