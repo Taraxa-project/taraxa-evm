@@ -311,7 +311,7 @@ func TestConfirmUndelegate(t *testing.T) {
 // - claimRewards
 // - delegate
 // - cancelUndelegate
-// -
+// - probably anything that also works with rewards
 
 func TestCancelUndelegate(t *testing.T) {
 	tc, test := init_test(t, CopyDefaultChainConfig())
