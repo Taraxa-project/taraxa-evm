@@ -469,7 +469,7 @@ func TestConfirmUndelegate(t *testing.T) {
 // - claimRewards
 // - delegate
 // - cancelUndelegate
-// -
+// - probably anything that also works with rewards
 
 func TestCancelUndelegate(t *testing.T) {
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
