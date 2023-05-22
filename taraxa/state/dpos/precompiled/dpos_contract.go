@@ -596,7 +596,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // - If less reward votes are included, rest of the bonus reward it is just burned
 // - Then for each validator vote and transaction proportion rewards are calculated and distributed
 
-func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *FeesRewards) *uint256.Int {
+func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats) *uint256.Int {
 	// When calling DistributeRewards, internal structures must be always initialized
 	self.lazy_init()
 	blockAuthorAddr := &rewardsStats.BlockAuthor
@@ -691,12 +691,21 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		}
 
 		// Adds fees for all txs that validator added in his blocks as first
-		validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
+		// validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
 		totalReward.Add(totalReward, validatorReward)
 
 		validatorCommission := new(uint256.Int).Div(new(uint256.Int).Mul(validatorReward, uint256.NewInt(uint64(validator.Commission))), uint256.NewInt(MaxCommission))
 		delegatorRewards := new(uint256.Int).Sub(validatorReward, validatorCommission)
 
+		// Add fee rewards to validator commission rewards pool, but not affect calculations
+		if validatorStats.FeesRewards != nil {
+			feesRewards := uint256.NewInt(0)
+			feesRewards.SetFromBig(validatorStats.FeesRewards)
+			if validatorStats.FeesRewards.Cmp(big.NewInt(0)) > 0 {
+				validatorCommission.Add(validatorCommission, feesRewards)
+				self.storage.AddBalance(contract_address, validatorStats.FeesRewards)
+			}
+		}
 		self.validators.AddValidatorRewards(&validatorAddress, validatorCommission.ToBig(), delegatorRewards.ToBig())
 	}
 

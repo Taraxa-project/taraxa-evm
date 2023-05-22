@@ -1,6 +1,8 @@
 package rewards_stats
 
 import (
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
@@ -12,6 +14,9 @@ type ValidatorStats struct {
 
 	// Validator cert voted block weight
 	VoteWeight uint64
+
+	// Fee rewards
+	FeesRewards *big.Int
 }
 
 type RewardsStats struct {
@@ -20,9 +25,6 @@ type RewardsStats struct {
 
 	// Validator stats
 	ValidatorsStats map[common.Address]ValidatorStats
-
-	// List of transactions validators
-	TxsValidators []common.Address
 
 	// Total unique transactions counter
 	TotalDagBlocksCount uint32
