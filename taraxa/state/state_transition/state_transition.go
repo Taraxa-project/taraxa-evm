@@ -118,12 +118,12 @@ func (self *StateTransition) GetEvmState() *state_evm.EVMState {
 	return &self.evm_state
 }
 
-func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (totalReward *uint256.Int) {
-	if self.chain_config.RewardsEnabled() && rewardsStats != nil && feesRewards != nil {
+func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.RewardsStats) (totalReward *uint256.Int) {
+	if self.chain_config.RewardsEnabled() && rewardsStats != nil {
 		if self.dpos_contract == nil {
 			panic("Stats rewards enabled but no dpos contract registered")
 		}
-		totalReward = self.dpos_contract.DistributeRewards(rewardsStats, feesRewards)
+		totalReward = self.dpos_contract.DistributeRewards(rewardsStats)
 		self.evm_state_checkpoint()
 	}
 

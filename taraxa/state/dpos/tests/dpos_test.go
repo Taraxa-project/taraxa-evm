@@ -326,8 +326,8 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("cancelUndelegate", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	// Advance 2 more rounds - delegation locking periods == 4
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("confirmUndelegate", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	total_balance = bigutil.Sub(total_balance, DefaultMinimumDeposit)
@@ -357,7 +357,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 	// Advance few block so we are sure the current block already passed hardfork block num
 	for i := uint64(0); i < cfg.Hardforks.MagnoliaHfBlockNum; i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("undelegate", validator1_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
@@ -377,7 +377,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 	// Advance 4 more rounds - delegation locking periods == 4
 	for i := 0; i < 4; i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Validator still exists
@@ -433,8 +433,8 @@ func TestConfirmUndelegate(t *testing.T) {
 	test.CheckContractBalance(totalBalance)
 
 	// Advance 2 more rounds - delegation locking periods == 4
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
@@ -456,8 +456,8 @@ func TestCancelUndelegate(t *testing.T) {
 
 	delegator_addr := addr(2)
 
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
@@ -598,18 +598,19 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	// Simulated rewards statistics
 	tmp_rewards_stats := NewRewardsStats(&validator1_addr)
-	fees_rewards := dpos.NewFeesRewards()
 
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.DagBlocksCount = 8
 	validator1_stats.VoteWeight = 1
-	initValidatorTrxsStats(validator1_addr, &fees_rewards, trxFee, validator1_stats.DagBlocksCount)
+	validator1_stats.FeesRewards = big.NewInt(int64(validator1_stats.DagBlocksCount))
+	validator1_stats.FeesRewards.Mul(validator1_stats.FeesRewards, trxFee)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.DagBlocksCount = 32
 	validator2_stats.VoteWeight = 5
-	initValidatorTrxsStats(validator2_addr, &fees_rewards, trxFee, validator2_stats.DagBlocksCount)
+	validator2_stats.FeesRewards = big.NewInt(int64(validator2_stats.DagBlocksCount))
+	validator2_stats.FeesRewards.Mul(validator2_stats.FeesRewards, trxFee)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
 	validator4_stats := rewards_stats.ValidatorStats{}
@@ -621,7 +622,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	tmp_rewards_stats.MaxVotesWeight = 8
 
 	// Advance block
-	reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards).ToBig()
+	reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats).ToBig()
 	totalBalance := bigutil.Add(total_stake, reward)
 	numberOfTrxs := new(big.Int)
 	numberOfTrxs.SetUint64(uint64(tmp_rewards_stats.TotalDagBlocksCount))
@@ -649,7 +650,6 @@ func TestRewardsAndCommission(t *testing.T) {
 	// Expected participants rewards
 	// validator1_rewards = (validator1_trxs * blockReward) / total_trxs
 	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator1_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
-	validator1_total_reward = bigutil.Add(validator1_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator1_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward := bigutil.Mul(big.NewInt(int64(validator1_stats.VoteWeight)), expected_vote_reward)
 	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
@@ -657,6 +657,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	// Commission reward
 	expected_validator1_commission_reward := bigutil.Div(bigutil.Mul(validator1_total_reward, big.NewInt(int64(validator1_commission))), big.NewInt(10000))
 	expected_validator1_delegators_reward := bigutil.Sub(validator1_total_reward, expected_validator1_commission_reward)
+
+	// Fee rewards goes to commission pool
+	expected_validator1_commission_reward = bigutil.Add(expected_validator1_commission_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator1_stats.DagBlocksCount))))
+
 	// Add author reward
 	author_commission_reward := bigutil.Div(bigutil.Mul(author_reward, big.NewInt(int64(validator1_commission))), big.NewInt(10000))
 	author_reward = bigutil.Sub(author_reward, author_commission_reward)
@@ -665,7 +669,6 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	// validator2_rewards = (validator2_trxs * blockReward) / total_trxs
 	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator2_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
-	validator2_total_reward = bigutil.Add(validator2_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator2_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator2_stats.VoteWeight)), expected_vote_reward)
 	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
@@ -673,6 +676,9 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	expected_validator2_commission_reward := bigutil.Div(bigutil.Mul(validator2_total_reward, big.NewInt(int64(validator2_commission))), big.NewInt(10000))
 	expected_validator2_delegators_reward := bigutil.Sub(validator2_total_reward, expected_validator2_commission_reward)
+
+	// Fee rewards goes to commission pool
+	expected_validator2_commission_reward = bigutil.Add(expected_validator2_commission_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator2_stats.DagBlocksCount))))
 
 	// Add vote reward for validator 4
 	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator4_stats.VoteWeight)), expected_vote_reward)
@@ -765,11 +771,7 @@ func TestClaimAllRewards(t *testing.T) {
 
 	tc, test := init_test(t, cfg)
 
-	tx_fee := big.NewInt(1)
 	total_stake := big.NewInt(0)
-
-	// Simulated rewards statistics
-	fees_rewards := dpos.NewFeesRewards()
 
 	// Create single delegator
 	delegator_addr := addr(1)
@@ -801,7 +803,6 @@ func TestClaimAllRewards(t *testing.T) {
 		validator_stats := rewards_stats.ValidatorStats{}
 		validator_stats.DagBlocksCount = 1
 		validator_stats.VoteWeight = 1
-		initValidatorTrxsStats(validator_addr, &fees_rewards, tx_fee, validator_stats.DagBlocksCount)
 		tmp_rewards_stats.ValidatorsStats[validator_addr] = validator_stats
 
 		tmp_rewards_stats.TotalDagBlocksCount += validator_stats.DagBlocksCount
@@ -810,24 +811,18 @@ func TestClaimAllRewards(t *testing.T) {
 	}
 
 	// Advance block
-	test.AdvanceBlock(&block_author, &tmp_rewards_stats, &fees_rewards)
+	test.AdvanceBlock(&block_author, &tmp_rewards_stats)
 
 	// Expected block reward
 	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
 	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
-	// Vote bonus rewards - aka Author reward
-	maxBlockAuthorReward := big.NewInt(int64(DefaultChainCfg.DPOS.MaxBlockAuthorReward))
-	bonus_reward := bigutil.Div(bigutil.Mul(expected_block_reward, maxBlockAuthorReward), big.NewInt(100))
-
-	// Vote bonus rewards - aka Author reward
-	max_votes_weigh := dpos.Max(tmp_rewards_stats.MaxVotesWeight, tmp_rewards_stats.TotalVotesWeight)
-	two_t_plus_one := max_votes_weigh*2/3 + 1
-	block_author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-two_t_plus_one))), big.NewInt(int64(max_votes_weigh-two_t_plus_one)))
-
-	// adjusted_expected_block_reward = Expected block reward - block author reward
-	adjusted_expected_block_reward := bigutil.Sub(expected_block_reward, block_author_reward)
-	expected_validator_reward := bigutil.Div(adjusted_expected_block_reward, big.NewInt(int64(validators_count)))
+	// Calculate it the same as we are doing it in dpos_contract to eliminate rounding error
+	dag_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(DefaultChainCfg.DPOS.DagProposersReward))), big.NewInt(100))
+	votes_part_p := 100 - uint64(DefaultChainCfg.DPOS.DagProposersReward) - uint64(DefaultChainCfg.DPOS.MaxBlockAuthorReward)
+	votes_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(0).SetUint64(votes_part_p)), big.NewInt(100))
+	expected_validator_reward := bigutil.Div(dag_part, big.NewInt(int64(validators_count)))
+	expected_validator_reward = bigutil.Add(expected_validator_reward, bigutil.Div(votes_part, big.NewInt(int64(validators_count))))
 
 	// Claim delegator's all rewards for batch 0
 	delegator_old_balance_batch0 := test.GetBalance(delegator_addr)
@@ -949,19 +944,19 @@ func TestSetCommission(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(11)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
 
 	//Advance 4 rounds
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(dpos.MaxCommission+1)), dpos.ErrCommissionOverflow, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(11)), util.ErrorString(""), util.ErrorString(""))
 
 	//Advance 4 rounds
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(20)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("setCommission", val_addr, uint16(16)), util.ErrorString(""), util.ErrorString(""))
@@ -1139,7 +1134,7 @@ func TestGetTotalDelegation(t *testing.T) {
 	}
 
 	// Set some balance to validators
-	cfg := CopyDefaultChainConfig()
+	cfg := DefaultChainCfg
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
@@ -1405,9 +1400,9 @@ func TestGetValidator(t *testing.T) {
 	// Undelegate
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// Advance 3 more rounds - delegation locking periods == 4
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
 	// ErrNonExistentValidator
@@ -1425,7 +1420,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks, otherwise getters are not working properly - in case these is not enough blocks produced yet, getters are not delayed as they should be
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Register validator and see what is getTotalEligibleVotesCount
@@ -1438,7 +1433,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 
 	// Wait DelegationDelay so getTotalEligibleVotesCount returns votes count based on new delegation
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 	votes_count_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getTotalEligibleVotesCount"), util.ErrorString(""), util.ErrorString(""))
 	votes_count = new(uint64)
@@ -1451,7 +1446,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 	test.ExecuteAndCheck(delegator_addr, bigutil.Mul(test.Chain_cfg.DPOS.EligibilityBalanceThreshold, big.NewInt(2)), test.pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	// Wait DelegationDelay so getTotalEligibleVotesCount returns votes count based on new delegation
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 	votes_count_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getTotalEligibleVotesCount"), util.ErrorString(""), util.ErrorString(""))
 	votes_count = new(uint64)
@@ -1464,7 +1459,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, test.Chain_cfg.DPOS.EligibilityBalanceThreshold), util.ErrorString(""), util.ErrorString(""))
 	// Wait DelegationDelay so getTotalEligibleVotesCount returns votes count based on new delegation
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 	votes_count_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("getTotalEligibleVotesCount"), util.ErrorString(""), util.ErrorString(""))
 	votes_count = new(uint64)
@@ -1483,7 +1478,7 @@ func TestGetValidatorEligibleVotesCount(t *testing.T) {
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks, otherwise getters are not working properly - in case these is not enough blocks produced yet, getters are not delayed as they should be
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Register validator
@@ -1493,7 +1488,7 @@ func TestGetValidatorEligibleVotesCount(t *testing.T) {
 
 	// Wait DelegationDelay so new delegation is applied
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// check if validator vote count was calculated properly in contract
@@ -1514,7 +1509,7 @@ func TestIsValidatorEligible(t *testing.T) {
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks, otherwise getters are not working properly - in case these is not enough blocks produced yet, getters are not delayed as they should be
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Check if validatorEligible == false before register&delegate
@@ -1527,7 +1522,7 @@ func TestIsValidatorEligible(t *testing.T) {
 
 	// Wait DelegationDelay so new delegation is applied
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Check if validatorEligible == true after register&delegate
