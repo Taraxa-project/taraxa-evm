@@ -46,7 +46,6 @@ type DposConfig = struct {
 
 type HardforksConfig struct {
 	RewardsDistributionFrequency map[uint64]uint32
-	FeeRewardsBlockNum           uint64
 	MagnoliaHfBlockNum           uint64
 }
 

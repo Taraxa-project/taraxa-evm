@@ -117,14 +117,14 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 	return res
 }
 
-func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (ret *uint256.Int) {
+func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats) (ret *uint256.Int) {
 	self.blk_n++
 	if author == nil {
 		self.st.BeginBlock(&vm.BlockInfo{})
 	} else {
 		self.st.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
 	}
-	ret = self.st.DistributeRewards(rewardsStats, feesRewards)
+	ret = self.st.DistributeRewards(rewardsStats)
 	self.st.EndBlock()
 	self.st.Commit()
 	return
@@ -222,11 +222,4 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 	copy(sig, sig[1:])
 	sig[64] = v
 	return sig, nil
-}
-
-func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, trxsCount uint32) {
-	f, _ := uint256.FromBig(trxFee)
-	for i := uint32(0); i < trxsCount; i++ {
-		feesRewards.AddTrxFeeReward(validator, f.Clone())
-	}
 }
