@@ -211,7 +211,6 @@ func TestUndelegate(t *testing.T) {
 	// ErrExistentUndelegation as one undelegation request already exists
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrExistentUndelegation, util.ErrorString(""))
 
-	// TODO: division by zero inside dpos contract... -> fix it !!!
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
 	// ErrExistentValidator
@@ -304,14 +303,6 @@ func TestConfirmUndelegate(t *testing.T) {
 
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("getValidator", val_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
-
-// TODO: !!! There are still some bugs in dpos contract code:
-// These methods might fail on division by zero as validator is deleted only after the undelegation confirmation so we still
-// have validator object in storgae but his total stake == 0:
-// - claimRewards
-// - delegate
-// - cancelUndelegate
-// - probably anything that also works with rewards
 
 func TestCancelUndelegate(t *testing.T) {
 	tc, test := init_test(t, CopyDefaultChainConfig())
