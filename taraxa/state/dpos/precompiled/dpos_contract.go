@@ -63,7 +63,6 @@ var (
 	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
 	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
 	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
-	ErrNonExistentRewards           = util.ErrorString("Rewards do not exist")
 	ErrExistentDelegation           = util.ErrorString("Delegation already exist")
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
@@ -718,10 +717,10 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
 	validator := self.validators.GetValidator(&args.Validator)
-	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
 	if self.dpos_config.ValidatorMaximumStake.Cmp(bigutil.Add(ctx.Value, validator.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
@@ -784,10 +783,10 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	}
 
 	validator := self.validators.GetValidator(&args.Validator)
-	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
@@ -901,10 +900,10 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		return ErrNonExistentUndelegation
 	}
 	validator := self.validators.GetValidator(&args.Validator)
-	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	prev_vote_count := voteCount(validator.TotalStake, self.dpos_config.EligibilityBalanceThreshold, self.dpos_config.VoteEligibilityBalanceStep)
 
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -966,16 +965,16 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 // Moves delegated tokens from one delegator to another
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args sol.RedelegateArgs) error {
 	validator_from := self.validators.GetValidator(&args.ValidatorFrom)
-	validator_rewards_from := self.validators.GetValidatorRewards(&args.ValidatorFrom)
 	if validator_from == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards_from := self.validators.GetValidatorRewards(&args.ValidatorFrom)
 
 	validator_to := self.validators.GetValidator(&args.ValidatorTo)
-	validator_rewards_to := self.validators.GetValidatorRewards(&args.ValidatorTo)
 	if validator_to == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards_to := self.validators.GetValidatorRewards(&args.ValidatorTo)
 
 	if self.dpos_config.ValidatorMaximumStake.Cmp(big.NewInt(0)) != 0 && self.dpos_config.ValidatorMaximumStake.Cmp(bigutil.Add(args.Amount, validator_to.TotalStake)) == -1 {
 		return ErrValidatorsMaxStakeExceeded
@@ -1120,9 +1119,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		}
 
 		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
-		if validator_rewards == nil {
-			return ErrNonExistentRewards
-		}
 
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
@@ -1187,9 +1183,6 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	}
 
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
-	if validator_rewards == nil {
-		return ErrNonExistentRewards
-	}
 
 	transferContractBalance(&ctx, validator_rewards.CommissionRewardsPool)
 	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, validator_rewards.CommissionRewardsPool))
