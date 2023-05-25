@@ -19,7 +19,7 @@ type GenesisValidator struct {
 	Delegations core.BalanceMap
 }
 
-func (self *GenesisValidator) Gen_register_validator_args() (vi sol.RegisterValidatorArgs) {
+func (self *GenesisValidator) GenRegisterValidatorArgs() (vi sol.RegisterValidatorArgs) {
 	vi.VrfKey = self.VrfKey
 	vi.Commission = self.Commission
 	vi.Description = self.Description

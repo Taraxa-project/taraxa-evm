@@ -593,7 +593,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	dagProposersReward := blockReward.Clone()
 	// We need to handle case for block 1
 	if rewardsStats.TotalVotesWeight > 0 {
-		// Calculate propotion between votes and transactions
+		// Calculate proportion between votes and transactions
 		dagProposersReward.Div(new(uint256.Int).Mul(blockReward, self.dag_proposers_reward), uint256.NewInt(100))
 		votesReward.Sub(blockReward, dagProposersReward)
 
@@ -808,12 +808,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
-		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
-			state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
-		} else {
-			state.RewardsPer1Stake = old_state.RewardsPer1Stake
-		}
-
+		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
@@ -889,7 +884,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 
 		if validator.UndelegationsCount == 0 && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
 			self.validators.DeleteValidator(&args.Validator)
-			self.state_delete(args.Validator[:], BlockToBytes(block))
+			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		}
 	}
 
@@ -1201,8 +1196,10 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	validator_rewards.CommissionRewardsPool = big.NewInt(0)
 
 	if validator.TotalStake.Cmp(big.NewInt(0)) == 0 {
-		self.validators.DeleteValidator(&args.Validator)
-		self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+		if !self.isMagnoliaHardfork(block) || validator.UndelegationsCount == 0 {
+			self.validators.DeleteValidator(&args.Validator)
+			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+		}
 	} else {
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
@@ -1557,13 +1554,8 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 	}
 }
 
-func (self *Contract) state_delete(validator_addr, block []byte) {
-	key := stor_k_1(field_state, validator_addr, block)
-	self.storage.Put(key, nil)
-}
-
 func (self *Contract) apply_genesis_entry(validator_info *chain_config.GenesisValidator, make_context func(caller *common.Address, value *big.Int) vm.CallFrame) {
-	args := validator_info.Gen_register_validator_args()
+	args := validator_info.GenRegisterValidatorArgs()
 
 	registrationError := self.registerValidatorWithoutChecks(make_context(&validator_info.Owner, big.NewInt(0)), 0, args)
 	if registrationError != nil {
