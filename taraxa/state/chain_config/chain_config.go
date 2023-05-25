@@ -21,6 +21,7 @@ type Hardforks struct {
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	FeeRewardsBlockNum           uint64
+	Hardforks       HardforksConfig
 }
 
 type ChainConfig struct {
