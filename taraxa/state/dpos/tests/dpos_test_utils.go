@@ -21,7 +21,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 
@@ -75,70 +74,10 @@ type DposTest struct {
 	abi       abi.ABI
 }
 
-var (
-	TaraPrecision                      = big.NewInt(1e+18)
-	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
-	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
-	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
-	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
-	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
-	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
-
-	DefaultChainCfg = chain_config.ChainConfig{
-		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: chain_config.DPOSConfig{
-			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
-			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
-			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
-			MinimumDeposit:              DefaultMinimumDeposit,
-			MaxBlockAuthorReward:        10,
-			DagProposersReward:          50,
-			CommissionChangeDelta:       0,
-			CommissionChangeFrequency:   0,
-			DelegationDelay:             2,
-			DelegationLockingPeriod:     4,
-			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
-			YieldPercentage:             20,
-		},
-		Hardforks: chain_config.Hardforks{FixRedelegateBlockNum:0, MagnoliaHfBlockNum: 0},
-	}
-)
-
 func init_test(t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test DposTest) {
 	tc = tests.NewTestCtx(t)
 	test.init(&tc, cfg)
 	return
-}
-
-// When running test suite, it is somehow overriding default config so it must be copied...
-// TODO: fix this
-func CopyDefaultChainConfig() chain_config.ChainConfig {
-	var new_cfg chain_config.ChainConfig
-
-	new_cfg.GenesisBalances = make(GenesisBalances)
-	for k, v := range DefaultChainCfg.GenesisBalances {
-		new_cfg.GenesisBalances[k] = v
-	}
-
-	new_cfg.DPOS.MaxBlockAuthorReward = DefaultChainCfg.DPOS.MaxBlockAuthorReward
-	new_cfg.DPOS.DagProposersReward = DefaultChainCfg.DPOS.DagProposersReward
-	new_cfg.DPOS.CommissionChangeDelta = DefaultChainCfg.DPOS.CommissionChangeDelta
-	new_cfg.DPOS.CommissionChangeFrequency = DefaultChainCfg.DPOS.CommissionChangeFrequency
-	new_cfg.DPOS.ValidatorMaximumStake = DefaultChainCfg.DPOS.ValidatorMaximumStake
-	new_cfg.DPOS.MinimumDeposit = DefaultChainCfg.DPOS.MinimumDeposit
-	new_cfg.DPOS.DelegationLockingPeriod = DefaultChainCfg.DPOS.DelegationLockingPeriod
-	new_cfg.DPOS.DelegationDelay = DefaultChainCfg.DPOS.DelegationDelay
-	new_cfg.DPOS.EligibilityBalanceThreshold = DefaultChainCfg.DPOS.EligibilityBalanceThreshold
-	new_cfg.DPOS.VoteEligibilityBalanceStep = DefaultChainCfg.DPOS.VoteEligibilityBalanceStep
-	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
-	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
-	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
-
-	new_cfg.Hardforks.RewardsDistributionFrequency = DefaultChainCfg.Hardforks.RewardsDistributionFrequency
-	new_cfg.Hardforks.FeeRewardsBlockNum = DefaultChainCfg.Hardforks.FeeRewardsBlockNum
-	new_cfg.Hardforks.MagnoliaHfBlockNum = DefaultChainCfg.Hardforks.MagnoliaHfBlockNum
-
-	return new_cfg
 }
 
 func (self *DposTest) init(t *tests.TestCtx, cfg chain_config.ChainConfig) {
