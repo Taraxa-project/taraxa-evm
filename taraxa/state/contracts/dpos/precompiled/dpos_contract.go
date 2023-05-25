@@ -67,7 +67,6 @@ var (
 	ErrInsufficientBalance          = util.ErrorString("Insufficient balance")
 	ErrNonExistentValidator         = util.ErrorString("Validator does not exist")
 	ErrNonExistentDelegation        = util.ErrorString("Delegation does not exist")
-	ErrNonExistentRewards           = util.ErrorString("Rewards do not exist")
 	ErrExistentDelegation           = util.ErrorString("Delegation already exist")
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
