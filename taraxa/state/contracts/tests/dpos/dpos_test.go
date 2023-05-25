@@ -390,7 +390,7 @@ func TestUndelegate(t *testing.T) {
 // In pre magnolia hardfork code, validator was deleted if his total_stake & rewards_pool == 0
 // In post magnolia hardfork code, validator was deleted if his total_stake & rewards_pool & ongoing undelegations_count == 0
 func TestPreMagnoliaHfUndelegate(t *testing.T) {
-	cfg := CopyDefaultChainConfig()
+	cfg := DefaultChainCfg
 	cfg.Hardforks.MagnoliaHfBlockNum = 1000
 
 	tc, test := init_test(t, cfg)
@@ -453,7 +453,8 @@ func TestConfirmUndelegate(t *testing.T) {
 	test.AdvanceBlock(nil, nil)
 
 	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance.Sub(totalBalance, DefaultMinimumDeposit)
+	totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
+
 	// TODO: values are equal(0) but big.nat differs in underlying big.Int objects ???
 	//test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
