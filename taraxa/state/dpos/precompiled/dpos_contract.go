@@ -737,7 +737,6 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args sol.ValidatorAddressArgs) error {
-	fmt.Println("delegate start")
 	validator := self.validators.GetValidator(&args.Validator)
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	if validator == nil {
