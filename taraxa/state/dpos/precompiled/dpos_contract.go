@@ -883,7 +883,6 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 		if validator.UndelegationsCount > 0 {
 			validator.UndelegationsCount--
 		}
-		validator.UndelegationsCount--
 
 		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
