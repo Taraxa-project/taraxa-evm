@@ -903,6 +903,12 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 		if validator == nil {
 			return ErrNonExistentValidator
 		}
+
+		// If all delegators undelegated before magnolia hardfork and validator was not yet deleted(e.g. due to unclaimed commission reward)
+		// , this counter would be == 0
+		if validator.UndelegationsCount > 0 {
+			validator.UndelegationsCount--
+		}
 		validator.UndelegationsCount--
 
 		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
@@ -968,7 +974,12 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
 	}
 	validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
-	validator.UndelegationsCount--
+
+	// If all delegators undelegated before magnolia hardfork and validator was not yet deleted(e.g. due to unclaimed commission reward)
+	// , this counter would be == 0
+	if validator.UndelegationsCount > 0 {
+		validator.UndelegationsCount--
+	}
 
 	a, _ := uint256.FromBig(undelegation.Amount)
 	self.amount_delegated.Add(self.amount_delegated, a)
