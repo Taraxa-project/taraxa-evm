@@ -985,8 +985,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	}
 	validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
 
-	// validator.UndelegationsCount might be == 0 if all delegators undelegated from the validator before magnolia hardfork
-	// and validator was not yet deleted(e.g. due to unclaimed commission reward)
+	// If all delegators undelegated before magnolia hardfork and validator was not yet deleted(e.g. due to unclaimed commission reward)
+	// , this counter would be == 0
 	if validator.UndelegationsCount > 0 {
 		validator.UndelegationsCount--
 	}
