@@ -295,6 +295,114 @@ func TestPreMagnoliaHfUndelegate(t *testing.T) {
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
 
+func TestMagnoliaHardfork(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.MagnoliaHfBlockNum = 25
+
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	validator1_owner := addr(1)
+	validator1_addr, validator1_proof := generateAddrAndProof()
+
+	validator2_owner := addr(2)
+	validator2_addr, validator2_proof := generateAddrAndProof()
+
+	// Test pre-magnolia hardfork behaviour
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
+
+	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_balance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(total_balance)
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("undelegate", validator1_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(total_balance)
+
+	// ErrNonExistentValidator - validator was already deleted after undelegate
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+
+	// ErrNonExistentValidator - validator was already deleted after undelegate
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("cancelUndelegate", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+
+	// Advance 2 more rounds - delegation locking periods == 4
+	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil, nil)
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("confirmUndelegate", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	total_balance = bigutil.Sub(total_balance, DefaultMinimumDeposit)
+	test.CheckContractBalance(total_balance)
+
+	// Register the same validator
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
+	test.CheckContractBalance(total_balance)
+
+	validator_raw := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	validator := new(GetValidatorRet)
+	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	tc.Assert.Equal(uint16(0), validator.ValidatorInfo.UndelegationsCount)
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(total_balance)
+
+	// ErrNonExistentValidator - validator was already deleted after redelegate
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+
+	// Register the same validator
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
+
+	// Test post-magnolia hardfork behaviour
+
+	// Advance few block so we are sure the current block already passed hardfork block num
+	for i := uint64(0); i < cfg.Hardforks.MagnoliaHfBlockNum; i++ {
+		test.AdvanceBlock(nil, nil, nil)
+	}
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("undelegate", validator1_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(total_balance)
+
+	// Validator still exists
+	validator_raw = test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	validator = new(GetValidatorRet)
+	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	tc.Assert.Equal(uint16(1), validator.ValidatorInfo.UndelegationsCount)
+
+	// Ok
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("cancelUndelegate", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(total_balance)
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("undelegate", validator1_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+
+	// Advance 4 more rounds - delegation locking periods == 4
+	for i := 0; i < 4; i++ {
+		test.AdvanceBlock(nil, nil, nil)
+	}
+
+	// Validator still exists
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("confirmUndelegate", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	total_balance = bigutil.Sub(total_balance, DefaultMinimumDeposit)
+	test.CheckContractBalance(total_balance)
+
+	// ErrNonExistentValidator - validator was deleted after confirmUndelegate
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+
+	// Register the same validator
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
+	test.CheckContractBalance(total_balance)
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(total_balance)
+
+	// ErrNonExistentValidator - validator was already deleted after redelegate
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+}
+
 func TestConfirmUndelegate(t *testing.T) {
 	tc, test := init_test(t, DefaultChainCfg)
 	defer test.end()
