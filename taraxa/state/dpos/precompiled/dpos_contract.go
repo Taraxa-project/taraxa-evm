@@ -871,7 +871,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args so
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
 	}
 
-	// We can delete validator object as it doesn't have any stake anymore (only before the hardfork)
+	// We can delete validator object as it doesn't have any stake anymore (only before the magnolia hardfork)
 	if !self.isMagnoliaHardfork(block) && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_put(&state_k, nil)
@@ -898,23 +898,22 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 	}
 
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
+
 	if self.isMagnoliaHardfork(block) {
 		validator := self.validators.GetValidator(&args.Validator)
-		if validator == nil {
-			return ErrNonExistentValidator
-		}
+		// Validator might be already deleted if all delegators undelegated from the validator before magnolia hardfork
+		if validator != nil {
+			// validator.UndelegationsCount might be == 0 if all delegators undelegated from the validator before magnolia hardfork
+			if validator.UndelegationsCount > 0 {
+				validator.UndelegationsCount--
+			}
 
-		// If all delegators undelegated before magnolia hardfork and validator was not yet deleted(e.g. due to unclaimed commission reward)
-		// , this counter would be == 0
-		if validator.UndelegationsCount > 0 {
-			validator.UndelegationsCount--
-		}
+			validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
-		validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
-
-		if validator.UndelegationsCount == 0 && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
-			self.validators.DeleteValidator(&args.Validator)
-			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+			if validator.UndelegationsCount == 0 && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
+				self.validators.DeleteValidator(&args.Validator)
+				self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+			}
 		}
 	}
 
@@ -974,8 +973,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	}
 	validator.TotalStake.Add(validator.TotalStake, undelegation.Amount)
 
-	// If all delegators undelegated before magnolia hardfork and validator was not yet deleted(e.g. due to unclaimed commission reward)
-	// , this counter would be == 0
+	// validator.UndelegationsCount might be == 0 if all delegators undelegated from the validator before magnolia hardfork
+	// and validator was not yet deleted(e.g. due to unclaimed commission reward)
 	if validator.UndelegationsCount > 0 {
 		validator.UndelegationsCount--
 	}
@@ -1246,6 +1245,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	}
 
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
+	// TODO: validator_rewards.CommissionRewardsPool might be == 0
 
 	transferContractBalance(&ctx, validator_rewards.CommissionRewardsPool)
 	self.evm.AddLog(self.logs.MakeCommissionRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, validator_rewards.CommissionRewardsPool))
@@ -1456,6 +1456,7 @@ func (self *Contract) to_validator_data(validator_address, owner common.Address)
 	validator_data.Info.CommissionReward = validator_rewards.CommissionRewardsPool
 	validator_data.Info.LastCommissionChange = validator.LastCommissionChange
 	validator_data.Info.Owner = self.validators.GetValidatorOwner(&validator_address)
+	validator_data.Info.UndelegationsCount = validator.UndelegationsCount
 	validator_data.Info.TotalStake = validator.TotalStake
 	validator_data.Info.Endpoint = validator_info.Endpoint
 	validator_data.Info.Description = validator_info.Description
