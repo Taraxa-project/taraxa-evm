@@ -38,6 +38,11 @@ const (
 	col_COUNT
 )
 
+const (
+	// Size limit of the memory structures for prune
+	db_prune_buffer_max_size = 500000
+)
+
 var versioned_read_columns = []state_db.Column{state_db.COL_acc_trie_value, state_db.COL_main_trie_value}
 
 type Opts = struct {
@@ -166,6 +171,13 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 				set_account_storage_value_to_prune = append(set_account_storage_value_to_prune, common.CopyBytes(prev_key))
 			}
 		}
+
+		if len(set_account_storage_value_to_prune) > db_prune_buffer_max_size {
+			for _, value_to_remove := range set_account_storage_value_to_prune {
+				self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_value], value_to_remove)
+			}
+			set_account_storage_value_to_prune = make([][]byte, 0)
+		}
 	}
 	itr.Close()
 
@@ -230,6 +242,13 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 			if account.StorageRootHash != nil {
 				set_storage_root_to_keep = append(set_storage_root_to_keep, *account.StorageRootHash)
 			}
+		}
+
+		if len(set_value_to_prune) > db_prune_buffer_max_size {
+			for _, value_to_remove := range set_value_to_prune {
+				self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_main_trie_value], value_to_remove)
+			}
+			set_value_to_prune = make([][]byte, 0)
 		}
 	}
 	itr.Close()
