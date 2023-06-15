@@ -161,13 +161,14 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func consensusErr(trxGas uint64, err util.ErrorString) (ret ExecutionResult) {
+func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.ErrorString) (ret ExecutionResult, err error) {
+	ret = result
 	ret.GasUsed = trxGas
-	ret.ConsensusErr = err
+	ret.ConsensusErr = consensusErr
 	return
 }
 
-func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
+func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 	self.trx = trx
 
 	defer func() { self.trx, self.jumpdests = nil, nil }()
@@ -185,14 +186,14 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 		availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
 		caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
 
-		return consensusErr(availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
+		return consensusErr(ret, availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 	}
 
 	caller.SubBalance(gas_fee)
 
 	// Check if tx.nonce < sender_nonce
 	if self.trx.Nonce.Cmp(sender_nonce) < 0 {
-		return consensusErr(gas_cap, ErrNonceTooLow)
+		return consensusErr(ret, gas_cap, ErrNonceTooLow)
 	}
 
 	// Nonce skipping is permanently enabled now. Uncomment this part to have strict nonce ordering
@@ -204,11 +205,11 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation)
 	if err != nil {
-		return consensusErr(gas_cap, util.ErrorString(err.Error()))
+		return consensusErr(ret, gas_cap, util.ErrorString(err.Error()))
 	}
 
 	if gas_cap < gas_intrinsic {
-		return consensusErr(gas_cap, ErrIntrinsicGas)
+		return consensusErr(ret, gas_cap, ErrIntrinsicGas)
 	}
 
 	gas_left := gas_cap
@@ -225,9 +226,10 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult) {
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
-			return consensusErr(gas_cap, err_str)
+			return consensusErr(ret, gas_cap, err_str)
 		} else {
-			ret.ExecutionErr = err_str
+			ret.ExecutionErr = util.ErrorString(err.Error())
+			execError = err
 		}
 	}
 	gas_left += util.MinU64(self.state.GetRefund(), (gas_cap-gas_left)/2)
@@ -317,7 +319,7 @@ func (self *EVM) create(
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
-		if err != errExecutionReverted {
+		if err != ErrExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
 	}
@@ -360,15 +362,30 @@ func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, val
 	}
 	snapshot := self.state.Snapshot()
 	self.transfer(caller, callee, value)
-	return self.call_end(CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
+	return self.call_end(CALL, CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
 }
 
-func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
+func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
 	gas_left = frame.Gas
 	gas_copy := frame.Gas
 	precompiled := self.precompiles.Get(code_owner.Address())
+	code := code_owner.GetCode()
 	start := time.Now()
-	var code_copy []byte
+
+	if self.vmConfig.Debug {
+		if self.depth == 0 {
+			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			defer func() {
+				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
+		} else {
+			self.vmConfig.Tracer.CaptureEnter(typ, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			defer func() {
+				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
+			}()
+		}
+	}
+
 	if precompiled != nil {
 		if gas_required := precompiled.RequiredGas(frame, self); gas_required <= gas_left {
 			gas_left -= gas_required
@@ -377,8 +394,7 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 		} else {
 			err = ErrOutOfGas
 		}
-	} else if code := code_owner.GetCode(); len(code) != 0 {
-		code_copy = code
+	} else if len(code) != 0 {
 		contract := NewContract(frame, CodeAndHash{code, code_owner.GetCodeHash()})
 		ret, err = self.run(&contract, read_only)
 		gas_left = contract.Gas
@@ -386,21 +402,8 @@ func (self *EVM) call_end(frame CallFrame, code_owner StateAccount, snapshot int
 	}
 	if err != nil {
 		self.state.RevertToSnapshot(snapshot)
-		if err != errExecutionReverted && precompiled == nil {
+		if err != ErrExecutionReverted && precompiled == nil {
 			gas_left = 0
-		}
-	}
-	if self.vmConfig.Debug {
-		if self.depth == 0 {
-			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
-			defer func() { // Lazy evaluation of the parameters
-				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
-			}()
-		} else {
-			self.vmConfig.Tracer.CaptureEnter(CALL, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code_copy)
-			defer func() { // Lazy evaluation of the parameters
-				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
-			}()
 		}
 	}
 	return
@@ -422,7 +425,7 @@ func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, 
 	if !BalanceGTE(caller.Account, value) {
 		return nil, gas, ErrInsufficientBalanceForTransfer
 	}
-	return self.call_end(CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
+	return self.call_end(CALLCODE, CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
 }
 
 // call_delegate executes the contract associated with the addr with the given input
@@ -435,7 +438,7 @@ func (self *EVM) call_delegate(caller *Contract, callee StateAccount, input []by
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	return self.call_end(CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
+	return self.call_end(DELEGATECALL, CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
 }
 
 // StaticCall executes the contract associated with the addr with the given input
@@ -453,7 +456,7 @@ func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte
 	// future scenarios
 	snapshot := self.state.Snapshot()
 	callee.AddBalance(big.NewInt(0))
-	return self.call_end(CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
+	return self.call_end(STATICCALL, CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
 }
 
 // loops and evaluates the contract's code with the given input data and returns
@@ -567,7 +570,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 		case err != nil:
 			return nil, err
 		case operation.reverts:
-			return res, errExecutionReverted
+			return res, ErrExecutionReverted
 		case operation.halts:
 			return res, nil
 		case !operation.jumps:

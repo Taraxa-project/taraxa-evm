@@ -41,50 +41,55 @@ func (self *TraceRunner) UpdateConfig(cfg *chain_config.ChainConfig) {
 	self.chain_config = cfg
 }
 
-func (self *TraceRunner) Trace(blk *vm.Block, trx *vm.Transaction, conf *vm.TracingConfig) []byte {
+func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.TracingConfig) []byte {
+	if trxs == nil || blk == nil {
+		return nil
+	}
 	var evm_state state_evm.EVMState
 	evm_state.Init(state_evm.Opts{
-		NumTransactionsToBuffer: 1,
+		NumTransactionsToBuffer: uint64(len(*trxs)),
 	})
 	evm_state.SetInput(state_db.GetBlockState(self.db, blk.Number))
-	// we don't need to specify nonce for eth_call. So set correct one
-	trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
-	var evm vm.EVM
-	var tracer vm.Tracer
-	if conf != nil {
-		tracer = vm.NewOeTracer(conf)
-	} else {
-		tracer = vm.NewStructLogger(nil)
+	output := make([]any, len(*trxs))
+	for index, trx := range *trxs {
+		// we don't need to specify nonce for eth_call. So set correct one
+		trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
+		var evm vm.EVM
+		var tracer vm.Tracer
+		if conf != nil {
+			tracer = vm.NewOeTracer(conf)
+		} else {
+			// tracer = vm.NewStructLogger(config.LogConfig)
+			tracer = vm.NewStructLogger(nil)
+		}
+
+		evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
+		evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
+		if self.dpos_api != nil {
+			self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+		}
+
+		ret, _ := evm.Main(&trx)
+
+		// Depending on the tracer type, format and return the output
+		switch tracer := tracer.(type) {
+		case *vm.StructLogger:
+			failed := len(ret.ExecutionErr) != 0 || len(ret.ConsensusErr) != 0
+			output[index] = ExecutionResult{
+				Gas:         ret.GasUsed,
+				Failed:      failed,
+				ReturnValue: fmt.Sprintf("%x", ret.CodeRetval),
+				StructLogs:  vm.FormatLogs(tracer.StructLogs()),
+			}
+		case *vm.OeTracer:
+			tracer.SetRetCode(ret.CodeRetval)
+			output[index] = tracer.GetResult()
+		default:
+			panic(fmt.Sprintf("bad tracer type %T", tracer))
+		}
 	}
-
-	// tracer = vm.NewStructLogger(config.LogConfig)
-	evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
-	evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
-	if self.dpos_api != nil {
-		self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
-	}
-
-	ret := evm.Main(trx)
-
-	// Depending on the tracer type, format and return the output
-	switch tracer := tracer.(type) {
-	case *vm.StructLogger:
-		failed := len(ret.ExecutionErr) != 0 || len(ret.ConsensusErr) != 0
-		out, _ := json.Marshal(ExecutionResult{
-			Gas:         ret.GasUsed,
-			Failed:      failed,
-			ReturnValue: fmt.Sprintf("%x", ret.CodeRetval),
-			StructLogs:  vm.FormatLogs(tracer.StructLogs()),
-		})
-		return out
-
-	case *vm.OeTracer:
-		tracer.SetRetCode(ret.CodeRetval)
-		out, _ := json.Marshal(tracer.GetResult())
-		return out
-	default:
-		panic(fmt.Sprintf("bad tracer type %T", tracer))
-	}
+	out, _ := json.Marshal(output)
+	return out
 }
 
 // ExecutionResult groups all structured logs emitted by the EVM

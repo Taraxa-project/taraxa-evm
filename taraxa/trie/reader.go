@@ -9,60 +9,6 @@ import (
 )
 
 type Reader struct{ Schema }
-
-type Proof struct {
-	Value []byte
-	Nodes [][]byte
-}
-
-func (self Reader) Prove(db_tx Input, root_hash *common.Hash, key *common.Hash) (ret Proof) {
-	return
-}
-
-func (self Reader) VerifyProof(db_tx Input, root_hash *common.Hash, key *common.Hash, proof *Proof) bool {
-	return true
-}
-
-func (self Reader) HashFully(db_tx Input, root_hash *common.Hash) *common.Hash {
-	var kbuf hex_key
-	return self.hash_fully(db_tx, (*node_hash)(root_hash), &hash_encoder{}, kbuf[:0]).common_hash()
-}
-
-func (self Reader) hash_fully(db_tx Input, n node, enc *hash_encoder, prefix []byte) (ret *node_hash) {
-	is_root := len(prefix) == 0
-	switch n := n.(type) {
-	case *node_hash:
-		return self.hash_fully(db_tx, self.resolve(db_tx, n, prefix), enc, prefix)
-	case *short_node:
-		hash_list := enc.ListStart()
-		enc.AppendString(hex_to_compact(n.key_part, &hex_key_compact{}))
-		if val_n, has_val := n.val.(value_node); has_val {
-			if val_n == nil_val_node {
-				val_n = self.resolve_val_n_by_hex_k(db_tx, append(prefix, n.key_part...))
-			}
-			_, enc_hash := val_n.val.EncodeForTrie()
-			enc.AppendString(enc_hash)
-		} else {
-			self.hash_fully(db_tx, n.val, enc, append(prefix, n.key_part...))
-		}
-		enc.ListEnd(hash_list, is_root, &ret)
-	case *full_node:
-		hash_list := enc.ListStart()
-		for i := 0; i < full_node_child_cnt; i++ {
-			if c := n.children[i]; c != nil {
-				self.hash_fully(db_tx, c, enc, append(prefix, byte(i)))
-			} else {
-				enc.AppendString(nil)
-			}
-		}
-		enc.AppendString(nil)
-		enc.ListEnd(hash_list, is_root, &ret)
-	default:
-		panic("impossible")
-	}
-	return
-}
-
 type KVCallback = func(*common.Hash, Value)
 
 func (self Reader) ForEach(db_tx Input, root_hash *common.Hash, with_values bool, cb KVCallback) {
@@ -70,16 +16,17 @@ func (self Reader) ForEach(db_tx Input, root_hash *common.Hash, with_values bool
 	self.for_each(db_tx, (*node_hash)(root_hash), with_values, cb, kbuf[:0])
 }
 
-func (self Reader) ForEachNodeHash(db_tx Input, root_hash *common.Hash, cb func(*common.Hash)) {
+func (self Reader) ForEachNodeHash(db_tx Input, root_hash *common.Hash, cb func(*common.Hash, []byte)) {
 	var kbuf hex_key
 	self.for_each_node_hash(db_tx, (*node_hash)(root_hash), cb, kbuf[:0])
 }
 
-func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash), prefix []byte) {
+func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash, []byte), prefix []byte) {
 	switch n := n.(type) {
 	case *node_hash:
-		self.for_each_node_hash(db_tx, self.resolve(db_tx, n, prefix), cb, prefix)
-		cb(n.common_hash())
+		ret_node, ret_bytes := self.resolve(db_tx, n, prefix)
+		cb(n.common_hash(), ret_bytes)
+		self.for_each_node_hash(db_tx, ret_node, cb, prefix)
 	case *short_node:
 		key_extended := append(prefix, n.key_part...)
 		if _, has_val := n.val.(value_node); !has_val {
@@ -99,7 +46,8 @@ func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash)
 func (self Reader) for_each(db_tx Input, n node, with_values bool, cb KVCallback, prefix []byte) {
 	switch n := n.(type) {
 	case *node_hash:
-		self.for_each(db_tx, self.resolve(db_tx, n, prefix), with_values, cb, prefix)
+		ret_node, _ := self.resolve(db_tx, n, prefix)
+		self.for_each(db_tx, ret_node, with_values, cb, prefix)
 	case *short_node:
 		key_extended := append(prefix, n.key_part...)
 		if val_n, has_val := n.val.(value_node); has_val {
@@ -123,9 +71,10 @@ func (self Reader) for_each(db_tx Input, n node, with_values bool, cb KVCallback
 	}
 }
 
-func (self Reader) resolve(db_tx Input, hash *node_hash, key_prefix []byte) (ret node) {
+func (self Reader) resolve(db_tx Input, hash *node_hash, key_prefix []byte) (ret node, ret_bytes []byte) {
 	db_tx.GetNode(hash.common_hash(), func(bytes []byte) {
 		ret, _ = self.dec_node(db_tx, key_prefix, hash, bytes)
+		ret_bytes = common.CopyBytes(bytes)
 	})
 	asserts.Holds(ret != nil)
 	return
@@ -145,7 +94,7 @@ func (self Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, 
 		case full_node_child_cnt:
 			return self.dec_full(db_tx, key_prefix, db_hash, payload), rest
 		default:
-			panic("impossible")
+			panic("impossible " + db_hash.common_hash().Hex())
 		}
 	case rlp.String:
 		switch len(payload) {
@@ -154,10 +103,10 @@ func (self Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, 
 		case common.HashLength:
 			return (*node_hash)(new(common.Hash).SetBytes(payload)), rest
 		default:
-			panic("impossible")
+			panic("impossible " + db_hash.common_hash().Hex())
 		}
 	default:
-		panic("impossible")
+		panic("impossible " + db_hash.common_hash().Hex())
 	}
 }
 

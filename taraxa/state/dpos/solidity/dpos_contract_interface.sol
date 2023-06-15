@@ -21,7 +21,7 @@ interface DposInterface {
         uint256 total_stake;
         // Validator's reward from delegators rewards commission
         uint256 commission_reward;
-        // Validator's commission - max value 1000(precision up to 0.1%)
+        // Validator's commission - max value 10000(precision up to 0.01%)
         uint16 commission;
         // Block number of last commission change
         uint64 last_commission_change;
@@ -69,7 +69,10 @@ interface DposInterface {
         uint256 stake;
         // block number when it will be unlocked
         uint64 block;
+        // Validator address
         address validator;
+        // Flag if validator still exists - in case he has 0 stake and 0 rewards, validator is deleted from memory & db
+        bool validator_exists;
     }
 
     // Delegates tokens to specified validator
@@ -91,8 +94,16 @@ interface DposInterface {
         uint256 amount
     ) external;
 
-    // Claims tokens from staking rewards based on delegation to <validator>
+    // Claims staking rewards from <validator>
     function claimRewards(address validator) external;
+
+    /**
+     * @notice Claims staking rewards from all validators (limited by batch) that caller has delegated to
+     *
+     * @param batch Batch number - there is a limit of 10 validators per batch that delegator can claim rewards from in single tranaction
+     * @return end  Flag if there are no more validators left that delegator can claim rewards from
+     **/
+    function claimAllRewards(uint32 batch) external returns (bool end);
 
     // Claims tokens from validator's commission rewards
     function claimCommissionRewards(address validator) external;

@@ -55,7 +55,7 @@ func (self ExtendedReader) ForEachStorage(addr *common.Address, f func(*common.H
 	})
 }
 
-func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash)) {
+func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash, []byte)) {
 	if storage_root == nil {
 		return
 	}
@@ -63,44 +63,15 @@ func (self ExtendedReader) ForEachAccountNodeHashByRoot(storage_root *common.Has
 	trie.Reader{AccountTrieSchema{}}.ForEachNodeHash(
 		AccountTrieInputAdapter{&no_addr, self},
 		storage_root,
-		func(hash *common.Hash) {
-			f(hash)
-		})
+		f)
 }
 
-func (self ExtendedReader) ForEachMainNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash)) {
+func (self ExtendedReader) ForEachMainNodeHashByRoot(storage_root *common.Hash, f func(*common.Hash, []byte)) {
 	if storage_root == nil {
 		return
 	}
 	trie.Reader{MainTrieSchema{}}.ForEachNodeHash(
 		MainTrieInputAdapter{self},
 		storage_root,
-		func(hash *common.Hash) {
-			f(hash)
-		})
-}
-
-type Proof struct {
-	AccountProof  trie.Proof
-	StorageProofs []trie.Proof
-}
-
-func (self ExtendedReader) Prove(state_root *common.Hash, addr *common.Address, keys ...common.Hash) (ret Proof) {
-	ret.AccountProof = trie.Reader{MainTrieSchema{}}.Prove(
-		MainTrieInputAdapter{self},
-		state_root,
-		keccak256.Hash(addr[:]))
-	if len(ret.AccountProof.Value) == 0 || len(keys) == 0 {
-		return
-	}
-	ret.StorageProofs = make([]trie.Proof, len(keys))
-	storage_root := StorageRoot(ret.AccountProof.Value)
-	if storage_root == nil {
-		return
-	}
-	acc_txn := AccountTrieInputAdapter{addr, self}
-	for i := 0; i < len(keys); i++ {
-		ret.StorageProofs[i] = trie.Reader{AccountTrieSchema{}}.Prove(acc_txn, storage_root, keccak256.Hash(keys[i][:]))
-	}
-	return
+		f)
 }
