@@ -43,6 +43,10 @@ type GetValidatorsRet struct {
 	End        bool
 }
 
+type GetTotalDelegationRet struct {
+	TotalDelegation *big.Int
+}
+
 type GetDelegationsRet struct {
 	Delegations []sol.DposInterfaceDelegationData
 	End         bool

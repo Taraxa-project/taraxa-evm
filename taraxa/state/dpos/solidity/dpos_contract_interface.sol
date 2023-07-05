@@ -177,6 +177,18 @@ interface DposInterface {
         returns (ValidatorData[] memory validators, bool end);
 
     /**
+     * @notice Returns total delegation for specified delegator
+     *
+     * @param delegator Delegator account address
+     *
+     * @return total_delegation 
+     **/
+    function getTotalDelegation(address delegator)
+        external
+        view
+        returns (uint256 total_delegation);
+
+    /**
      * @notice Returns list of delegations for specified delegator - which validators delegator delegated to
      *
      * @param delegator     delegator account address

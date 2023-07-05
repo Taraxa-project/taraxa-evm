@@ -99,10 +99,10 @@ const (
 	// Maximum number of validators per batch returned by getValidators call
 	GetValidatorsMaxCount = 20
 
-	// Maximum number of validators per batch returned by getDelegations call
+	// Maximum number of delegations per batch returned by getDelegations call
 	GetDelegationsMaxCount = 20
 
-	// Maximum number of validators per batch returned by getUndelegations call
+	// Maximum number of undelegations per batch returned by getUndelegations call
 	GetUndelegationsMaxCount = 20
 )
 
@@ -252,6 +252,18 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		// This method is iterating through list of validators, so we charge relatively large fee here
 		return GetValidatorsMaxCount * DposBatchGetMethodsGas
+
+	case "getTotalDelegation":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args sol.GetTotalDelegationArgs
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		delegations_count := uint64(self.delegations.GetDelegationsCount(&args.Delegator))
+		return delegations_count * DposBatchGetMethodsGas
 
 	case "getDelegations":
 		// First 4 bytes is method signature !!!!
@@ -539,6 +551,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getValidatorsFor(args))
+
+	case "getTotalDelegation":
+		var args sol.GetTotalDelegationArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getTotalDelegation input args: ", err)
+			return nil, err
+		}
+		return method.Outputs.Pack(self.getTotalDelegation(args))
 
 	case "getDelegations":
 		var args sol.GetDelegationsArgs
@@ -1393,7 +1413,27 @@ func (self *Contract) getValidatorsFor(args sol.GetValidatorsForArgs) (validator
 	return
 }
 
-// Returns batch of delegations for specified address
+// Returns total delegation for specified delegator address
+func (self *Contract) getTotalDelegation(args sol.GetTotalDelegationArgs) *big.Int {
+	totalDelegation := big.NewInt(0)
+
+	count := self.delegations.GetDelegationsCount(&args.Delegator)
+	delegator_validators_addresses, _ := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, 0, count)
+
+	for _, validator_address := range delegator_validators_addresses {
+		delegation := self.delegations.GetDelegation(&args.Delegator, &validator_address)
+		if delegation == nil {
+			// This should never happen
+			panic("getTotalDelegation - unable to fetch delegation data")
+		}
+
+		totalDelegation = bigutil.Add(totalDelegation, delegation.Stake)
+	}
+
+	return totalDelegation
+}
+
+// Returns batch of delegations for specified delegator address
 func (self *Contract) getDelegations(args sol.GetDelegationsArgs) (delegations []sol.DposInterfaceDelegationData, end bool) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
 
