@@ -389,10 +389,9 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 // This is called on each call to contract
 // It translates call and tries to execute them
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
-	if evm.GetDepth() != 0 {
+	if evm.GetBlock().Number < self.hardforks_config.MagnoliaHfBlockNum && evm.GetDepth() != 0 {
 		return nil, ErrCallIsNotToplevel
 	}
-
 	self.lazy_init()
 
 	method, err := self.Abi.MethodById(ctx.Input)
