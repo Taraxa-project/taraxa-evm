@@ -410,7 +410,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, ErrCallIsNotToplevel
 		}
 	}
-
 	self.lazy_init()
 
 	method, err := self.Abi.MethodById(ctx.Input)
