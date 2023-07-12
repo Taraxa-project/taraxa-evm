@@ -927,6 +927,60 @@ func TestGetValidatorsFor(t *testing.T) {
 	tc.Assert.Equal("validator_"+fmt.Sprint(3*dpos.GetValidatorsMaxCount-1)+"_description", batch2_parsed_result.Validators[len(batch2_parsed_result.Validators)-1].Info.Description)
 }
 
+func TestGetTotalDelegation(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	gen_validators_num := 13
+
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+		val_owner := addr(uint64(i))
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := CopyDefaultChainConfig()
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = DefaultBalance
+	}
+
+	// Generate delegator and set some balance to him
+	delegator1_addr := addr(uint64(gen_validators_num + 1))
+	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+
+	tc, test := init_test(t, cfg)
+	defer test.end()
+
+	// Register validators
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	// Create delegator delegations
+	for i := 0; i < gen_validators_num; i++ {
+		test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.pack("delegate", gen_validators[i].address), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	intristic_gas := 21464
+
+	// Get first batch of delegator1 delegations from contract
+	result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getTotalDelegation", delegator1_addr), util.ErrorString(""), util.ErrorString(""))
+	parsed_result := new(GetTotalDelegationRet)
+	test.unpack(parsed_result, "getTotalDelegation", result.CodeRetval)
+	// Checks used gas
+	tc.Assert.Equal(dpos.DposBatchGetMethodsGas*uint64(gen_validators_num)+uint64(intristic_gas), result.GasUsed)
+	// Checks total delegation
+	tc.Assert.Equal(bigutil.Mul(big.NewInt(int64(gen_validators_num)), DefaultMinimumDeposit), parsed_result.TotalDelegation)
+
+}
+
 func TestGetDelegations(t *testing.T) {
 	type GenValidator struct {
 		address common.Address
