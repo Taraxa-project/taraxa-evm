@@ -20,7 +20,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
+	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 )
 
@@ -38,7 +39,11 @@ import (
 // [1] https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf
 
 // Fixed contract address
-var contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+var dpos_contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
+
+func ContractAddress() common.Address {
+	return *dpos_contract_address
+}
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
 const (
@@ -129,7 +134,7 @@ type State struct {
 type Contract struct {
 	cfg Config
 	// current storage
-	storage StorageWrapper
+	storage contract_storage.StorageWrapper
 	// delayed storage for PBFT
 	delayedStorage Reader
 	// ABI of the contract
@@ -156,9 +161,9 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg Config, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
+func (self *Contract) Init(cfg Config, storage contract_storage.Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
-	self.storage.Init(storage)
+	self.storage.Init(dpos_contract_address, storage)
 	self.delayedStorage = readStorage
 	self.evm = evm
 	return self
@@ -176,7 +181,7 @@ func (self *Contract) UpdateConfig(cfg Config) {
 
 // Register this precompiled contract
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
-	defensive_copy := *contract_address
+	defensive_copy := *dpos_contract_address
 	registry(&defensive_copy, self)
 }
 
@@ -335,13 +340,13 @@ func (self *Contract) lazy_init() {
 	self.dag_proposers_reward = uint256.NewInt(uint64(self.cfg.DagProposersReward))
 	self.max_block_author_reward = uint256.NewInt(uint64(self.cfg.MaxBlockAuthorReward))
 
-	self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+	self.storage.Get(contract_storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_vote_count = self.eligible_vote_count_orig
 
 	self.amount_delegated_orig = uint256.NewInt(0)
-	self.storage.Get(stor_k_1(field_amount_delegated), func(bytes []byte) {
+	self.storage.Get(contract_storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
@@ -356,11 +361,11 @@ func (self *Contract) EndBlockCall() {
 	}
 	// Update values
 	if self.eligible_vote_count_orig != self.eligible_vote_count {
-		self.storage.Put(stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
+		self.storage.Put(contract_storage.Stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
 		self.eligible_vote_count_orig = self.eligible_vote_count
 	}
 	if self.amount_delegated_orig.Cmp(self.amount_delegated) != 0 {
-		self.storage.Put(stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
+		self.storage.Put(contract_storage.Stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 		self.amount_delegated_orig = self.amount_delegated.Clone()
 	}
 }
@@ -378,7 +383,7 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 
 	make_context := func(caller *common.Address, value *big.Int) (ctx vm.CallFrame) {
 		ctx.CallerAccount = get_account(caller)
-		ctx.Account = get_account(contract_address)
+		ctx.Account = get_account(dpos_contract_address)
 		ctx.Value = value
 		return
 	}
@@ -388,7 +393,7 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 	}
 
 	self.EndBlockCall()
-	self.storage.IncrementNonce(contract_address)
+	self.storage.IncrementNonce(dpos_contract_address)
 
 	return nil
 }
@@ -711,7 +716,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		fmt.Println(errorString)
 	}
 
-	self.storage.AddBalance(contract_address, totalReward.ToBig())
+	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
 	return newMintedRewards
 }
@@ -1498,7 +1503,7 @@ func (self *Contract) getUndelegations(args sol.GetUndelegationsArgs) (undelegat
 }
 
 func (self *Contract) state_get(validator_addr, block []byte) (state *State, key common.Hash) {
-	key = stor_k_2(field_state, validator_addr, block)
+	key = contract_storage.Stor_k_2(field_state, validator_addr, block)
 	self.storage.Get(&key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
@@ -1509,7 +1514,7 @@ func (self *Contract) state_get(validator_addr, block []byte) (state *State, key
 // Gets state object from storage and decrements it's count
 // if number of references is 0 it also removes object from storage
 func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (state *State) {
-	key := stor_k_1(field_state, validator_addr, block)
+	key := contract_storage.Stor_k_1(field_state, validator_addr, block)
 	self.storage.Get(key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
@@ -1548,7 +1553,7 @@ func (self *Contract) apply_genesis_entry(validator_info *GenesisValidator, make
 		// for delegate call with a transaction value(out delegation amount) is transferred with transaction logic
 		// before entering this function. So we should do the same thing manually
 		self.storage.SubBalance(&delegator, amount)
-		self.storage.AddBalance(contract_address, amount)
+		self.storage.AddBalance(dpos_contract_address, amount)
 
 		delegationError := self.delegate(make_context(&delegator, amount), 0, sol.ValidatorAddressArgs{validator_info.Address})
 		if delegationError != nil {

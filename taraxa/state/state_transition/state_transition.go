@@ -5,7 +5,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
@@ -16,17 +18,19 @@ import (
 )
 
 type StateTransition struct {
-	chain_config       *chain_config.ChainConfig
-	state              state_db.LatestState
-	pending_blk_state  state_db.PendingBlockState
-	evm_state          state_evm.EVMState
-	evm                vm.EVM
-	trie_sink          TrieSink
-	pending_state_root common.Hash
-	dpos_contract      *dpos.Contract
-	get_reader         func(types.BlockNum) dpos.Reader
-	new_chain_config   *chain_config.ChainConfig
-	LastBlockNum       uint64
+	chain_config        *chain_config.ChainConfig
+	state               state_db.LatestState
+	pending_blk_state   state_db.PendingBlockState
+	evm_state           state_evm.EVMState
+	evm                 vm.EVM
+	trie_sink           TrieSink
+	pending_state_root  common.Hash
+	dpos_contract       *dpos.Contract
+	get_dpos_reader     func(types.BlockNum) dpos.Reader
+	slashing_contract   *slashing.Contract
+	get_slashing_reader func(types.BlockNum) slashing.Reader
+	new_chain_config    *chain_config.ChainConfig
+	LastBlockNum        uint64
 }
 
 type Opts struct {
@@ -38,14 +42,17 @@ func (self *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	get_reader func(types.BlockNum) dpos.Reader,
+	get_dpos_reader func(types.BlockNum) dpos.Reader,
+	slashing_api *slashing.API,
+	get_slashing_reader func(types.BlockNum) slashing.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
 	self.chain_config = chain_config
 	self.state = state
 	self.evm_state.Init(opts.EVMState)
-	self.get_reader = get_reader
+	self.get_dpos_reader = get_dpos_reader
+	self.get_slashing_reader = get_slashing_reader
 	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
 		// 24MB total
 		PreallocatedMem: 8 * 1024 * 1024,
@@ -53,7 +60,10 @@ func (self *StateTransition) Init(
 	state_desc := state.GetCommittedDescriptor()
 	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
-		self.dpos_contract = dpos_api.NewContract(dpos.EVMStateStorage{&self.evm_state}, get_reader(state_desc.BlockNum), &self.evm)
+		self.dpos_contract = dpos_api.NewContract(contract_storage.EVMStateStorage{&self.evm_state}, get_dpos_reader(state_desc.BlockNum), &self.evm)
+	}
+	if slashing_api != nil {
+		self.slashing_contract = slashing_api.NewContract(contract_storage.EVMStateStorage{&self.evm_state}, get_slashing_reader(state_desc.BlockNum), &self.evm)
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		self.begin_block()
@@ -155,7 +165,7 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	state_root, self.pending_state_root = self.pending_state_root, common.ZeroHash
 	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
 	if self.dpos_contract != nil {
-		self.dpos_contract.CommitCall(self.get_reader(self.evm.GetBlock().Number))
+		self.dpos_contract.CommitCall(self.get_dpos_reader(self.evm.GetBlock().Number))
 	}
 	return
 }

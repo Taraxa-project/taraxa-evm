@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -47,7 +49,7 @@ func (self *ValidatorRewards) Empty() bool {
 // as such info is stored under multiple independent storage keys, it is important that caller does not need to
 // think about all implementation details, but just calls functions on Validators type
 type Validators struct {
-	storage         *StorageWrapper
+	storage         *contract_storage.StorageWrapper
 	validators_list IterableMap
 
 	validator_field         []byte
@@ -66,7 +68,7 @@ var (
 	validator_list_index    = []byte{5}
 )
 
-func (self *Validators) Init(stor *StorageWrapper, prefix []byte) *Validators {
+func (self *Validators) Init(stor *contract_storage.StorageWrapper, prefix []byte) *Validators {
 	self.storage = stor
 
 	// Init Validators storage fields keys - relative to the prefix
@@ -89,7 +91,7 @@ func (self *Validators) CheckValidatorOwner(owner, validator *common.Address) bo
 
 // Checks if correct account is trying to access validator object
 func (self *Validators) GetValidatorOwner(validator *common.Address) (ret common.Address) {
-	key := stor_k_1(self.validator_owner_field, validator[:])
+	key := contract_storage.Stor_k_1(self.validator_owner_field, validator[:])
 	self.storage.Get(key, func(bytes []byte) {
 		ret = common.BytesToAddress(bytes)
 	})
@@ -98,7 +100,7 @@ func (self *Validators) GetValidatorOwner(validator *common.Address) (ret common
 
 // Returns public vrf key for validator
 func (self *Validators) GetVrfKey(validator *common.Address) (ret []byte) {
-	key := stor_k_1(self.validator_vrf_key_field, validator[:])
+	key := contract_storage.Stor_k_1(self.validator_vrf_key_field, validator[:])
 	self.storage.Get(key, func(bytes []byte) {
 		ret = bytes
 	})
@@ -139,10 +141,10 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 	rewards.CommissionRewardsPool = big.NewInt(0)
 	Save(self, validator_address, rewards)
 
-	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
+	validator_owner_key := contract_storage.Stor_k_1(self.validator_owner_field, validator_address[:])
 	self.storage.Put(validator_owner_key, owner_address.Bytes())
 
-	validator_vrf_key := stor_k_1(self.validator_vrf_key_field, validator_address[:])
+	validator_vrf_key := contract_storage.Stor_k_1(self.validator_vrf_key_field, validator_address[:])
 	self.storage.Put(validator_vrf_key, vrf_key)
 
 	// Adds validator into the list of all validators
@@ -151,19 +153,19 @@ func (self *Validators) CreateValidator(owner_address *common.Address, validator
 }
 
 func (self *Validators) DeleteValidator(validator_address *common.Address) {
-	validator_key := stor_k_1(self.validator_field, validator_address[:])
+	validator_key := contract_storage.Stor_k_1(self.validator_field, validator_address[:])
 	self.storage.Put(validator_key, nil)
 
-	validator_info_key := stor_k_1(self.validator_info_field, validator_address[:])
+	validator_info_key := contract_storage.Stor_k_1(self.validator_info_field, validator_address[:])
 	self.storage.Put(validator_info_key, nil)
 
-	validator_owner_key := stor_k_1(self.validator_owner_field, validator_address[:])
+	validator_owner_key := contract_storage.Stor_k_1(self.validator_owner_field, validator_address[:])
 	self.storage.Put(validator_owner_key, nil)
 
-	validator_vrf_key := stor_k_1(self.validator_vrf_key_field, validator_address[:])
+	validator_vrf_key := contract_storage.Stor_k_1(self.validator_vrf_key_field, validator_address[:])
 	self.storage.Put(validator_vrf_key, nil)
 
-	rewards_key := stor_k_1(self.validator_rewards_field, validator_address[:])
+	rewards_key := contract_storage.Stor_k_1(self.validator_rewards_field, validator_address[:])
 	self.storage.Put(rewards_key, nil)
 
 	// Removes validator from the list of all validators
@@ -225,7 +227,7 @@ func (self *Validators) getFieldFor(t any) []byte {
 }
 
 func Get[T Field](v *Validators, validator_address *common.Address) (ret *T) {
-	key := stor_k_1(v.getFieldFor(ret), validator_address[:])
+	key := contract_storage.Stor_k_1(v.getFieldFor(ret), validator_address[:])
 	v.storage.Get(key, func(bytes []byte) {
 		ret = new(T)
 		rlp.MustDecodeBytes(bytes, ret)
@@ -234,7 +236,7 @@ func Get[T Field](v *Validators, validator_address *common.Address) (ret *T) {
 }
 
 func Save[T Field](v *Validators, address *common.Address, data *T) {
-	key := stor_k_1(v.getFieldFor(data), address[:])
+	key := contract_storage.Stor_k_1(v.getFieldFor(data), address[:])
 	v.storage.Put(key, rlp.MustEncodeToBytes(data))
 }
 

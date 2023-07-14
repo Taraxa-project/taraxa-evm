@@ -2,6 +2,7 @@ package dpos
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
 // IterableMap storage fields keys - relative to the prefix from Init function
@@ -13,17 +14,17 @@ var (
 
 // IterableMap storage wrapper
 type IterableMap struct {
-	storage                     *StorageWrapper
+	storage                     *contract_storage.StorageWrapper
 	accounts_storage_prefix     []byte       // accounts are stored under "accounts_storage_prefix + pos" key
 	accounts_count_storage_key  *common.Hash // accounts count is stored under accounts_count_storage_key
 	accounts_pos_storage_prefix []byte       // accounts positions are stored under "accounts_pos_storage_prefix + address" key
 }
 
 // Inits iterbale map with prefix, so multiple iterbale maps can coexists thanks to different prefixes
-func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
+func (self *IterableMap) Init(stor *contract_storage.StorageWrapper, prefix []byte) {
 	self.storage = stor
 	self.accounts_storage_prefix = append(prefix, field_accounts...)
-	self.accounts_count_storage_key = stor_k_1(prefix, field_accounts_count)
+	self.accounts_count_storage_key = contract_storage.Stor_k_1(prefix, field_accounts_count)
 	self.accounts_pos_storage_prefix = append(prefix, field_accounts_pos...)
 }
 
@@ -46,11 +47,11 @@ func (self *IterableMap) CreateAccount(account *common.Address) bool {
 	new_account_pos := accounts_count + 1
 
 	// Saves new account into the accounts array with key -> self.accounts_storage_prefix + pos
-	accounts_k := stor_k_1(self.accounts_storage_prefix, uint32ToBytes(new_account_pos))
+	accounts_k := contract_storage.Stor_k_1(self.accounts_storage_prefix, uint32ToBytes(new_account_pos))
 	self.storage.Put(accounts_k, account.Bytes())
 
 	// Save position of ney item in accounts array into the accounts pos mapping
-	accounts_pos_k := stor_k_1(self.accounts_pos_storage_prefix, account[:])
+	accounts_pos_k := contract_storage.Stor_k_1(self.accounts_pos_storage_prefix, account[:])
 	self.storage.Put(accounts_pos_k, uint32ToBytes(new_account_pos))
 
 	// Saves new accounts count
@@ -74,8 +75,8 @@ func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 	if acc_exists == false {
 		panic("Account does not exist")
 	}
-	delete_acc_address_at_pos_k := stor_k_1(self.accounts_storage_prefix, uint32ToBytes(delete_acc_pos))
-	delete_acc_pos_k := stor_k_1(self.accounts_pos_storage_prefix, account[:])
+	delete_acc_address_at_pos_k := contract_storage.Stor_k_1(self.accounts_storage_prefix, uint32ToBytes(delete_acc_pos))
+	delete_acc_pos_k := contract_storage.Stor_k_1(self.accounts_pos_storage_prefix, account[:])
 
 	// Account to be deleted is saved on the last position
 	if delete_acc_pos == accounts_count {
@@ -89,7 +90,7 @@ func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 	// There is more accounts saved and account to be deleted is somewhere in the middle
 
 	// Positions are shifted +1 because pos == 0 is reserved to indicate non-existent element
-	last_acc_address_at_pos_k := stor_k_1(self.accounts_storage_prefix, uint32ToBytes(accounts_count))
+	last_acc_address_at_pos_k := contract_storage.Stor_k_1(self.accounts_storage_prefix, uint32ToBytes(accounts_count))
 
 	last_acc_address := common.ZeroAddress
 	self.storage.Get(last_acc_address_at_pos_k, func(bytes []byte) {
@@ -100,7 +101,7 @@ func (self *IterableMap) RemoveAccount(account *common.Address) uint32 {
 		panic("Unable to delete account " + account.String() + ". Account not found")
 	}
 
-	last_acc_pos_k := stor_k_1(self.accounts_pos_storage_prefix, last_acc_address[:])
+	last_acc_pos_k := contract_storage.Stor_k_1(self.accounts_pos_storage_prefix, last_acc_address[:])
 
 	// Swap account to be deleted with the last item
 	self.storage.Put(last_acc_pos_k, uint32ToBytes(delete_acc_pos))
@@ -143,7 +144,7 @@ func (self *IterableMap) GetAccounts(batch uint32, count uint32) (result []commo
 	// Start with index == 1, there is nothing saved on index == 0 as it is reserved to indicate non-existent account
 	var idx uint32
 	for idx = uint32(requested_idx_start + 1); idx <= requested_idx_end && idx <= accounts_count; idx++ {
-		accounts_k := stor_k_1(self.accounts_storage_prefix, uint32ToBytes(idx))
+		accounts_k := contract_storage.Stor_k_1(self.accounts_storage_prefix, uint32ToBytes(idx))
 
 		account := common.ZeroAddress
 		self.storage.Get(accounts_k, func(bytes []byte) {
@@ -174,7 +175,7 @@ func (self *IterableMap) GetCount() (count uint32) {
 // Checks is account exists in iterable map
 // If account exists <true, position> it returned, otheriwse <false, 0>
 func (self *IterableMap) accountExists(account *common.Address) (acc_exists bool, acc_pos uint32) {
-	pos_k := stor_k_1(self.accounts_pos_storage_prefix, account[:])
+	pos_k := contract_storage.Stor_k_1(self.accounts_pos_storage_prefix, account[:])
 	acc_pos = 0
 
 	self.storage.Get(pos_k, func(bytes []byte) {

@@ -3,7 +3,8 @@ package chain_config
 import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 )
 
 type Hardforks struct {
@@ -15,6 +16,7 @@ type ChainConfig struct {
 	EVMChainConfig  params.ChainConfig
 	GenesisBalances core.BalanceMap
 	DPOS            dpos.Config
+	Slashing        slashing.Config
 	Hardforks       Hardforks
 }
 
