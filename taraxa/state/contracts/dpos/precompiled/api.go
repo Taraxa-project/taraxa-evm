@@ -3,17 +3,12 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
-
-func ContractAddress() common.Address {
-	return *contract_address
-}
 
 type API struct {
 	config_by_block []chain_config.DposConfigWithBlock
@@ -78,7 +73,7 @@ func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contr
 	return new(Contract).Init(self.config, storage, reader, evm)
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
+func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, storage_factory)
 	return

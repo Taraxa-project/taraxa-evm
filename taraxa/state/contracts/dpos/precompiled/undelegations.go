@@ -3,6 +3,8 @@ package dpos
 import (
 	"math/big"
 
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
@@ -17,7 +19,7 @@ type Undelegation struct {
 }
 
 type Undelegations struct {
-	storage *StorageWrapper
+	storage *contract_storage.StorageWrapper
 	// <delegator addres -> list of undelegations> as each delegator can undelegate multiple times
 	undelegations_map map[common.Address]*IterableMap
 
@@ -25,7 +27,7 @@ type Undelegations struct {
 	delegator_undelegations_field []byte
 }
 
-func (self *Undelegations) Init(stor *StorageWrapper, prefix []byte) {
+func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Delegations storage fields keys - relative to the prefix
@@ -106,5 +108,5 @@ func (self *Undelegations) removeDelegatorUndelegationList(delegator_address *co
 
 // Return key to storage where undelegations is stored
 func (self *Undelegations) genUndelegationKey(delegator_address *common.Address, validator_address *common.Address) *common.Hash {
-	return stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
+	return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
 }

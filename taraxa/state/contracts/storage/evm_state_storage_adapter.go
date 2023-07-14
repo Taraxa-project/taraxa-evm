@@ -1,4 +1,4 @@
-package dpos
+package contract_storage
 
 import (
 	"math/big"

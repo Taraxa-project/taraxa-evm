@@ -7,7 +7,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 )
 
 type Redelegation struct {
