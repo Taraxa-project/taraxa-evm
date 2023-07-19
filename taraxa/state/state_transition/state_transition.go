@@ -111,6 +111,9 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
+	if self.slashing_contract != nil && rules_changed {
+		self.slashing_contract.Register(self.evm.RegisterPrecompiledContract)
+	}
 }
 
 func (self *StateTransition) ExecuteTransaction(tx *vm.Transaction) (ret vm.ExecutionResult) {

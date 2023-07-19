@@ -1,20 +1,15 @@
 package test_utils
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"math/big"
 	"strings"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcec"
 	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
@@ -42,13 +37,13 @@ type ContractTest struct {
 	abi           abi.ABI
 }
 
-func Init_test(contract_addr common.Address, t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test ContractTest) {
+func Init_test(contract_addr common.Address, contract_abi string, t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test ContractTest) {
 	tc = tests.NewTestCtx(t)
-	test.init(contract_addr, &tc, cfg)
+	test.init(contract_addr, contract_abi, &tc, cfg)
 	return
 }
 
-func (self *ContractTest) init(contract_addr common.Address, t *tests.TestCtx, cfg chain_config.ChainConfig) {
+func (self *ContractTest) init(contract_addr common.Address, contract_abi string, t *tests.TestCtx, cfg chain_config.ChainConfig) {
 	self.tc = t
 	self.Chain_cfg = cfg
 
@@ -64,7 +59,7 @@ func (self *ContractTest) init(contract_addr common.Address, t *tests.TestCtx, c
 
 	self.St = self.SUT.GetStateTransition()
 	self.contract_addr = contract_addr
-	self.abi, _ = abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
+	self.abi, _ = abi.JSON(strings.NewReader(contract_abi))
 }
 
 func (self *ContractTest) execute(from common.Address, value *big.Int, input []byte) vm.ExecutionResult {
@@ -86,6 +81,7 @@ func (self *ContractTest) execute(from common.Address, value *big.Int, input []b
 
 	self.St.EndBlock()
 	self.St.Commit()
+
 	return res
 }
 
@@ -159,13 +155,4 @@ func (self *ContractTest) Unpack(v interface{}, name string, output []byte) erro
 		self.tc.FailNow()
 	}
 	return err
-}
-
-func GenerateKeyPair() (pubkey []byte, privkey *ecdsa.PrivateKey) {
-	privkey, err := ecdsa.GenerateKey(btcec.S256(), rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	pubkey = elliptic.Marshal(btcec.S256(), privkey.X, privkey.Y)
-	return
 }

@@ -4,7 +4,7 @@ import (
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/core"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -48,7 +48,7 @@ type GenesisValidator struct {
 	Delegations core.BalanceMap
 }
 
-func (self *GenesisValidator) gen_register_validator_args() (vi sol.RegisterValidatorArgs) {
+func (self *GenesisValidator) gen_register_validator_args() (vi dpos_sol.RegisterValidatorArgs) {
 	vi.VrfKey = self.VrfKey
 	vi.Commission = self.Commission
 	vi.Description = self.Description

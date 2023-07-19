@@ -10,7 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/holiman/uint256"
 
