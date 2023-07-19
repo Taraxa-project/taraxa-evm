@@ -1,65 +1,96 @@
-// package slashing_tests
+package slashing_tests
 
-// import (
-// 	"math/big"
-// 	"testing"
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"math/big"
+	"testing"
 
-// 	"github.com/Taraxa-project/taraxa-evm/core/vm"
-// 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
-// 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
-// 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
-// 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
-// )
+	"github.com/Taraxa-project/taraxa-evm/common"
+	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
+	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
+	test_utils "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/tests"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
+)
 
-// // This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
-// var DelegatedEventHash = *keccak256.Hash([]byte("Delegated(address,address,uint256)"))
-// var UndelegatedEventHash = *keccak256.Hash([]byte("Undelegated(address,address,uint256)"))
-// var UndelegateConfirmedEventHash = *keccak256.Hash([]byte("UndelegateConfirmed(address,address,uint256)"))
-// var UndelegateCanceledEventHash = *keccak256.Hash([]byte("UndelegateCanceled(address,address,uint256)"))
-// var RedelegatedEventHash = *keccak256.Hash([]byte("Redelegated(address,address,address,uint256)"))
-// var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address,uint256)"))
-// var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address,uint256)"))
-// var CommissionSetEventHash = *keccak256.Hash([]byte("CommissionSet(address,uint16)"))
-// var ValidatorRegisteredEventHash = *keccak256.Hash([]byte("ValidatorRegistered(address)"))
-// var ValidatorInfoSetEventHash = *keccak256.Hash([]byte("ValidatorInfoSet(address)"))
+type IsJailedRet struct {
+	End bool
+}
 
-// type IsJailedRet struct {
-// 	End bool
-// }
+type GenesisBalances = map[common.Address]*big.Int
 
-// func TestCommitDoubleVotingProof(t *testing.T) {
-// 	_, test := init_test(t, CopyDefaultChainConfig())
-// 	defer test.end()
+var addr, addr_p = tests.Addr, tests.AddrP
 
-// 	validator1_owner := addr(1)
-// 	validator1_addr, validator1_proof := generateAddrAndProof()
+var (
+	TaraPrecision                      = big.NewInt(1e+18)
+	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
+	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
+	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
+	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
+	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
 
-// 	validator2_owner := addr(2)
-// 	validator2_addr, validator2_proof := generateAddrAndProof()
+	DefaultChainCfg = chain_config.ChainConfig{
+		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
+		DPOS: dpos.Config{
+			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
+			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
+			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
+			MinimumDeposit:              DefaultMinimumDeposit,
+			MaxBlockAuthorReward:        10,
+			DagProposersReward:          50,
+			CommissionChangeDelta:       0,
+			CommissionChangeFrequency:   0,
+			DelegationDelay:             2,
+			DelegationLockingPeriod:     4,
+			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
+			YieldPercentage:             20,
+		},
+	}
+)
 
-// 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-// 	test.CheckContractBalance(DefaultMinimumDeposit)
-// 	// Try to register same validator twice
-// 	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
-// 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
-// 	// Try to register with not enough balance
-// 	test.ExecuteAndCheck(validator2_owner, bigutil.Add(DefaultBalance, big.NewInt(1)), test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), vm.ErrInsufficientBalanceForTransfer)
-// 	// Try to register with wrong proof
-// 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.pack("registerValidator", validator1_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrWrongProof, util.ErrorString(""))
-// }
+func generateKeyPair() (pubkey, privkey []byte) {
+	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	pubkey = elliptic.Marshal(secp256k1.S256(), key.X, key.Y)
 
-// // func TestProof(t *testing.T) {
-// // 	pubkey, seckey := generateKeyPair()
-// // 	addr := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
-// // 	proof, _ := sign(addr.Hash().Bytes(), seckey)
-// // 	pubkey2, err := crypto.Ecrecover(addr.Hash().Bytes(), append(proof[:64], proof[64]-27))
-// // 	if err != nil {
-// // 		t.Errorf(err.Error())
-// // 	}
-// // 	if !bytes.Equal(pubkey, pubkey2) {
-// // 		t.Errorf("pubkey mismatch: want: %x have: %x", pubkey, pubkey2)
-// // 	}
-// // 	if common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:]) != addr {
-// // 		t.Errorf("pubkey mismatch: want: %x have: %x", addr, addr)
-// // 	}
-// // }
+	privkey = make([]byte, 32)
+	blob := key.D.Bytes()
+	copy(privkey[32-len(blob):], blob)
+
+	return pubkey, privkey
+}
+
+func TestCommitDoubleVotingProof(t *testing.T) {
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	_, seckey := generateKeyPair()
+	//pubkey, seckey := generateKeyPair()
+	//vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+
+	var vote slashing.Vote
+	vote.BlockHash = common.Hash{0x1}
+	vote.VrfSortition.Period = 10
+	vote.VrfSortition.Round = 20
+	vote.VrfSortition.Step = 30
+	vote.VrfSortition.Proof = [80]byte{1, 2, 3}
+
+	// Sign vote
+	sig, err := secp256k1.Sign(keccak256.Hash(vote.GetVoteRlp(false)).Bytes(), seckey)
+	tc.Assert.True(err == nil)
+
+	copy(vote.Signature[:], sig)
+
+	author := addr(1)
+	test.ExecuteAndCheck(author, big.NewInt(0), test.Pack("commitDoubleVotingProof", author, vote.GetVoteRlp(true), vote.GetVoteRlp(true)), util.ErrorString(""), util.ErrorString(""))
+}

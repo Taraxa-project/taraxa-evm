@@ -12,7 +12,7 @@
 //		 3. a) remove generated file `rm DposInterface.abi`
 // 		    b) remove generated file `rm dpos_contract_interface.go`
 
-package sol
+package slashing_sol
 
 import (
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -31,9 +31,9 @@ var TaraxaSlashingClientMetaData = "[{\"anonymous\":false,\"inputs\":[{\"indexed
 // !!! Important: arguments names inside "<...>Args" structs must match args names from solidity interface, otherwise it won't work
 
 type CommitDoubleVotingProofArgs struct {
-	Validator common.Address
-	Vote1     []byte
-	Vote2     []byte
+	Author common.Address // Author of the proof
+	Vote1  []byte
+	Vote2  []byte
 }
 
 type IsJailedArgs struct {

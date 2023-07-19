@@ -12,7 +12,7 @@
 //		 3. a) remove generated file `rm DposInterface.abi`
 // 		    b) remove generated file `rm dpos_contract_interface.go`
 
-package sol
+package dpos_sol
 
 import (
 	"math/big"

@@ -3,6 +3,8 @@ package dpos_tests
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"strings"
@@ -17,7 +19,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	test_utils "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/tests"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -43,12 +45,12 @@ var ValidatorRegisteredEventHash = *keccak256.Hash([]byte("ValidatorRegistered(a
 var ValidatorInfoSetEventHash = *keccak256.Hash([]byte("ValidatorInfoSet(address)"))
 
 type GetUndelegationsRet struct {
-	Undelegations []sol.DposInterfaceUndelegationData
+	Undelegations []dpos_sol.DposInterfaceUndelegationData
 	End           bool
 }
 
 type GetValidatorsRet struct {
-	Validators []sol.DposInterfaceValidatorData
+	Validators []dpos_sol.DposInterfaceValidatorData
 	End        bool
 }
 
@@ -57,19 +59,17 @@ type GetTotalDelegationRet struct {
 }
 
 type GetDelegationsRet struct {
-	Delegations []sol.DposInterfaceDelegationData
+	Delegations []dpos_sol.DposInterfaceDelegationData
 	End         bool
 }
 
 type GetValidatorRet struct {
-	ValidatorInfo sol.DposInterfaceValidatorBasicInfo
+	ValidatorInfo dpos_sol.DposInterfaceValidatorBasicInfo
 }
 
 type ClaimAllRewardsRet struct {
 	End bool
 }
-
-type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
 
@@ -83,6 +83,8 @@ type DposTest struct {
 	dpos_addr common.Address
 	abi       abi.ABI
 }
+
+type GenesisBalances = map[common.Address]*big.Int
 
 var (
 	TaraPrecision                      = big.NewInt(1e+18)
@@ -139,8 +141,17 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 	return new_cfg
 }
 
+func GenerateKeyPair() (pubkey []byte, privkey *ecdsa.PrivateKey) {
+	privkey, err := ecdsa.GenerateKey(btcec.S256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	pubkey = elliptic.Marshal(btcec.S256(), privkey.X, privkey.Y)
+	return
+}
+
 func generateAddrAndProof() (addr common.Address, proof []byte) {
-	pubkey, seckey := test_utils.GenerateKeyPair()
+	pubkey, seckey := GenerateKeyPair()
 	addr = common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
 	proof, _ = sign(keccak256.Hash(addr.Bytes()).Bytes(), seckey)
 	return
@@ -181,7 +192,7 @@ func NewRewardsStats(author *common.Address) rewards_stats.RewardsStats {
 }
 
 func TestProof(t *testing.T) {
-	pubkey, seckey := test_utils.GenerateKeyPair()
+	pubkey, seckey := GenerateKeyPair()
 	addr := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
 	proof, _ := sign(addr.Hash().Bytes(), seckey)
 	pubkey2, err := crypto.Ecrecover(addr.Hash().Bytes(), append(proof[:64], proof[64]-27))
@@ -197,7 +208,7 @@ func TestProof(t *testing.T) {
 }
 
 func TestRegisterValidator(t *testing.T) {
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	validator1_owner := addr(1)
@@ -218,7 +229,7 @@ func TestRegisterValidator(t *testing.T) {
 }
 
 func TestDelegate(t *testing.T) {
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -232,7 +243,7 @@ func TestDelegate(t *testing.T) {
 }
 
 func TestDelegateMinMax(t *testing.T) {
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_addr, proof := generateAddrAndProof()
@@ -253,7 +264,7 @@ func TestDelegateMinMax(t *testing.T) {
 }
 
 func TestRedelegate(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	validator1_owner := addr(1)
@@ -304,7 +315,7 @@ func TestRedelegate(t *testing.T) {
 }
 
 func TestRedelegateMinMax(t *testing.T) {
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	validator1_addr, validator1_proof := generateAddrAndProof()
@@ -331,7 +342,7 @@ func TestRedelegateMinMax(t *testing.T) {
 	test.CheckContractBalance(totalBalance)
 }
 func TestUndelegate(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
@@ -364,7 +375,7 @@ func TestUndelegate(t *testing.T) {
 }
 
 func TestConfirmUndelegate(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	tc, test := init_test(t, cfg)
@@ -545,7 +556,7 @@ func TestConfirmUndelegate(t *testing.T) {
 }
 
 func TestCancelUndelegate(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -597,7 +608,7 @@ func TestCancelUndelegate(t *testing.T) {
 }
 
 func TestUndelegateMin(t *testing.T) {
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_addr, proof := generateAddrAndProof()
@@ -610,7 +621,7 @@ func TestUndelegateMin(t *testing.T) {
 }
 
 func TestRewardsAndCommission(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	trxFee := bigutil.Div(TaraPrecision, big.NewInt(1000)) //  0.001 TARA
@@ -867,7 +878,7 @@ func TestClaimAllRewards(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.DPOS.MinimumDeposit = big.NewInt(0)
 
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 
 	total_stake := big.NewInt(0)
 
@@ -969,7 +980,7 @@ func TestGenesis(t *testing.T) {
 	}
 	accVoteCount := bigutil.Div(DefaultEligibilityBalanceThreshold, cfg.DPOS.VoteEligibilityBalanceStep)
 
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 
 	defer test.End()
 
@@ -985,7 +996,7 @@ func TestGenesis(t *testing.T) {
 }
 
 func TestSetValidatorInfo(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1031,7 +1042,7 @@ func TestSetCommission(t *testing.T) {
 	cfg.DPOS.CommissionChangeDelta = 5
 	cfg.DPOS.CommissionChangeFrequency = 4
 
-	_, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1083,7 +1094,7 @@ func TestGetValidators(t *testing.T) {
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	// Register validators
@@ -1165,7 +1176,7 @@ func TestGetValidatorsFor(t *testing.T) {
 	for _, validator := range gen_validators {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	// Register validators
@@ -1241,7 +1252,7 @@ func TestGetTotalDelegation(t *testing.T) {
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
 	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
 
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	// Register validators
@@ -1296,7 +1307,7 @@ func TestGetDelegations(t *testing.T) {
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
 	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
 
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	// Register validators
@@ -1392,7 +1403,7 @@ func TestGetUndelegations(t *testing.T) {
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
 	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
 
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, cfg)
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	// Register validators
@@ -1478,7 +1489,7 @@ func TestGetUndelegations(t *testing.T) {
 }
 
 func TestGetValidator(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1508,7 +1519,7 @@ func TestGetValidator(t *testing.T) {
 }
 
 func TestGetTotalEligibleVotesCount(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1568,7 +1579,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 }
 
 func TestGetValidatorEligibleVotesCount(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1599,7 +1610,7 @@ func TestGetValidatorEligibleVotesCount(t *testing.T) {
 }
 
 func TestIsValidatorEligible(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	val_owner := addr(1)
@@ -1631,7 +1642,7 @@ func TestIsValidatorEligible(t *testing.T) {
 }
 
 func TestIterableMapClass(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1702,7 +1713,7 @@ func TestIterableMapClass(t *testing.T) {
 }
 
 func TestValidatorsClass(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1817,7 +1828,7 @@ func TestHardfork(t *testing.T) {
 }
 
 func TestDelegationsClass(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1887,7 +1898,7 @@ func TestDelegationsClass(t *testing.T) {
 }
 
 func TestUndelegationsClass(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), t, CopyDefaultChainConfig())
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
@@ -1951,7 +1962,7 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 	tc := tests.NewTestCtx(t)
 	amount := big.NewInt(0)
 
-	Abi, _ := abi.JSON(strings.NewReader(sol.TaraxaDposClientMetaData))
+	Abi, _ := abi.JSON(strings.NewReader(dpos_sol.TaraxaDposClientMetaData))
 	logs := *new(dpos.Logs).Init(Abi.Events)
 
 	count := 0

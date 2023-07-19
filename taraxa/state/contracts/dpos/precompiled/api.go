@@ -3,6 +3,9 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/core"
+	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"

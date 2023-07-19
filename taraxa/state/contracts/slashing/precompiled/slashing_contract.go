@@ -2,10 +2,16 @@ package slashing
 
 import (
 	"fmt"
+	"log"
+	"strings"
 
+	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
+	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -30,16 +36,54 @@ const (
 
 // Contract methods error return values
 var (
-	ErrInsufficientBalance       = util.ErrorString("Insufficient balance")
-	ErrCallIsNotToplevel         = util.ErrorString("only top-level calls are allowed")
-	ErrWrongDoubleVotingProof    = util.ErrorString("Wrong double voting proof, validator address could not be recovered")
-	ErrExistingDoubleVotingProof = util.ErrorString("Existing double voting proof")
+	ErrInsufficientBalance         = util.ErrorString("Insufficient balance")
+	ErrCallIsNotToplevel           = util.ErrorString("only top-level calls are allowed")
+	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
+	ErrInvalidVotesValidator       = util.ErrorString("Votes validator differs")
+	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
+	ErrInvalidDoubleVotingProof    = util.ErrorString("Wrong double voting proof, validator address could not be recovered")
+	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
 )
 
 // Contract storage fields keys
 var (
 	field_jail_block = []byte{0}
 )
+
+type VrfPbftSortition struct {
+	Period uint64
+	Round  uint32
+	Step   uint32
+	Proof  [80]byte
+}
+
+// Gong representation of C++ vote structure used in consensus
+type Vote struct {
+	// Block hash
+	BlockHash common.Hash
+
+	// Vrf sortition
+	VrfSortition VrfPbftSortition
+
+	// Signature
+	Signature [65]byte
+}
+
+func (self *Vote) GetVoteRlp(include_sig bool) []byte {
+	rlp := rlp.MustEncodeToBytes(self)
+	if include_sig {
+		return rlp
+	}
+
+	return rlp[:len(rlp)-len(self.Signature)]
+}
+
+func NewVote(vote_rlp []byte) Vote {
+	var vote Vote
+	rlp.MustDecodeBytes(vote_rlp, &vote)
+
+	return vote
+}
 
 // Main contract class
 type Contract struct {
@@ -55,6 +99,7 @@ type Contract struct {
 func (self *Contract) Init(cfg Config, storage contract_storage.Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(slashing_contract_address, storage)
+	self.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
 	self.evm = evm
 	return self
 }
@@ -124,9 +169,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		// TODO: fix
-		//return method.Outputs.Pack(self.storage.IsJailed(&args.Validator))
-		return method.Outputs.Pack(false)
+		return method.Outputs.Pack(self.isJailed(args))
 	default:
 	}
 
@@ -136,50 +179,49 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args sol.CommitDoubleVotingProofArgs) error {
+	vote1 := NewVote(args.Vote1)
+	vote1_validator, err := validateVoteSig(vote1)
+	if err != nil {
+		return ErrInvalidVoteSignature
+	}
+
+	vote2 := NewVote(args.Vote2)
+	vote2_validator, err := validateVoteSig(vote2)
+	if err != nil {
+		return ErrInvalidVoteSignature
+	}
+
+	// Check if votes validator is the same address
+	if *vote1_validator != *vote2_validator {
+		return ErrInvalidDoubleVotingProof
+	}
+
+	// Validate votes period and round
+	if vote1.VrfSortition.Period != vote2.VrfSortition.Period || vote1.VrfSortition.Round != vote2.VrfSortition.Round {
+		return ErrInvalidVotesPeriodRoundStep
+	}
+
+	// TODO: Validates votes step
+
+	// TODO: save proof into db...
+
+	log.Println("vote1: ", vote1)
+	log.Println("vote2: ", vote2)
 
 	return nil
 }
 
-// func validateProof(proof []byte, validator *common.Address) error {
-// 	if len(proof) != 65 {
-// 		return ErrWrongProof
-// 	}
+func validateVoteSig(vote Vote) (*common.Address, error) {
+	// Do not use vote signature to calculate vote hash
+	pubKey, err := secp256k1.RecoverPubkey(keccak256.Hash(vote.GetVoteRlp(false)).Bytes(), vote.Signature[:])
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Make sure the public key is a valid one
-// 	pubKey, err := crypto.Ecrecover(keccak256.Hash(validator.Bytes()).Bytes(), append(proof[:64], proof[64]-27))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// the first byte of pubkey is bitcoin heritage
-// 	if common.BytesToAddress(keccak256.Hash(pubKey[1:])[12:]) != *validator {
-// 		return ErrWrongProof
-// 	}
-
-// 	return nil
-// }
+	return new(common.Address).SetBytes(keccak256.Hash(pubKey[1:])[12:]), nil
+}
 
 // Returns batch of delegations for specified delegator address
 func (self *Contract) isJailed(args sol.IsJailedArgs) bool {
-	// delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetDelegationsMaxCount)
-
 	return false
 }
-
-// func (self *Contract) state_get(validator_addr, block []byte) (state *State, key common.Hash) {
-// 	key = stor_k_2(field_state, validator_addr, block)
-// 	self.storage.Get(&key, func(bytes []byte) {
-// 		state = new(State)
-// 		rlp.MustDecodeBytes(bytes, state)
-// 	})
-// 	return
-// }
-
-// // Saves state object to storage
-// func (self *Contract) state_put(key *common.Hash, state *State) {
-// 	if state != nil {
-// 		self.storage.Put(key, rlp.MustEncodeToBytes(state))
-// 	} else {
-// 		self.storage.Put(key, nil)
-// 	}
-// }
