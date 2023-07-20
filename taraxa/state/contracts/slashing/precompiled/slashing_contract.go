@@ -193,15 +193,16 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
+	if *vote1_validator != args.Validator {
+		return ErrInvalidDoubleVotingProof
+	}
 
 	vote2 := NewVote(args.Vote2)
 	vote2_validator, err := validateVoteSig(vote2)
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
-
-	// Check if votes validator is the same address
-	if *vote1_validator != *vote2_validator {
+	if *vote2_validator != args.Validator {
 		return ErrInvalidDoubleVotingProof
 	}
 
