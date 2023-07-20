@@ -74,9 +74,8 @@ func TestCommitDoubleVotingProof(t *testing.T) {
 	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
 	defer test.End()
 
-	_, seckey := generateKeyPair()
-	//pubkey, seckey := generateKeyPair()
-	//vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	pubkey, seckey := generateKeyPair()
+	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
 
 	var vote slashing.Vote
 	vote.BlockHash = common.Hash{0x1}
@@ -91,6 +90,6 @@ func TestCommitDoubleVotingProof(t *testing.T) {
 
 	copy(vote.Signature[:], sig)
 
-	author := addr(1)
-	test.ExecuteAndCheck(author, big.NewInt(0), test.Pack("commitDoubleVotingProof", author, vote.GetVoteRlp(true), vote.GetVoteRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	proof_author := addr(1)
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote.GetVoteRlp(true), vote.GetVoteRlp(true)), util.ErrorString(""), util.ErrorString(""))
 }
