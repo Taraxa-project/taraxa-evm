@@ -1511,7 +1511,7 @@ func TestIterableMapClass(t *testing.T) {
 	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{evm_state})
 
 	iter_map_prefix := []byte{0}
-	iter_map := dpos.IterableMap{}
+	iter_map := contract_storage.AddressesIMap{}
 	iter_map.Init(&storage, iter_map_prefix)
 
 	acc1 := addr(1)
@@ -1523,7 +1523,7 @@ func TestIterableMapClass(t *testing.T) {
 	iter_map.CreateAccount(&acc1)
 	tc.Assert.Equal(uint32(1), iter_map.GetCount())
 	// Tries to create duplicate account
-	tc.Assert.PanicsWithValue("Account already exists", func() { iter_map.CreateAccount(&acc1) })
+	tc.Assert.PanicsWithValue("Item "+string(acc1.Bytes())+" already exists", func() { iter_map.CreateAccount(&acc1) })
 	tc.Assert.Equal(uint32(1), iter_map.GetCount())
 
 	iter_map.CreateAccount(&acc2)
@@ -1548,7 +1548,7 @@ func TestIterableMapClass(t *testing.T) {
 	// Tests RemoveAccount
 	iter_map.RemoveAccount(&acc2)
 	tc.Assert.Equal(uint32(3), iter_map.GetCount())
-	tc.Assert.PanicsWithValue("Account does not exist", func() { iter_map.RemoveAccount(&acc2) })
+	tc.Assert.PanicsWithValue("Item "+string(acc2.Bytes())+" does not exist", func() { iter_map.RemoveAccount(&acc2) })
 	tc.Assert.Equal(uint32(3), iter_map.GetCount())
 
 	// To optimize iterbale map removing, it is implement through swapping of the item to be deleted with the last item
