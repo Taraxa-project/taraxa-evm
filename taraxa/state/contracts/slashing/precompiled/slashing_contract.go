@@ -37,7 +37,6 @@ const (
 // Contract methods error return values
 var (
 	ErrInsufficientBalance         = util.ErrorString("Insufficient balance")
-	ErrCallIsNotToplevel           = util.ErrorString("only top-level calls are allowed")
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validator differs")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
@@ -47,7 +46,10 @@ var (
 
 // Contract storage fields keys
 var (
-	field_jail_block = []byte{0}
+	field_malicious_validators  = []byte{0}
+	field_validators_proofs     = []byte{1}
+	field_double_voting_proofs  = []byte{2}
+	field_validators_jail_block = []byte{3}
 )
 
 type VrfPbftSortition struct {
@@ -93,12 +95,23 @@ type Contract struct {
 	// ABI of the contract
 	Abi abi.ABI
 	evm *vm.EVM
+
+	// Iterable map of malicious validators
+	malicious_validators contract_storage.AddressesIMap
+
+	// validator address -> list of proof of his malicious behaviour
+	validators_proofs map[common.Address]*ProofsIMap
+
+	// Double voting malicious behaviour proofs
+	double_voting_proofs DoubleVotingProofs
 }
 
 // Initialize contract class
 func (self *Contract) Init(cfg Config, storage contract_storage.Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(slashing_contract_address, storage)
+	self.malicious_validators.Init(&self.storage, field_malicious_validators)
+	self.double_voting_proofs.Init(&self.storage, field_double_voting_proofs)
 	self.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
 	self.evm = evm
 	return self
@@ -141,10 +154,6 @@ func (self *Contract) CommitCall(readStorage Reader) {
 // This is called on each call to contract
 // It translates call and tries to execute them
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
-	if evm.GetDepth() != 0 {
-		return nil, ErrCallIsNotToplevel
-	}
-
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		return nil, err

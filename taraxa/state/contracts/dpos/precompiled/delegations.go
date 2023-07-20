@@ -23,7 +23,7 @@ type Delegation struct {
 type Delegations struct {
 	storage *contract_storage.StorageWrapper
 	// <delegator addres -> list of validators> as each delegator can delegate to multiple validators
-	delegators_validators map[common.Address]*IterableMap
+	delegators_validators map[common.Address]*contract_storage.AddressesIMap
 
 	delegations_field                  []byte
 	delegators_validators_field_prefix []byte
@@ -109,10 +109,10 @@ func (self *Delegations) GetDelegatorValidatorsAddresses(delegator_address *comm
 	return delegator_validators.GetAccounts(batch, count)
 }
 
-func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *IterableMap {
+func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *contract_storage.AddressesIMap {
 	delegator_validators, found := self.delegators_validators[*delegator_address]
 	if found == false {
-		delegator_validators = new(IterableMap)
+		delegator_validators = new(contract_storage.AddressesIMap)
 		delegator_validators_field := append(self.delegators_validators_field_prefix, delegator_address[:]...)
 		delegator_validators.Init(self.storage, delegator_validators_field)
 	}

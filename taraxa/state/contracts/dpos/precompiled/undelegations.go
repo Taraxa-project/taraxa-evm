@@ -21,7 +21,7 @@ type Undelegation struct {
 type Undelegations struct {
 	storage *contract_storage.StorageWrapper
 	// <delegator addres -> list of undelegations> as each delegator can undelegate multiple times
-	undelegations_map map[common.Address]*IterableMap
+	undelegations_map map[common.Address]*contract_storage.AddressesIMap
 
 	undelegations_field           []byte
 	delegator_undelegations_field []byte
@@ -90,10 +90,10 @@ func (self *Undelegations) GetDelegatorValidatorsAddresses(delegator_address *co
 }
 
 // Returns list of undelegations for given address
-func (self *Undelegations) getDelegatorUndelegationsList(delegator_address *common.Address) *IterableMap {
+func (self *Undelegations) getDelegatorUndelegationsList(delegator_address *common.Address) *contract_storage.AddressesIMap {
 	delegator_undelegations, found := self.undelegations_map[*delegator_address]
 	if !found {
-		delegator_undelegations = new(IterableMap)
+		delegator_undelegations = new(contract_storage.AddressesIMap)
 		delegator_undelegations_tmp := append(self.delegator_undelegations_field, delegator_address[:]...)
 		delegator_undelegations.Init(self.storage, delegator_undelegations_tmp)
 	}

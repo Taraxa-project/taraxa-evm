@@ -58,7 +58,7 @@ func (self *ValidatorRewards) Empty() bool {
 // think about all implementation details, but just calls functions on Validators type
 type Validators struct {
 	storage         *contract_storage.StorageWrapper
-	validators_list IterableMap
+	validators_list contract_storage.AddressesIMap
 
 	validator_field         []byte
 	validator_info_field    []byte
