@@ -71,13 +71,17 @@ type Vote struct {
 	Signature [65]byte
 }
 
-func (self *Vote) GetVoteRlp(include_sig bool) []byte {
+func (self *Vote) GetRlp(include_sig bool) []byte {
 	rlp := rlp.MustEncodeToBytes(self)
 	if include_sig {
 		return rlp
 	}
 
 	return rlp[:len(rlp)-len(self.Signature)]
+}
+
+func (self *Vote) GetHash() *common.Hash {
+	return keccak256.Hash(self.GetRlp(false))
 }
 
 func NewVote(vote_rlp []byte) Vote {
@@ -189,7 +193,21 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args sol.CommitDoubleVotingProofArgs) error {
 	vote1 := NewVote(args.Vote1)
-	vote1_validator, err := validateVoteSig(vote1)
+	vote1_hash := vote1.GetHash()
+
+	vote2 := NewVote(args.Vote2)
+	vote2_hash := vote2.GetHash()
+
+	// TODO: get tx hash
+	tx_hash := common.Hash{}
+
+	// Check for existing proof
+	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(&args.Validator, vote1_hash, vote2_hash)
+	if self.double_voting_proofs.ProofExists(proof_db_key) {
+		return ErrExistingDoubleVotingProof
+	}
+
+	vote1_validator, err := validateVoteSig(vote1_hash, vote1.Signature[:])
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
@@ -197,8 +215,7 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 		return ErrInvalidDoubleVotingProof
 	}
 
-	vote2 := NewVote(args.Vote2)
-	vote2_validator, err := validateVoteSig(vote2)
+	vote2_validator, err := validateVoteSig(vote2_hash, vote2.Signature[:])
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
@@ -213,7 +230,20 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 
 	// TODO: Validates votes step
 
-	// TODO: save proof into db...
+	// Save the actual proof
+	proof := DoubleVotingProof{&args.Author, block, vote1_hash, vote2_hash, &tx_hash}
+	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
+
+	// Assign proof db key to the specific malicious validator
+	validator_proofs := self.getValidatorProofsList(&args.Validator)
+	validator_proofs.CreateProof(DoubleVoting, proof_db_key)
+
+	// Add validator to the list of malicious validators
+	if !self.malicious_validators.AccountExists(&args.Validator) {
+		self.malicious_validators.CreateAccount(&args.Validator)
+	}
+
+	// TODO: Save jail block for the malicious validator
 
 	log.Println("vote1: ", vote1)
 	log.Println("vote2: ", vote2)
@@ -221,9 +251,20 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	return nil
 }
 
-func validateVoteSig(vote Vote) (*common.Address, error) {
+func (self *Contract) getValidatorProofsList(validator *common.Address) *ProofsIMap {
+	validator_proofs, found := self.validators_proofs[*validator]
+	if found == false {
+		validator_proofs = new(ProofsIMap)
+		validator_proofs_field := append(field_validators_proofs, validator[:]...)
+		validator_proofs.Init(&self.storage, validator_proofs_field)
+	}
+
+	return validator_proofs
+}
+
+func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address, error) {
 	// Do not use vote signature to calculate vote hash
-	pubKey, err := secp256k1.RecoverPubkey(keccak256.Hash(vote.GetVoteRlp(false)).Bytes(), vote.Signature[:])
+	pubKey, err := secp256k1.RecoverPubkey(vote_hash.Bytes(), signature)
 	if err != nil {
 		return nil, err
 	}

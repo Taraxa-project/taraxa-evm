@@ -4,6 +4,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type API struct {
@@ -12,7 +13,7 @@ type API struct {
 }
 
 type Config = struct {
-	JailTime uint32 // [number of blocks]
+	DoubleVotingJailTime uint64 // [number of blocks]
 }
 
 type ConfigWithBlock struct {
@@ -21,7 +22,7 @@ type ConfigWithBlock struct {
 }
 
 func (self *API) Init(cfg Config) *API {
-	//asserts.Holds(cfg.JailTime > 0)
+	asserts.Holds(cfg.DoubleVotingJailTime > 0)
 	self.cfg = cfg
 	return self
 }
