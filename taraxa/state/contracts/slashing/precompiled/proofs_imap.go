@@ -1,6 +1,7 @@
 package slashing
 
 import (
+	"github.com/Taraxa-project/taraxa-evm/common"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
@@ -16,7 +17,7 @@ const (
 )
 
 type ProofKey struct {
-	Key        []byte
+	DbKey      common.Hash
 	Proof_type ProofType
 }
 
@@ -31,17 +32,17 @@ func (self *ProofsIMap) Init(stor *contract_storage.StorageWrapper, prefix []byt
 }
 
 // Checks is proof exists in iterable map
-func (self *ProofsIMap) ProofExists(proof_type ProofType, key []byte) bool {
+func (self *ProofsIMap) ProofExists(proof_type ProofType, key *common.Hash) bool {
 	return self.proofs.ItemExists(createProofKey(proof_type, key))
 }
 
 // Creates proof from iterable map
-func (self *ProofsIMap) CreateProof(proof_type ProofType, key []byte) bool {
+func (self *ProofsIMap) CreateProof(proof_type ProofType, key *common.Hash) bool {
 	return self.proofs.CreateItem(createProofKey(proof_type, key))
 }
 
 // Removes proof from iterable map, returns number of left proofs in the iterbale map
-func (self *ProofsIMap) RemoveProof(proof_type ProofType, key []byte) uint32 {
+func (self *ProofsIMap) RemoveProof(proof_type ProofType, key *common.Hash) uint32 {
 	return self.proofs.RemoveItem(createProofKey(proof_type, key))
 }
 
@@ -56,7 +57,7 @@ func (self *ProofsIMap) GetProofs(batch uint32, count uint32) (result []ProofKey
 		// Remove last byte to get actual key
 		key := proof_key_bytes[:len(proof_key_bytes)-1]
 
-		result[idx] = ProofKey{key, proof_type}
+		result[idx] = ProofKey{common.BytesToHash(key), proof_type}
 	}
 
 	return
@@ -68,6 +69,6 @@ func (self *ProofsIMap) GetCount() (count uint32) {
 }
 
 // Proof key consists of key + proof type. Proof type is always last byte of proof key
-func createProofKey(proof_type ProofType, key []byte) []byte {
-	return append(key, byte(proof_type))
+func createProofKey(proof_type ProofType, key *common.Hash) []byte {
+	return append(key.Bytes(), byte(proof_type))
 }
