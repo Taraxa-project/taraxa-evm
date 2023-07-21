@@ -37,6 +37,10 @@ type CommitDoubleVotingProofArgs struct {
 	Vote2     []byte
 }
 
+type GetJailTimeArgs struct {
+	Validator common.Address
+}
+
 type IsJailedArgs struct {
 	Validator common.Address
 }

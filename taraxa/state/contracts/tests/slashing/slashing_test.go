@@ -53,6 +53,7 @@ var (
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
 		},
+		Slashing: slashing.Config{5},
 	}
 )
 
@@ -85,11 +86,11 @@ func TestCommitDoubleVotingProof(t *testing.T) {
 	vote.VrfSortition.Proof = [80]byte{1, 2, 3}
 
 	// Sign vote
-	sig, err := secp256k1.Sign(keccak256.Hash(vote.GetVoteRlp(false)).Bytes(), seckey)
+	sig, err := secp256k1.Sign(vote.GetHash().Bytes(), seckey)
 	tc.Assert.True(err == nil)
 
 	copy(vote.Signature[:], sig)
 
 	proof_author := addr(1)
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote.GetVoteRlp(true), vote.GetVoteRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote.GetRlp(true), vote.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
 }

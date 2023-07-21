@@ -38,8 +38,9 @@ const (
 var (
 	ErrInsufficientBalance         = util.ErrorString("Insufficient balance")
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
-	ErrInvalidVotesValidator       = util.ErrorString("Votes validator differs")
+	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differs")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
+	ErrInvalidVotesBlockHash       = util.ErrorString("Votes block hash is ok")
 	ErrInvalidDoubleVotingProof    = util.ErrorString("Wrong double voting proof, validator address could not be recovered")
 	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
 )
@@ -182,7 +183,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return method.Outputs.Pack(self.isJailed(args))
+		return method.Outputs.Pack(self.isJailed(evm.GetBlock().Number, args))
 	default:
 	}
 
@@ -197,6 +198,13 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 
 	vote2 := NewVote(args.Vote2)
 	vote2_hash := vote2.GetHash()
+
+	log.Println("vote1: ", vote1)
+	log.Println("vote2: ", vote2)
+
+	if vote1_hash == vote2_hash {
+		return ErrInvalidDoubleVotingProof
+	}
 
 	// TODO: get tx hash
 	tx_hash := common.Hash{}
@@ -224,13 +232,25 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	}
 
 	// Validate votes period and round
-	if vote1.VrfSortition.Period != vote2.VrfSortition.Period || vote1.VrfSortition.Round != vote2.VrfSortition.Round {
+	if vote1.VrfSortition.Period != vote2.VrfSortition.Period || vote1.VrfSortition.Round != vote2.VrfSortition.Round || vote1.VrfSortition.Step != vote2.VrfSortition.Step {
 		return ErrInvalidVotesPeriodRoundStep
 	}
 
-	// TODO: Validates votes step
+	// Check if votes have different votes block hash
+	if vote1.BlockHash == vote2.BlockHash {
+		return ErrInvalidVotesBlockHash
+	}
 
-	// Save the actual proof
+	// Validators can create 2 votes for each second finishing step - one for nullblockhash and one for some specific block
+	if vote1.VrfSortition.Step >= 5 && vote1.VrfSortition.Step%2 == 1 {
+		if vote1.BlockHash == common.ZeroHash && vote2.BlockHash != common.ZeroHash {
+			return ErrInvalidVotesBlockHash
+		} else if vote1.BlockHash != common.ZeroHash && vote2.BlockHash == common.ZeroHash {
+			return ErrInvalidVotesBlockHash
+		}
+	}
+
+	// Save the proof into db
 	proof := DoubleVotingProof{&args.Author, block, vote1_hash, vote2_hash, &tx_hash}
 	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
 
@@ -243,10 +263,8 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 		self.malicious_validators.CreateAccount(&args.Validator)
 	}
 
-	// TODO: Save jail block for the malicious validator
-
-	log.Println("vote1: ", vote1)
-	log.Println("vote2: ", vote2)
+	// Save jail block for the malicious validator
+	self.jailValidator(block, &args.Validator)
 
 	return nil
 }
@@ -272,7 +290,45 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 	return new(common.Address).SetBytes(keccak256.Hash(pubKey[1:])[12:]), nil
 }
 
-// Returns batch of delegations for specified delegator address
-func (self *Contract) isJailed(args sol.IsJailedArgs) bool {
+func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) {
+	jail_block := current_block + self.cfg.DoubleVotingJailTime
+
+	var currrent_jail_block *types.BlockNum
+	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
+	self.storage.Get(db_key, func(bytes []byte) {
+		currrent_jail_block = new(types.BlockNum)
+		rlp.MustDecodeBytes(bytes, currrent_jail_block)
+	})
+
+	// In case validator is already jailed, compound his jail time
+	if currrent_jail_block != nil && *currrent_jail_block+self.cfg.DoubleVotingJailTime > jail_block {
+		jail_block = *currrent_jail_block + self.cfg.DoubleVotingJailTime
+	}
+
+	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
+}
+
+// Return validator's jail time - block until he is jailed. 0 in case he was never jailed
+func (self *Contract) getJailTime(args sol.GetJailTimeArgs) types.BlockNum {
+	var currrent_jail_block *types.BlockNum
+	db_key := contract_storage.Stor_k_1(field_validators_jail_block, args.Validator.Bytes())
+	self.storage.Get(db_key, func(bytes []byte) {
+		currrent_jail_block = new(types.BlockNum)
+		rlp.MustDecodeBytes(bytes, currrent_jail_block)
+	})
+
+	if currrent_jail_block == nil {
+		return types.BlockNum(0)
+	}
+
+	return *currrent_jail_block
+}
+
+func (self *Contract) isJailed(block types.BlockNum, args sol.IsJailedArgs) bool {
+	jail_time := self.getJailTime(sol.GetJailTimeArgs{Validator: args.Validator})
+	if jail_time >= block {
+		return true
+	}
+
 	return false
 }
