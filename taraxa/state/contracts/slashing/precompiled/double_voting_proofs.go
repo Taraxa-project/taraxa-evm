@@ -4,18 +4,10 @@ import (
 	"bytes"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
-
-type DoubleVotingProof struct {
-	ProofAuthor *common.Address
-	Block       types.BlockNum
-	Vote1Hash   *common.Hash
-	Vote2Hash   *common.Hash
-	TxHash      *common.Hash // Tx hash with full proof
-}
 
 type DoubleVotingProofs struct {
 	storage      *contract_storage.StorageWrapper
@@ -56,15 +48,15 @@ func (self *DoubleVotingProofs) GenDoubleVotingProofDbKey(validator *common.Addr
 // 	return
 // }
 
-func (self *DoubleVotingProofs) SaveProof(db_key *common.Hash, proof *DoubleVotingProof) {
+func (self *DoubleVotingProofs) SaveProof(db_key *common.Hash, proof *slashing_sol.SlashingInterfaceDoubleVotingProof) {
 	self.storage.Put(db_key, rlp.MustEncodeToBytes(proof))
 	return
 }
 
-func (self *DoubleVotingProofs) GetProof(db_key *common.Hash) (proof *DoubleVotingProof) {
+func (self *DoubleVotingProofs) GetProof(db_key *common.Hash) (proof *slashing_sol.SlashingInterfaceDoubleVotingProof) {
 	// TODO: any way how to check for existence withou copying the bytes ???
 	self.storage.Get(db_key, func(bytes []byte) {
-		proof = new(DoubleVotingProof)
+		proof = new(slashing_sol.SlashingInterfaceDoubleVotingProof)
 		rlp.MustDecodeBytes(bytes, proof)
 	})
 

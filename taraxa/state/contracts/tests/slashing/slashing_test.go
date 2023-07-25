@@ -57,6 +57,18 @@ var (
 	}
 )
 
+var DefaultVote = slashing.Vote{BlockHash: common.Hash{0x1}, VrfSortition: slashing.VrfPbftSortition{Period: 10, Round: 20, Step: 30, Proof: [80]byte{1, 2, 3}}}
+
+func signVote(vote *slashing.Vote, private_key []byte) {
+	// Sign vote
+	sig, err := secp256k1.Sign(vote.GetHash().Bytes(), private_key)
+	if err != nil {
+		panic("Unable to sign vote")
+	}
+
+	copy(vote.Signature[:], sig)
+}
+
 func generateKeyPair() (pubkey, privkey []byte) {
 	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
 	if err != nil {
@@ -71,26 +83,113 @@ func generateKeyPair() (pubkey, privkey []byte) {
 	return pubkey, privkey
 }
 
-func TestCommitDoubleVotingProof(t *testing.T) {
+func TestDoubleVotingSameVotesHashes(t *testing.T) {
 	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
 	defer test.End()
 
-	pubkey, seckey := generateKeyPair()
+	pubkey, privkey := generateKeyPair()
 	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
-
-	var vote slashing.Vote
-	vote.BlockHash = common.Hash{0x1}
-	vote.VrfSortition.Period = 10
-	vote.VrfSortition.Round = 20
-	vote.VrfSortition.Step = 30
-	vote.VrfSortition.Proof = [80]byte{1, 2, 3}
+	vote := DefaultVote
+	signVote(&vote, privkey)
 
 	// Sign vote
-	sig, err := secp256k1.Sign(vote.GetHash().Bytes(), seckey)
+	sig, err := secp256k1.Sign(vote.GetHash().Bytes(), privkey)
 	tc.Assert.True(err == nil)
 
 	copy(vote.Signature[:], sig)
 
 	proof_author := addr(1)
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote.GetRlp(true), vote.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	// Same vote hash err
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote.GetRlp(true), vote.GetRlp(true)), slashing.ErrInvalidDoubleVotingProof, util.ErrorString(""))
+}
+
+func TestDoubleVotingExistingProof(t *testing.T) {
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	pubkey, privkey := generateKeyPair()
+	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey)
+
+	vote2 := DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+	signVote(&vote2, privkey)
+
+	proof_author := addr(1)
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	// Existing proof err
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
+}
+
+func TestDoubleVotingInvalidSig(t *testing.T) {
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	pubkey, _ := generateKeyPair()
+	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	vote1 := DefaultVote
+
+	vote2 := DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+
+	proof_author := addr(1)
+	// Existing proof err
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVoteSignature, util.ErrorString(""))
+}
+
+func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	pubkey, privkey := generateKeyPair()
+	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey)
+
+	vote2 := DefaultVote
+	vote2.VrfSortition.Period = vote1.VrfSortition.Period + 1
+	signVote(&vote2, privkey)
+
+	proof_author := addr(1)
+	// Existing invalid period
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+
+	vote1 = DefaultVote
+	vote1.VrfSortition.Round = 10
+	signVote(&vote1, privkey)
+
+	vote2 = DefaultVote
+	vote2.VrfSortition.Round = vote1.VrfSortition.Round + 1
+	signVote(&vote2, privkey)
+	// Existing invalid round
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+
+	vote1 = DefaultVote
+	vote1.VrfSortition.Step = 10
+	signVote(&vote1, privkey)
+
+	vote2 = DefaultVote
+	vote2.VrfSortition.Step = vote1.VrfSortition.Step + 1
+	signVote(&vote2, privkey)
+	// Existing invalid step
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+}
+
+func TestDoubleVotingInvalidBlockHash(t *testing.T) {
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	pubkey, privkey := generateKeyPair()
+	malicious_vote_author := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey)
+
+	vote2 := DefaultVote
+	vote2.VrfSortition.Proof = [80]byte{4, 5, 6}
+	signVote(&vote2, privkey)
+
+	proof_author := addr(1)
+	// Existing proof err
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
 }

@@ -1,14 +1,14 @@
 package slashing
 
 import (
+	"bytes"
 	"fmt"
-	"log"
+	"math/big"
 	"strings"
 
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
@@ -31,6 +31,8 @@ func ContractAddress() common.Address {
 const (
 	CommitDoubleVotingProofGas uint64 = 20000
 	IsJailedGas                uint64 = 5000
+	getJailInfoGas             uint64 = 5000
+	SlashingGetMethodGas       uint64 = 5000
 	DefaultSlashingMethodGas   uint64 = 5000
 )
 
@@ -41,7 +43,7 @@ var (
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differs")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
 	ErrInvalidVotesBlockHash       = util.ErrorString("Votes block hash is ok")
-	ErrInvalidDoubleVotingProof    = util.ErrorString("Wrong double voting proof, validator address could not be recovered")
+	ErrInvalidDoubleVotingProof    = util.ErrorString("Invalid double voting proof")
 	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
 )
 
@@ -145,6 +147,22 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return CommitDoubleVotingProofGas
 	case "isJailed":
 		return IsJailedGas
+	case "getJailInfo":
+		return getJailInfoGas
+	case "getMaliciousValidators":
+		validators_count := uint64(self.malicious_validators.GetCount())
+		return validators_count * SlashingGetMethodGas
+	case "getDoubleVotingProofs":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args slashing_sol.ValidatorArg
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		proofs_count := uint64(self.getValidatorProofsList(&args.Validator).GetCount())
+		return proofs_count * SlashingGetMethodGas
 	default:
 	}
 
@@ -169,21 +187,43 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	switch method.Name {
 	case "commitDoubleVotingProof":
-		var args sol.CommitDoubleVotingProofArgs
+		var args slashing_sol.CommitDoubleVotingProofArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse commitDoubleVotingProof input args: ", err)
 			return nil, err
 		}
 
 		return nil, self.commitDoubleVotingProof(ctx, evm.GetBlock().Number, args)
+
 	case "isJailed":
-		var args sol.IsJailedArgs
+		var args slashing_sol.ValidatorArg
 		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse IsJailed input args: ", err)
+			fmt.Println("Unable to parse isJailed input args: ", err)
 			return nil, err
 		}
 
 		return method.Outputs.Pack(self.isJailed(evm.GetBlock().Number, args))
+
+	case "getJailInfo":
+		var args slashing_sol.ValidatorArg
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getJailInfo input args: ", err)
+			return nil, err
+		}
+
+		return method.Outputs.Pack(self.getJailInfo(evm.GetBlock().Number, &args.Validator, true))
+
+	case "getMaliciousValidators":
+		return method.Outputs.Pack(self.getMaliciousValidators(evm.GetBlock().Number))
+
+	case "getDoubleVotingProofs":
+		var args slashing_sol.ValidatorArg
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getDoubleVotingProofs input args: ", err)
+			return nil, err
+		}
+
+		return method.Outputs.Pack(self.getDoubleVotingProofs(args))
 	default:
 	}
 
@@ -192,17 +232,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
-func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args sol.CommitDoubleVotingProofArgs) error {
+func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args slashing_sol.CommitDoubleVotingProofArgs) error {
 	vote1 := NewVote(args.Vote1)
 	vote1_hash := vote1.GetHash()
 
 	vote2 := NewVote(args.Vote2)
 	vote2_hash := vote2.GetHash()
 
-	log.Println("vote1: ", vote1)
-	log.Println("vote2: ", vote2)
-
-	if vote1_hash == vote2_hash {
+	if bytes.Compare(vote1_hash.Bytes(), vote2_hash.Bytes()) == 0 {
 		return ErrInvalidDoubleVotingProof
 	}
 
@@ -219,7 +256,7 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
-	if *vote1_validator != args.Validator {
+	if bytes.Compare(vote1_validator.Bytes(), args.Validator.Bytes()) != 0 {
 		return ErrInvalidDoubleVotingProof
 	}
 
@@ -227,7 +264,7 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
-	if *vote2_validator != args.Validator {
+	if bytes.Compare(vote2_validator.Bytes(), args.Validator.Bytes()) != 0 {
 		return ErrInvalidDoubleVotingProof
 	}
 
@@ -236,22 +273,23 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 		return ErrInvalidVotesPeriodRoundStep
 	}
 
-	// Check if votes have different votes block hash
-	if vote1.BlockHash == vote2.BlockHash {
+	// Validate voted blocks hashes
+	if bytes.Compare(vote1.BlockHash.Bytes(), vote2.BlockHash.Bytes()) == 0 {
 		return ErrInvalidVotesBlockHash
 	}
 
 	// Validators can create 2 votes for each second finishing step - one for nullblockhash and one for some specific block
 	if vote1.VrfSortition.Step >= 5 && vote1.VrfSortition.Step%2 == 1 {
-		if vote1.BlockHash == common.ZeroHash && vote2.BlockHash != common.ZeroHash {
-			return ErrInvalidVotesBlockHash
-		} else if vote1.BlockHash != common.ZeroHash && vote2.BlockHash == common.ZeroHash {
+		vote1_is_zero_hash := bytes.Compare(vote1.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
+		vote2_is_zero_hash := bytes.Compare(vote2.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
+
+		if (vote1_is_zero_hash && !vote2_is_zero_hash) || (!vote1_is_zero_hash && vote2_is_zero_hash) {
 			return ErrInvalidVotesBlockHash
 		}
 	}
 
 	// Save the proof into db
-	proof := DoubleVotingProof{&args.Author, block, vote1_hash, vote2_hash, &tx_hash}
+	proof := slashing_sol.SlashingInterfaceDoubleVotingProof{args.ProofAuthor, big.NewInt(int64(block)), vote1_hash.Hex(), vote2_hash.Hex(), tx_hash.Hex()}
 	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
 
 	// Assign proof db key to the specific malicious validator
@@ -309,26 +347,70 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 }
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
-func (self *Contract) getJailTime(args sol.GetJailTimeArgs) types.BlockNum {
+func (self *Contract) getJailInfo(block types.BlockNum, validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
 	var currrent_jail_block *types.BlockNum
-	db_key := contract_storage.Stor_k_1(field_validators_jail_block, args.Validator.Bytes())
+	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
 	self.storage.Get(db_key, func(bytes []byte) {
 		currrent_jail_block = new(types.BlockNum)
 		rlp.MustDecodeBytes(bytes, currrent_jail_block)
 	})
 
 	if currrent_jail_block == nil {
-		return types.BlockNum(0)
+		ret.JailBlock = big.NewInt(0)
+		ret.IsJailed = false
+		ret.ProofsCount = 0
+		return
 	}
 
-	return *currrent_jail_block
+	ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
+	if *currrent_jail_block >= block {
+		ret.IsJailed = true
+	} else {
+		ret.IsJailed = false
+	}
+
+	if get_proofs_count == false {
+		ret.ProofsCount = 0
+	} else {
+		ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
+	}
+
+	return
 }
 
-func (self *Contract) isJailed(block types.BlockNum, args sol.IsJailedArgs) bool {
-	jail_time := self.getJailTime(sol.GetJailTimeArgs{Validator: args.Validator})
-	if jail_time >= block {
-		return true
+func (self *Contract) isJailed(block types.BlockNum, args slashing_sol.ValidatorArg) bool {
+	return self.getJailInfo(block, &args.Validator, false).IsJailed
+}
+
+func (self *Contract) getMaliciousValidators(block types.BlockNum) (ret []slashing_sol.SlashingInterfaceMaliciousValidator) {
+	malicious_validators, _ := self.malicious_validators.GetAccounts(0, self.malicious_validators.GetCount())
+
+	// Reserve slice capacity
+	ret = make([]slashing_sol.SlashingInterfaceMaliciousValidator, 0, len(malicious_validators))
+
+	for idx, validator_address := range malicious_validators {
+		ret[idx] = slashing_sol.SlashingInterfaceMaliciousValidator{Validator: validator_address, JailInfo: self.getJailInfo(block, &validator_address, true)}
 	}
 
-	return false
+	return
+}
+
+func (self *Contract) getDoubleVotingProofs(args slashing_sol.ValidatorArg) (ret []slashing_sol.SlashingInterfaceDoubleVotingProof) {
+	validator_proofs_list := self.getValidatorProofsList(&args.Validator)
+
+	proofs_keys, _ := validator_proofs_list.GetProofs(0, validator_proofs_list.GetCount())
+
+	// Reserve slice capacity
+	ret = make([]slashing_sol.SlashingInterfaceDoubleVotingProof, 0, 0)
+
+	for _, proof_key := range proofs_keys {
+		if proof_key.Proof_type != DoubleVoting {
+			continue
+		}
+
+		proof := self.double_voting_proofs.GetProof(&proof_key.DbKey)
+		ret = append(ret, *proof)
+	}
+
+	return
 }
