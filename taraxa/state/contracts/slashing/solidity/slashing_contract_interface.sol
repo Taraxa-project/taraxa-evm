@@ -34,7 +34,7 @@ interface SlashingInterface {
      *
      * @param validator validator's address
      **/
-    function getJailInfo(address validator) external view returns (uint256);
+    function getJailInfo(address validator) external view returns (JailInfo memory info);
 
     struct MaliciousValidator {
         address validator;
@@ -49,7 +49,7 @@ interface SlashingInterface {
     function getMaliciousValidators()
         external
         view
-        returns (MaliciousValidator[] memory validators);
+        returns (MaliciousValidator[] memory);
 
     struct DoubleVotingProof {
         address proof_author; // author of the proof
@@ -68,5 +68,5 @@ interface SlashingInterface {
     function getDoubleVotingProofs(address validator)
         external
         view
-        returns (DoubleVotingProof[] memory proofs);
+        returns (DoubleVotingProof[] memory);
 }
