@@ -38,11 +38,10 @@ const (
 
 // Contract methods error return values
 var (
-	ErrInsufficientBalance         = util.ErrorString("Insufficient balance")
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differs")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
-	ErrInvalidVotesBlockHash       = util.ErrorString("Votes block hash is ok")
+	ErrInvalidVotesBlockHash       = util.ErrorString("Invalid votes block hash")
 	ErrInvalidDoubleVotingProof    = util.ErrorString("Invalid double voting proof")
 	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
 )
@@ -386,7 +385,7 @@ func (self *Contract) getMaliciousValidators(block types.BlockNum) (ret []slashi
 	malicious_validators, _ := self.malicious_validators.GetAccounts(0, self.malicious_validators.GetCount())
 
 	// Reserve slice capacity
-	ret = make([]slashing_sol.SlashingInterfaceMaliciousValidator, 0, len(malicious_validators))
+	ret = make([]slashing_sol.SlashingInterfaceMaliciousValidator, len(malicious_validators))
 
 	for idx, validator_address := range malicious_validators {
 		ret[idx] = slashing_sol.SlashingInterfaceMaliciousValidator{Validator: validator_address, JailInfo: self.getJailInfo(block, &validator_address, true)}
@@ -401,7 +400,7 @@ func (self *Contract) getDoubleVotingProofs(args slashing_sol.ValidatorArg) (ret
 	proofs_keys, _ := validator_proofs_list.GetProofs(0, validator_proofs_list.GetCount())
 
 	// Reserve slice capacity
-	ret = make([]slashing_sol.SlashingInterfaceDoubleVotingProof, 0, 0)
+	ret = make([]slashing_sol.SlashingInterfaceDoubleVotingProof, 0)
 
 	for _, proof_key := range proofs_keys {
 		if proof_key.Proof_type != DoubleVoting {

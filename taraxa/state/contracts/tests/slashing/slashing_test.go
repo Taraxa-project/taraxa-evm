@@ -120,6 +120,9 @@ func TestDoubleVotingExistingProof(t *testing.T) {
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
 	// Existing proof err
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
+
+	// Existing proof err - change votes order
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote2.GetRlp(true), vote1.GetRlp(true)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
 }
 
 func TestDoubleVotingInvalidSig(t *testing.T) {
@@ -190,6 +193,230 @@ func TestDoubleVotingInvalidBlockHash(t *testing.T) {
 	signVote(&vote2, privkey)
 
 	proof_author := addr(1)
-	// Existing proof err
+	// Invalid block hash err
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+
+	vote1 = DefaultVote
+	vote1.VrfSortition.Step = 5
+	vote2.BlockHash = common.Hash{0x1}
+	signVote(&vote1, privkey)
+
+	vote2 = DefaultVote
+	vote2.VrfSortition.Step = 5
+	vote2.BlockHash = common.ZeroHash
+	signVote(&vote2, privkey)
+
+	// Invalid block hash err - second finish step, 1 specific block + 1 null block hash is allowed
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+
+	vote1 = DefaultVote
+	vote1.VrfSortition.Step = 5
+	vote1.BlockHash = common.ZeroHash
+	signVote(&vote1, privkey)
+
+	vote2 = DefaultVote
+	vote2.VrfSortition.Step = 5
+	vote2.BlockHash = common.Hash{0x1}
+	signVote(&vote2, privkey)
+
+	// Invalid block hash err - second finish step, 1 specific block + 1 null block hash is allowed
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author, vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+}
+
+func TestIsJailed(t *testing.T) {
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	proof_author := addr(1)
+
+	pubkey1, privkey1 := generateKeyPair()
+	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey1)
+
+	vote2 := DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+	signVote(&vote2, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author1, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed := new(bool)
+	test.Unpack(result_parsed, "isJailed", result.CodeRetval)
+	tc.Assert.Equal(true, *result_parsed)
+
+	// Advance couple of blocks and check if IsJailed flag is set to false
+	for idx := uint64(0); idx < DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
+		test.AdvanceBlock(nil, nil, nil)
+	}
+
+	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed = new(bool)
+	test.Unpack(result_parsed, "isJailed", result.CodeRetval)
+	tc.Assert.Equal(false, *result_parsed)
+}
+
+func TestGetJailInfo(t *testing.T) {
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	proof_author := addr(1)
+
+	pubkey1, privkey1 := generateKeyPair()
+	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey1)
+
+	vote2 := DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+	signVote(&vote2, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author1, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	type GetJailInfoRet struct {
+		Info slashing_sol.SlashingInterfaceJailInfo
+	}
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailInfo", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed := new(GetJailInfoRet)
+	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
+
+	tc.Assert.Equal(true, result_parsed.Info.IsJailed)
+	tc.Assert.Equal(uint32(1), result_parsed.Info.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
+
+	// Test cumulative jail time - commit another double voting proof
+	vote1 = DefaultVote
+	signVote(&vote1, privkey1)
+
+	vote2 = DefaultVote
+	vote2.BlockHash = common.Hash{0x3}
+	signVote(&vote2, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author1, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailInfo", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed = new(GetJailInfoRet)
+	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
+
+	tc.Assert.Equal(true, result_parsed.Info.IsJailed)
+	tc.Assert.Equal(uint32(2), result_parsed.Info.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
+
+	// Advance couple of blocks and check if IsJailed flag is set to false
+	for idx := uint64(0); idx < 2*DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
+		test.AdvanceBlock(nil, nil, nil)
+	}
+
+	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailInfo", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed = new(GetJailInfoRet)
+	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
+
+	tc.Assert.Equal(false, result_parsed.Info.IsJailed)
+	tc.Assert.Equal(uint32(2), result_parsed.Info.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
+}
+
+func TestMaliciousValidatorsList(t *testing.T) {
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	proof_author := addr(1)
+
+	pubkey1, privkey1 := generateKeyPair()
+	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
+	vote1 := DefaultVote
+	signVote(&vote1, privkey1)
+
+	vote2 := DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+	signVote(&vote2, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author1, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	pubkey2, privkey2 := generateKeyPair()
+	malicious_vote_author2 := common.BytesToAddress(keccak256.Hash(pubkey2[1:])[12:])
+	vote1 = DefaultVote
+	signVote(&vote1, privkey2)
+
+	vote2 = DefaultVote
+	vote2.BlockHash = common.Hash{0x2}
+	signVote(&vote2, privkey2)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author2, vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getMaliciousValidators"), util.ErrorString(""), util.ErrorString(""))
+	result_parsed := []slashing_sol.SlashingInterfaceMaliciousValidator{}
+	test.Unpack(&result_parsed, "getMaliciousValidators", result.CodeRetval)
+	tc.Assert.Equal(2, len(result_parsed))
+
+	tc.Assert.Equal(malicious_vote_author1.Bytes(), result_parsed[0].Validator.Bytes())
+	tc.Assert.Equal(true, result_parsed[0].JailInfo.IsJailed)
+	tc.Assert.Equal(uint32(1), result_parsed[0].JailInfo.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[0].JailInfo.JailBlock)
+
+	tc.Assert.Equal(malicious_vote_author2.Bytes(), result_parsed[1].Validator.Bytes())
+	tc.Assert.Equal(true, result_parsed[1].JailInfo.IsJailed)
+	tc.Assert.Equal(uint32(1), result_parsed[1].JailInfo.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[1].JailInfo.JailBlock)
+
+	// Advance couple of blocks and check if IsJailed flag is set to false
+	for idx := uint64(0); idx < DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
+		test.AdvanceBlock(nil, nil, nil)
+	}
+
+	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getMaliciousValidators"), util.ErrorString(""), util.ErrorString(""))
+	result_parsed = []slashing_sol.SlashingInterfaceMaliciousValidator{}
+	test.Unpack(&result_parsed, "getMaliciousValidators", result.CodeRetval)
+	tc.Assert.Equal(2, len(result_parsed))
+
+	tc.Assert.Equal(malicious_vote_author1.Bytes(), result_parsed[0].Validator.Bytes())
+	tc.Assert.Equal(false, result_parsed[0].JailInfo.IsJailed)
+	tc.Assert.Equal(uint32(1), result_parsed[0].JailInfo.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[0].JailInfo.JailBlock)
+
+	tc.Assert.Equal(malicious_vote_author2.Bytes(), result_parsed[1].Validator.Bytes())
+	tc.Assert.Equal(false, result_parsed[1].JailInfo.IsJailed)
+	tc.Assert.Equal(uint32(1), result_parsed[1].JailInfo.ProofsCount)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[1].JailInfo.JailBlock)
+}
+
+func TestDoubleVotingProofsList(t *testing.T) {
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	proof_author := addr(1)
+	pubkey1, privkey1 := generateKeyPair()
+	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
+
+	// Commit 3 double voting proofs
+	vote1 := DefaultVote
+	signVote(&vote1, privkey1)
+
+	votes_count := 3
+	votes := make([]slashing.Vote, votes_count)
+
+	for idx := 0; idx < votes_count; idx++ {
+		hash_bytes := make([]byte, 1)
+		hash_bytes[0] = byte(idx)
+
+		vote := DefaultVote
+		vote.BlockHash = common.BytesToHash(hash_bytes)
+		signVote(&vote, privkey1)
+		votes[idx] = vote
+
+		test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", proof_author, malicious_vote_author1, vote1.GetRlp(true), vote.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getDoubleVotingProofs", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	var result_parsed []slashing_sol.SlashingInterfaceDoubleVotingProof
+	test.Unpack(&result_parsed, "getDoubleVotingProofs", result.CodeRetval)
+	tc.Assert.Equal(3, len(result_parsed))
+
+	for idx := 0; idx < votes_count; idx++ {
+		tc.Assert.Equal(proof_author.Bytes(), result_parsed[idx].ProofAuthor.Bytes())
+		tc.Assert.Equal(vote1.GetHash().Bytes(), common.HexToHash(result_parsed[idx].Vote1Hash).Bytes())
+		tc.Assert.Equal(votes[idx].GetHash().Bytes(), common.HexToHash(result_parsed[idx].Vote2Hash).Bytes())
+		tc.Assert.Equal(big.NewInt(int64(idx)+1), result_parsed[idx].Block)
+	}
 }
