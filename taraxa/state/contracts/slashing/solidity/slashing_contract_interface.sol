@@ -10,8 +10,6 @@ interface SlashingInterface {
 
     // Commit double voting malicious behaviour proof
     function commitDoubleVotingProof(
-        address proof_author,    // proof author
-        address validator, // malicious validator
         bytes memory vote1,
         bytes memory vote2
     ) external;

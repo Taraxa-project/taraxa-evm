@@ -42,7 +42,7 @@ var (
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differs")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
 	ErrInvalidVotesBlockHash       = util.ErrorString("Invalid votes block hash")
-	ErrInvalidDoubleVotingProof    = util.ErrorString("Invalid double voting proof")
+	ErrIdenticalVotes              = util.ErrorString("Votes are identical")
 	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
 )
 
@@ -234,37 +234,33 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args slashing_sol.CommitDoubleVotingProofArgs) error {
 	vote1 := NewVote(args.Vote1)
 	vote1_hash := vote1.GetHash()
+	vote1_validator, err := validateVoteSig(vote1_hash, vote1.Signature[:])
+	if err != nil {
+		return ErrInvalidVoteSignature
+	}
 
 	vote2 := NewVote(args.Vote2)
 	vote2_hash := vote2.GetHash()
+	vote2_validator, err := validateVoteSig(vote2_hash, vote2.Signature[:])
+	if err != nil {
+		return ErrInvalidVoteSignature
+	}
 
 	if bytes.Compare(vote1_hash.Bytes(), vote2_hash.Bytes()) == 0 {
-		return ErrInvalidDoubleVotingProof
+		return ErrIdenticalVotes
+	}
+
+	if bytes.Compare(vote1_validator.Bytes(), vote2_validator.Bytes()) != 0 {
+		return ErrInvalidVotesValidator
 	}
 
 	// TODO: get tx hash
 	tx_hash := common.Hash{}
 
 	// Check for existing proof
-	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(&args.Validator, vote1_hash, vote2_hash)
+	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(vote1_validator, vote1_hash, vote2_hash)
 	if self.double_voting_proofs.ProofExists(proof_db_key) {
 		return ErrExistingDoubleVotingProof
-	}
-
-	vote1_validator, err := validateVoteSig(vote1_hash, vote1.Signature[:])
-	if err != nil {
-		return ErrInvalidVoteSignature
-	}
-	if bytes.Compare(vote1_validator.Bytes(), args.Validator.Bytes()) != 0 {
-		return ErrInvalidDoubleVotingProof
-	}
-
-	vote2_validator, err := validateVoteSig(vote2_hash, vote2.Signature[:])
-	if err != nil {
-		return ErrInvalidVoteSignature
-	}
-	if bytes.Compare(vote2_validator.Bytes(), args.Validator.Bytes()) != 0 {
-		return ErrInvalidDoubleVotingProof
 	}
 
 	// Validate votes period and round
@@ -288,20 +284,20 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	}
 
 	// Save the proof into db
-	proof := slashing_sol.SlashingInterfaceDoubleVotingProof{args.ProofAuthor, big.NewInt(int64(block)), vote1_hash.Hex(), vote2_hash.Hex(), tx_hash.Hex()}
+	proof := slashing_sol.SlashingInterfaceDoubleVotingProof{*ctx.CallerAccount.Address(), big.NewInt(int64(block)), vote1_hash.Hex(), vote2_hash.Hex(), tx_hash.Hex()}
 	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
 
 	// Assign proof db key to the specific malicious validator
-	validator_proofs := self.getValidatorProofsList(&args.Validator)
+	validator_proofs := self.getValidatorProofsList(vote1_validator)
 	validator_proofs.CreateProof(DoubleVoting, proof_db_key)
 
 	// Add validator to the list of malicious validators
-	if !self.malicious_validators.AccountExists(&args.Validator) {
-		self.malicious_validators.CreateAccount(&args.Validator)
+	if !self.malicious_validators.AccountExists(vote1_validator) {
+		self.malicious_validators.CreateAccount(vote1_validator)
 	}
 
 	// Save jail block for the malicious validator
-	self.jailValidator(block, &args.Validator)
+	self.jailValidator(block, vote1_validator)
 
 	return nil
 }
