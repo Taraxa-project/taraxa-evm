@@ -23,6 +23,25 @@ import (
 	"github.com/holiman/uint256"
 )
 
+type ContractRef interface {
+	Address() *common.Address
+	Account() StateAccount
+}
+
+type ContractAccWrapper struct {
+	caller StateAccount
+}
+
+// Address returns the contracts address
+func (c ContractAccWrapper) Address() *common.Address {
+	return c.caller.Address()
+}
+
+// Address returns the contracts account
+func (c ContractAccWrapper) Account() StateAccount {
+	return c.caller
+}
+
 // Contract represents an ethereum contract in the state database. It contains
 // the contract code, calling arguments.
 type Contract struct {
@@ -94,4 +113,9 @@ func (self *Contract) UseGas(gas uint64) (ok bool) {
 // Address returns the contracts address
 func (c *Contract) Address() *common.Address {
 	return c.CallFrame.Account.Address()
+}
+
+// Address returns the contracts account
+func (c *Contract) Account() StateAccount {
+	return c.CallFrame.Account
 }

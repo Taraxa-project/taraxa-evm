@@ -222,7 +222,7 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 	} else {
 		acc_to := self.state.GetAccount(self.trx.To)
 		caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
-		ret.CodeRetval, gas_left, err = self.call(caller, acc_to, self.trx.Input, gas_left, self.trx.Value)
+		ret.CodeRetval, gas_left, err = self.Call(ContractAccWrapper{caller}, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
 		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
@@ -338,52 +338,76 @@ func (self *EVM) create(
 // parameters. It also handles any necessary value transfer required and takes
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
-func (self *EVM) call(caller, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, gas_left uint64, err error) {
+func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, gas_left uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
 	if self.depth > CallCreateDepth {
 		return nil, gas, ErrDepth
 	}
-	if value.Sign() == 0 {
-		if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
-			// Calling a non existing account, don't do anything, but ping the tracer
-			if self.vmConfig.Debug {
-				if self.depth == 0 {
-					self.vmConfig.Tracer.CaptureStart(self, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
-					self.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
-				} else {
-					self.vmConfig.Tracer.CaptureEnter(CALL, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
-					self.vmConfig.Tracer.CaptureExit(ret, 0, 0, nil)
-				}
-			}
-			return nil, gas, nil
-		}
-	} else if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller, value) {
-		return nil, gas, ErrInsufficientBalanceForTransfer
-	}
-	snapshot := self.state.Snapshot()
-	self.transfer(caller, callee, value)
-	return self.call_end(CALL, CallFrame{caller, callee, input, gas, value}, callee, snapshot, false)
-}
 
-func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, snapshot int, read_only bool) (ret []byte, gas_left uint64, err error) {
-	gas_left = frame.Gas
-	gas_copy := frame.Gas
-	precompiled := self.precompiles.Get(code_owner.Address())
-	code := code_owner.GetCode()
+	if typ == CALL || typ == CALLCODE {
+		if value.Sign() == 0 && *caller.Address() != common.ZeroAddress && !BalanceGTE(caller.Account(), value) {
+			return nil, gas, ErrInsufficientBalanceForTransfer
+		}
+	}
+
+	snapshot := self.state.Snapshot()
+
+	if typ == CALL {
+		if value.Sign() == 0 {
+			if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+				// Calling a non existing account, don't do anything, but ping the tracer
+				if self.vmConfig.Debug {
+					if self.depth == 0 {
+						self.vmConfig.Tracer.CaptureStart(self, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
+						self.vmConfig.Tracer.CaptureEnd(ret, 0, 0, nil)
+					} else {
+						self.vmConfig.Tracer.CaptureEnter(CALL, caller.Address(), callee.Address(), false, false, input, gas, value, nil)
+						self.vmConfig.Tracer.CaptureExit(ret, 0, 0, nil)
+					}
+				}
+				return nil, gas, nil
+			}
+		}
+		self.transfer(caller.Account(), callee, value)
+	} else if typ == STATICCALL {
+		// We do an AddBalance of zero here, just in order to trigger a touch.
+		// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
+		// but is the correct thing to do and matters on other networks, in tests, and potential
+		// future scenarios
+		callee.AddBalance(big.NewInt(0))
+	}
+
+	gas_copy := gas
+	gas_left = gas
+	precompiled := self.precompiles.Get(callee.Address())
+	code := callee.GetCode()
 	start := time.Now()
 
 	if self.vmConfig.Debug {
 		if self.depth == 0 {
-			self.vmConfig.Tracer.CaptureStart(self, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			self.vmConfig.Tracer.CaptureStart(self, caller.Address(), callee.Address(), precompiled != nil, false, input, gas_copy, value, code)
 			defer func() {
-				self.vmConfig.Tracer.CaptureEnd(ret, frame.Gas-gas_copy, time.Since(start), err)
+				self.vmConfig.Tracer.CaptureEnd(ret, gas-gas_copy, time.Since(start), err)
 			}()
 		} else {
-			self.vmConfig.Tracer.CaptureEnter(typ, frame.CallerAccount.Address(), frame.Account.Address(), precompiled != nil, false, frame.Input, gas_copy, frame.Value, code)
+			self.vmConfig.Tracer.CaptureEnter(typ, caller.Address(), callee.Address(), precompiled != nil, false, input, gas_copy, value, code)
 			defer func() {
-				self.vmConfig.Tracer.CaptureExit(ret, frame.Gas-gas_copy, time.Since(start), err)
+				self.vmConfig.Tracer.CaptureExit(ret, gas-gas_copy, time.Since(start), err)
 			}()
 		}
+	}
+
+	frame := CallFrame{caller.Account(), callee, input, gas, value}
+	if typ == CALLCODE {
+		frame = CallFrame{caller.Account(), caller.Account(), input, gas, value}
+	} else if typ == DELEGATECALL {
+		parent := caller.(*Contract)
+		frame = CallFrame{parent.CallerAccount, caller.Account(), input, gas, parent.Value}
+	}
+
+	read_only := false
+	if typ == STATICCALL {
+		read_only = true
 	}
 
 	if precompiled != nil {
@@ -395,7 +419,7 @@ func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, 
 			err = ErrOutOfGas
 		}
 	} else if len(code) != 0 {
-		contract := NewContract(frame, CodeAndHash{code, code_owner.GetCodeHash()})
+		contract := NewContract(frame, CodeAndHash{code, callee.GetCodeHash()})
 		ret, err = self.run(&contract, read_only)
 		gas_left = contract.Gas
 		gas_copy = contract.Gas
@@ -409,6 +433,14 @@ func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, 
 	return
 }
 
+// call executes the contract associated with the addr with the given input as
+// parameters. It also handles any necessary value transfer required and takes
+// the necessary steps to create accounts and reverses the state in case of an
+// execution error or failed value transfer.
+func (self *EVM) Call(caller ContractRef, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, gas_left uint64, err error) {
+	return self.call(CALL, caller, callee, input, gas, value)
+}
+
 // call_code executes the contract associated with the addr with the given input
 // as parameters. It also handles any necessary value transfer required and takes
 // the necessary steps to create accounts and reverses the state in case of an
@@ -416,16 +448,8 @@ func (self *EVM) call_end(typ OpCode, frame CallFrame, code_owner StateAccount, 
 //
 // call_code differs from call in the sense that it executes the given address'
 // code with the caller as context.
-func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	// Fail if we're trying to execute above the call depth limit
-	if self.depth > CallCreateDepth {
-		return nil, gas, ErrDepth
-	}
-	// Fail if we're trying to transfer more than the available balance
-	if !BalanceGTE(caller.Account, value) {
-		return nil, gas, ErrInsufficientBalanceForTransfer
-	}
-	return self.call_end(CALLCODE, CallFrame{caller.Account, caller.Account, input, gas, value}, callee, self.state.Snapshot(), false)
+func (self *EVM) call_code(caller ContractRef, callee StateAccount, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
+	return self.call(CALLCODE, caller, callee, input, gas, value)
 }
 
 // call_delegate executes the contract associated with the addr with the given input
@@ -433,30 +457,16 @@ func (self *EVM) call_code(caller *Contract, callee StateAccount, input []byte, 
 //
 // call_delegate differs from call_code in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
-func (self *EVM) call_delegate(caller *Contract, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	// Fail if we're trying to execute above the call depth limit
-	if self.depth > CallCreateDepth {
-		return nil, gas, ErrDepth
-	}
-	return self.call_end(DELEGATECALL, CallFrame{caller.CallerAccount, caller.Account, input, gas, caller.Value}, callee, self.state.Snapshot(), false)
+func (self *EVM) call_delegate(caller ContractRef, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
+	return self.call(DELEGATECALL, caller, callee, input, gas, nil)
 }
 
 // StaticCall executes the contract associated with the addr with the given input
 // as parameters while disallowing any modifications to the state during the call.
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
-func (self *EVM) call_static(caller *Contract, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	// Fail if we're trying to execute above the call depth limit
-	if self.depth > CallCreateDepth {
-		return nil, gas, ErrDepth
-	}
-	// We do an AddBalance of zero here, just in order to trigger a touch.
-	// This doesn't matter on Mainnet, where all empties are gone at the time of Byzantium,
-	// but is the correct thing to do and matters on other networks, in tests, and potential
-	// future scenarios
-	snapshot := self.state.Snapshot()
-	callee.AddBalance(big.NewInt(0))
-	return self.call_end(STATICCALL, CallFrame{caller.Account, callee, input, gas, big.NewInt(0)}, callee, snapshot, true)
+func (self *EVM) call_static(caller ContractRef, callee StateAccount, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
+	return self.call(STATICCALL, caller, callee, input, gas, big.NewInt(0))
 }
 
 // loops and evaluates the contract's code with the given input data and returns
