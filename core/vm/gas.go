@@ -184,7 +184,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 		y, x    = stack.Back(1), stack.Back(0)
 		y_big   = y.ToBig()
 		x_big   = x.ToBig()
-		current = contract.Account.GetState(x_big)
+		current = contract.Account().GetState(x_big)
 	)
 	// The new gas metering is based on net gas costs (EIP-1283):
 	//
@@ -203,7 +203,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	if current.Cmp(y_big) == 0 { // noop (1)
 		return NetSstoreNoopGas, nil
 	}
-	original := contract.Account.GetCommittedState(x_big)
+	original := contract.Account().GetCommittedState(x_big)
 	if original.Cmp(current) == 0 {
 		if original.Sign() == 0 { // create slot (2.1.1)
 			return NetSstoreInitGas, nil
@@ -507,11 +507,11 @@ func gasSuicide(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memoryS
 	gas = evm.gas_table.Suicide
 	new_acc := evm.get_account(stack.Back(0))
 
-	if new_acc.IsEIP161Empty() && contract.Account.GetBalance().Sign() != 0 {
+	if new_acc.IsEIP161Empty() && contract.Account().GetBalance().Sign() != 0 {
 		gas += evm.gas_table.CreateBySuicide
 	}
 
-	if !contract.Account.HasSuicided() {
+	if !contract.Account().HasSuicided() {
 		evm.state.AddRefund(SuicideRefundGas)
 	}
 	return gas, nil
