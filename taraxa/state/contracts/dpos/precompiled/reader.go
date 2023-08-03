@@ -6,10 +6,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 
+	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )

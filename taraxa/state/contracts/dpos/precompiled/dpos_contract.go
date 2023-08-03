@@ -20,6 +20,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 
+	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -164,7 +165,7 @@ type Contract struct {
 // Initialize contract class
 func (self *Contract) Init(cfg chain_config.ChainConfig, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
-	self.storage.Init(storage)
+	self.storage.Init(dpos_contract_address, storage)
 	self.delayedStorage = readStorage
 	self.evm = evm
 	return self
@@ -1644,7 +1645,7 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 }
 
 func (self *Contract) apply_genesis_entry(validator_info *chain_config.GenesisValidator, make_context func(caller *common.Address, value *big.Int) vm.CallFrame) {
-	args := validator_info.GenRegisterValidatorArgs()
+	args := dpos_sol.RegisterValidatorArgs{VrfKey: validator_info.VrfKey, Commission: validator_info.Commission, Description: validator_info.Description, Endpoint: validator_info.Endpoint, Validator: validator_info.Address}
 
 	registrationError := self.registerValidatorWithoutChecks(make_context(&validator_info.Owner, big.NewInt(0)), 0, args)
 	if registrationError != nil {

@@ -3,12 +3,10 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/core"
-	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
@@ -23,8 +21,9 @@ type GenesisTransfer = struct {
 	Value       *big.Int
 }
 
-func (self *API) Init(cfg chain_config.ChainConfig) *API {
-	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.DPOS.DelegationLockingPeriod)
+func (self *API) Init(cfg chain_config.DposConfig, hardforks chain_config.HardforksConfig) *API {
+	asserts.Holds(cfg.DelegationDelay <= cfg.DelegationLockingPeriod)
+==== BASE ====
 
 	asserts.Holds(cfg.DPOS.EligibilityBalanceThreshold != nil)
 	asserts.Holds(cfg.DPOS.VoteEligibilityBalanceStep != nil)
@@ -72,7 +71,7 @@ func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig
 	self.config = cfg
 }
 
-func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contract {
+func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
 	return new(Contract).Init(self.config, storage, reader, evm)
 }
 

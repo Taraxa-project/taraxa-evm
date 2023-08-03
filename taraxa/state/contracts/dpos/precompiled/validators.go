@@ -189,7 +189,7 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 }
 
 func (self *Validators) GetValidator(validator_address *common.Address) (validator *Validator) {
-	key := stor_k_1(self.validator_field, validator_address[:])
+	key := contract_storage.Stor_k_1(self.validator_field, validator_address[:])
 	self.storage.Get(key, func(bytes []byte) {
 		// Try to decode into post-hardfork extented Validator struct first
 		validator = new(Validator)

@@ -12,7 +12,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	test_utils "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/tests"
@@ -44,7 +43,7 @@ var (
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: dpos.Config{
+		DPOS: chain_config.DposConfig{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -150,7 +149,7 @@ func TestDoubleVotingInvalidSig(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey)
 
-	// Invalid signature err - vote1 data changes after signing it
+	// Wrong address recovered - vote1 data changes after signing it
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesValidator, util.ErrorString(""))
 }
 
