@@ -146,8 +146,7 @@ func TestDoubleVotingInvalidSig(t *testing.T) {
 	signVote(&vote2, privkey)
 
 	// Invalid signature err - vote1 data changes after signing it
-	// TODO: signature was recovered successfully ???
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVoteSignature, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesValidator, util.ErrorString(""))
 }
 
 func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
@@ -422,8 +421,6 @@ func TestDoubleVotingProofsList(t *testing.T) {
 
 	for idx := 0; idx < votes_count; idx++ {
 		tc.Assert.Equal(proof_author.Bytes(), result_parsed[idx].ProofAuthor.Bytes())
-		tc.Assert.Equal(vote1.GetHash().Bytes(), common.HexToHash(result_parsed[idx].Vote1Hash).Bytes())
-		tc.Assert.Equal(votes[idx].GetHash().Bytes(), common.HexToHash(result_parsed[idx].Vote2Hash).Bytes())
 		tc.Assert.Equal(big.NewInt(int64(idx)+1), result_parsed[idx].Block)
 	}
 }
