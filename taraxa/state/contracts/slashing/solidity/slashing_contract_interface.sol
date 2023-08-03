@@ -4,9 +4,7 @@
 pragma solidity >=0.8.0;
 
 interface SlashingInterface {
-    event NewProof(address indexed author, address indexed validator, uint8 proof_type);
     event Jailed(address indexed validator, uint256 block);
-    event Slashed(address indexed validator, uint256 amount);
 
     // Commit double voting malicious behaviour proof
     function commitDoubleVotingProof(
@@ -52,9 +50,6 @@ interface SlashingInterface {
     struct DoubleVotingProof {
         address proof_author; // author of the proof
         uint256 block;
-        string vote1_hash; 
-        string vote2_hash; 
-        string tx_hash; 
     }
 
     /**

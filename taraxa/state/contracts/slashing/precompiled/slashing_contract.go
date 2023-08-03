@@ -254,9 +254,6 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 		return ErrInvalidVotesValidator
 	}
 
-	// TODO: get tx hash
-	tx_hash := common.Hash{}
-
 	// Check for existing proof
 	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(vote1_validator, vote1_hash, vote2_hash)
 	if self.double_voting_proofs.ProofExists(proof_db_key) {
@@ -284,7 +281,7 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	}
 
 	// Save the proof into db
-	proof := slashing_sol.SlashingInterfaceDoubleVotingProof{*ctx.CallerAccount.Address(), big.NewInt(int64(block)), vote1_hash.Hex(), vote2_hash.Hex(), tx_hash.Hex()}
+	proof := slashing_sol.SlashingInterfaceDoubleVotingProof{ProofAuthor: *ctx.CallerAccount.Address(), Block: big.NewInt(int64(block))}
 	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
 
 	// Assign proof db key to the specific malicious validator
