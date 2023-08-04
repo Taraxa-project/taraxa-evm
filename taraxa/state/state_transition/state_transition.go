@@ -170,6 +170,9 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	if self.dpos_contract != nil {
 		self.dpos_contract.CommitCall(self.get_dpos_reader(self.evm.GetBlock().Number))
 	}
+	if self.slashing_contract != nil {
+		self.slashing_contract.CommitCall(self.get_slashing_reader(self.evm.GetBlock().Number))
+	}
 	return
 }
 

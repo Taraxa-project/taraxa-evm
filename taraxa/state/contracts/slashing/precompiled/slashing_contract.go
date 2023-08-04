@@ -96,8 +96,12 @@ func NewVote(vote_rlp []byte) Vote {
 // Main contract class
 type Contract struct {
 	cfg Config
+
 	// current storage
 	storage contract_storage.StorageWrapper
+	// delayed storage for PBFT
+	read_storage Reader
+
 	// ABI of the contract
 	Abi abi.ABI
 	evm *vm.EVM
@@ -113,19 +117,15 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg Config, storage contract_storage.Storage, readStorage Reader, evm *vm.EVM) *Contract {
+func (self *Contract) Init(cfg Config, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(slashing_contract_address, storage)
+	self.read_storage = read_storage
 	self.malicious_validators.Init(&self.storage, field_malicious_validators)
 	self.double_voting_proofs.Init(&self.storage, field_double_voting_proofs)
 	self.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
 	self.evm = evm
 	return self
-}
-
-// Updates config - for HF
-func (self *Contract) UpdateConfig(cfg Config) {
-	self.cfg = cfg
 }
 
 // Register this precompiled contract
@@ -168,9 +168,13 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	return DefaultSlashingMethodGas
 }
 
-// Should be called on each block commit - updates delayedStorage
-func (self *Contract) CommitCall(readStorage Reader) {
-	defer self.storage.ClearCache()
+// Should be called on each block commit
+func (self *Contract) CommitCall(read_storage Reader) {
+	// TODO: ClearCache breaks the tests for some reason ???
+	//defer self.storage.ClearCache()
+
+	// Update read storage
+	self.read_storage = read_storage
 }
 
 // This is called on each call to contract
@@ -210,7 +214,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return method.Outputs.Pack(self.getJailInfo(evm.GetBlock().Number, &args.Validator, true))
+		return method.Outputs.Pack(self.getJailInfo(&args.Validator, true))
 
 	case "getMaliciousValidators":
 		return method.Outputs.Pack(self.getMaliciousValidators(evm.GetBlock().Number))
@@ -321,7 +325,8 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 }
 
 func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) {
-	jail_block := current_block + self.cfg.DoubleVotingJailTime
+	var jail_block types.BlockNum
+	jail_block = current_block + self.cfg.DoubleVotingJailTime
 
 	var currrent_jail_block *types.BlockNum
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
@@ -339,7 +344,7 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 }
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
-func (self *Contract) getJailInfo(block types.BlockNum, validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
+func (self *Contract) getJailInfo(validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
 	var currrent_jail_block *types.BlockNum
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
 	self.storage.Get(db_key, func(bytes []byte) {
@@ -347,18 +352,11 @@ func (self *Contract) getJailInfo(block types.BlockNum, validator *common.Addres
 		rlp.MustDecodeBytes(bytes, currrent_jail_block)
 	})
 
-	if currrent_jail_block == nil {
-		ret.JailBlock = big.NewInt(0)
-		ret.IsJailed = false
-		ret.ProofsCount = 0
-		return
-	}
-
-	ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
-	if *currrent_jail_block >= block {
-		ret.IsJailed = true
+	ret.ProofsCount = 0
+	if currrent_jail_block != nil {
+		ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
 	} else {
-		ret.IsJailed = false
+		ret.JailBlock = big.NewInt(0)
 	}
 
 	if get_proofs_count == false {
@@ -371,8 +369,30 @@ func (self *Contract) getJailInfo(block types.BlockNum, validator *common.Addres
 }
 
 func (self *Contract) isJailed(block types.BlockNum, args slashing_sol.ValidatorArg) bool {
-	return self.getJailInfo(block, &args.Validator, false).IsJailed
+	jailBlock := self.getJailInfo(&args.Validator, false).JailBlock
+	if jailBlock.Uint64() >= block {
+		return true
+	} else {
+		return false
+	}
 }
+
+// // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
+// func (self *Contract) getJailInfo(validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
+// 	ret = self.read_storage.getJailInfo(validator)
+
+// 	if get_proofs_count == false {
+// 		ret.ProofsCount = 0
+// 	} else {
+// 		ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
+// 	}
+
+// 	return
+// }
+
+// func (self *Contract) isJailed(block types.BlockNum, args slashing_sol.ValidatorArg) bool {
+// 	return self.read_storage.IsJailed(block, &args.Validator)
+// }
 
 func (self *Contract) getMaliciousValidators(block types.BlockNum) (ret []slashing_sol.SlashingInterfaceMaliciousValidator) {
 	malicious_validators, _ := self.malicious_validators.GetAccounts(0, self.malicious_validators.GetCount())
@@ -381,7 +401,7 @@ func (self *Contract) getMaliciousValidators(block types.BlockNum) (ret []slashi
 	ret = make([]slashing_sol.SlashingInterfaceMaliciousValidator, len(malicious_validators))
 
 	for idx, validator_address := range malicious_validators {
-		ret[idx] = slashing_sol.SlashingInterfaceMaliciousValidator{Validator: validator_address, JailInfo: self.getJailInfo(block, &validator_address, true)}
+		ret[idx] = slashing_sol.SlashingInterfaceMaliciousValidator{Validator: validator_address, JailInfo: self.getJailInfo(&validator_address, true)}
 	}
 
 	return

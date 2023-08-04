@@ -21,7 +21,6 @@ interface SlashingInterface {
 
     struct JailInfo {
         uint256 jail_block;  // block until which is validator jailed
-        bool is_jailed;      // flag if validator is currently jailed
         uint32 proofs_count; // number of malicious behaviour proofs
     }
 
