@@ -345,7 +345,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 	}
 
 	if typ == CALL || typ == CALLCODE {
-		if value.Sign() == 0 && *caller.Address() != common.ZeroAddress && !BalanceGTE(caller.Account(), value) {
+		if *caller.Address() != common.ZeroAddress && !BalanceGTE(caller.Account(), value) {
 			return nil, gas, ErrInsufficientBalanceForTransfer
 		}
 	}
