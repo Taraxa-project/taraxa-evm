@@ -15,8 +15,14 @@ type ValidatorStats struct {
 }
 
 type RewardsStats struct {
+	// Pbft block author
+	BlockAuthor common.Address
+
 	// Validator stats
 	ValidatorsStats map[common.Address]ValidatorStats
+
+	// List of transactions validators
+	TxsValidators []common.Address
 
 	// Total unique transactions counter
 	TotalDagBlocksCount uint32
@@ -26,11 +32,4 @@ type RewardsStats struct {
 
 	// Max weight of votes in block
 	MaxVotesWeight uint64
-}
-
-func NewRewardsStats() RewardsStats {
-	rewardsStats := RewardsStats{}
-	rewardsStats.ValidatorsStats = make(map[common.Address]ValidatorStats)
-
-	return rewardsStats
 }
