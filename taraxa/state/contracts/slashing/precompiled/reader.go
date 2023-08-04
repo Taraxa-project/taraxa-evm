@@ -1,7 +1,12 @@
 package slashing
 
 import (
+	"math/big"
+
+	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
+	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
@@ -16,11 +21,30 @@ func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func
 	return self
 }
 
-func (self Reader) IsJailed() bool {
-	return false
-	// self.storage.Get(stor_k_1(field_eligible_vote_count), func(bytes []byte) {
-	// 	jailed_until := bin.DEC_b_endian_compact_64(bytes)
-	// })
+func (self *Reader) getJailInfo(addr *common.Address) (ret slashing_sol.SlashingInterfaceJailInfo) {
+	var currrent_jail_block *types.BlockNum
+	db_key := contract_storage.Stor_k_1(field_validators_jail_block, addr.Bytes())
+	self.storage.Get(db_key, func(bytes []byte) {
+		currrent_jail_block = new(types.BlockNum)
+		rlp.MustDecodeBytes(bytes, currrent_jail_block)
+	})
 
-	// return jailed_until >= actual_block
+	ret.ProofsCount = 0
+	if currrent_jail_block != nil {
+		ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
+	} else {
+		ret.JailBlock = big.NewInt(0)
+	}
+
+	return
+}
+
+func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
+	// TODO: check magnolia hardfork
+	jailBlock := self.getJailInfo(addr).JailBlock
+	if jailBlock.Uint64() >= block {
+		return true
+	}
+
+	return false
 }

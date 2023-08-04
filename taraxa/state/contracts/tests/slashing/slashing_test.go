@@ -287,7 +287,6 @@ func TestGetJailInfo(t *testing.T) {
 	result_parsed := new(GetJailInfoRet)
 	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
 
-	tc.Assert.Equal(true, result_parsed.Info.IsJailed)
 	tc.Assert.Equal(uint32(1), result_parsed.Info.ProofsCount)
 	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
 
@@ -305,20 +304,6 @@ func TestGetJailInfo(t *testing.T) {
 	result_parsed = new(GetJailInfoRet)
 	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
 
-	tc.Assert.Equal(true, result_parsed.Info.IsJailed)
-	tc.Assert.Equal(uint32(2), result_parsed.Info.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
-
-	// Advance couple of blocks and check if IsJailed flag is set to false
-	for idx := uint64(0); idx < 2*DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
-		test.AdvanceBlock(nil, nil, nil)
-	}
-
-	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailInfo", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
-	result_parsed = new(GetJailInfoRet)
-	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
-
-	tc.Assert.Equal(false, result_parsed.Info.IsJailed)
 	tc.Assert.Equal(uint32(2), result_parsed.Info.ProofsCount)
 	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed.Info.JailBlock)
 }
@@ -357,32 +342,10 @@ func TestMaliciousValidatorsList(t *testing.T) {
 	tc.Assert.Equal(2, len(result_parsed))
 
 	tc.Assert.Equal(malicious_vote_author1.Bytes(), result_parsed[0].Validator.Bytes())
-	tc.Assert.Equal(true, result_parsed[0].JailInfo.IsJailed)
 	tc.Assert.Equal(uint32(1), result_parsed[0].JailInfo.ProofsCount)
 	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[0].JailInfo.JailBlock)
 
 	tc.Assert.Equal(malicious_vote_author2.Bytes(), result_parsed[1].Validator.Bytes())
-	tc.Assert.Equal(true, result_parsed[1].JailInfo.IsJailed)
-	tc.Assert.Equal(uint32(1), result_parsed[1].JailInfo.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[1].JailInfo.JailBlock)
-
-	// Advance couple of blocks and check if IsJailed flag is set to false
-	for idx := uint64(0); idx < DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
-		test.AdvanceBlock(nil, nil, nil)
-	}
-
-	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getMaliciousValidators"), util.ErrorString(""), util.ErrorString(""))
-	result_parsed = []slashing_sol.SlashingInterfaceMaliciousValidator{}
-	test.Unpack(&result_parsed, "getMaliciousValidators", result.CodeRetval)
-	tc.Assert.Equal(2, len(result_parsed))
-
-	tc.Assert.Equal(malicious_vote_author1.Bytes(), result_parsed[0].Validator.Bytes())
-	tc.Assert.Equal(false, result_parsed[0].JailInfo.IsJailed)
-	tc.Assert.Equal(uint32(1), result_parsed[0].JailInfo.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[0].JailInfo.JailBlock)
-
-	tc.Assert.Equal(malicious_vote_author2.Bytes(), result_parsed[1].Validator.Bytes())
-	tc.Assert.Equal(false, result_parsed[1].JailInfo.IsJailed)
 	tc.Assert.Equal(uint32(1), result_parsed[1].JailInfo.ProofsCount)
 	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), result_parsed[1].JailInfo.JailBlock)
 }
