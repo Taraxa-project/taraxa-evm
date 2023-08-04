@@ -249,7 +249,7 @@ func opKeccak256(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 }
 
 func opAddress(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	stack.push(new(uint256.Int).SetBytes(contract.Account.Address().Bytes()))
+	stack.push(new(uint256.Int).SetBytes(contract.Address().Bytes()))
 	return nil, nil
 }
 
@@ -514,14 +514,14 @@ func opMstore8(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 
 func opSload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	loc := stack.peek()
-	loc.SetFromBig(contract.Account.GetState(loc.ToBig()))
+	loc.SetFromBig(contract.Account().GetState(loc.ToBig()))
 	return nil, nil
 }
 
 func opSstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	loc := stack.pop()
 	val := stack.pop()
-	contract.Account.SetState(loc.ToBig(), val.ToBig())
+	contract.Account().SetState(loc.ToBig(), val.ToBig())
 	return nil, nil
 }
 
@@ -605,7 +605,7 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	stackvalue := size
 
 	contract.UseGas(gas)
-	res, addr, returnGas, suberr := evm.create_1(contract.Account, input, gas, value.ToBig())
+	res, addr, returnGas, suberr := evm.create_1(contract.Account(), input, gas, value.ToBig())
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -640,7 +640,7 @@ func opCreate2(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 	contract.UseGas(gas)
 	// reuse size int for stackvalue
 	stackvalue := size
-	res, addr, returnGas, suberr := evm.create_2(contract.Account, input, gas, endowment.ToBig(), salt.ToBig())
+	res, addr, returnGas, suberr := evm.create_2(contract.Account(), input, gas, endowment.ToBig(), salt.ToBig())
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()
@@ -668,7 +668,7 @@ func opCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	if !value.IsZero() {
 		gas += CallStipend
 	}
-	ret, returnGas, err := evm.call(contract.Account, evm.get_account(&addr), args, gas, value.ToBig())
+	ret, returnGas, err := evm.Call(contract, evm.get_account(&addr), args, gas, value.ToBig())
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -777,7 +777,7 @@ func opStop(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 func opSuicide(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	beneficiary := stack.pop()
 	addr := common.Address(beneficiary.Bytes20())
-	contract.Account.Suicide(&addr)
+	contract.Account().Suicide(&addr)
 	return nil, nil
 }
 
@@ -793,7 +793,7 @@ func makeLog(size int) executionFunc {
 			topics[i] = common.Hash(addr.Bytes32())
 		}
 		data := memory.GetCopy(int64(mStart.Uint64()), int64(mSize.Uint64()))
-		evm.state.AddLog(LogRecord{*contract.Account.Address(), topics, data})
+		evm.state.AddLog(LogRecord{*contract.Address(), topics, data})
 		return nil, nil
 	}
 }
