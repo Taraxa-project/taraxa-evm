@@ -17,6 +17,7 @@ type StorageWriter interface {
 	SubBalance(*common.Address, *big.Int) bool
 	AddBalance(*common.Address, *big.Int)
 	Put(*common.Address, *common.Hash, []byte)
+	GetNonce(address *common.Address) *big.Int
 	IncrementNonce(address *common.Address)
 }
 type Storage interface {

@@ -128,6 +128,13 @@ func (self *Contract) Init(cfg Config, storage contract_storage.Storage, read_st
 	return self
 }
 
+func (self *Contract) storageInitialization() {
+	// This needs to be done just once
+	if self.storage.GetNonce(slashing_contract_address).Cmp(big.NewInt(0)) == 0 {
+		self.storage.IncrementNonce(slashing_contract_address)
+	}
+}
+
 // Register this precompiled contract
 func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
 	defensive_copy := *slashing_contract_address
@@ -170,9 +177,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 // Should be called on each block commit
 func (self *Contract) CommitCall(read_storage Reader) {
-	// TODO: ClearCache breaks the tests for some reason ???
-	//defer self.storage.ClearCache()
-
+	defer self.storage.ClearCache()
 	// Update read storage
 	self.read_storage = read_storage
 }
@@ -325,8 +330,7 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 }
 
 func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) {
-	var jail_block types.BlockNum
-	jail_block = current_block + self.cfg.DoubleVotingJailTime
+	jail_block := current_block + self.cfg.DoubleVotingJailTime
 
 	var currrent_jail_block *types.BlockNum
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
@@ -341,6 +345,8 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 	}
 
 	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
+	// This will be run just once after first write
+	self.storageInitialization()
 }
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed

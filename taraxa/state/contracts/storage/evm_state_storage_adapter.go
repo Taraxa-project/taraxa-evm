@@ -34,3 +34,8 @@ func (self EVMStateStorage) GetAccountStorage(address *common.Address, k *common
 func (self EVMStateStorage) IncrementNonce(address *common.Address) {
 	self.GetAccountConcrete(address).IncrementNonce()
 }
+
+func (self EVMStateStorage) GetNonce(address *common.Address) *big.Int {
+	return self.GetAccountConcrete(address).GetNonce()
+}
+
