@@ -106,6 +106,8 @@ type Contract struct {
 	Abi abi.ABI
 	evm *vm.EVM
 
+	logs Logs
+
 	// Iterable map of malicious validators
 	malicious_validators contract_storage.AddressesIMap
 
@@ -124,6 +126,7 @@ func (self *Contract) Init(cfg Config, storage contract_storage.Storage, read_st
 	self.malicious_validators.Init(&self.storage, field_malicious_validators)
 	self.double_voting_proofs.Init(&self.storage, field_double_voting_proofs)
 	self.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
+	self.logs = *new(Logs).Init(self.Abi.Events)
 	self.evm = evm
 	return self
 }
@@ -303,7 +306,9 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	}
 
 	// Save jail block for the malicious validator
-	self.jailValidator(block, vote1_validator)
+	jail_block := self.jailValidator(block, vote1_validator)
+
+	self.evm.AddLog(self.logs.MakeJailedLog(vote1_validator, big.NewInt(int64(jail_block))))
 
 	return nil
 }
@@ -329,7 +334,8 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 	return new(common.Address).SetBytes(keccak256.Hash(pubKey[1:])[12:]), nil
 }
 
-func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) {
+// Jails validator and returns block number, until which he is jailed
+func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) types.BlockNum {
 	jail_block := current_block + self.cfg.DoubleVotingJailTime
 
 	var currrent_jail_block *types.BlockNum
@@ -345,8 +351,11 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 	}
 
 	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
+
 	// This will be run just once after first write
 	self.storageInitialization()
+
+	return jail_block
 }
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
