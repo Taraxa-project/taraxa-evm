@@ -975,7 +975,7 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 	state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
 	wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
 	if wrong_state != nil || state == nil {
-		return
+		panic("HF on wrong account")
 	}
 
 	//Corrected number of references
