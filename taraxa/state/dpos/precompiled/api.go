@@ -3,8 +3,7 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/core"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -17,98 +16,60 @@ func ContractAddress() common.Address {
 }
 
 type API struct {
-	cfg_by_block []ConfigWithBlock
-	cfg          Config
+	cfg_by_block []chain_config.ConfigWithBlock
+	cfg          chain_config.ChainConfig
 }
 
-type Config = struct {
-	EligibilityBalanceThreshold *big.Int
-	VoteEligibilityBalanceStep  *big.Int
-	ValidatorMaximumStake       *big.Int
-	MinimumDeposit              *big.Int
-	MaxBlockAuthorReward        uint16
-	DagProposersReward          uint16
-	CommissionChangeDelta       uint16
-	CommissionChangeFrequency   uint32 // [number of blocks]
-	DelegationDelay             uint32 // [number of blocks]
-	DelegationLockingPeriod     uint32 // [number of blocks]
-	BlocksPerYear               uint32 // [count]
-	YieldPercentage             uint16 // [%]
-	InitialValidators           []GenesisValidator
-}
-
-type ConfigWithBlock struct {
-	cfg   Config
-	blk_n types.BlockNum
-}
-type GenesisValidator struct {
-	Address     common.Address
-	Owner       common.Address
-	VrfKey      []byte
-	Commission  uint16
-	Endpoint    string
-	Description string
-	Delegations core.BalanceMap
-}
-
-func (self *GenesisValidator) gen_register_validator_args() (vi sol.RegisterValidatorArgs) {
-	vi.VrfKey = self.VrfKey
-	vi.Commission = self.Commission
-	vi.Description = self.Description
-	vi.Endpoint = self.Endpoint
-	vi.Validator = self.Address
-	return
-}
 
 type GenesisTransfer = struct {
 	Beneficiary common.Address
 	Value       *big.Int
 }
 
-func (self *API) Init(cfg Config) *API {
-	asserts.Holds(cfg.DelegationDelay <= cfg.DelegationLockingPeriod)
+func (self *API) Init(cfg chain_config.ChainConfig) *API {
+	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.DPOS.DelegationLockingPeriod)
 
-	asserts.Holds(cfg.EligibilityBalanceThreshold != nil)
-	asserts.Holds(cfg.VoteEligibilityBalanceStep != nil)
-	asserts.Holds(cfg.ValidatorMaximumStake != nil)
-	asserts.Holds(cfg.MinimumDeposit != nil)
+	asserts.Holds(cfg.DPOS.EligibilityBalanceThreshold != nil)
+	asserts.Holds(cfg.DPOS.VoteEligibilityBalanceStep != nil)
+	asserts.Holds(cfg.DPOS.ValidatorMaximumStake != nil)
+	asserts.Holds(cfg.DPOS.MinimumDeposit != nil)
 
 	// MinimumDeposit must be <= ValidatorMaximumStake
-	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(cfg.MinimumDeposit) != -1)
+	asserts.Holds(cfg.DPOS.ValidatorMaximumStake.Cmp(cfg.DPOS.MinimumDeposit) != -1)
 
 	// ValidatorMaximumStake must be:
 	//     > 0 as it is used for certain calculations in dpos contract, which require it to be != 0
 	//     ValidatorMaximumStake * theoretical_max_reward_pool cannot overflow unit256
-	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(big.NewInt(0)) == 1)
+	asserts.Holds(cfg.DPOS.ValidatorMaximumStake.Cmp(big.NewInt(0)) == 1)
 	// max uint256 == 2^256 == *10^77. Let ValidatorMaximumStake be half of that -> 10^38
 	num_1e38 := big.NewInt(0)
 	num_1e38.SetString("4B3B4CA85A86C47A098A224000000000", 16) // 10^38
-	asserts.Holds(cfg.ValidatorMaximumStake.Cmp(num_1e38) == -1)
+	asserts.Holds(cfg.DPOS.ValidatorMaximumStake.Cmp(num_1e38) == -1)
 
 	//MaxBlockAuthorReward is in %
-	asserts.Holds(cfg.MaxBlockAuthorReward <= 100)
+	asserts.Holds(cfg.DPOS.MaxBlockAuthorReward <= 100)
 
 	self.cfg = cfg
 	return self
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64) Config {
+func (self *API) GetConfigByBlockNum(blk_n uint64)  chain_config.ChainConfig {
 	for i, e := range self.cfg_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
 		l_size := len(self.cfg_by_block)
 		if i < l_size-1 {
-			next_block_num = self.cfg_by_block[i+1].blk_n
+			next_block_num = self.cfg_by_block[i+1].Blk_n
 		}
-		if (e.blk_n <= blk_n) && (next_block_num > blk_n) {
-			return e.cfg
+		if (e.Blk_n <= blk_n) && (next_block_num > blk_n) {
+			return e.Cfg
 		}
 	}
 	return self.cfg
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg Config) {
-	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
+func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
+	self.cfg_by_block = append(self.cfg_by_block,  chain_config.ConfigWithBlock{cfg, blk_n})
 	self.cfg = cfg
 }
 
