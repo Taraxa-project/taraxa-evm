@@ -307,7 +307,6 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 
 	// Save jail block for the malicious validator
 	jail_block := self.jailValidator(block, vote1_validator)
-
 	self.evm.AddLog(self.logs.MakeJailedLog(vote1_validator, big.NewInt(int64(jail_block))))
 
 	return nil

@@ -250,8 +250,11 @@ func TestIsJailed(t *testing.T) {
 	signVote(&vote2, privkey1)
 
 	res := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
-	tc.Assert.Equal(len(res.Logs), 1)
-	tc.Assert.Equal(res.Logs[0].Topics[0], JailedEventHash)
+	tc.Assert.Equal(1, len(res.Logs))
+	tc.Assert.Equal(2, len(res.Logs[0].Topics))
+	tc.Assert.Equal(JailedEventHash, res.Logs[0].Topics[0])
+	tc.Assert.Equal(malicious_vote_author1, common.BytesToAddress(res.Logs[0].Topics[1].Bytes()))
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Slashing.DoubleVotingJailTime))), bigutil.FromBytes(res.Logs[0].Data))
 
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
 	result_parsed := new(bool)
