@@ -351,54 +351,20 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
 func (self *Contract) getJailInfo(validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
-	var currrent_jail_block *types.BlockNum
-	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
-	self.storage.Get(db_key, func(bytes []byte) {
-		currrent_jail_block = new(types.BlockNum)
-		rlp.MustDecodeBytes(bytes, currrent_jail_block)
-	})
-
-	ret.ProofsCount = 0
-	if currrent_jail_block != nil {
-		ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
-	} else {
-		ret.JailBlock = big.NewInt(0)
-	}
+	ret = self.read_storage.getJailInfo(validator)
 
 	if get_proofs_count == false {
 		ret.ProofsCount = 0
-	} else {
-		ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
+		return
 	}
 
+	ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
 	return
 }
 
 func (self *Contract) isJailed(block types.BlockNum, args slashing_sol.ValidatorArg) bool {
-	jailBlock := self.getJailInfo(&args.Validator, false).JailBlock
-	if jailBlock.Uint64() >= block {
-		return true
-	} else {
-		return false
-	}
+	return self.read_storage.IsJailed(block, &args.Validator)
 }
-
-// // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
-// func (self *Contract) getJailInfo(validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
-// 	ret = self.read_storage.getJailInfo(validator)
-
-// 	if get_proofs_count == false {
-// 		ret.ProofsCount = 0
-// 	} else {
-// 		ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
-// 	}
-
-// 	return
-// }
-
-// func (self *Contract) isJailed(block types.BlockNum, args slashing_sol.ValidatorArg) bool {
-// 	return self.read_storage.IsJailed(block, &args.Validator)
-// }
 
 func (self *Contract) getMaliciousValidators(block types.BlockNum) (ret []slashing_sol.SlashingInterfaceMaliciousValidator) {
 	malicious_validators, _ := self.malicious_validators.GetAccounts(0, self.malicious_validators.GetCount())

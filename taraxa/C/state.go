@@ -294,6 +294,12 @@ func taraxa_evm_state_api_dpos_is_eligible(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
+
+	// If validator is jailed, return false
+	if state_API_instances[ptr].SlashingReader(params.BlkNum).IsJailed(params.BlkNum, &params.Addr) {
+		return false
+	}
+
 	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
 }
 
