@@ -150,6 +150,9 @@ func TestRedelegate(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// Validator 1 does not exist as we withdraw all stake
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
+	// Validator can not redelegate to same validator
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator1_addr, DefaultMinimumDeposit), dpos.ErrSameValidator, util.ErrorString(""))
+
 	test.CheckContractBalance(totalBalance)
 }
 
