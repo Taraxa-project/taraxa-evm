@@ -5,8 +5,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"math/big"
+	"strings"
 	"testing"
 
+	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
@@ -19,6 +21,9 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 )
+
+// This strings should correspond to event signatures in ../solidity/slashing_contract_interface.sol file
+var JailedEventHash = *keccak256.Hash([]byte("Jailed(address,uint256)"))
 
 type IsJailedRet struct {
 	End bool
@@ -244,7 +249,9 @@ func TestIsJailed(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey1)
 
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	res := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(res.Logs), 1)
+	tc.Assert.Equal(res.Logs[0].Topics[0], JailedEventHash)
 
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
 	result_parsed := new(bool)
@@ -386,4 +393,22 @@ func TestDoubleVotingProofsList(t *testing.T) {
 		tc.Assert.Equal(proof_author.Bytes(), result_parsed[idx].ProofAuthor.Bytes())
 		tc.Assert.Equal(big.NewInt(int64(idx)+1), result_parsed[idx].Block)
 	}
+}
+
+func TestMakeLogsCheckTopics(t *testing.T) {
+	tc := tests.NewTestCtx(t)
+	block := big.NewInt(123)
+
+	Abi, _ := abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
+	logs := *new(slashing.Logs).Init(Abi.Events)
+
+	count := 0
+	{
+		log := logs.MakeJailedLog(&common.ZeroAddress, block)
+		tc.Assert.Equal(log.Topics[0], JailedEventHash)
+		count++
+	}
+
+	// Check that we tested all events from the ABI
+	tc.Assert.Equal(count, len(Abi.Events))
 }
