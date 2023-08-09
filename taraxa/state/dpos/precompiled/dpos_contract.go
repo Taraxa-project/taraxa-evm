@@ -973,11 +973,15 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		val := self.validators.GetValidator(&val_addr)
 
+		fmt.Println("fixRedelegateBlockNumFunc", val_addr.String(), del_addr.String())
+		
 		state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
 		wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
 		if wrong_state != nil || state == nil {
 			panic("HF on wrong account")
 		}
+
+		fmt.Println("fixRedelegateBlockNumFunc", "wrong state block num", val.LastUpdated, delegation.LastUpdated)
 
 		//Corrected number of references
 		state.Count--
@@ -985,6 +989,7 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
+		val.TotalStake = bigutil.Sub(val.TotalStake, delegation.Stake)
 		self.validators.ModifyValidator(&val_addr, val)
 
 		// Corrected reward pool value
