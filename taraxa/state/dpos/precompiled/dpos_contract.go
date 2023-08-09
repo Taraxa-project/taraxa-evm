@@ -1,6 +1,7 @@
 package dpos
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -159,6 +160,8 @@ type Contract struct {
 
 // Initialize contract class
 func (self *Contract) Init(cfg chain_config.ChainConfig, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
+	hjson, _ := json.Marshal(cfg.Hardforks)
+	fmt.Println("Initializing DPOS contract", string(hjson))
 	self.cfg = cfg
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
@@ -994,7 +997,6 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 // Moves delegated tokens from one delegator to another
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args sol.RedelegateArgs) error {
-
 	if self.cfg.Hardforks.FixRedelegateBlockNum < block {
 		if args.ValidatorFrom == args.ValidatorTo {
 			return ErrSameValidator

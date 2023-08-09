@@ -14,7 +14,7 @@ type RedelegationMap = map[common.Address]common.Address
 
 type Hardforks struct {
 	FixRedelegateBlockNum uint64
-	Redelegations RedelegationMap
+	Redelegations         RedelegationMap
 }
 
 type ChainConfig struct {
@@ -44,9 +44,9 @@ type DPOSConfig = struct {
 	InitialValidators           []GenesisValidator
 }
 
-type ConfigWithBlock struct {
-	Cfg   ChainConfig
-	Blk_n types.BlockNum
+type DposConfigWithBlock struct {
+	DposConfig DPOSConfig
+	Blk_n      types.BlockNum
 }
 
 type GenesisValidator struct {

@@ -16,10 +16,9 @@ func ContractAddress() common.Address {
 }
 
 type API struct {
-	cfg_by_block []chain_config.ConfigWithBlock
-	cfg          chain_config.ChainConfig
+	config_by_block []chain_config.DposConfigWithBlock
+	config          chain_config.ChainConfig
 }
-
 
 type GenesisTransfer = struct {
 	Beneficiary common.Address
@@ -49,32 +48,34 @@ func (self *API) Init(cfg chain_config.ChainConfig) *API {
 	//MaxBlockAuthorReward is in %
 	asserts.Holds(cfg.DPOS.MaxBlockAuthorReward <= 100)
 
-	self.cfg = cfg
+	self.config = cfg
 	return self
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64)  chain_config.ChainConfig {
-	for i, e := range self.cfg_by_block {
+func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.ChainConfig {
+	for i, e := range self.config_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
-		l_size := len(self.cfg_by_block)
+		l_size := len(self.config_by_block)
 		if i < l_size-1 {
-			next_block_num = self.cfg_by_block[i+1].Blk_n
+			next_block_num = self.config_by_block[i+1].Blk_n
 		}
 		if (e.Blk_n <= blk_n) && (next_block_num > blk_n) {
-			return e.Cfg
+			cfg := self.config
+			cfg.DPOS = e.DposConfig
+			return cfg
 		}
 	}
-	return self.cfg
+	return self.config
 }
 
 func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
-	self.cfg_by_block = append(self.cfg_by_block,  chain_config.ConfigWithBlock{cfg, blk_n})
-	self.cfg = cfg
+	self.config_by_block = append(self.config_by_block, chain_config.DposConfigWithBlock{cfg.DPOS, blk_n})
+	self.config = cfg
 }
 
 func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.cfg, storage, reader, evm)
+	return new(Contract).Init(self.config, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
