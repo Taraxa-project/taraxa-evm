@@ -974,8 +974,8 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 		val := self.validators.GetValidator(&val_addr)
 
 		fmt.Println("fixRedelegateBlockNumFunc", val_addr.String(), del_addr.String())
-		
-		state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
+
+		state, _ := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
 		wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
 		if wrong_state != nil || state == nil {
 			panic("HF on wrong account")
@@ -983,9 +983,6 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		fmt.Println("fixRedelegateBlockNumFunc", "wrong state block num", val.LastUpdated, delegation.LastUpdated)
 
-		//Corrected number of references
-		state.Count--
-		self.state_put(&state_k, state)
 
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
@@ -994,7 +991,9 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		// Corrected reward pool value
 		val_rewards := self.validators.GetValidatorRewards(&val_addr)
-		rewardsPer1Stake := bigutil.Sub(state.RewardsPer1Stake, self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake))
+		fmt.Println("fixRedelegateBlockNumFunc", val_rewards.RewardsPool.String(), val.TotalStake.String(), state.RewardsPer1Stake.String())
+		rewardsPer1Stake := bigutil.Sub(self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake), state.RewardsPer1Stake)
+
 		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
 		self.validators.ModifyValidatorRewards(&val_addr, val_rewards)
 	}
@@ -1086,6 +1085,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
 		}
 
+		fmt.Println("redelegate", validator_rewards_from.RewardsPool.String(), validator_from.TotalStake.String(), state.RewardsPer1Stake.String())
 	}
 
 	// Now we delegate
