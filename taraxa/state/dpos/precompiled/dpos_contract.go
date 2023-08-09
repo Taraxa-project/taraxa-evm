@@ -68,7 +68,7 @@ var (
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
 	ErrExistentValidator            = util.ErrorString("Validator already exist")
-	ErrSameValidator                = util.ErrorString("Validators are same")
+	ErrSameValidator                = util.ErrorString("From and to validators are the same")
 	ErrBrokenState                  = util.ErrorString("Fatal error state is broken")
 	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
 	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
@@ -965,39 +965,31 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 }
 
 func (self *Contract) fixRedelegateBlockNumFunc() {
-	// TODO
-	val_addr := new(common.Address).SetBytes(common.FromHex("0x0000000000000000000000000000000000000000"))
-	del_addr := new(common.Address).SetBytes(common.FromHex("0x0000000000000000000000000000000000000000"))
+	for val_addr, del_addr := range self.cfg.Hardforks.Redelegations {
+		delegation := self.delegations.GetDelegation(&del_addr, &val_addr)
 
-	delegation := self.delegations.GetDelegation(del_addr, val_addr)
-	if del_addr == nil {
-		return
+		val := self.validators.GetValidator(&val_addr)
+
+		state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
+		wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
+		if wrong_state != nil || state == nil {
+			panic("HF on wrong account")
+		}
+
+		//Corrected number of references
+		state.Count--
+		self.state_put(&state_k, state)
+
+		// Corrected block num
+		val.LastUpdated = delegation.LastUpdated
+		self.validators.ModifyValidator(&val_addr, val)
+
+		// Corrected reward pool value
+		val_rewards := self.validators.GetValidatorRewards(&val_addr)
+		rewardsPer1Stake := bigutil.Sub(state.RewardsPer1Stake, self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake))
+		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
+		self.validators.ModifyValidatorRewards(&val_addr, val_rewards)
 	}
-	val := self.validators.GetValidator(val_addr)
-	if val == nil {
-		return
-	}
-
-	state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
-	wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
-	if wrong_state != nil || state == nil {
-		panic("HF on wrong account")
-	}
-
-	//Corrected number of references
-	state.Count--
-	self.state_put(&state_k, state)
-
-	// Corrected block num
-	val.LastUpdated = delegation.LastUpdated
-	self.validators.ModifyValidator(val_addr, val)
-
-	// Corrected reward pool value
-	val_rewards := self.validators.GetValidatorRewards(val_addr)
-	rewardsPer1Stake := bigutil.Sub(state.RewardsPer1Stake, self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake))
-	val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
-	self.validators.ModifyValidatorRewards(val_addr, val_rewards)
-
 }
 
 // Moves delegated tokens from one delegator to another

@@ -10,8 +10,11 @@ import (
 	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 )
 
+type RedelegationMap = map[common.Address]common.Address
+
 type Hardforks struct {
 	FixRedelegateBlockNum uint64
+	Redelegations RedelegationMap
 }
 
 type ChainConfig struct {
