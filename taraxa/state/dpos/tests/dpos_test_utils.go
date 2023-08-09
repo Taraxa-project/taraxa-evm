@@ -86,7 +86,7 @@ var (
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: dpos.Config{
+		DPOS: chain_config.DPOSConfig{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -100,6 +100,7 @@ var (
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
 		},
+		Hardforks: chain_config.Hardforks{FixRedelegateBlockNum:0},
 	}
 )
 

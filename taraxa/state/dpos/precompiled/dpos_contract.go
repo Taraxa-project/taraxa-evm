@@ -970,7 +970,13 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 	del_addr := new(common.Address).SetBytes(common.FromHex("0x0000000000000000000000000000000000000000"))
 
 	delegation := self.delegations.GetDelegation(del_addr, val_addr)
+	if del_addr == nil {
+		return
+	}
 	val := self.validators.GetValidator(val_addr)
+	if val == nil {
+		return
+	}
 
 	state, state_k := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
 	wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))

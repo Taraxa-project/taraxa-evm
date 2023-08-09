@@ -12,6 +12,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -680,7 +681,7 @@ func TestGenesis(t *testing.T) {
 	delegator := addr(1)
 
 	for i := uint64(1); i < 5; i++ {
-		entry := dpos.GenesisValidator{addr(i), addr(i), DefaultVrfKey, 0, "", "", core.BalanceMap{}}
+		entry := chain_config.GenesisValidator{addr(i), addr(i), DefaultVrfKey, 0, "", "", core.BalanceMap{}}
 		entry.Delegations[delegator] = DefaultEligibilityBalanceThreshold
 		cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, entry)
 	}
