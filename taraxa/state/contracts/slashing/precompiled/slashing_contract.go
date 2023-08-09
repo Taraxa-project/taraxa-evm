@@ -8,6 +8,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -95,7 +96,7 @@ func NewVote(vote_rlp []byte) Vote {
 
 // Main contract class
 type Contract struct {
-	cfg Config
+	cfg chain_config.SlashingConfig
 
 	// current storage
 	storage contract_storage.StorageWrapper
@@ -119,7 +120,7 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg Config, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
+func (self *Contract) Init(cfg chain_config.SlashingConfig, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(slashing_contract_address, storage)
 	self.read_storage = read_storage
@@ -335,7 +336,7 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 
 // Jails validator and returns block number, until which he is jailed
 func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) types.BlockNum {
-	jail_block := current_block + self.cfg.DoubleVotingJailTime
+	jail_block := current_block + self.cfg.JailTime
 
 	var currrent_jail_block *types.BlockNum
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
@@ -345,8 +346,8 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 	})
 
 	// In case validator is already jailed, compound his jail time
-	if currrent_jail_block != nil && *currrent_jail_block+self.cfg.DoubleVotingJailTime > jail_block {
-		jail_block = *currrent_jail_block + self.cfg.DoubleVotingJailTime
+	if currrent_jail_block != nil && *currrent_jail_block+self.cfg.JailTime > jail_block {
+		jail_block = *currrent_jail_block + self.cfg.JailTime
 	}
 
 	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))

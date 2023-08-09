@@ -7,7 +7,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 )
 
 type Redelegation struct {
@@ -49,6 +48,7 @@ type DPOSConfig = struct {
 	BlocksPerYear               uint32 // [count]
 	YieldPercentage             uint16 // [%]
 	InitialValidators           []GenesisValidator
+	Slashing                    SlashingConfig
 }
 
 type DposConfigWithBlock struct {

@@ -6,16 +6,17 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
 type Reader struct {
-	cfg     *Config
+	cfg     *chain_config.SlashingConfig
 	storage *contract_storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *Config, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+func (self *Reader) Init(cfg *chain_config.SlashingConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
 	self.cfg = cfg
 	self.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n))
 	return self

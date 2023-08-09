@@ -21,7 +21,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
-	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	test_utils "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/tests"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -112,8 +111,8 @@ var (
 			DelegationLockingPeriod:     4,
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
+			Slashing:                    chain_config.SlashingConfig{JailTime: 5},
 		},
-		Slashing: slashing.Config{DoubleVotingJailTime: 5},
 		Hardforks: chain_config.HardforksConfig{
 			MagnoliaHfBlockNum: 0,
 		},
@@ -143,8 +142,7 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
-
-	new_cfg.Slashing.DoubleVotingJailTime = DefaultChainCfg.Slashing.DoubleVotingJailTime
+	new_cfg.DPOS.Slashing.JailTime = DefaultChainCfg.DPOS.Slashing.JailTime
 
 	return new_cfg
 }
