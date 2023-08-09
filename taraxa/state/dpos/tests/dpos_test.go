@@ -1708,8 +1708,8 @@ func TestRedelegateHF(t *testing.T) {
 	delegator5_stake := DefaultMinimumDeposit
 
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.FixRedelegateBlockNum = 11
-	cfg.Hardforks.Redelegations = map[common.Address]common.Address{validator2_addr: delegator3_addr}
+	cfg.Hardforks.FixRedelegateBlockNum = 12
+	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{validator2_addr, delegator3_addr, DefaultMinimumDeposit})
 	tc, test := init_test(t, cfg)
 	defer test.end()
 
@@ -1879,6 +1879,11 @@ func TestRedelegateHF(t *testing.T) {
 	tc.Assert.Equal(1, len(batch0_parsed_result.Delegations))
 	tc.Assert.Equal(true, batch0_parsed_result.End)
 
+	validator_raw := test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	validator := new(GetValidatorRet)
+	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	old_stake := validator.ValidatorInfo.TotalStake
+
 	{
 		batch0_result := test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("getDelegations", delegator3_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 		batch0_parsed_result := new(GetDelegationsRet)
@@ -1888,7 +1893,7 @@ func TestRedelegateHF(t *testing.T) {
 		old_delegation := batch0_parsed_result.Delegations[0].Delegation.Stake
 
 		//Redelegate issue
-		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("reDelegate", validator2_addr, validator2_addr, delegator3_stake), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("reDelegate", validator2_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 
 		// HF happens
 		test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
@@ -1901,6 +1906,12 @@ func TestRedelegateHF(t *testing.T) {
 		new_delegation := batch0_parsed_result.Delegations[0].Delegation.Stake
 		tc.Assert.Equal(new_delegation, old_delegation)
 	}
+
+	validator_raw = test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	validator = new(GetValidatorRet)
+	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	new_stake := validator.ValidatorInfo.TotalStake
+	tc.Assert.Equal(new_stake, old_stake)
 
 	{
 		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))

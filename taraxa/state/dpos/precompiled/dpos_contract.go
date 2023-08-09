@@ -968,15 +968,15 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 }
 
 func (self *Contract) fixRedelegateBlockNumFunc() {
-	for val_addr, del_addr := range self.cfg.Hardforks.Redelegations {
-		delegation := self.delegations.GetDelegation(&del_addr, &val_addr)
+	for _, redelegation := range self.cfg.Hardforks.Redelegations {
+		delegation := self.delegations.GetDelegation(&redelegation.Delegator, &redelegation.Validator)
 
-		val := self.validators.GetValidator(&val_addr)
+		val := self.validators.GetValidator(&redelegation.Validator)
 
-		fmt.Println("fixRedelegateBlockNumFunc", val_addr.String(), del_addr.String())
+		fmt.Println("fixRedelegateBlockNumFunc", redelegation.Validator.String(), redelegation.Delegator.String())
 
-		state, _ := self.state_get(val_addr[:], BlockToBytes(delegation.LastUpdated))
-		wrong_state, _ := self.state_get(val_addr[:], BlockToBytes(val.LastUpdated))
+		state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(delegation.LastUpdated))
+		wrong_state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(val.LastUpdated))
 		if wrong_state != nil || state == nil {
 			panic("HF on wrong account")
 		}
@@ -986,16 +986,16 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
-		val.TotalStake = bigutil.Sub(val.TotalStake, delegation.Stake)
-		self.validators.ModifyValidator(&val_addr, val)
+		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
+		self.validators.ModifyValidator(&redelegation.Validator, val)
 
 		// Corrected reward pool value
-		val_rewards := self.validators.GetValidatorRewards(&val_addr)
+		val_rewards := self.validators.GetValidatorRewards(&redelegation.Validator)
 		fmt.Println("fixRedelegateBlockNumFunc", val_rewards.RewardsPool.String(), val.TotalStake.String(), state.RewardsPer1Stake.String())
 		rewardsPer1Stake := bigutil.Sub(self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake), state.RewardsPer1Stake)
 
 		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
-		self.validators.ModifyValidatorRewards(&val_addr, val_rewards)
+		self.validators.ModifyValidatorRewards(&redelegation.Validator, val_rewards)
 	}
 }
 
