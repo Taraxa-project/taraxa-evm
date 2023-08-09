@@ -262,7 +262,7 @@ func TestIsJailed(t *testing.T) {
 
 	// Advance couple of blocks and check if IsJailed flag is set to false
 	for idx := uint64(0); idx < DefaultChainCfg.Slashing.DoubleVotingJailTime; idx++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))

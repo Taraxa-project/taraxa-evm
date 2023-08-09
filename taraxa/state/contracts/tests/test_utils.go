@@ -85,14 +85,14 @@ func (self *ContractTest) execute(from common.Address, value *big.Int, input []b
 	return res
 }
 
-func (self *ContractTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (ret *uint256.Int) {
+func (self *ContractTest) AdvanceBlock(author *common.Address, rewardsStats *rewards_stats.RewardsStats) (ret *uint256.Int) {
 	self.blk_n++
 	if author == nil {
 		self.St.BeginBlock(&vm.BlockInfo{})
 	} else {
 		self.St.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
 	}
-	ret = self.St.DistributeRewards(rewardsStats, feesRewards)
+	ret = self.St.DistributeRewards(rewardsStats)
 	self.St.EndBlock()
 	self.St.Commit()
 	return

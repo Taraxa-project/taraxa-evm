@@ -714,7 +714,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 			feesRewards.SetFromBig(validatorStats.FeesRewards)
 			if validatorStats.FeesRewards.Cmp(big.NewInt(0)) > 0 {
 				validatorCommission.Add(validatorCommission, feesRewards)
-				self.storage.AddBalance(contract_address, validatorStats.FeesRewards)
+				self.storage.AddBalance(dpos_contract_address, validatorStats.FeesRewards)
 			}
 		}
 		self.validators.AddValidatorRewards(&validatorAddress, validatorCommission.ToBig(), delegatorRewards.ToBig())

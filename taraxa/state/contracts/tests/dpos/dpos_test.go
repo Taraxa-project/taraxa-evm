@@ -452,8 +452,8 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("cancelUndelegate", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	// Advance 2 more rounds - delegation locking periods == 4
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("confirmUndelegate", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	total_balance = bigutil.Sub(total_balance, DefaultMinimumDeposit)
@@ -483,7 +483,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 	// Advance few block so we are sure the current block already passed hardfork block num
 	for i := uint64(0); i < cfg.Hardforks.MagnoliaHfBlockNum; i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("undelegate", validator1_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
@@ -503,7 +503,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 	// Advance 4 more rounds - delegation locking periods == 4
 	for i := 0; i < 4; i++ {
-		test.AdvanceBlock(nil, nil, nil)
+		test.AdvanceBlock(nil, nil)
 	}
 
 	// Validator still exists
@@ -533,8 +533,6 @@ func TestConfirmUndelegate(t *testing.T) {
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
-	tc, test := init_test(t, cfg)
-	defer test.end()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 
@@ -1528,9 +1526,9 @@ func TestGetValidator(t *testing.T) {
 	// Undelegate
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// Advance 3 more rounds - delegation locking periods == 4
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
-	test.AdvanceBlock(nil, nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
 	// ErrNonExistentValidator
