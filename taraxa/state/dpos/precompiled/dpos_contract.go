@@ -983,7 +983,6 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		fmt.Println("fixRedelegateBlockNumFunc", "wrong state block num", val.LastUpdated, delegation.LastUpdated)
 
-
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
@@ -994,7 +993,7 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 		fmt.Println("fixRedelegateBlockNumFunc", val_rewards.RewardsPool.String(), val.TotalStake.String(), state.RewardsPer1Stake.String())
 		rewardsPer1Stake := bigutil.Sub(self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake), state.RewardsPer1Stake)
 
-		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
+		val_rewards.RewardsPool = bigutil.Div(bigutil.Mul(rewardsPer1Stake, val.TotalStake), self.cfg.DPOS.ValidatorMaximumStake)
 		self.validators.ModifyValidatorRewards(&redelegation.Validator, val_rewards)
 	}
 }
