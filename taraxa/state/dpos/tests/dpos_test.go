@@ -1772,7 +1772,7 @@ func TestRedelegateHF(t *testing.T) {
 	test.CheckContractBalance(total_stake)
 
 	// Simulated rewards statistics
-	tmp_rewards_stats := rewards_stats.NewRewardsStats()
+	tmp_rewards_stats := NewRewardsStats(&validator1_addr)
 	fees_rewards := dpos.NewFeesRewards()
 
 	validator1_stats := rewards_stats.ValidatorStats{}
