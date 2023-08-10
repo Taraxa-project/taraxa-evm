@@ -133,7 +133,7 @@ func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.Rewar
 func (self *StateTransition) EndBlock() {
 	self.LastBlockNum = self.evm.GetBlock().Number
 	if self.dpos_contract != nil {
-		self.dpos_contract.EndBlockCall()
+		self.dpos_contract.EndBlockCall(self.LastBlockNum)
 		self.evm_state_checkpoint()
 	}
 	self.pending_blk_state = nil
