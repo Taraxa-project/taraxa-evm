@@ -17,8 +17,10 @@ type Redelegation struct {
 }
 
 type Hardforks struct {
-	FixRedelegateBlockNum uint64
-	Redelegations         []Redelegation
+	FixRedelegateBlockNum        uint64
+	Redelegations                []Redelegation
+  FeeRewardsBlockNum           uint64
+  RewardsDistributionFrequency map[uint64]uint32
 }
 
 type ChainConfig struct {

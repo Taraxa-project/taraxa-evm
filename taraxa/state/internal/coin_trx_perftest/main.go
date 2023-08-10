@@ -143,7 +143,7 @@ func main() {
 			})
 			batch_size++
 		}
-		st.EndBlock(nil, nil, nil)
+		st.EndBlock()
 		if batch_size >= prepare_trx_batch_size || blk_n == num_prepare_blocks-1 {
 			st.Commit()
 			batch_size = 0
@@ -233,7 +233,7 @@ func main() {
 				}
 				st.ExecuteTransaction(&trx)
 			}
-			st.EndBlock(nil, nil, nil)
+			st.EndBlock()
 		})
 		with_timer("trie_commit", func() {
 			st.PrepareCommit()

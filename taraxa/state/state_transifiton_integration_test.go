@@ -53,7 +53,7 @@ func TestEthMainnetSmoke(t *testing.T) {
 		for i := range blk.Transactions {
 			st.ExecuteTransaction(&blk.Transactions[i])
 		}
-		st.EndBlock(blk.UncleBlocks, nil, nil)
+		st.EndBlock()
 		asserts.EQ(st.Commit().Hex(), blk.StateRoot.Hex())
 		progress_bar.Add(1)
 	}

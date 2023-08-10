@@ -34,6 +34,14 @@ var CommissionSetEventHash = *keccak256.Hash([]byte("CommissionSet(address,uint1
 var ValidatorRegisteredEventHash = *keccak256.Hash([]byte("ValidatorRegistered(address)"))
 var ValidatorInfoSetEventHash = *keccak256.Hash([]byte("ValidatorInfoSet(address)"))
 
+func NewRewardsStats(author *common.Address) rewards_stats.RewardsStats {
+	rewardsStats := rewards_stats.RewardsStats{}
+	rewardsStats.BlockAuthor = *author
+	rewardsStats.ValidatorsStats = make(map[common.Address]rewards_stats.ValidatorStats)
+
+	return rewardsStats
+}
+
 func TestProof(t *testing.T) {
 	pubkey, seckey := generateKeyPair()
 	addr := common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
@@ -406,7 +414,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.CheckContractBalance(total_stake)
 
 	// Simulated rewards statistics
-	tmp_rewards_stats := rewards_stats.NewRewardsStats()
+	tmp_rewards_stats := NewRewardsStats(&validator1_addr)
 	fees_rewards := dpos.NewFeesRewards()
 
 	validator1_stats := rewards_stats.ValidatorStats{}
@@ -579,10 +587,6 @@ func TestClaimAllRewards(t *testing.T) {
 
 	// Simulated rewards statistics
 	fees_rewards := dpos.NewFeesRewards()
-	tmp_rewards_stats := rewards_stats.NewRewardsStats()
-	tmp_rewards_stats.TotalDagBlocksCount = 0
-	tmp_rewards_stats.TotalVotesWeight = 0
-	tmp_rewards_stats.MaxVotesWeight = 0
 
 	// Create single delegator
 	delegator_addr := addr(1)
@@ -594,6 +598,7 @@ func TestClaimAllRewards(t *testing.T) {
 	validator_commission := uint16(0) // 0%
 	var block_author common.Address
 
+	var tmp_rewards_stats rewards_stats.RewardsStats
 	// Add 1 extra validator, who is going to be block author with zero delegation
 	for idx := uint64(1); idx <= validators_count+1; idx++ {
 		validator_addr, validator_proof := generateAddrAndProof()
@@ -601,6 +606,7 @@ func TestClaimAllRewards(t *testing.T) {
 		test.ExecuteAndCheck(validator_owner, validator_stake, test.pack("registerValidator", validator_addr, validator_proof, DefaultVrfKey, validator_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 		if idx == 1 {
 			block_author = validator_addr
+			tmp_rewards_stats = NewRewardsStats(&block_author)
 			continue
 		}
 

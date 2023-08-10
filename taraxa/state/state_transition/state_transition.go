@@ -118,15 +118,19 @@ func (self *StateTransition) GetEvmState() *state_evm.EVMState {
 	return &self.evm_state
 }
 
-func (self *StateTransition) EndBlock(uncles []state_common.UncleBlock, rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (totalReward *uint256.Int) {
+func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.RewardsStats, feesRewards *dpos.FeesRewards) (totalReward *uint256.Int) {
 	if self.chain_config.RewardsEnabled() && rewardsStats != nil && feesRewards != nil {
-		evm_block := self.evm.GetBlock()
 		if self.dpos_contract == nil {
 			panic("Stats rewards enabled but no dpos contract registered")
 		}
-		totalReward = self.dpos_contract.DistributeRewards(&evm_block.Author, rewardsStats, feesRewards)
+		totalReward = self.dpos_contract.DistributeRewards(rewardsStats, feesRewards)
 		self.evm_state_checkpoint()
 	}
+
+	return
+}
+
+func (self *StateTransition) EndBlock() {
 	self.LastBlockNum = self.evm.GetBlock().Number
 	if self.dpos_contract != nil {
 		self.dpos_contract.EndBlockCall(self.LastBlockNum)

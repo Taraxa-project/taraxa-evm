@@ -5,7 +5,6 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
-	"fmt"
 	"math/big"
 	"sync"
 	"unsafe"
@@ -16,8 +15,6 @@ import (
 	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -209,9 +206,7 @@ func taraxa_evm_state_api_transition_state(
 	var params struct {
 		Blk           vm.BlockInfo
 		Txs           []vm.Transaction
-		TxsValidators []common.Address // Transactions stats: tx hash -> validator that included it as first in his block
-		Uncles        []state_common.UncleBlock
-		Rewards_stats rewards_stats.RewardsStats
+		Rewards_stats []rewards_stats.RewardsStats
 	}
 	dec_rlp(params_enc, &params)
 
@@ -223,36 +218,30 @@ func taraxa_evm_state_api_transition_state(
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
 
-	disabled_contract_distribution := st.GetChainConfig().RewardsEnabled()
-	if !disabled_contract_distribution && len(params.Txs) != len(params.TxsValidators) {
-		errorString := fmt.Sprintf("Number of txs (%d) != number of txs validators (%d)", len(params.Txs), len(params.TxsValidators))
-		panic(errorString)
-	}
-
-	// What rewards should be distributed to which accounts
-	feesRewards := dpos.NewFeesRewards()
-
 	st.BeginBlock(&params.Blk)
 
 	for i := range params.Txs {
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
-		txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
-		g, _ := uint256.FromBig(tx.GasPrice)
-		txFee.Mul(txFee, g)
 
 		// Contract distribution is disabled - just add fee to the block author balance
-		// TODO: once there is a stabilized version - remove this flag and use only dpos contract
-		if disabled_contract_distribution {
+		if st.BlockNumber() < st.GetChainConfig().Hardforks.FeeRewardsBlockNum {
+			txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
+			g, _ := uint256.FromBig(tx.GasPrice)
+			txFee.Mul(txFee, g)
 			st.AddTxFeeToBalance(&params.Blk.Author, txFee)
-		} else {
-			// Reward dag block author, who included specified tx as first
-			feesRewards.AddTrxFeeReward(params.TxsValidators[i], txFee)
 		}
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
 	}
-	totalReward := st.EndBlock(params.Uncles, &params.Rewards_stats, &feesRewards)
+	totalReward := uint256.NewInt(0)
+	for i := range params.Rewards_stats {
+		reward := st.DistributeRewards(&params.Rewards_stats[i], &dpos.FeesRewards{})
+		if reward != nil {
+			totalReward.Add(totalReward, reward)
+		}
+	}
+	st.EndBlock()
 	if totalReward != nil {
 		retval.TotalReward = totalReward.ToBig()
 	}

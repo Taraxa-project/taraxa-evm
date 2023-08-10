@@ -10,7 +10,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_dry_runner"
@@ -108,7 +107,8 @@ type StateTransition interface {
 	AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int)
 	GetChainConfig() *chain_config.ChainConfig
 	GetEvmState() *state_evm.EVMState
-	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards) *uint256.Int
+	DistributeRewards(*rewards_stats.RewardsStats, *dpos.FeesRewards) *uint256.Int
+	EndBlock()
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)
 }

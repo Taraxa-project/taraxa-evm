@@ -173,7 +173,7 @@ func (self *DposTest) execute(from common.Address, value *big.Int, input []byte)
 		Nonce:    senderNonce,
 	})
 
-	self.st.EndBlock(nil, nil, nil)
+	self.st.EndBlock()
 	self.st.Commit()
 	return res
 }
@@ -185,7 +185,8 @@ func (self *DposTest) AdvanceBlock(author *common.Address, rewardsStats *rewards
 	} else {
 		self.st.BeginBlock(&vm.BlockInfo{*author, 0, 0, nil})
 	}
-	ret = self.st.EndBlock(nil, rewardsStats, feesRewards)
+	ret = self.st.DistributeRewards(rewardsStats, feesRewards)
+	self.st.EndBlock()
 	self.st.Commit()
 	return
 }
