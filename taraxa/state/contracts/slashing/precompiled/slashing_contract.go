@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
+	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
@@ -326,7 +326,7 @@ func (self *Contract) getValidatorProofsList(validator *common.Address) *ProofsI
 
 func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address, error) {
 	// Do not use vote signature to calculate vote hash
-	pubKey, err := secp256k1.RecoverPubkey(vote_hash.Bytes(), signature)
+	pubKey, err := crypto.Ecrecover(vote_hash.Bytes(), signature)
 	if err != nil {
 		return nil, err
 	}
