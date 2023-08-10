@@ -1708,8 +1708,8 @@ func TestRedelegateHF(t *testing.T) {
 	delegator5_stake := DefaultMinimumDeposit
 
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.FixRedelegateBlockNum = 12
-	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{validator2_addr, delegator3_addr, DefaultMinimumDeposit})
+	cfg.Hardforks.FixRedelegateBlockNum = 13
+	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{validator2_addr, delegator3_addr, big.NewInt(1000)})
 	tc, test := init_test(t, cfg)
 	defer test.end()
 
@@ -1893,8 +1893,36 @@ func TestRedelegateHF(t *testing.T) {
 		old_delegation := batch0_parsed_result.Delegations[0].Delegation.Stake
 
 		//Redelegate issue
-		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("reDelegate", validator2_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("reDelegate", validator2_addr, validator2_addr, big.NewInt(1000)), util.ErrorString(""), util.ErrorString(""))
 
+		// More rewards after redelegate issue
+		{
+			// Simulated rewards statistics
+			tmp_rewards_stats := rewards_stats.NewRewardsStats()
+			fees_rewards := dpos.NewFeesRewards()
+
+			validator1_stats := rewards_stats.ValidatorStats{}
+			validator1_stats.DagBlocksCount = 8
+			validator1_stats.VoteWeight = 1
+			initValidatorTrxsStats(validator1_addr, &fees_rewards, trxFee, validator1_stats.DagBlocksCount)
+			tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
+
+			validator2_stats := rewards_stats.ValidatorStats{}
+			validator2_stats.DagBlocksCount = 32
+			validator2_stats.VoteWeight = 5
+			initValidatorTrxsStats(validator2_addr, &fees_rewards, trxFee, validator2_stats.DagBlocksCount)
+			tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
+
+			validator4_stats := rewards_stats.ValidatorStats{}
+			validator4_stats.VoteWeight = 1
+			tmp_rewards_stats.ValidatorsStats[validator4_addr] = validator4_stats
+
+			tmp_rewards_stats.TotalDagBlocksCount = validator1_stats.DagBlocksCount + validator2_stats.DagBlocksCount
+			tmp_rewards_stats.TotalVotesWeight = 7
+			tmp_rewards_stats.MaxVotesWeight = 8
+			// Advance block
+			test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards)
+		}
 		// HF happens
 		test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 

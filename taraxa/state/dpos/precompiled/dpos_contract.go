@@ -983,7 +983,6 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		fmt.Println("fixRedelegateBlockNumFunc", "wrong state block num", val.LastUpdated, delegation.LastUpdated)
 
-
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
@@ -991,7 +990,7 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		// Corrected reward pool value
 		val_rewards := self.validators.GetValidatorRewards(&redelegation.Validator)
-		fmt.Println("fixRedelegateBlockNumFunc", val_rewards.RewardsPool.String(), val.TotalStake.String(), state.RewardsPer1Stake.String())
+
 		rewardsPer1Stake := bigutil.Sub(self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake), state.RewardsPer1Stake)
 
 		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
@@ -1084,8 +1083,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			self.eligible_vote_count -= prev_vote_count_from
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
 		}
-
-		fmt.Println("redelegate", validator_rewards_from.RewardsPool.String(), validator_from.TotalStake.String(), state.RewardsPer1Stake.String())
 	}
 
 	// Now we delegate
