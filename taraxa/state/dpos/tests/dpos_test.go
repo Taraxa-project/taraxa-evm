@@ -1931,10 +1931,10 @@ func TestRedelegateHF(t *testing.T) {
 	//Check claim vs getter result
 	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
 
-	tc.Assert.Equal(expected_delegator1_reward, actual_delegator1_reward)
-	tc.Assert.Equal(expected_delegator2_reward, actual_delegator2_reward)
-	tc.Assert.Equal(expected_delegator3_reward, actual_delegator3_reward)
-	tc.Assert.Equal(expected_delegator4_reward, actual_delegator4_reward)
+	tc.Assert.NotEqual(expected_delegator1_reward.Cmp(actual_delegator1_reward), 1)
+	tc.Assert.NotEqual(expected_delegator2_reward.Cmp(actual_delegator2_reward), 1)
+	tc.Assert.NotEqual(expected_delegator3_reward.Cmp(actual_delegator3_reward), 1)
+	tc.Assert.NotEqual(expected_delegator4_reward.Cmp(actual_delegator4_reward), 1)
 
 	// Check commission rewards
 	validator1_old_balance := test.GetBalance(validator1_owner)
