@@ -63,7 +63,7 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionRes
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_dpos_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
-	if self.slashing_api != nil {
+	if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) && self.slashing_api != nil {
 		self.slashing_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
 	ret, err := evm.Main(trx)

@@ -22,28 +22,23 @@ func (self *Reader) Init(cfg *chain_config.SlashingConfig, blk_n types.BlockNum,
 	return self
 }
 
-func (self *Reader) getJailInfo(addr *common.Address) (ret slashing_sol.SlashingInterfaceJailInfo) {
-	var currrent_jail_block *types.BlockNum
+func (self *Reader) getJailInfo(addr *common.Address) (ret *slashing_sol.SlashingInterfaceJailInfo) {
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, addr.Bytes())
 	self.storage.Get(db_key, func(bytes []byte) {
-		currrent_jail_block = new(types.BlockNum)
+		currrent_jail_block := new(types.BlockNum)
 		rlp.MustDecodeBytes(bytes, currrent_jail_block)
-	})
 
-	ret.ProofsCount = 0
-	if currrent_jail_block != nil {
+		ret = new(slashing_sol.SlashingInterfaceJailInfo)
 		ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
-	} else {
-		ret.JailBlock = big.NewInt(0)
-	}
+		ret.ProofsCount = 0
+	})
 
 	return
 }
 
 func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
-	// TODO: check magnolia hardfork
-	jailBlock := self.getJailInfo(addr).JailBlock
-	if jailBlock.Uint64() >= block {
+	jail_info := self.getJailInfo(addr)
+	if jail_info != nil && jail_info.JailBlock.Uint64() >= block {
 		return true
 	}
 

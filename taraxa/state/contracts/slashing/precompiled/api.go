@@ -5,7 +5,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 )
 
 type API struct {
@@ -19,7 +18,6 @@ type ConfigWithBlock struct {
 }
 
 func (self *API) Init(cfg chain_config.SlashingConfig) *API {
-	asserts.Holds(cfg.JailTime > 0)
 	self.cfg = cfg
 	return self
 }

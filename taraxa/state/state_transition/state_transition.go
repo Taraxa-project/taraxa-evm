@@ -111,7 +111,7 @@ func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	if self.dpos_contract != nil && rules_changed {
 		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
-	if self.slashing_contract != nil && rules_changed {
+	if self.slashing_contract != nil && self.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
 		self.slashing_contract.Register(self.evm.RegisterPrecompiledContract)
 	}
 }
@@ -170,7 +170,7 @@ func (self *StateTransition) Commit() (state_root common.Hash) {
 	if self.dpos_contract != nil {
 		self.dpos_contract.CommitCall(self.get_dpos_reader(self.evm.GetBlock().Number))
 	}
-	if self.slashing_contract != nil {
+	if self.slashing_contract != nil && self.chain_config.Hardforks.IsMagnoliaHardfork(self.evm.GetBlock().Number) {
 		self.slashing_contract.CommitCall(self.get_slashing_reader(self.evm.GetBlock().Number))
 	}
 	return

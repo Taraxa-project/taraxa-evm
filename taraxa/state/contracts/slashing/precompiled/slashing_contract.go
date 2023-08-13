@@ -360,14 +360,18 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
 func (self *Contract) getJailInfo(validator *common.Address, get_proofs_count bool) (ret slashing_sol.SlashingInterfaceJailInfo) {
-	ret = self.read_storage.getJailInfo(validator)
-
-	if get_proofs_count == false {
-		ret.ProofsCount = 0
-		return
+	jail_info := self.read_storage.getJailInfo(validator)
+	if jail_info != nil {
+		ret = *jail_info
+		if get_proofs_count == true {
+			ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
+		} else {
+			ret.ProofsCount = 0
+		}
+	} else {
+		ret.JailBlock = big.NewInt(0)
 	}
 
-	ret.ProofsCount = self.getValidatorProofsList(validator).GetCount()
 	return
 }
 
