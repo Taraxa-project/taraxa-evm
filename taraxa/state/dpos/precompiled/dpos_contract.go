@@ -1,7 +1,6 @@
 package dpos
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -160,8 +159,6 @@ type Contract struct {
 
 // Initialize contract class
 func (self *Contract) Init(cfg chain_config.ChainConfig, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
-	hjson, _ := json.Marshal(cfg.Hardforks)
-	fmt.Println("Initializing DPOS contract", string(hjson))
 	self.cfg = cfg
 	self.storage.Init(storage)
 	self.delayedStorage = readStorage
@@ -974,7 +971,7 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 
 		val := self.validators.GetValidator(&redelegation.Validator)
 
-		fmt.Println("fixRedelegateBlockNumFunc", redelegation.Validator.String(), redelegation.Delegator.String())
+		fmt.Println("Applying HF on validator", redelegation.Validator.String(), "delegator", redelegation.Delegator.String())
 
 		state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(delegation.LastUpdated))
 		wrong_state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(val.LastUpdated))
@@ -982,21 +979,12 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 			panic("HF on wrong account")
 		}
 
-		fmt.Println("fixRedelegateBlockNumFunc", "wrong state block num", val.LastUpdated, delegation.LastUpdated)
-
+		fmt.Println("Fixing block from", val.LastUpdated, "to", delegation.LastUpdated)
 
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
 		self.validators.ModifyValidator(&redelegation.Validator, val)
-
-		// Corrected reward pool value
-		val_rewards := self.validators.GetValidatorRewards(&redelegation.Validator)
-		fmt.Println("fixRedelegateBlockNumFunc", val_rewards.RewardsPool.String(), val.TotalStake.String(), state.RewardsPer1Stake.String())
-		rewardsPer1Stake := bigutil.Sub(self.calculateRewardPer1Stake(val_rewards.RewardsPool, val.TotalStake), state.RewardsPer1Stake)
-
-		val_rewards.RewardsPool = bigutil.Mul(rewardsPer1Stake, val.TotalStake)
-		self.validators.ModifyValidatorRewards(&redelegation.Validator, val_rewards)
 	}
 }
 
@@ -1085,8 +1073,6 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args so
 			self.eligible_vote_count -= prev_vote_count_from
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
 		}
-
-		fmt.Println("redelegate", validator_rewards_from.RewardsPool.String(), validator_from.TotalStake.String(), state.RewardsPer1Stake.String())
 	}
 
 	// Now we delegate
