@@ -12,13 +12,19 @@ import (
 )
 
 type Reader struct {
-	cfg     *chain_config.SlashingConfig
-	storage *contract_storage.StorageReaderWrapper
+	dpos_config *chain_config.DposConfig
+	storage     *contract_storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *chain_config.SlashingConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
-	self.cfg = cfg
-	self.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n))
+func (self *Reader) Init(cfg *chain_config.DposConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+	self.dpos_config = cfg
+
+	blk_n_actual := uint64(0)
+	if uint64(self.dpos_config.DelegationDelay) < blk_n {
+		blk_n_actual = blk_n - uint64(self.dpos_config.DelegationDelay)
+	}
+
+	self.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n_actual))
 	return self
 }
 

@@ -9,20 +9,20 @@ import (
 
 type API struct {
 	cfg_by_block []ConfigWithBlock
-	cfg          chain_config.SlashingConfig
+	cfg          chain_config.DposConfig
 }
 
 type ConfigWithBlock struct {
-	cfg   chain_config.SlashingConfig
+	cfg   chain_config.DposConfig
 	blk_n types.BlockNum
 }
 
-func (self *API) Init(cfg chain_config.SlashingConfig) *API {
+func (self *API) Init(cfg chain_config.DposConfig) *API {
 	self.cfg = cfg
 	return self
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.SlashingConfig {
+func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DposConfig {
 	for i, e := range self.cfg_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
@@ -37,13 +37,13 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.SlashingConfig {
 	return self.cfg
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.SlashingConfig) {
+func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.DposConfig) {
 	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
 	self.cfg = cfg
 }
 
 func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.cfg, storage, reader, evm)
+	return new(Contract).Init(self.cfg.Slashing, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {

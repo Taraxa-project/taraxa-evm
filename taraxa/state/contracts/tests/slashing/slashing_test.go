@@ -258,8 +258,19 @@ func TestIsJailed(t *testing.T) {
 	tc.Assert.Equal(malicious_vote_author1, common.BytesToAddress(res.Logs[0].Topics[1].Bytes()))
 	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.DPOS.Slashing.JailTime))), bigutil.FromBytes(res.Logs[0].Data))
 
+	// isJailed returns true after test.Chain_cfg.DPOS.DelegationDelay blocks
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
 	result_parsed := new(bool)
+	test.Unpack(result_parsed, "isJailed", result.CodeRetval)
+	tc.Assert.Equal(false, *result_parsed)
+
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed = new(bool)
 	test.Unpack(result_parsed, "isJailed", result.CodeRetval)
 	tc.Assert.Equal(true, *result_parsed)
 
@@ -291,6 +302,11 @@ func TestGetJailInfo(t *testing.T) {
 
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
 
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
 	type GetJailInfoRet struct {
 		Info slashing_sol.SlashingInterfaceJailInfo
 	}
@@ -311,6 +327,11 @@ func TestGetJailInfo(t *testing.T) {
 	signVote(&vote2, privkey1)
 
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
 
 	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailInfo", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
 	result_parsed = new(GetJailInfoRet)
@@ -347,6 +368,11 @@ func TestMaliciousValidatorsList(t *testing.T) {
 	signVote(&vote2, privkey2)
 
 	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
 
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getMaliciousValidators"), util.ErrorString(""), util.ErrorString(""))
 	result_parsed := []slashing_sol.SlashingInterfaceMaliciousValidator{}

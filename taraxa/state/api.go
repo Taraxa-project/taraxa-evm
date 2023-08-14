@@ -45,7 +45,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 	self.config = chain_cfg
 
 	self.dpos = new(dpos.API).Init(*self.config)
-	self.slashing = new(slashing.API).Init(self.config.DPOS.Slashing)
+	self.slashing = new(slashing.API).Init(self.config.DPOS)
 	config_changes := self.rocksdb.GetDPOSConfigChanges()
 	if len(config_changes) == 0 {
 		bytes := rlp.MustEncodeToBytes(self.config.DPOS)
