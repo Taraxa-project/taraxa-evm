@@ -11,6 +11,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto/secp256k1"
+	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
@@ -67,6 +68,8 @@ var (
 var DefaultVote = slashing.Vote{BlockHash: common.Hash{0x1}, VrfSortition: slashing.VrfPbftSortition{Period: 10, Round: 20, Step: 30, Proof: [80]byte{1, 2, 3}}}
 
 func signVote(vote *slashing.Vote, private_key []byte) {
+	vote.VrfSortitionBytes = rlp.MustEncodeToBytes(vote.VrfSortition)
+
 	// Sign vote
 	sig, err := secp256k1.Sign(vote.GetHash().Bytes(), private_key)
 	if err != nil {
@@ -90,6 +93,10 @@ func generateKeyPair() (pubkey, privkey []byte) {
 	return pubkey, privkey
 }
 
+func GetVoteRlp(vote *slashing.Vote) []byte {
+	return rlp.MustEncodeToBytes(vote)
+}
+
 func TestDoubleVotingSameVotesHashes(t *testing.T) {
 	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
 	defer test.End()
@@ -106,7 +113,7 @@ func TestDoubleVotingSameVotesHashes(t *testing.T) {
 
 	proof_author := addr(1)
 	// Same vote hash err
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote.GetRlp(true), vote.GetRlp(true)), slashing.ErrIdenticalVotes, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote), GetVoteRlp(&vote)), slashing.ErrIdenticalVotes, util.ErrorString(""))
 }
 
 func TestDoubleVotingExistingProof(t *testing.T) {
@@ -122,12 +129,12 @@ func TestDoubleVotingExistingProof(t *testing.T) {
 	signVote(&vote2, privkey)
 
 	proof_author := addr(1)
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 	// Existing proof err
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
 
 	// Existing proof err - change votes order
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote2.GetRlp(true), vote1.GetRlp(true)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote2), GetVoteRlp(&vote1)), slashing.ErrExistingDoubleVotingProof, util.ErrorString(""))
 }
 
 func TestDoubleVotingInvalidSig(t *testing.T) {
@@ -136,24 +143,27 @@ func TestDoubleVotingInvalidSig(t *testing.T) {
 
 	_, privkey := generateKeyPair()
 	vote1 := DefaultVote
+	vote1.VrfSortitionBytes = rlp.MustEncodeToBytes(vote1.VrfSortition)
 
 	vote2 := DefaultVote
 	vote2.BlockHash = common.Hash{0x2}
+	vote2.VrfSortitionBytes = rlp.MustEncodeToBytes(vote2.VrfSortition)
 
 	proof_author := addr(1)
 	// Invalid signature err
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVoteSignature, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVoteSignature, util.ErrorString(""))
 
 	vote1 = DefaultVote
 	signVote(&vote1, privkey)
 	vote1.VrfSortition.Period = 123
+	vote1.VrfSortitionBytes = rlp.MustEncodeToBytes(vote1.VrfSortition)
 
 	vote2 = DefaultVote
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey)
 
 	// Wrong address recovered - vote1 data changes after signing it
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesValidator, util.ErrorString(""))
 }
 
 func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
@@ -170,7 +180,7 @@ func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
 
 	proof_author := addr(1)
 	// Existing invalid period
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
 
 	vote1 = DefaultVote
 	vote1.VrfSortition.Round = 10
@@ -180,7 +190,7 @@ func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
 	vote2.VrfSortition.Round = vote1.VrfSortition.Round + 1
 	signVote(&vote2, privkey)
 	// Existing invalid round
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
 
 	vote1 = DefaultVote
 	vote1.VrfSortition.Step = 10
@@ -190,7 +200,7 @@ func TestDoubleVotingInvalidPeriodRoundStep(t *testing.T) {
 	vote2.VrfSortition.Step = vote1.VrfSortition.Step + 1
 	signVote(&vote2, privkey)
 	// Existing invalid step
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesPeriodRoundStep, util.ErrorString(""))
 }
 
 func TestDoubleVotingInvalidBlockHash(t *testing.T) {
@@ -207,7 +217,7 @@ func TestDoubleVotingInvalidBlockHash(t *testing.T) {
 
 	proof_author := addr(1)
 	// Invalid block hash err
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
 
 	vote1 = DefaultVote
 	vote1.VrfSortition.Step = 5
@@ -220,7 +230,7 @@ func TestDoubleVotingInvalidBlockHash(t *testing.T) {
 	signVote(&vote2, privkey)
 
 	// Invalid block hash err - second finish step, 1 specific block + 1 null block hash is allowed
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
 
 	vote1 = DefaultVote
 	vote1.VrfSortition.Step = 5
@@ -233,7 +243,7 @@ func TestDoubleVotingInvalidBlockHash(t *testing.T) {
 	signVote(&vote2, privkey)
 
 	// Invalid block hash err - second finish step, 1 specific block + 1 null block hash is allowed
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), slashing.ErrInvalidVotesBlockHash, util.ErrorString(""))
 }
 
 func TestIsJailed(t *testing.T) {
@@ -251,7 +261,7 @@ func TestIsJailed(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey1)
 
-	res := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	res := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(1, len(res.Logs))
 	tc.Assert.Equal(2, len(res.Logs[0].Topics))
 	tc.Assert.Equal(JailedEventHash, res.Logs[0].Topics[0])
@@ -300,7 +310,7 @@ func TestGetJailInfo(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey1)
 
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
@@ -326,7 +336,7 @@ func TestGetJailInfo(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x3}
 	signVote(&vote2, privkey1)
 
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
@@ -356,7 +366,7 @@ func TestMaliciousValidatorsList(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey1)
 
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 
 	pubkey2, privkey2 := generateKeyPair()
 	malicious_vote_author2 := common.BytesToAddress(keccak256.Hash(pubkey2[1:])[12:])
@@ -367,7 +377,7 @@ func TestMaliciousValidatorsList(t *testing.T) {
 	vote2.BlockHash = common.Hash{0x2}
 	signVote(&vote2, privkey2)
 
-	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote2.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote2)), util.ErrorString(""), util.ErrorString(""))
 
 	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
@@ -412,7 +422,7 @@ func TestDoubleVotingProofsList(t *testing.T) {
 		signVote(&vote, privkey1)
 		votes[idx] = vote
 
-		test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", vote1.GetRlp(true), vote.GetRlp(true)), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote1), GetVoteRlp(&vote)), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getDoubleVotingProofs", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))

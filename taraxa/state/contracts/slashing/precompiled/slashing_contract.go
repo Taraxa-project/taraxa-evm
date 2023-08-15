@@ -40,8 +40,8 @@ const (
 // Contract methods error return values
 var (
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
-	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differs")
-	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differs")
+	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differ")
+	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differ")
 	ErrInvalidVotesBlockHash       = util.ErrorString("Invalid votes block hash")
 	ErrIdenticalVotes              = util.ErrorString("Votes are identical")
 	ErrExistingDoubleVotingProof   = util.ErrorString("Existing double voting proof")
@@ -67,29 +67,32 @@ type Vote struct {
 	// Block hash
 	BlockHash common.Hash
 
-	// Vrf sortition
-	VrfSortition VrfPbftSortition
+	// Vrf sortition - byte array is used because of the way vote rlp is passed from C++
+	VrfSortitionBytes []byte
+	VrfSortition      VrfPbftSortition `rlp:"-"`
 
 	// Signature
 	Signature [65]byte
 }
 
-func (self *Vote) GetRlp(include_sig bool) []byte {
-	rlp := rlp.MustEncodeToBytes(self)
-	if include_sig {
-		return rlp
-	}
+type VoteHashData struct {
+	// Block hash
+	BlockHash common.Hash
 
-	return rlp[:len(rlp)-len(self.Signature)]
+	// Vrf sortition - byte array is used because of the way vote rlp is passed from C++
+	VrfSortitionBytes []byte
 }
 
 func (self *Vote) GetHash() *common.Hash {
-	return keccak256.Hash(self.GetRlp(false))
+	// Only blockhash and vrf are used for hash, which is signed
+	rlp := rlp.MustEncodeToBytes(VoteHashData{BlockHash: self.BlockHash, VrfSortitionBytes: self.VrfSortitionBytes})
+	return keccak256.Hash(rlp)
 }
 
 func NewVote(vote_rlp []byte) Vote {
 	var vote Vote
 	rlp.MustDecodeBytes(vote_rlp, &vote)
+	rlp.MustDecodeBytes(vote.VrfSortitionBytes, &vote.VrfSortition)
 
 	return vote
 }
@@ -245,50 +248,50 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
 func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args slashing_sol.CommitDoubleVotingProofArgs) error {
-	vote1 := NewVote(args.Vote1)
-	vote1_hash := vote1.GetHash()
-	vote1_validator, err := validateVoteSig(vote1_hash, vote1.Signature[:])
+	vote_a := NewVote(args.Vote1)
+	vote_a_hash := vote_a.GetHash()
+	vote_a_validator, err := validateVoteSig(vote_a_hash, vote_a.Signature[:])
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
 
-	vote2 := NewVote(args.Vote2)
-	vote2_hash := vote2.GetHash()
-	vote2_validator, err := validateVoteSig(vote2_hash, vote2.Signature[:])
+	vote_b := NewVote(args.Vote2)
+	vote_b_hash := vote_b.GetHash()
+	vote_b_validator, err := validateVoteSig(vote_b_hash, vote_b.Signature[:])
 	if err != nil {
 		return ErrInvalidVoteSignature
 	}
 
-	if bytes.Compare(vote1_hash.Bytes(), vote2_hash.Bytes()) == 0 {
+	if bytes.Compare(vote_a_hash.Bytes(), vote_b_hash.Bytes()) == 0 {
 		return ErrIdenticalVotes
 	}
 
-	if bytes.Compare(vote1_validator.Bytes(), vote2_validator.Bytes()) != 0 {
+	if bytes.Compare(vote_a_validator.Bytes(), vote_b_validator.Bytes()) != 0 {
 		return ErrInvalidVotesValidator
 	}
 
 	// Check for existing proof
-	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(vote1_validator, vote1_hash, vote2_hash)
+	proof_db_key := self.double_voting_proofs.GenDoubleVotingProofDbKey(vote_a_validator, vote_a_hash, vote_b_hash)
 	if self.double_voting_proofs.ProofExists(proof_db_key) {
 		return ErrExistingDoubleVotingProof
 	}
 
 	// Validate votes period and round
-	if vote1.VrfSortition.Period != vote2.VrfSortition.Period || vote1.VrfSortition.Round != vote2.VrfSortition.Round || vote1.VrfSortition.Step != vote2.VrfSortition.Step {
+	if vote_a.VrfSortition.Period != vote_b.VrfSortition.Period || vote_a.VrfSortition.Round != vote_b.VrfSortition.Round || vote_a.VrfSortition.Step != vote_b.VrfSortition.Step {
 		return ErrInvalidVotesPeriodRoundStep
 	}
 
 	// Validate voted blocks hashes
-	if bytes.Compare(vote1.BlockHash.Bytes(), vote2.BlockHash.Bytes()) == 0 {
+	if bytes.Compare(vote_a.BlockHash.Bytes(), vote_b.BlockHash.Bytes()) == 0 {
 		return ErrInvalidVotesBlockHash
 	}
 
 	// Validators can create 2 votes for each second finishing step - one for nullblockhash and one for some specific block
-	if vote1.VrfSortition.Step >= 5 && vote1.VrfSortition.Step%2 == 1 {
-		vote1_is_zero_hash := bytes.Compare(vote1.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
-		vote2_is_zero_hash := bytes.Compare(vote2.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
+	if vote_a.VrfSortition.Step >= 5 && vote_a.VrfSortition.Step%2 == 1 {
+		vote_a_is_zero_hash := bytes.Compare(vote_a.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
+		vote_b_is_zero_hash := bytes.Compare(vote_b.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
 
-		if (vote1_is_zero_hash && !vote2_is_zero_hash) || (!vote1_is_zero_hash && vote2_is_zero_hash) {
+		if (vote_a_is_zero_hash && !vote_b_is_zero_hash) || (!vote_a_is_zero_hash && vote_b_is_zero_hash) {
 			return ErrInvalidVotesBlockHash
 		}
 	}
@@ -298,17 +301,17 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	self.double_voting_proofs.SaveProof(proof_db_key, &proof)
 
 	// Assign proof db key to the specific malicious validator
-	validator_proofs := self.getValidatorProofsList(vote1_validator)
+	validator_proofs := self.getValidatorProofsList(vote_a_validator)
 	validator_proofs.CreateProof(DoubleVoting, proof_db_key)
 
 	// Add validator to the list of malicious validators
-	if !self.malicious_validators.AccountExists(vote1_validator) {
-		self.malicious_validators.CreateAccount(vote1_validator)
+	if !self.malicious_validators.AccountExists(vote_a_validator) {
+		self.malicious_validators.CreateAccount(vote_a_validator)
 	}
 
 	// Save jail block for the malicious validator
-	jail_block := self.jailValidator(block, vote1_validator)
-	self.evm.AddLog(self.logs.MakeJailedLog(vote1_validator, big.NewInt(int64(jail_block))))
+	jail_block := self.jailValidator(block, vote_a_validator)
+	self.evm.AddLog(self.logs.MakeJailedLog(vote_a_validator, big.NewInt(int64(jail_block))))
 
 	return nil
 }
