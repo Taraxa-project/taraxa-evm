@@ -703,7 +703,6 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		newMintedRewards.Add(newMintedRewards, validatorReward)
 
 		// Adds fees for all txs that validator added in his blocks as first
-		// validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
 		totalReward.Add(totalReward, validatorReward)
 
 		validatorCommission := new(uint256.Int).Div(new(uint256.Int).Mul(validatorReward, uint256.NewInt(uint64(validator.Commission))), uint256.NewInt(MaxCommission))
@@ -1673,10 +1672,6 @@ func (self *Contract) calculateRewardPer1Stake(rewardsPool *big.Int, stake *big.
 
 func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *big.Int) *big.Int {
 	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.DPOS.ValidatorMaximumStake)
-}
-
-func (self *Contract) modifyValidator(block types.BlockNum, validator_address *common.Address, validator *Validator) {
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), validator_address, validator)
 }
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
