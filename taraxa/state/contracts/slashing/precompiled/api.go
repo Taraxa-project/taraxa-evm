@@ -9,20 +9,20 @@ import (
 
 type API struct {
 	cfg_by_block []ConfigWithBlock
-	cfg          chain_config.DposConfig
+	cfg          chain_config.DPOSConfig
 }
 
 type ConfigWithBlock struct {
-	cfg   chain_config.DposConfig
+	cfg   chain_config.DPOSConfig
 	blk_n types.BlockNum
 }
 
-func (self *API) Init(cfg chain_config.DposConfig) *API {
+func (self *API) Init(cfg chain_config.DPOSConfig) *API {
 	self.cfg = cfg
 	return self
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DposConfig {
+func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DPOSConfig {
 	for i, e := range self.cfg_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
@@ -37,7 +37,7 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DposConfig {
 	return self.cfg
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.DposConfig) {
+func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.DPOSConfig) {
 	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
 	self.cfg = cfg
 }

@@ -17,10 +17,10 @@ import (
 
 type Reader struct {
 	cfg     *chain_config.ChainConfig
-	storage *StorageReaderWrapper
+	storage *storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) *Reader {
+func (self *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) storage.StorageReader) *Reader {
 	self.cfg = cfg
 	blk_n_actual := uint64(0)
 	if uint64(self.cfg.DPOS.DelegationDelay) < blk_n {

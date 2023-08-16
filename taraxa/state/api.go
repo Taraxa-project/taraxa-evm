@@ -62,9 +62,9 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		// Decode rlp data from db and apply
 		for _, key := range keys {
 			value := config_changes[key]
-			cfg := new(chain_config.DposConfig)
-			rlp.MustDecodeBytes(value, cfg)
-			self.dpos.UpdateConfig(key, *cfg)
+			cfg := *self.config
+			rlp.MustDecodeBytes(value, &cfg.DPOS)
+			self.dpos.UpdateConfig(key, cfg)
 		}
 	}
 

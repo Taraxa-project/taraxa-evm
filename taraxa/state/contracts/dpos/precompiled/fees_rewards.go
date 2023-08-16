@@ -30,10 +30,3 @@ func (self *FeesRewards) GetTrxsFeesReward(account common.Address) *uint256.Int 
 		return uint256.NewInt(0)
 	}
 }
-
-func NewFeesRewards() FeesRewards {
-	feesRewards := FeesRewards{}
-	feesRewards.Init()
-
-	return feesRewards
-}

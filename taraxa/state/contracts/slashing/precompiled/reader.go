@@ -12,11 +12,11 @@ import (
 )
 
 type Reader struct {
-	dpos_config *chain_config.DposConfig
+	dpos_config *chain_config.DPOSConfig
 	storage     *contract_storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *chain_config.DposConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+func (self *Reader) Init(cfg *chain_config.DPOSConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
 	self.dpos_config = cfg
 
 	blk_n_actual := uint64(0)

@@ -30,7 +30,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 	"github.com/btcsuite/btcd/btcec"
-	"github.com/holiman/uint256"
 )
 
 // This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
@@ -98,7 +97,7 @@ var (
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: chain_config.DposConfig{
+		DPOS: chain_config.DPOSConfig{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -114,7 +113,8 @@ var (
 			Slashing:                    chain_config.SlashingConfig{JailTime: 5},
 		},
 		Hardforks: chain_config.HardforksConfig{
-			MagnoliaHfBlockNum: 0,
+			FixRedelegateBlockNum: 0,
+			MagnoliaHfBlockNum:    0,
 		},
 	}
 )
@@ -180,13 +180,6 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 	copy(sig, sig[1:])
 	sig[64] = v
 	return sig, nil
-}
-
-func initValidatorTrxsStats(validator common.Address, feesRewards *dpos.FeesRewards, trxFee *big.Int, trxsCount uint32) {
-	f, _ := uint256.FromBig(trxFee)
-	for i := uint32(0); i < trxsCount; i++ {
-		feesRewards.AddTrxFeeReward(validator, f.Clone())
-	}
 }
 
 func NewRewardsStats(author *common.Address) rewards_stats.RewardsStats {
@@ -313,9 +306,9 @@ func TestRedelegate(t *testing.T) {
 	// OK
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	// Validator 1 does not exist as we withdraw all stake
-	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 	// Validator can not redelegate to same validator
-	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("reDelegate", validator1_addr, validator1_addr, DefaultMinimumDeposit), dpos.ErrSameValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator1_addr, DefaultMinimumDeposit), dpos.ErrSameValidator, util.ErrorString(""))
 
 	test.CheckContractBalance(totalBalance)
 }
@@ -2026,8 +2019,8 @@ func TestRedelegateHF(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 	cfg.Hardforks.FixRedelegateBlockNum = 12
 	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{validator2_addr, delegator3_addr, DefaultMinimumDeposit})
-	tc, test := init_test(t, cfg)
-	defer test.end()
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
 
 	/*
 		Simulate scenario when we have:
@@ -2064,37 +2057,34 @@ func TestRedelegateHF(t *testing.T) {
 	*/
 
 	// Creates validators & delegators
-	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake := delegator1_stake
 
-	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator2_stake)
 
-	test.ExecuteAndCheck(delegator3_addr, delegator3_stake, test.pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator3_addr, delegator3_stake, test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator3_stake)
 
-	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.Pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator4_stake)
 
-	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.Pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator5_stake)
 
 	test.CheckContractBalance(total_stake)
 
 	// Simulated rewards statistics
 	tmp_rewards_stats := NewRewardsStats(&validator1_addr)
-	fees_rewards := dpos.NewFeesRewards()
 
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.DagBlocksCount = 8
 	validator1_stats.VoteWeight = 1
-	initValidatorTrxsStats(validator1_addr, &fees_rewards, trxFee, validator1_stats.DagBlocksCount)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.DagBlocksCount = 32
 	validator2_stats.VoteWeight = 5
-	initValidatorTrxsStats(validator2_addr, &fees_rewards, trxFee, validator2_stats.DagBlocksCount)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
 	validator4_stats := rewards_stats.ValidatorStats{}
@@ -2106,7 +2096,7 @@ func TestRedelegateHF(t *testing.T) {
 	tmp_rewards_stats.MaxVotesWeight = 8
 
 	// Advance block
-	reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats, &fees_rewards).ToBig()
+	reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats).ToBig()
 	totalBalance := bigutil.Add(total_stake, reward)
 	numberOfTrxs := new(big.Int)
 	numberOfTrxs.SetUint64(uint64(tmp_rewards_stats.TotalDagBlocksCount))
@@ -2179,7 +2169,7 @@ func TestRedelegateHF(t *testing.T) {
 	// tc.Assert.Equal(bigutil.Div(expected_dag_rewardPlusFees, big.NewInt(1)0), bigutil.Div(expectedDelegatorsRewards, big.NewInt(1)0))
 
 	// ErrNonExistentDelegation
-	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 
 	// Check delgators rewards
 	delegator1_old_balance := test.GetBalance(delegator1_addr)
@@ -2189,55 +2179,55 @@ func TestRedelegateHF(t *testing.T) {
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	// Check getter
-	batch0_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("getDelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("getDelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 	batch0_parsed_result := new(GetDelegationsRet)
-	test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
+	test.Unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
 	tc.Assert.Equal(1, len(batch0_parsed_result.Delegations))
 	tc.Assert.Equal(true, batch0_parsed_result.End)
 
-	validator_raw := test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	validator_raw := test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.Pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	validator := new(GetValidatorRet)
-	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
 	old_stake := validator.ValidatorInfo.TotalStake
 
 	{
-		batch0_result := test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("getDelegations", delegator3_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+		batch0_result := test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.Pack("getDelegations", delegator3_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 		batch0_parsed_result := new(GetDelegationsRet)
-		test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
+		test.Unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
 		tc.Assert.Equal(1, len(batch0_parsed_result.Delegations))
 		tc.Assert.Equal(true, batch0_parsed_result.End)
 		old_delegation := batch0_parsed_result.Delegations[0].Delegation.Stake
 
 		//Redelegate issue
-		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("reDelegate", validator2_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.Pack("reDelegate", validator2_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 
 		// HF happens
-		test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 
-		batch0_result = test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("getDelegations", delegator3_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+		batch0_result = test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.Pack("getDelegations", delegator3_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 		batch0_parsed_result = new(GetDelegationsRet)
-		test.unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
+		test.Unpack(batch0_parsed_result, "getDelegations", batch0_result.CodeRetval)
 		tc.Assert.Equal(1, len(batch0_parsed_result.Delegations))
 		tc.Assert.Equal(true, batch0_parsed_result.End)
 		new_delegation := batch0_parsed_result.Delegations[0].Delegation.Stake
 		tc.Assert.Equal(new_delegation, old_delegation)
 	}
 
-	validator_raw = test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	validator_raw = test.ExecuteAndCheck(validator2_addr, big.NewInt(0), test.Pack("getValidator", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	validator = new(GetValidatorRet)
-	test.unpack(validator, "getValidator", validator_raw.CodeRetval)
+	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
 	new_stake := validator.ValidatorInfo.TotalStake
 	tc.Assert.Equal(new_stake, old_stake)
 
 	{
-		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-		clam_res := test.ExecuteAndCheck(delegator4_addr, DefaultMinimumDeposit, test.pack("delegate", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator3_addr, big.NewInt(0), test.Pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+		clam_res := test.ExecuteAndCheck(delegator4_addr, DefaultMinimumDeposit, test.Pack("delegate", validator4_addr), util.ErrorString(""), util.ErrorString(""))
 		tc.Assert.Equal(len(clam_res.Logs), 2)
 		tc.Assert.Equal(clam_res.Logs[0].Topics[0], RewardsClaimedEventHash)
 		tc.Assert.Equal(clam_res.Logs[1].Topics[0], DelegatedEventHash)
 	}
 
-	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 
 	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
 	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
@@ -2257,10 +2247,10 @@ func TestRedelegateHF(t *testing.T) {
 	validator2_old_balance := test.GetBalance(validator2_owner)
 	validator4_old_balance := test.GetBalance(validator4_owner)
 
-	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	{
-		claim_res := test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.pack("claimCommissionRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
+		claim_res := test.ExecuteAndCheck(delegator4_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator4_addr), util.ErrorString(""), util.ErrorString(""))
 		tc.Assert.Equal(len(claim_res.Logs), 1)
 		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
 	}

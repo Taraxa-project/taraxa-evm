@@ -44,7 +44,7 @@ var (
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
-		DPOS: chain_config.DposConfig{
+		DPOS: chain_config.DPOSConfig{
 			EligibilityBalanceThreshold: DefaultEligibilityBalanceThreshold,
 			VoteEligibilityBalanceStep:  DefaultVoteEligibilityBalanceStep,
 			ValidatorMaximumStake:       DefaultValidatorMaximumStake,
@@ -60,7 +60,8 @@ var (
 			Slashing:                    chain_config.SlashingConfig{JailTime: 5},
 		},
 		Hardforks: chain_config.HardforksConfig{
-			MagnoliaHfBlockNum: 0,
+			FixRedelegateBlockNum: 0,
+			MagnoliaHfBlockNum:    0,
 		},
 	}
 )

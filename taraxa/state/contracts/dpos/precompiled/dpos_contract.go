@@ -23,6 +23,7 @@ import (
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
+	storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 )
 
@@ -163,7 +164,7 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg chain_config.ChainConfig, storage Storage, readStorage Reader, evm *vm.EVM) *Contract {
+func (self *Contract) Init(cfg chain_config.ChainConfig, storage storage.Storage, readStorage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(dpos_contract_address, storage)
 	self.delayedStorage = readStorage
@@ -373,7 +374,7 @@ func (self *Contract) EndBlockCall(block_num uint64) {
 
 	// Apply HF
 	if block_num == self.cfg.Hardforks.FixRedelegateBlockNum {
-		self.fixRedelegateBlockNumFunc()
+		self.fixRedelegateBlockNumFunc(block_num)
 	}
 }
 
@@ -399,7 +400,7 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 		self.apply_genesis_entry(&entry, make_context)
 	}
 
-	self.EndBlockCall()
+	self.EndBlockCall(0)
 	self.storage.IncrementNonce(dpos_contract_address)
 
 	return nil
@@ -946,6 +947,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	if validator == nil {
 		return ErrNonExistentValidator
 	}
+	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 	prev_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
 
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -1009,7 +1011,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	return nil
 }
 
-func (self *Contract) fixRedelegateBlockNumFunc() {
+func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
 	for _, redelegation := range self.cfg.Hardforks.Redelegations {
 		delegation := self.delegations.GetDelegation(&redelegation.Delegator, &redelegation.Validator)
 
@@ -1028,12 +1030,12 @@ func (self *Contract) fixRedelegateBlockNumFunc() {
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
-		self.validators.ModifyValidator(&redelegation.Validator, val)
+		self.validators.ModifyValidator(self.isMagnoliaHardfork(block_num), &redelegation.Validator, val)
 	}
 }
 
 // Moves delegated tokens from one delegator to another
-func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args sol.RedelegateArgs) error {
+func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.RedelegateArgs) error {
 	if self.cfg.Hardforks.FixRedelegateBlockNum < block {
 		if args.ValidatorFrom == args.ValidatorTo {
 			return ErrSameValidator
@@ -1678,7 +1680,7 @@ func (self *Contract) modifyValidator(block types.BlockNum, validator_address *c
 }
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
-	return block >= self.hardforks_config.MagnoliaHfBlockNum
+	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

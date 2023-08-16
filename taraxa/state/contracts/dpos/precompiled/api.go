@@ -3,6 +3,7 @@ package dpos
 import (
 	"math/big"
 
+	"github.com/Taraxa-project/taraxa-evm/common"
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
@@ -11,8 +12,13 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
+type DposConfigWithBlock struct {
+	DposConfig chain_config.DPOSConfig
+	Blk_n      types.BlockNum
+}
+
 type API struct {
-	config_by_block []chain_config.DposConfigWithBlock
+	config_by_block []DposConfigWithBlock
 	config          chain_config.ChainConfig
 }
 
@@ -21,9 +27,8 @@ type GenesisTransfer = struct {
 	Value       *big.Int
 }
 
-func (self *API) Init(cfg chain_config.DposConfig, hardforks chain_config.HardforksConfig) *API {
-	asserts.Holds(cfg.DelegationDelay <= cfg.DelegationLockingPeriod)
-==== BASE ====
+func (self *API) Init(cfg chain_config.ChainConfig) *API {
+	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.DPOS.DelegationLockingPeriod)
 
 	asserts.Holds(cfg.DPOS.EligibilityBalanceThreshold != nil)
 	asserts.Holds(cfg.DPOS.VoteEligibilityBalanceStep != nil)
@@ -67,7 +72,7 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.ChainConfig {
 }
 
 func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
-	self.config_by_block = append(self.config_by_block, chain_config.DposConfigWithBlock{cfg.DPOS, blk_n})
+	self.config_by_block = append(self.config_by_block, DposConfigWithBlock{cfg.DPOS, blk_n})
 	self.config = cfg
 }
 
