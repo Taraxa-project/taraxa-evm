@@ -18,7 +18,6 @@ type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
-	FeeRewardsBlockNum           uint64
 	MagnoliaHfBlockNum           uint64
 }
 

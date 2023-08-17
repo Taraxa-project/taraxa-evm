@@ -221,7 +221,7 @@ func taraxa_evm_state_api_execute_transactions(
 		txResult := st.ExecuteTransaction(tx)
 
 		// Contract distribution is disabled - just add fee to the block author balance
-		if st.BlockNumber() < st.GetChainConfig().Hardforks.FeeRewardsBlockNum {
+		if st.BlockNumber() < st.GetChainConfig().Hardforks.MagnoliaHfBlockNum {
 			txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
 			g, _ := uint256.FromBig(tx.GasPrice)
 			txFee.Mul(txFee, g)
