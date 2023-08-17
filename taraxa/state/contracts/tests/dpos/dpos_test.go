@@ -2080,11 +2080,15 @@ func TestRedelegateHF(t *testing.T) {
 	validator1_stats := rewards_stats.ValidatorStats{}
 	validator1_stats.DagBlocksCount = 8
 	validator1_stats.VoteWeight = 1
+	validator1_stats.FeesRewards = big.NewInt(int64(validator1_stats.DagBlocksCount))
+	validator1_stats.FeesRewards.Mul(validator1_stats.FeesRewards, trxFee)
 	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
 
 	validator2_stats := rewards_stats.ValidatorStats{}
 	validator2_stats.DagBlocksCount = 32
 	validator2_stats.VoteWeight = 5
+	validator2_stats.FeesRewards = big.NewInt(int64(validator2_stats.DagBlocksCount))
+	validator2_stats.FeesRewards.Mul(validator2_stats.FeesRewards, trxFee)
 	tmp_rewards_stats.ValidatorsStats[validator2_addr] = validator2_stats
 
 	validator4_stats := rewards_stats.ValidatorStats{}
@@ -2124,7 +2128,6 @@ func TestRedelegateHF(t *testing.T) {
 	// Expected participants rewards
 	// validator1_rewards = (validator1_trxs * blockReward) / total_trxs
 	validator1_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator1_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
-	validator1_total_reward = bigutil.Add(validator1_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator1_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward := bigutil.Mul(big.NewInt(int64(validator1_stats.VoteWeight)), expected_vote_reward)
 	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
@@ -2132,6 +2135,10 @@ func TestRedelegateHF(t *testing.T) {
 	// Commission reward
 	expected_validator1_commission_reward := bigutil.Div(bigutil.Mul(validator1_total_reward, big.NewInt(int64(validator1_commission))), big.NewInt(10000))
 	expected_validator1_delegators_reward := bigutil.Sub(validator1_total_reward, expected_validator1_commission_reward)
+
+	// Fee rewards goes to commission pool
+	expected_validator1_commission_reward = bigutil.Add(expected_validator1_commission_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator1_stats.DagBlocksCount))))
+
 	// Add author reward
 	author_commission_reward := bigutil.Div(bigutil.Mul(author_reward, big.NewInt(int64(validator1_commission))), big.NewInt(10000))
 	author_reward = bigutil.Sub(author_reward, author_commission_reward)
@@ -2140,7 +2147,6 @@ func TestRedelegateHF(t *testing.T) {
 
 	// validator2_rewards = (validator2_trxs * blockReward) / total_trxs
 	validator2_total_reward := bigutil.Div(bigutil.Mul(expected_dag_reward, big.NewInt(int64(validator2_stats.DagBlocksCount))), big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount)))
-	validator2_total_reward = bigutil.Add(validator2_total_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator2_stats.DagBlocksCount))))
 	// Add vote reward
 	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator2_stats.VoteWeight)), expected_vote_reward)
 	validatorVoteReward = bigutil.Div(validatorVoteReward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight)))
@@ -2148,6 +2154,9 @@ func TestRedelegateHF(t *testing.T) {
 
 	expected_validator2_commission_reward := bigutil.Div(bigutil.Mul(validator2_total_reward, big.NewInt(int64(validator2_commission))), big.NewInt(10000))
 	expected_validator2_delegators_reward := bigutil.Sub(validator2_total_reward, expected_validator2_commission_reward)
+
+	// Fee rewards goes to commission pool
+	expected_validator2_commission_reward = bigutil.Add(expected_validator2_commission_reward, bigutil.Mul(trxFee, big.NewInt(int64(validator2_stats.DagBlocksCount))))
 
 	// Add vote reward for validator 4
 	validatorVoteReward = bigutil.Mul(big.NewInt(int64(validator4_stats.VoteWeight)), expected_vote_reward)
