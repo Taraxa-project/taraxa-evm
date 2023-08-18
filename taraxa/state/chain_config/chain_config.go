@@ -14,19 +14,20 @@ type Redelegation struct {
 	Amount    *big.Int
 }
 
+type MagnoliaHfConfig struct {
+	BlockNum uint64
+	JailTime uint64 // [number of blocks]
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
-	MagnoliaHfBlockNum           uint64
+	MagnoliaHf                   MagnoliaHfConfig
 }
 
 func (self *HardforksConfig) IsMagnoliaHardfork(block uint64) bool {
-	return block >= self.MagnoliaHfBlockNum
-}
-
-type SlashingConfig = struct {
-	JailTime uint64 // [number of blocks]
+	return block >= self.MagnoliaHf.BlockNum
 }
 
 type GenesisValidator struct {
@@ -53,7 +54,6 @@ type DPOSConfig = struct {
 	BlocksPerYear               uint32 // [count]
 	YieldPercentage             uint16 // [%]
 	InitialValidators           []GenesisValidator
-	Slashing                    SlashingConfig
 }
 
 type ChainConfig struct {

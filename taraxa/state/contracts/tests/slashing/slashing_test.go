@@ -57,11 +57,13 @@ var (
 			DelegationLockingPeriod:     4,
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
-			Slashing:                    chain_config.SlashingConfig{JailTime: 5},
 		},
 		Hardforks: chain_config.HardforksConfig{
 			FixRedelegateBlockNum: 0,
-			MagnoliaHfBlockNum:    0,
+			MagnoliaHf: chain_config.MagnoliaHfConfig{
+				BlockNum: 0,
+				JailTime: 5,
+			},
 		},
 	}
 )
@@ -267,7 +269,7 @@ func TestIsJailed(t *testing.T) {
 	tc.Assert.Equal(2, len(res.Logs[0].Topics))
 	tc.Assert.Equal(JailedEventHash, res.Logs[0].Topics[0])
 	tc.Assert.Equal(malicious_vote_author1, common.BytesToAddress(res.Logs[0].Topics[1].Bytes()))
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.DPOS.Slashing.JailTime))), bigutil.FromBytes(res.Logs[0].Data))
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Hardforks.MagnoliaHf.JailTime))), bigutil.FromBytes(res.Logs[0].Data))
 
 	// isJailed returns true after test.Chain_cfg.DPOS.DelegationDelay blocks
 	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("isJailed", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
@@ -286,7 +288,7 @@ func TestIsJailed(t *testing.T) {
 	tc.Assert.Equal(true, *result_parsed)
 
 	// Advance couple of blocks and check if IsJailed flag is set to false
-	for idx := uint64(0); idx < DefaultChainCfg.DPOS.Slashing.JailTime; idx++ {
+	for idx := uint64(0); idx < DefaultChainCfg.Hardforks.MagnoliaHf.JailTime; idx++ {
 		test.AdvanceBlock(nil, nil)
 	}
 
@@ -327,7 +329,7 @@ func TestGetJailInfo(t *testing.T) {
 	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
 
 	tc.Assert.Equal(uint32(1), result_parsed.Info.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.DPOS.Slashing.JailTime))), result_parsed.Info.JailBlock)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Hardforks.MagnoliaHf.JailTime))), result_parsed.Info.JailBlock)
 
 	// Test cumulative jail time - commit another double voting proof
 	vote1 = DefaultVote
@@ -349,7 +351,7 @@ func TestGetJailInfo(t *testing.T) {
 	test.Unpack(result_parsed, "getJailInfo", result.CodeRetval)
 
 	tc.Assert.Equal(uint32(2), result_parsed.Info.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.DPOS.Slashing.JailTime))), result_parsed.Info.JailBlock)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(2*DefaultChainCfg.Hardforks.MagnoliaHf.JailTime))), result_parsed.Info.JailBlock)
 }
 
 func TestMaliciousValidatorsList(t *testing.T) {
@@ -392,11 +394,11 @@ func TestMaliciousValidatorsList(t *testing.T) {
 
 	tc.Assert.Equal(malicious_vote_author1.Bytes(), result_parsed[0].Validator.Bytes())
 	tc.Assert.Equal(uint32(1), result_parsed[0].JailInfo.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.DPOS.Slashing.JailTime))), result_parsed[0].JailInfo.JailBlock)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(1), big.NewInt(int64(DefaultChainCfg.Hardforks.MagnoliaHf.JailTime))), result_parsed[0].JailInfo.JailBlock)
 
 	tc.Assert.Equal(malicious_vote_author2.Bytes(), result_parsed[1].Validator.Bytes())
 	tc.Assert.Equal(uint32(1), result_parsed[1].JailInfo.ProofsCount)
-	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.DPOS.Slashing.JailTime))), result_parsed[1].JailInfo.JailBlock)
+	tc.Assert.Equal(bigutil.Add(big.NewInt(2), big.NewInt(int64(DefaultChainCfg.Hardforks.MagnoliaHf.JailTime))), result_parsed[1].JailInfo.JailBlock)
 }
 
 func TestDoubleVotingProofsList(t *testing.T) {

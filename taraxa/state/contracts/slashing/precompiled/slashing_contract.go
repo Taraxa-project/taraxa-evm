@@ -99,7 +99,7 @@ func NewVote(vote_rlp []byte) Vote {
 
 // Main contract class
 type Contract struct {
-	cfg chain_config.SlashingConfig
+	cfg chain_config.MagnoliaHfConfig
 
 	// current storage
 	storage contract_storage.StorageWrapper
@@ -123,7 +123,7 @@ type Contract struct {
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg chain_config.SlashingConfig, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
+func (self *Contract) Init(cfg chain_config.MagnoliaHfConfig, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
 	self.cfg = cfg
 	self.storage.Init(slashing_contract_address, storage)
 	self.read_storage = read_storage

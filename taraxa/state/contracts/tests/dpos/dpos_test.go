@@ -110,11 +110,13 @@ var (
 			DelegationLockingPeriod:     4,
 			BlocksPerYear:               365 * 24 * 60 * 15, // block every 4 seconds
 			YieldPercentage:             20,
-			Slashing:                    chain_config.SlashingConfig{JailTime: 5},
 		},
 		Hardforks: chain_config.HardforksConfig{
 			FixRedelegateBlockNum: 0,
-			MagnoliaHfBlockNum:    0,
+			MagnoliaHf: chain_config.MagnoliaHfConfig{
+				BlockNum: 0,
+				JailTime: 5,
+			},
 		},
 	}
 )
@@ -142,7 +144,7 @@ func CopyDefaultChainConfig() chain_config.ChainConfig {
 	new_cfg.DPOS.YieldPercentage = DefaultChainCfg.DPOS.YieldPercentage
 	new_cfg.DPOS.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	new_cfg.DPOS.InitialValidators = DefaultChainCfg.DPOS.InitialValidators
-	new_cfg.DPOS.Slashing.JailTime = DefaultChainCfg.DPOS.Slashing.JailTime
+	new_cfg.Hardforks = DefaultChainCfg.Hardforks
 
 	return new_cfg
 }
@@ -386,7 +388,7 @@ func TestUndelegate(t *testing.T) {
 // In post magnolia hardfork code, validator was deleted if his total_stake & rewards_pool & ongoing undelegations_count == 0
 func TestPreMagnoliaHfUndelegate(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.MagnoliaHfBlockNum = 1000
+	cfg.Hardforks.MagnoliaHf.BlockNum = 1000
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -414,7 +416,7 @@ func TestPreMagnoliaHfUndelegate(t *testing.T) {
 
 func TestMagnoliaHardfork(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.MagnoliaHfBlockNum = 25
+	cfg.Hardforks.MagnoliaHf.BlockNum = 25
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -473,7 +475,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 	// Test post-magnolia hardfork behaviour
 
 	// Advance few block so we are sure the current block already passed hardfork block num
-	for i := uint64(0); i < cfg.Hardforks.MagnoliaHfBlockNum; i++ {
+	for i := uint64(0); i < cfg.Hardforks.MagnoliaHf.BlockNum; i++ {
 		test.AdvanceBlock(nil, nil)
 	}
 
@@ -1405,7 +1407,7 @@ func TestGetUndelegations(t *testing.T) {
 		cfg.GenesisBalances[validator.owner] = DefaultBalance
 	}
 
-	cfg.Hardforks.MagnoliaHfBlockNum = 1000
+	cfg.Hardforks.MagnoliaHf.BlockNum = 1000
 
 	// Generate 2 delegators and set some balance to them
 	delegator1_addr := addr(uint64(gen_validators_num + 1))

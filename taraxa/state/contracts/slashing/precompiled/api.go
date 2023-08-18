@@ -8,8 +8,9 @@ import (
 )
 
 type API struct {
-	cfg_by_block []ConfigWithBlock
-	cfg          chain_config.DPOSConfig
+	cfg_by_block    []ConfigWithBlock
+	dpos_cfg        chain_config.DPOSConfig
+	magnolia_hf_cfg chain_config.MagnoliaHfConfig
 }
 
 type ConfigWithBlock struct {
@@ -17,8 +18,9 @@ type ConfigWithBlock struct {
 	blk_n types.BlockNum
 }
 
-func (self *API) Init(cfg chain_config.DPOSConfig) *API {
-	self.cfg = cfg
+func (self *API) Init(dpos_cfg chain_config.DPOSConfig, magnolia_hf_cfg chain_config.MagnoliaHfConfig) *API {
+	self.dpos_cfg = dpos_cfg
+	self.magnolia_hf_cfg = magnolia_hf_cfg
 	return self
 }
 
@@ -34,16 +36,16 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.DPOSConfig {
 			return e.cfg
 		}
 	}
-	return self.cfg
+	return self.dpos_cfg
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.DPOSConfig) {
-	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{cfg, blk_n})
-	self.cfg = cfg
+func (self *API) UpdateConfig(blk_n types.BlockNum, dpos_cfg chain_config.DPOSConfig) {
+	self.cfg_by_block = append(self.cfg_by_block, ConfigWithBlock{dpos_cfg, blk_n})
+	self.dpos_cfg = dpos_cfg
 }
 
 func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.cfg.Slashing, storage, reader, evm)
+	return new(Contract).Init(self.magnolia_hf_cfg, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
