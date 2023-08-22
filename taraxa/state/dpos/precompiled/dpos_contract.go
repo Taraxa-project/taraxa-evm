@@ -683,9 +683,6 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 			validatorReward.Add(validatorReward, validatorVoteReward)
 		}
 
-		// Add reward for for final check
-		newMintedRewards.Add(newMintedRewards, validatorReward)
-
 		validator := self.validators.GetValidator(&validatorAddress)
 		if validator == nil {
 			// This could happen due to few blocks artificial delay we use to determine if validator is eligible or not when
@@ -696,6 +693,9 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 			// We shouldn't really check if validator was eligible before. Because there is a possibility to include some old DAG block anytime(not only at this few blocks old)
 			continue
 		}
+
+		// Add reward for for final check
+		newMintedRewards.Add(newMintedRewards, validatorReward)
 
 		// Adds fees for all txs that validator added in his blocks as first
 		validatorReward.Add(validatorReward, feesRewards.GetTrxsFeesReward(validatorAddress))
