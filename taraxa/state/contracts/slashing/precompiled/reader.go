@@ -1,13 +1,10 @@
 package slashing
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	slashing_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
@@ -28,25 +25,28 @@ func (self *Reader) Init(cfg *chain_config.DPOSConfig, blk_n types.BlockNum, sto
 	return self
 }
 
-func (self *Reader) getJailInfo(addr *common.Address) (ret *slashing_sol.SlashingInterfaceJailInfo) {
+func (self *Reader) getJailBlock(addr *common.Address) (jailed bool, block types.BlockNum) {
+	block = 0
+	jailed = false
+
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, addr.Bytes())
 	self.storage.Get(db_key, func(bytes []byte) {
-		currrent_jail_block := new(types.BlockNum)
-		rlp.MustDecodeBytes(bytes, currrent_jail_block)
-
-		ret = new(slashing_sol.SlashingInterfaceJailInfo)
-		ret.JailBlock = big.NewInt(int64(*currrent_jail_block))
-		ret.ProofsCount = 0
+		rlp.MustDecodeBytes(bytes, &block)
+		jailed = true
 	})
 
 	return
 }
 
 func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
-	jail_info := self.getJailInfo(addr)
-	if jail_info != nil && jail_info.JailBlock.Uint64() >= block {
-		return true
+	jailed, jail_block := self.getJailBlock(addr)
+	if !jailed {
+		return false
 	}
 
-	return false
+	if jail_block < block {
+		return false
+	}
+
+	return true
 }

@@ -15,8 +15,6 @@
 package slashing_sol
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
@@ -24,25 +22,7 @@ import (
 /**** Automatically generated & Copy pasted structs ****/
 /*******************************************************/
 
-var TaraxaSlashingClientMetaData = "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"block\",\"type\":\"uint256\"}],\"name\":\"Jailed\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"vote1\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"vote2\",\"type\":\"bytes\"}],\"name\":\"commitDoubleVotingProof\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"}],\"name\":\"getDoubleVotingProofs\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"proof_author\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"block\",\"type\":\"uint256\"}],\"internalType\":\"struct SlashingInterface.DoubleVotingProof[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"}],\"name\":\"getJailInfo\",\"outputs\":[{\"components\":[{\"internalType\":\"uint256\",\"name\":\"jail_block\",\"type\":\"uint256\"},{\"internalType\":\"uint32\",\"name\":\"proofs_count\",\"type\":\"uint32\"}],\"internalType\":\"struct SlashingInterface.JailInfo\",\"name\":\"info\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getMaliciousValidators\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"},{\"components\":[{\"internalType\":\"uint256\",\"name\":\"jail_block\",\"type\":\"uint256\"},{\"internalType\":\"uint32\",\"name\":\"proofs_count\",\"type\":\"uint32\"}],\"internalType\":\"struct SlashingInterface.JailInfo\",\"name\":\"jail_info\",\"type\":\"tuple\"}],\"internalType\":\"struct SlashingInterface.MaliciousValidator[]\",\"name\":\"\",\"type\":\"tuple[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"}],\"name\":\"isJailed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
-
-// SlashingInterfaceDoubleVotingProof is an auto generated low-level Go binding around an user-defined struct.
-type SlashingInterfaceDoubleVotingProof struct {
-	ProofAuthor common.Address
-	Block       *big.Int
-}
-
-// SlashingInterfaceJailInfo is an auto generated low-level Go binding around an user-defined struct.
-type SlashingInterfaceJailInfo struct {
-	JailBlock   *big.Int
-	ProofsCount uint32
-}
-
-// SlashingInterfaceMaliciousValidator is an auto generated low-level Go binding around an user-defined struct.
-type SlashingInterfaceMaliciousValidator struct {
-	Validator common.Address
-	JailInfo  SlashingInterfaceJailInfo
-}
+var TaraxaSlashingClientMetaData = "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"block\",\"type\":\"uint64\"}],\"name\":\"Jailed\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"vote_a\",\"type\":\"bytes\"},{\"internalType\":\"bytes\",\"name\":\"vote_b\",\"type\":\"bytes\"}],\"name\":\"commitDoubleVotingProof\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"validator\",\"type\":\"address\"}],\"name\":\"getJailBlock\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
 
 /*******************************************************/
 /************** Manually created structs ***************/
@@ -51,8 +31,8 @@ type SlashingInterfaceMaliciousValidator struct {
 // !!! Important: arguments names inside "<...>Args" structs must match args names from solidity interface, otherwise it won't work
 
 type CommitDoubleVotingProofArgs struct {
-	Vote1 []byte
-	Vote2 []byte
+	VoteA []byte
+	VoteB []byte
 }
 
 type ValidatorArg struct {

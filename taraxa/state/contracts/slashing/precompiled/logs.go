@@ -1,8 +1,6 @@
 package slashing
 
 import (
-	"math/big"
-
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -30,7 +28,7 @@ func (self *Logs) Init(events map[string]abi.Event) *Logs {
 // If some event will be added or changed TestMakeLogsCheckTopics test should be modified
 
 // event Jailed(address indexed validator, uint256 block)
-func (self *Logs) MakeJailedLog(validator *common.Address, block *big.Int) vm.LogRecord {
+func (self *Logs) MakeJailedLog(validator *common.Address, block uint64) vm.LogRecord {
 	event := self.Events["Jailed"]
 
 	return *checkError(event.MakeLog(slashing_contract_address, validator, block))
