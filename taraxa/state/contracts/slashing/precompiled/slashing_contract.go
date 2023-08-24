@@ -252,7 +252,7 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	// Save double voting proof
 	self.saveDoubleVotingProof(proof_db_key)
 
-	self.evm.AddLog(self.logs.MakeJailedLog(vote_a_validator, jail_block))
+	self.evm.AddLog(self.logs.MakeJailedLog(vote_a_validator, block, jail_block, DOUBLE_VOTING))
 
 	return nil
 }

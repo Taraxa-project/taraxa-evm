@@ -23,7 +23,7 @@ import (
 )
 
 // This strings should correspond to event signatures in ../solidity/slashing_contract_interface.sol file
-var JailedEventHash = *keccak256.Hash([]byte("Jailed(address,uint64)"))
+var JailedEventHash = *keccak256.Hash([]byte("Jailed(address,uint64,uint64,uint8)"))
 
 type IsJailedRet struct {
 	End bool
@@ -307,7 +307,7 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 
 	count := 0
 	{
-		log := logs.MakeJailedLog(&common.ZeroAddress, block)
+		log := logs.MakeJailedLog(&common.ZeroAddress, block, block+DefaultChainCfg.Hardforks.MagnoliaHf.JailTime, slashing.DOUBLE_VOTING)
 		tc.Assert.Equal(log.Topics[0], JailedEventHash)
 		count++
 	}

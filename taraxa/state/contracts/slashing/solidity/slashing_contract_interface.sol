@@ -4,7 +4,9 @@
 pragma solidity >=0.8.0;
 
 interface SlashingInterface {
-    event Jailed(address indexed validator, uint64 block);
+    // Malicious behaviour types
+    // uint8 DOUBLE_VOTING = 1
+    event Jailed(address indexed validator, uint64 indexed start_block, uint64 indexed end_block, uint8 malicious_behaviour_type);
 
     // Commit double voting malicious behaviour proof
     function commitDoubleVotingProof(
