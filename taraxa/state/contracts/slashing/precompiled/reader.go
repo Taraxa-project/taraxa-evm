@@ -9,16 +9,16 @@ import (
 )
 
 type Reader struct {
-	dpos_config *chain_config.DPOSConfig
-	storage     *contract_storage.StorageReaderWrapper
+	cfg     *chain_config.ChainConfig
+	storage *contract_storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *chain_config.DPOSConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
-	self.dpos_config = cfg
+func (self *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+	self.cfg = cfg
 
 	blk_n_actual := uint64(0)
-	if uint64(self.dpos_config.DelegationDelay) < blk_n {
-		blk_n_actual = blk_n - uint64(self.dpos_config.DelegationDelay)
+	if uint64(self.cfg.DPOS.DelegationDelay) < blk_n {
+		blk_n_actual = blk_n - uint64(self.cfg.DPOS.DelegationDelay)
 	}
 
 	self.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n_actual))
@@ -39,6 +39,10 @@ func (self *Reader) getJailBlock(addr *common.Address) (jailed bool, block types
 }
 
 func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
+	if !self.cfg.Hardforks.IsMagnoliaHardfork(block) {
+		return false
+	}
+
 	jailed, jail_block := self.getJailBlock(addr)
 	if !jailed {
 		return false
