@@ -3,20 +3,22 @@ package dpos
 import (
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	"github.com/Taraxa-project/taraxa-evm/common"
+	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
-	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 )
 
-func ContractAddress() common.Address {
-	return *contract_address
+type DposConfigWithBlock struct {
+	DposConfig chain_config.DPOSConfig
+	Blk_n      types.BlockNum
 }
 
 type API struct {
-	config_by_block []chain_config.DposConfigWithBlock
+	config_by_block []DposConfigWithBlock
 	config          chain_config.ChainConfig
 }
 
@@ -70,15 +72,15 @@ func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.ChainConfig {
 }
 
 func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
-	self.config_by_block = append(self.config_by_block, chain_config.DposConfigWithBlock{cfg.DPOS, blk_n})
+	self.config_by_block = append(self.config_by_block, DposConfigWithBlock{cfg.DPOS, blk_n})
 	self.config = cfg
 }
 
-func (self *API) NewContract(storage Storage, reader Reader, evm *vm.EVM) *Contract {
+func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
 	return new(Contract).Init(self.config, storage, reader, evm)
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) StorageReader) (ret Reader) {
+func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, storage_factory)
 	return

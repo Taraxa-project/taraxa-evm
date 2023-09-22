@@ -10,7 +10,6 @@ import (
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/holiman/uint256"
 
@@ -195,8 +194,8 @@ func taraxa_evm_state_api_trace_transactions(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_transition_state
-func taraxa_evm_state_api_transition_state(
+//export taraxa_evm_state_api_execute_transactions
+func taraxa_evm_state_api_execute_transactions(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -204,16 +203,13 @@ func taraxa_evm_state_api_transition_state(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		Blk           vm.BlockInfo
-		Txs           []vm.Transaction
-		Rewards_stats []rewards_stats.RewardsStats
+		Blk vm.BlockInfo
+		Txs []vm.Transaction
 	}
 	dec_rlp(params_enc, &params)
 
 	var retval struct {
 		ExecutionResults []vm.ExecutionResult
-		StateRoot        common.Hash
-		TotalReward      *big.Int
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
@@ -225,7 +221,7 @@ func taraxa_evm_state_api_transition_state(
 		txResult := st.ExecuteTransaction(tx)
 
 		// Contract distribution is disabled - just add fee to the block author balance
-		if st.BlockNumber() < st.GetChainConfig().Hardforks.FeeRewardsBlockNum {
+		if st.BlockNumber() < st.GetChainConfig().Hardforks.MagnoliaHf.BlockNum {
 			txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
 			g, _ := uint256.FromBig(tx.GasPrice)
 			txFee.Mul(txFee, g)
@@ -234,13 +230,39 @@ func taraxa_evm_state_api_transition_state(
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
 	}
+
+	enc_rlp(&retval, cb)
+}
+
+//export taraxa_evm_state_api_distribute_rewards
+func taraxa_evm_state_api_distribute_rewards(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+
+	defer handle_err(cb_err)
+	var params struct {
+		Rewards_stats []rewards_stats.RewardsStats
+	}
+	dec_rlp(params_enc, &params)
+
+	var retval struct {
+		StateRoot   common.Hash
+		TotalReward *big.Int
+	}
+	self := state_API_instances[ptr]
+	st := self.GetStateTransition()
+
 	totalReward := uint256.NewInt(0)
 	for i := range params.Rewards_stats {
-		reward := st.DistributeRewards(&params.Rewards_stats[i], &dpos.FeesRewards{})
+		reward := st.DistributeRewards(&params.Rewards_stats[i])
 		if reward != nil {
 			totalReward.Add(totalReward, reward)
 		}
 	}
+
 	st.EndBlock()
 	if totalReward != nil {
 		retval.TotalReward = totalReward.ToBig()
@@ -271,6 +293,12 @@ func taraxa_evm_state_api_dpos_is_eligible(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
+
+	// If validator is jailed, return false
+	if state_API_instances[ptr].SlashingReader(params.BlkNum).IsJailed(params.BlkNum, &params.Addr) {
+		return false
+	}
+
 	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
 }
 

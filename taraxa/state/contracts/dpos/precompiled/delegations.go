@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
 type Delegation struct {
@@ -20,15 +21,15 @@ type Delegation struct {
 // as such info is stored under multiple independent storage keys, it is important that caller does not need to
 // think about all implementation details, but just calls functions on Delegations type
 type Delegations struct {
-	storage *StorageWrapper
+	storage *contract_storage.StorageWrapper
 	// <delegator addres -> list of validators> as each delegator can delegate to multiple validators
-	delegators_validators map[common.Address]*IterableMap
+	delegators_validators map[common.Address]*contract_storage.AddressesIMap
 
 	delegations_field                  []byte
 	delegators_validators_field_prefix []byte
 }
 
-func (self *Delegations) Init(stor *StorageWrapper, prefix []byte) {
+func (self *Delegations) Init(stor *contract_storage.StorageWrapper, prefix []byte) {
 	self.storage = stor
 
 	// Init Delegations storage fields keys - relative to the prefix
@@ -108,10 +109,10 @@ func (self *Delegations) GetDelegatorValidatorsAddresses(delegator_address *comm
 	return delegator_validators.GetAccounts(batch, count)
 }
 
-func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *IterableMap {
+func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *contract_storage.AddressesIMap {
 	delegator_validators, found := self.delegators_validators[*delegator_address]
 	if found == false {
-		delegator_validators = new(IterableMap)
+		delegator_validators = new(contract_storage.AddressesIMap)
 		delegator_validators_field := append(self.delegators_validators_field_prefix, delegator_address[:]...)
 		delegator_validators.Init(self.storage, delegator_validators_field)
 	}
@@ -124,5 +125,5 @@ func (self *Delegations) removeDelegatorValidatorsList(delegator_address *common
 }
 
 func (self *Delegations) genDelegationKey(delegator_address *common.Address, validator_address *common.Address) common.Hash {
-	return stor_k_2(self.delegations_field, validator_address[:], delegator_address[:])
+	return contract_storage.Stor_k_2(self.delegations_field, validator_address[:], delegator_address[:])
 }

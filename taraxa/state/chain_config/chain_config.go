@@ -5,9 +5,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 )
 
 type Redelegation struct {
@@ -16,22 +14,30 @@ type Redelegation struct {
 	Amount    *big.Int
 }
 
-type Hardforks struct {
+type MagnoliaHfConfig struct {
+	BlockNum uint64
+	JailTime uint64 // [number of blocks]
+}
+
+type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
-	FeeRewardsBlockNum           uint64
+	MagnoliaHf                   MagnoliaHfConfig
 }
 
-type ChainConfig struct {
-	EVMChainConfig  params.ChainConfig
-	GenesisBalances core.BalanceMap
-	DPOS            DPOSConfig
-	Hardforks       Hardforks
+func (self *HardforksConfig) IsMagnoliaHardfork(block uint64) bool {
+	return block >= self.MagnoliaHf.BlockNum
 }
 
-func (self *ChainConfig) RewardsEnabled() bool {
-	return self.DPOS.YieldPercentage > 0
+type GenesisValidator struct {
+	Address     common.Address
+	Owner       common.Address
+	VrfKey      []byte
+	Commission  uint16
+	Endpoint    string
+	Description string
+	Delegations core.BalanceMap
 }
 
 type DPOSConfig = struct {
@@ -50,26 +56,13 @@ type DPOSConfig = struct {
 	InitialValidators           []GenesisValidator
 }
 
-type DposConfigWithBlock struct {
-	DposConfig DPOSConfig
-	Blk_n      types.BlockNum
+type ChainConfig struct {
+	EVMChainConfig  params.ChainConfig
+	GenesisBalances core.BalanceMap
+	DPOS            DPOSConfig
+	Hardforks       HardforksConfig
 }
 
-type GenesisValidator struct {
-	Address     common.Address
-	Owner       common.Address
-	VrfKey      []byte
-	Commission  uint16
-	Endpoint    string
-	Description string
-	Delegations core.BalanceMap
-}
-
-func (self *GenesisValidator) GenRegisterValidatorArgs() (vi sol.RegisterValidatorArgs) {
-	vi.VrfKey = self.VrfKey
-	vi.Commission = self.Commission
-	vi.Description = self.Description
-	vi.Endpoint = self.Endpoint
-	vi.Validator = self.Address
-	return
+func (self *ChainConfig) RewardsEnabled() bool {
+	return self.DPOS.YieldPercentage > 0
 }
