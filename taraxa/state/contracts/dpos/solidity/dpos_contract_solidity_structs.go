@@ -91,6 +91,7 @@ type RegisterValidatorArgs struct {
 	Validator   common.Address
 	Proof       []byte
 	VrfKey      []byte
+	BlsKey      []byte
 	Commission  uint16
 	Description string
 	Endpoint    string
@@ -104,6 +105,11 @@ type SetValidatorInfoArgs struct {
 type SetCommissionArgs struct {
 	Validator  common.Address
 	Commission uint16
+}
+
+type UpdateBlsKeyArgs struct {
+	Validator common.Address
+	BlsKey    []byte
 }
 
 type ValidatorAddressArgs struct {

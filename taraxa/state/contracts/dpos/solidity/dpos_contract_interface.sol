@@ -108,6 +108,7 @@ interface DposInterface {
         address validator,
         bytes memory proof,
         bytes memory vrf_key,
+        bytes memory bls_key,
         uint16 commission,
         string calldata description,
         string calldata endpoint
@@ -125,8 +126,8 @@ interface DposInterface {
     // Sets validator's commission [%] * 100 so 1% is 100 & 10% is 1000
     function setCommission(address validator, uint16 commission) external;
 
-    // TODO: these 4 methods below can be all replaced by "getValidator" and "getValidators" calls, but it should be
-    //       considered in terms of performance, etc...
+    // Updates validator's bls ulic key
+    function updateBlsKey(address validator, bytes memory bls_key) external;
 
     // Returns true if acc is eligible validator, otherwise false
     function isValidatorEligible(address validator) external view returns (bool);

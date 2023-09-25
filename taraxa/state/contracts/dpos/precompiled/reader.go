@@ -141,3 +141,10 @@ func (r Reader) GetTotalSupply() *big.Int {
 
 	return total_supply.ToBig()
 }
+
+func (r Reader) GetBlsKey(addr *common.Address) (ret []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_validators, validator_bls_index, addr[:]), func(bytes []byte) {
+		ret = bytes
+	})
+	return
+}

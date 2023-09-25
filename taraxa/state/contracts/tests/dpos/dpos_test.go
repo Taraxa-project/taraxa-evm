@@ -85,6 +85,7 @@ var (
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
 	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
+	DefaultBlsKey                      = common.RightPadBytes([]byte("0x0"), 32)
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
@@ -115,6 +116,7 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
+			FicusHfBlockNum: 0,
 		},
 	}
 )
@@ -216,15 +218,15 @@ func TestRegisterValidator(t *testing.T) {
 	validator2_owner := addr(2)
 	validator2_addr, validator2_proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Try to register same validator twice
-	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
 	// Try to register with not enough balance
-	test.ExecuteAndCheck(validator2_owner, bigutil.Add(DefaultBalance, big.NewInt(1)), test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), vm.ErrInsufficientBalanceForTransfer)
+	test.ExecuteAndCheck(validator2_owner, bigutil.Add(DefaultBalance, big.NewInt(1)), test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), vm.ErrInsufficientBalanceForTransfer)
 	// Try to register with wrong proof
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrWrongProof, util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), dpos.ErrWrongProof, util.ErrorString(""))
 }
 
 func TestDelegate(t *testing.T) {
@@ -232,7 +234,7 @@ func TestDelegate(t *testing.T) {
 	defer test.End()
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Try to delegate to not existent validator
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("delegate", addr(2)), dpos.ErrNonExistentValidator, util.ErrorString(""))
@@ -248,7 +250,7 @@ func TestDelegateMinMax(t *testing.T) {
 	delegation := bigutil.Mul(big.NewInt(5000000), TaraPrecision)
 
 	val_addr, proof := generateAddrAndProof()
-	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	test.ExecuteAndCheck(addr(1), bigutil.Sub(delegation, DefaultMinimumDeposit), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	totalBalance := bigutil.Sub(delegation, DefaultMinimumDeposit)
@@ -274,13 +276,13 @@ func TestRedelegate(t *testing.T) {
 	validator2_owner := addr(2)
 	validator2_addr, validator2_proof := generateAddrAndProof()
 
-	reg_res := test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	reg_res := test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(reg_res.Logs), 2)
 	tc.Assert.Equal(reg_res.Logs[0].Topics[0], ValidatorRegisteredEventHash)
 	tc.Assert.Equal(reg_res.Logs[1].Topics[0], DelegatedEventHash)
 	test.CheckContractBalance(DefaultMinimumDeposit)
 
-	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
 	test.CheckContractBalance(totalBalance)
 	redelegate_res := test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
@@ -292,7 +294,7 @@ func TestRedelegate(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, DefaultMinimumDeposit), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	vali1_new_delegation := bigutil.Mul(DefaultMinimumDeposit, big.NewInt(2))
-	test.ExecuteAndCheck(validator1_owner, vali1_new_delegation, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, vali1_new_delegation, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	totalBalance.Add(totalBalance, vali1_new_delegation)
 	test.CheckContractBalance(totalBalance)
 	// Validator to does not exist
@@ -329,8 +331,8 @@ func TestRedelegateMinMax(t *testing.T) {
 
 	delegation := bigutil.Mul(big.NewInt(5000000), TaraPrecision)
 
-	test.ExecuteAndCheck(validator1_owner, init_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-	test.ExecuteAndCheck(validator2_owner, init_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, init_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, init_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	totalBalance := bigutil.Add(init_stake, init_stake)
 	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, bigutil.Add(DefaultMinimumDeposit, big.NewInt(1))), dpos.ErrInsufficientDelegation, util.ErrorString(""))
@@ -352,7 +354,7 @@ func TestUndelegate(t *testing.T) {
 
 	delegator_addr := addr(2)
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(undelegate_res.Logs), 1)
@@ -369,7 +371,7 @@ func TestUndelegate(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
 	// ErrExistentValidator
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 
 	// NonExistentValidator
@@ -399,7 +401,7 @@ func TestPreMagnoliaHfUndelegate(t *testing.T) {
 
 	delegator_addr := addr(2)
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(undelegate_res.Logs), 1)
@@ -430,10 +432,10 @@ func TestMagnoliaHardfork(t *testing.T) {
 	validator2_addr, validator2_proof := generateAddrAndProof()
 
 	// Test pre-magnolia hardfork behaviour
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 
-	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_balance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
 	test.CheckContractBalance(total_balance)
 
@@ -455,7 +457,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.CheckContractBalance(total_balance)
 
 	// Register the same validator
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
 	test.CheckContractBalance(total_balance)
 
@@ -471,7 +473,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	// Register the same validator
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
 
 	// Test post-magnolia hardfork behaviour
@@ -512,7 +514,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	// Register the same validator
-	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_balance = bigutil.Add(total_balance, DefaultMinimumDeposit)
 	test.CheckContractBalance(total_balance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("getValidator", validator1_addr), util.ErrorString(""), util.ErrorString(""))
@@ -524,6 +526,75 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
 
+func TestFicusHardforkRegisterValidator(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.FicusHfBlockNum = 5
+
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	validator1_owner := addr(1)
+	validator1_addr, validator1_proof := generateAddrAndProof()
+
+	// Test pre-ficus hardfork validator register with valid bls key - ErrUnsupportedBlsKey
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), dpos.ErrUnsupportedBlsKey, util.ErrorString(""))
+	// Register validator without bls key
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, []byte{}, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
+
+	// Advance few block so we are sure the current block already passed hardfork block num
+	for i := uint64(0); i < cfg.Hardforks.FicusHfBlockNum; i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	validator2_owner := addr(2)
+	validator2_addr, validator2_proof := generateAddrAndProof()
+
+	// Test post-ficus hardfork validator register with valid bls key
+	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit))
+
+	validator3_owner := addr(2)
+	validator3_addr, validator3_proof := generateAddrAndProof()
+
+	// Test post-ficus hardfork validator register with invalid bls key - ErrWrongBlsKey
+	test.ExecuteAndCheck(validator3_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator3_addr, validator3_proof, DefaultVrfKey, []byte{1, 2, 3}, uint16(10), "test", "test"), dpos.ErrWrongBlsKey, util.ErrorString(""))
+}
+
+func TestFicusHardforkUpdateBlsKey(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.FicusHfBlockNum = 5
+
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	validator1_owner := addr(1)
+	validator1_addr, validator1_proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, []byte{}, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+
+	// Test pre-ficus hardfork updateBlsKey with valid bls key - ErrUnsupportedBlsKey
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("updateBlsKey", validator1_addr, []byte{}), dpos.ErrUnsupportedBlsKey, util.ErrorString(""))
+
+	// Advance few block so we are sure the current block already passed hardfork block num
+	for i := uint64(0); i < cfg.Hardforks.FicusHfBlockNum; i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	// Test post-ficus hardfork validator register with invalid validator address - ErrWrongBlsKey
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("updateBlsKey", addr(2), []byte{}), dpos.ErrNonExistentValidator, util.ErrorString(""))
+
+	// Test post-ficus hardfork validator register with invalid account - ErrWrongOwnerAcc
+	test.ExecuteAndCheck(addr(2), DefaultMinimumDeposit, test.Pack("updateBlsKey", validator1_addr, []byte{}), dpos.ErrWrongOwnerAcc, util.ErrorString(""))
+
+	// Test post-ficus hardfork validator register with invalid bls key - ErrWrongBlsKey
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("updateBlsKey", validator1_addr, []byte{}), dpos.ErrWrongBlsKey, util.ErrorString(""))
+
+	// Test post-ficus hardfork validator register with valid bls key
+	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("updateBlsKey", validator1_addr, DefaultBlsKey), util.ErrorString(""), util.ErrorString(""))
+
+}
+
 func TestConfirmUndelegate(t *testing.T) {
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
@@ -531,7 +602,7 @@ func TestConfirmUndelegate(t *testing.T) {
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 
 	// ErrNonExistentDelegation
@@ -580,7 +651,7 @@ func TestCancelUndelegate(t *testing.T) {
 	test.AdvanceBlock(nil, nil)
 	test.AdvanceBlock(nil, nil)
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// ErrNonExistentUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegate", val_addr), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
@@ -624,7 +695,7 @@ func TestUndelegateMin(t *testing.T) {
 	defer test.End()
 
 	val_addr, proof := generateAddrAndProof()
-	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(addr(1), big.NewInt(0), test.Pack("undelegate", val_addr, big.NewInt(1)), dpos.ErrInsufficientDelegation, util.ErrorString(""))
 	test.ExecuteAndCheck(addr(2), bigutil.Mul(DefaultMinimumDeposit, big.NewInt(3)), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
@@ -849,19 +920,19 @@ func TestRewardsAndCommission(t *testing.T) {
 	*/
 
 	// Creates validators & delegators
-	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake := delegator1_stake
 
-	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator2_stake)
 
 	test.ExecuteAndCheck(delegator3_addr, delegator3_stake, test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator3_stake)
 
-	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.Pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.Pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, DefaultBlsKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator4_stake)
 
-	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.Pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.Pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, DefaultBlsKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator5_stake)
 
 	test.CheckContractBalance(total_stake)
@@ -1067,7 +1138,7 @@ func TestClaimAllRewards(t *testing.T) {
 	for idx := uint64(1); idx <= validators_count+1; idx++ {
 		validator_addr, validator_proof := generateAddrAndProof()
 		validator_owner := addr(idx)
-		test.ExecuteAndCheck(validator_owner, validator_stake, test.Pack("registerValidator", validator_addr, validator_proof, DefaultVrfKey, validator_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator_owner, validator_stake, test.Pack("registerValidator", validator_addr, validator_proof, DefaultVrfKey, DefaultBlsKey, validator_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 		if idx == 1 {
 			block_author = validator_addr
 			tmp_rewards_stats = NewRewardsStats(&block_author)
@@ -1135,7 +1206,7 @@ func TestSetValidatorInfo(t *testing.T) {
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 
 	validator_raw := test.ExecuteAndCheck(val_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator := new(GetValidatorRet)
@@ -1181,7 +1252,7 @@ func TestSetCommission(t *testing.T) {
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("setCommission", val_addr, uint16(11)), dpos.ErrWrongOwnerAcc, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("setCommission", val_addr, uint16(11)), dpos.ErrForbiddenCommissionChange, util.ErrorString(""))
 
@@ -1233,7 +1304,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	intristic_gas_batch0 := 21400
@@ -1316,7 +1387,7 @@ func TestGetValidatorsFor(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	intristic_gas_batch0 := 21656
@@ -1393,7 +1464,7 @@ func TestGetTotalDelegation(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	// Create delegator delegations
@@ -1449,7 +1520,7 @@ func TestGetDelegations(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	// Create delegator delegations
@@ -1546,7 +1617,7 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	// Create delegator delegations
@@ -1637,7 +1708,7 @@ func TestGetValidator(t *testing.T) {
 	test.ExecuteAndCheck(val_addr, big.NewInt(0), test.Pack("getValidator", val_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 
 	// Register validator and check if it is returned from contract
-	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	validator_raw := test.ExecuteAndCheck(val_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator := new(GetValidatorRet)
 	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
@@ -1671,7 +1742,7 @@ func TestGetTotalEligibleVotesCount(t *testing.T) {
 	}
 
 	// Register validator and see what is getTotalEligibleVotesCount
-	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	// New delegation through registerValidator should not be applied yet in delayed storage - getTotalEligibleVotesCount should return 0 at this moment
 	votes_count_raw := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getTotalEligibleVotesCount"), util.ErrorString(""), util.ErrorString(""))
 	votes_count := new(uint64)
@@ -1729,7 +1800,7 @@ func TestGetValidatorEligibleVotesCount(t *testing.T) {
 	}
 
 	// Register validator
-	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	// Delegate some more
 	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 
@@ -1765,7 +1836,7 @@ func TestIsValidatorEligible(t *testing.T) {
 	test.Unpack(is_eligible, "isValidatorEligible", is_eligible_raw.CodeRetval)
 	tc.Assert.Equal(false, *is_eligible)
 
-	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, test.Chain_cfg.DPOS.EligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 
 	// Wait DelegationDelay so new delegation is applied
 	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
@@ -1875,11 +1946,11 @@ func TestValidatorsClass(t *testing.T) {
 	validator2_owner := addr(1)
 
 	// Checks CreateValidator & CheckValidatorOwner
-	validators.CreateValidator(true, &validator1_owner, &validator1_addr, DefaultVrfKey, 0, 1, "validator1_description", "validator1_endpoint")
+	validators.CreateValidator(true, &validator1_owner, &validator1_addr, DefaultVrfKey, DefaultBlsKey, 0, 1, "validator1_description", "validator1_endpoint")
 	validators.CheckValidatorOwner(&validator1_owner, &validator1_addr)
 	tc.Assert.Equal(uint32(1), validators.GetValidatorsCount())
 
-	validators.CreateValidator(true, &validator2_owner, &validator2_addr, DefaultVrfKey, 0, 2, "validator2_description", "validator2_endpoint")
+	validators.CreateValidator(true, &validator2_owner, &validator2_addr, DefaultVrfKey, DefaultBlsKey, 0, 2, "validator2_description", "validator2_endpoint")
 	validators.CheckValidatorOwner(&validator2_owner, &validator2_addr)
 	tc.Assert.Equal(uint32(2), validators.GetValidatorsCount())
 	{
@@ -2188,19 +2259,19 @@ func TestRedelegateHF(t *testing.T) {
 	*/
 
 	// Creates validators & delegators
-	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake := delegator1_stake
 
-	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator2_owner, delegator2_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, DefaultBlsKey, validator2_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator2_stake)
 
 	test.ExecuteAndCheck(delegator3_addr, delegator3_stake, test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator3_stake)
 
-	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.Pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator4_owner, delegator4_stake, test.Pack("registerValidator", validator4_addr, validator4_proof, DefaultVrfKey, DefaultBlsKey, validator4_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator4_stake)
 
-	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.Pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator5_owner, delegator5_stake, test.Pack("registerValidator", validator5_addr, validator5_proof, DefaultVrfKey, DefaultBlsKey, validator5_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake = bigutil.Add(total_stake, delegator5_stake)
 
 	test.CheckContractBalance(total_stake)
