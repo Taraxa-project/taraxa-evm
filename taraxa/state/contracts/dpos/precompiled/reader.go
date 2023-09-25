@@ -106,3 +106,10 @@ func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
 	})
 	return
 }
+
+func (self Reader) GetBlsKey(addr *common.Address) (ret []byte) {
+	self.storage.Get(storage.Stor_k_1(field_validators, validator_bls_index, addr[:]), func(bytes []byte) {
+		ret = bytes
+	})
+	return
+}

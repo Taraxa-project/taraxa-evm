@@ -59,6 +59,7 @@ const (
 	ClaimRewardsGas           uint64 = 40000
 	ClaimCommissionRewardsGas uint64 = 20000
 	SetValidatorInfoGas       uint64 = 20000
+	UpdateBlsKeyGas           uint64 = 20000
 	DposGetMethodsGas         uint64 = 5000
 	DposBatchGetMethodsGas    uint64 = 5000
 	DefaultDposMethodGas      uint64 = 20000
@@ -81,7 +82,10 @@ var (
 	ErrCallIsNotToplevel            = util.ErrorString("only top-level calls are allowed")
 	ErrWrongProof                   = util.ErrorString("Wrong proof, validator address could not be recovered")
 	ErrWrongOwnerAcc                = util.ErrorString("This account is not owner of specified validator")
-	ErrWrongVrfKey                  = util.ErrorString("Wrong vrf key specified in validator arguments")
+	ErrWrongVrfKey                  = util.ErrorString("Wrong vrf key")
+	ErrWrongBlsKey                  = util.ErrorString("Wrong bls key")
+	ErrUnsupportedBlsKey            = util.ErrorString("Bls key not yet supported")
+	ErrExistentBlsKey               = util.ErrorString("Bls key already saved")
 	ErrForbiddenCommissionChange    = util.ErrorString("Forbidden commission change")
 	ErrCommissionOverflow           = util.ErrorString("Commission is bigger than maximum value")
 	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
@@ -100,6 +104,9 @@ const (
 
 	// Length of vrf public key
 	VrfKeyLength = 32
+
+	// Length of bls public key
+	BlsKeyLength = 32
 
 	// Maximum number of validators per batch that delegator get claim rewards from
 	ClaimAllRewardsMaxCount = 10
@@ -217,6 +224,8 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return RegisterValidatorGas
 	case "setValidatorInfo":
 		return SetValidatorInfoGas
+	case "updateBlsKey":
+		return UpdateBlsKeyGas
 	case "isValidatorEligible":
 	case "getTotalEligibleVotesCount":
 	case "getValidatorEligibleVotesCount":
@@ -504,6 +513,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return nil, self.setCommission(ctx, block_num, args)
+
+	case "updateBlsKey":
+		var args dpos_sol.UpdateBlsKeyArgs
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse updateBlsKey input args: ", err)
+			return nil, err
+		}
+		return nil, self.updateBlsKey(ctx, block_num, args)
 
 	case "registerValidator":
 		var args dpos_sol.RegisterValidatorArgs
@@ -1308,6 +1325,18 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	if len(args.VrfKey) != VrfKeyLength {
 		return ErrWrongVrfKey
 	}
+
+	if self.cfg.Hardforks.IsFicusHardfork(block) {
+		if len(args.BlsKey) != BlsKeyLength {
+			return ErrWrongBlsKey
+		}
+	} else {
+		// bls key was not supported before ficus hardfork
+		if len(args.BlsKey) != 0 {
+			return ErrUnsupportedBlsKey
+		}
+	}
+
 	if MaxCommission < uint64(args.Commission) {
 		return ErrCommissionOverflow
 	}
@@ -1336,7 +1365,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	state.RewardsPer1Stake = big.NewInt(0)
 
 	// Creates validator related objects in storage
-	validator := self.validators.CreateValidator(self.isMagnoliaHardfork(block), owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
+	validator := self.validators.CreateValidator(self.isMagnoliaHardfork(block), owner_address, &args.Validator, args.VrfKey, args.BlsKey, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 	self.evm.AddLog(self.logs.MakeValidatorRegisteredLog(&args.Validator))
 
@@ -1420,6 +1449,39 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 	validator.LastCommissionChange = block
 	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
+
+	return nil
+}
+
+// Changes validator commission to new rate
+func (self *Contract) updateBlsKey(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UpdateBlsKeyArgs) error {
+	if !self.validators.ValidatorExists(&args.Validator) {
+		return ErrNonExistentValidator
+	}
+
+	if !self.validators.CheckValidatorOwner(ctx.CallerAccount.Address(), &args.Validator) {
+		return ErrWrongOwnerAcc
+	}
+
+	if !self.cfg.Hardforks.IsFicusHardfork(block) {
+		return ErrUnsupportedBlsKey
+	}
+
+	if len(args.BlsKey) != BlsKeyLength {
+		return ErrWrongBlsKey
+	}
+
+	// TODO: do we want to allow changing bls key multiple times ? If so:
+	//			- do we allow also vrf key change ?
+	//			- C++ key manager cache will no longer work properly
+	if len(self.validators.GetBlsKey(&args.Validator)) > 0 {
+		return ErrExistentBlsKey
+	}
+
+	self.validators.SaveBlsKey(&args.Validator, args.BlsKey)
+
+	// TODO: do we want event for this method ???
+	//self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
 }
@@ -1646,7 +1708,7 @@ func (self *Contract) state_put(key *common.Hash, state *State) {
 }
 
 func (self *Contract) apply_genesis_entry(validator_info *chain_config.GenesisValidator, make_context func(caller *common.Address, value *big.Int) vm.CallFrame) {
-	args := dpos_sol.RegisterValidatorArgs{VrfKey: validator_info.VrfKey, Commission: validator_info.Commission, Description: validator_info.Description, Endpoint: validator_info.Endpoint, Validator: validator_info.Address}
+	args := dpos_sol.RegisterValidatorArgs{VrfKey: validator_info.VrfKey, BlsKey: validator_info.BlsKey, Commission: validator_info.Commission, Description: validator_info.Description, Endpoint: validator_info.Endpoint, Validator: validator_info.Address}
 
 	registrationError := self.registerValidatorWithoutChecks(make_context(&validator_info.Owner, big.NewInt(0)), 0, args)
 	if registrationError != nil {
@@ -1659,7 +1721,7 @@ func (self *Contract) apply_genesis_entry(validator_info *chain_config.GenesisVa
 		self.storage.SubBalance(&delegator, amount)
 		self.storage.AddBalance(dpos_contract_address, amount)
 
-		delegationError := self.delegate(make_context(&delegator, amount), 0, dpos_sol.ValidatorAddressArgs{validator_info.Address})
+		delegationError := self.delegate(make_context(&delegator, amount), 0, dpos_sol.ValidatorAddressArgs{Validator: validator_info.Address})
 		if delegationError != nil {
 			panic("apply_genesis_entry: delegationError: " + delegationError.Error())
 		}

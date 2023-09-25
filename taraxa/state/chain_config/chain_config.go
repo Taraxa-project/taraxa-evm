@@ -26,6 +26,7 @@ type HardforksConfig struct {
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+	FicusHfBlockNum              uint64
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
@@ -45,10 +46,15 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 	}
 }
 
+func (self *HardforksConfig) IsFicusHardfork(block uint64) bool {
+	return block >= self.FicusHfBlockNum
+}
+
 type GenesisValidator struct {
 	Address     common.Address
 	Owner       common.Address
 	VrfKey      []byte
+	BlsKey      []byte
 	Commission  uint16
 	Endpoint    string
 	Description string
