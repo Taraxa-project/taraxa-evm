@@ -278,11 +278,6 @@ func (self *Contract) jailValidator(current_block types.BlockNum, validator *com
 		rlp.MustDecodeBytes(bytes, currrent_jail_block)
 	})
 
-	// In case validator is already jailed, compound his jail time
-	if currrent_jail_block != nil && *currrent_jail_block+self.cfg.JailTime > jail_block {
-		jail_block = *currrent_jail_block + self.cfg.JailTime
-	}
-
 	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
 
 	// This will be run just once after first write
