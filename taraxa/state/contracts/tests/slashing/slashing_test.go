@@ -295,7 +295,7 @@ func TestGetJailBlock(t *testing.T) {
 	result = test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
 	result_parsed = new(uint64)
 	test.Unpack(result_parsed, "getJailBlock", result.CodeRetval)
-	tc.Assert.Equal(1+2*DefaultChainCfg.Hardforks.MagnoliaHf.JailTime, *result_parsed)
+	tc.Assert.Equal(1+2*uint64(test.Chain_cfg.DPOS.DelegationDelay)+DefaultChainCfg.Hardforks.MagnoliaHf.JailTime, *result_parsed)
 }
 
 func TestMakeLogsCheckTopics(t *testing.T) {
