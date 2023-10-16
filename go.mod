@@ -12,7 +12,8 @@ require (
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/crypto v0.3.0
-	golang.org/x/sys v0.2.0
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
+	golang.org/x/sys v0.13.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
 )
 
