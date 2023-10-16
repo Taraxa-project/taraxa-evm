@@ -40,6 +40,7 @@ const (
 var (
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differ")
+	ErrNotAValidator               = util.ErrorString("Votes validators is not a validator")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differ")
 	ErrInvalidVotesBlockHash       = util.ErrorString("Invalid votes block hash")
 	ErrIdenticalVotes              = util.ErrorString("Votes are identical")
@@ -255,6 +256,11 @@ func (c *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNu
 		return ErrInvalidVotesValidator
 	}
 
+	// Check if validator is validator
+	if !c.delayedReader.IsEligible(vote_a_validator) {
+		return ErrNotAValidator
+	}
+
 	// Save jail block for the malicious validator
 	jail_block := c.jailValidator(block, vote_a_validator)
 	// Save double voting proof
@@ -308,8 +314,8 @@ func (c *Contract) CleanupJailedValidators(currentBlock types.BlockNum) {
 	if c.nextCleanUpBlock > currentBlock {
 		return
 	}
-	// we need to read current data, not delayed one
-	reader := new(Reader).Init(&c.cfg, currentBlock, func(uint64) contract_storage.StorageReader {
+	// we need it to read current data, not delayed one
+	reader := new(Reader).Init(&c.cfg, currentBlock, nil, func(uint64) contract_storage.StorageReader {
 		return c.storage
 	})
 	jailed_validators := reader.GetJailedValidators()

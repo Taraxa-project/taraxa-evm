@@ -30,7 +30,7 @@ func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, stora
 	}
 
 	r.storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(blk_n_actual))
-	r.slashing_reader = new(slashing.Reader).Init(cfg, blk_n, storage_factory)
+	r.slashing_reader = new(slashing.Reader).Init(cfg, blk_n, r, storage_factory)
 	return r
 }
 

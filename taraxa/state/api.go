@@ -29,7 +29,6 @@ type API struct {
 	dry_runner       state_dry_runner.DryRunner
 	trace_runner     state_dry_runner.TraceRunner
 	dpos             *dpos.API
-	slashing         *slashing.API
 	config           *chain_config.ChainConfig
 }
 
@@ -45,7 +44,6 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 	self.config = chain_cfg
 
 	self.dpos = new(dpos.API).Init(*self.config)
-	self.slashing = new(slashing.API).Init(*self.config)
 	config_changes := self.rocksdb.GetDPOSConfigChanges()
 	if len(config_changes) == 0 {
 		bytes := rlp.MustEncodeToBytes(self.config.DPOS)
@@ -73,7 +71,6 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		get_block_hash,
 		self.dpos,
 		self.DPOSReader,
-		self.slashing,
 		self.SlashingReader,
 		self.config,
 		state_transition.Opts{
@@ -86,8 +83,8 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.slashing, self.SlashingReader, self.config)
-	self.trace_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.slashing, self.SlashingReader, self.config)
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.SlashingReader, self.config)
+	self.trace_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.SlashingReader, self.config)
 	return self
 }
 
@@ -148,7 +145,7 @@ func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
 }
 
 func (self *API) SlashingReader(blk_n types.BlockNum) slashing.Reader {
-	return self.slashing.NewReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
+	return self.dpos.NewSlashingReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }
