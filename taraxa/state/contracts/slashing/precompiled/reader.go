@@ -13,24 +13,21 @@ type Reader struct {
 	storage *contract_storage.StorageReaderWrapper
 }
 
-func (self *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
-	self.cfg = cfg
+func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+	r.cfg = cfg
 
 	blk_n_actual := uint64(0)
-	if uint64(self.cfg.DPOS.DelegationDelay) < blk_n {
-		blk_n_actual = blk_n - uint64(self.cfg.DPOS.DelegationDelay)
+	if uint64(r.cfg.DPOS.DelegationDelay) < blk_n {
+		blk_n_actual = blk_n - uint64(r.cfg.DPOS.DelegationDelay)
 	}
 
-	self.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n_actual))
-	return self
+	r.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n_actual))
+	return r
 }
 
-func (self *Reader) getJailBlock(addr *common.Address) (jailed bool, block types.BlockNum) {
-	block = 0
-	jailed = false
-
+func (r *Reader) getJailBlock(addr *common.Address) (jailed bool, block types.BlockNum) {
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, addr.Bytes())
-	self.storage.Get(db_key, func(bytes []byte) {
+	r.storage.Get(db_key, func(bytes []byte) {
 		rlp.MustDecodeBytes(bytes, &block)
 		jailed = true
 	})
@@ -38,12 +35,12 @@ func (self *Reader) getJailBlock(addr *common.Address) (jailed bool, block types
 	return
 }
 
-func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
-	if !self.cfg.Hardforks.IsMagnoliaHardfork(block) {
+func (r Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
+	if !r.cfg.Hardforks.IsMagnoliaHardfork(block) {
 		return false
 	}
 
-	jailed, jail_block := self.getJailBlock(addr)
+	jailed, jail_block := r.getJailBlock(addr)
 	if !jailed {
 		return false
 	}
@@ -53,4 +50,15 @@ func (self Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
 	}
 
 	return true
+}
+
+func (r Reader) GetJailedValidators() (jailed_validators []common.Address) {
+	jailed_validators_key := common.BytesToHash(field_jailed_validators)
+	r.storage.Get(&jailed_validators_key, func(bytes []byte) {
+		if len(bytes) != 0 {
+			rlp.MustDecodeBytes(bytes, &jailed_validators)
+		}
+	})
+
+	return
 }

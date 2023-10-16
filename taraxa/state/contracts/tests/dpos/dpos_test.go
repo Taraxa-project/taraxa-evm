@@ -14,17 +14,14 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
-	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	test_utils "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/tests"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
@@ -75,13 +72,6 @@ var addr, addr_p = tests.Addr, tests.AddrP
 
 type DposTest struct {
 	Chain_cfg chain_config.ChainConfig
-	st        state.StateTransition
-	statedb   *state_db_rocksdb.DB
-	tc        *tests.TestCtx
-	SUT       *state.API
-	blk_n     types.BlockNum
-	dpos_addr common.Address
-	abi       abi.ABI
 }
 
 type GenesisBalances = map[common.Address]*big.Int
@@ -556,9 +546,9 @@ func TestConfirmUndelegate(t *testing.T) {
 	test.AdvanceBlock(nil, nil)
 
 	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
 
 	// TODO: values are equal(0) but big.nat differs in underlying big.Int objects ???
+	// totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
 	//test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
@@ -984,7 +974,7 @@ func TestGenesis(t *testing.T) {
 	delegator := addr(1)
 
 	for i := uint64(1); i < 5; i++ {
-		entry := chain_config.GenesisValidator{addr(i), addr(i), DefaultVrfKey, 0, "", "", core.BalanceMap{}}
+		entry := chain_config.GenesisValidator{Address: addr(i), Owner: addr(i), VrfKey: DefaultVrfKey, Commission: 0, Endpoint: "", Description: "", Delegations: core.BalanceMap{}}
 		entry.Delegations[delegator] = DefaultEligibilityBalanceThreshold
 		cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, entry)
 	}
@@ -998,7 +988,7 @@ func TestGenesis(t *testing.T) {
 	test.CheckContractBalance(totalAmountDelegated)
 
 	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(delegator))
-	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().EligibleVoteCount())
+	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().TotalEligibleVoteCount())
 	tc.Assert.Equal(totalAmountDelegated, test.GetDPOSReader().TotalAmountDelegated())
 	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
 	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(2)))
@@ -1661,7 +1651,7 @@ func TestIterableMapClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{evm_state})
+	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	iter_map_prefix := []byte{0}
 	iter_map := contract_storage.AddressesIMap{}
@@ -1734,7 +1724,7 @@ func TestValidatorsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{evm_state})
+	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	validators := new(dpos.Validators).Init(&storage, []byte{})
 	field_validators := []byte{0}
@@ -1805,7 +1795,7 @@ func TestDelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{evm_state})
+	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	delegations := dpos.Delegations{}
 	field_delegations := []byte{2}
@@ -1875,7 +1865,7 @@ func TestUndelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{evm_state})
+	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	undelegations := dpos.Undelegations{}
 	field_undelegations := []byte{3}
@@ -2020,7 +2010,7 @@ func TestRedelegateHF(t *testing.T) {
 
 	cfg := CopyDefaultChainConfig()
 	cfg.Hardforks.FixRedelegateBlockNum = 12
-	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{validator2_addr, delegator3_addr, DefaultMinimumDeposit})
+	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{Validator: validator2_addr, Delegator: delegator3_addr, Amount: DefaultMinimumDeposit})
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 

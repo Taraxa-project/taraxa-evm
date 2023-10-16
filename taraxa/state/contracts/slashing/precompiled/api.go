@@ -45,7 +45,7 @@ func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig
 }
 
 func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.config.Hardforks.MagnoliaHf, storage, reader, evm)
+	return new(Contract).Init(self.config, storage, reader, evm)
 }
 
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
