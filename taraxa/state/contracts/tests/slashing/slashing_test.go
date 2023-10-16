@@ -32,10 +32,9 @@ type IsJailedRet struct {
 type GenesisBalances = map[common.Address]*big.Int
 
 var addr, addr_p = tests.Addr, tests.AddrP
-
 var (
 	TaraPrecision                      = big.NewInt(1e+18)
-	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000000), TaraPrecision)
 	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
 	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
@@ -96,6 +95,13 @@ func generateKeyPair() (pubkey, privkey []byte) {
 	return pubkey, privkey
 }
 
+func addValidator(cfg *chain_config.ChainConfig) (privkey []byte, address common.Address) {
+	pubkey, privkey := generateKeyPair()
+	address = common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
+	cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, chain_config.GenesisValidator{Address: address, Owner: address, VrfKey: common.Hash{}.Bytes(), Commission: 0, Endpoint: "", Description: "", Delegations: map[common.Address]*big.Int{addr(1): DefaultValidatorMaximumStake}})
+	return
+}
+
 func GetVoteRlp(vote *slashing.Vote) []byte {
 	return rlp.MustEncodeToBytes(vote)
 }
@@ -120,10 +126,11 @@ func TestDoubleVotingSameVotesHashes(t *testing.T) {
 }
 
 func TestDoubleVotingExistingProof(t *testing.T) {
-	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	cfg := DefaultChainCfg
+	privkey, _ := addValidator(&cfg)
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
 	defer test.End()
 
-	_, privkey := generateKeyPair()
 	vote_a := DefaultVote
 	signVote(&vote_a, privkey)
 
@@ -141,10 +148,11 @@ func TestDoubleVotingExistingProof(t *testing.T) {
 }
 
 func TestDoubleVotingInvalidSig(t *testing.T) {
-	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	cfg := DefaultChainCfg
+	privkey, _ := addValidator(&cfg)
+	_, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
 	defer test.End()
 
-	_, privkey := generateKeyPair()
 	vote_a := DefaultVote
 	vote_a.VrfSortitionBytes = rlp.MustEncodeToBytes(vote_a.VrfSortition)
 
@@ -251,13 +259,13 @@ func TestDoubleVotingInvalidBlockHash(t *testing.T) {
 }
 
 func TestGetJailBlock(t *testing.T) {
-	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	cfg := DefaultChainCfg
+	privkey1, malicious_vote_author1 := addValidator(&cfg)
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
 	defer test.End()
 
 	proof_author := addr(1)
 
-	pubkey1, privkey1 := generateKeyPair()
-	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
 	vote_a := DefaultVote
 	signVote(&vote_a, privkey1)
 
@@ -319,27 +327,36 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 func TestJailedValidatorsList(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.Hardforks.MagnoliaHf.JailTime = 50
+	proof_author := addr(1)
+	test_voters_count := uint64(10)
+
+	type VoteProof struct {
+		VoteA  slashing.Vote
+		VoteB  slashing.Vote
+		author common.Address
+	}
+
+	proofs := make([]VoteProof, test_voters_count)
+	// execute commitDoubleVotingProof + generate DelegationDelay blocks
+	blocks_per_iteration := uint64(cfg.DPOS.DelegationDelay + 1)
+	for i := uint64(0); i < test_voters_count; i++ {
+		privkey1, author := addValidator(&cfg)
+		proofs[i].author = author
+		proofs[i].VoteA = DefaultVote
+		proofs[i].VoteA.VrfSortition.Period = uint64(i)
+		signVote(&proofs[i].VoteA, privkey1)
+
+		voteB := proofs[i].VoteA
+		voteB.BlockHash = common.Hash{0x2}
+		signVote(&voteB, privkey1)
+		proofs[i].VoteB = voteB
+	}
+
 	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
 	defer test.End()
 
-	proof_author := addr(1)
-
-	test_voters_count := uint64(10)
-	jailed := make([]common.Address, test_voters_count)
-	// execute commitDoubleVotingProof + generate DelegationDelay blocks
-	blocks_per_iteration := uint64(test.Chain_cfg.DPOS.DelegationDelay + 1)
-	for i := uint64(0); i < test_voters_count; i++ {
-		pubkey1, privkey1 := generateKeyPair()
-		jailed[i] = common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
-		vote_a := DefaultVote
-		vote_a.VrfSortition.Period = uint64(i)
-		signVote(&vote_a, privkey1)
-
-		vote_b := vote_a
-		vote_b.BlockHash = common.Hash{0x2}
-		signVote(&vote_b, privkey1)
-
-		test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote_a), GetVoteRlp(&vote_b)), util.ErrorString(""), util.ErrorString(""))
+	for _, proof := range proofs {
+		test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&proof.VoteA), GetVoteRlp(&proof.VoteB)), util.ErrorString(""), util.ErrorString(""))
 		for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
 			test.AdvanceBlock(nil, nil)
 		}
@@ -348,11 +365,16 @@ func TestJailedValidatorsList(t *testing.T) {
 	// Check list of jailed validators. We need to get it directly from reader later
 	jailed_from_contract := test.St.GetJailedValidators()
 	tc.Assert.Equal(test_voters_count, uint64(len(jailed_from_contract)))
-	tc.Assert.Equal(jailed, jailed_from_contract)
-
+	{
+		jailed := make([]common.Address, test_voters_count)
+		for i := uint64(0); i < test_voters_count; i++ {
+			jailed[i] = proofs[i].author
+		}
+		tc.Assert.Equal(jailed, jailed_from_contract)
+	}
 	first_unjail_block := uint64(0)
 	for i := uint64(0); i < test_voters_count; i++ {
-		result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", jailed[i]), util.ErrorString(""), util.ErrorString(""))
+		result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", proofs[i].author), util.ErrorString(""), util.ErrorString(""))
 		unjail_block := uint64(0)
 		test.Unpack(&unjail_block, "getJailBlock", result.CodeRetval)
 		expected_unjail := 1 + cfg.Hardforks.MagnoliaHf.JailTime + i*blocks_per_iteration
@@ -363,6 +385,9 @@ func TestJailedValidatorsList(t *testing.T) {
 		}
 	}
 
+	if first_unjail_block == 0 {
+		return
+	}
 	for {
 		test.AdvanceBlock(nil, nil)
 		if test.BlockNumber() == first_unjail_block {
@@ -373,6 +398,10 @@ func TestJailedValidatorsList(t *testing.T) {
 	for i := uint64(0); i < test_voters_count; i++ {
 		jailed_from_contract := test.St.GetJailedValidators()
 		tc.Assert.Equal(test_voters_count-i, uint64(len(jailed_from_contract)))
+		jailed := make([]common.Address, test_voters_count)
+		for i := uint64(0); i < test_voters_count; i++ {
+			jailed[i] = proofs[i].author
+		}
 		tc.Assert.Equal(jailed[i:], jailed_from_contract)
 
 		for i := uint64(0); i < blocks_per_iteration; i++ {
@@ -384,12 +413,12 @@ func TestJailedValidatorsList(t *testing.T) {
 func TestDoubleJailing(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.Hardforks.MagnoliaHf.JailTime = 50
+	privkey1, _ := addValidator(&cfg)
 	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
 	defer test.End()
 
 	proof_author := addr(1)
 
-	_, privkey1 := generateKeyPair()
 	vote_a := DefaultVote
 	vote_a.VrfSortition.Period = uint64(1)
 	signVote(&vote_a, privkey1)

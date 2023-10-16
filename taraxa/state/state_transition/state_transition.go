@@ -43,7 +43,6 @@ func (st *StateTransition) Init(
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
 	get_dpos_reader func(types.BlockNum) dpos.Reader,
-	slashing_api *slashing.API,
 	get_slashing_reader func(types.BlockNum) slashing.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
@@ -62,8 +61,8 @@ func (st *StateTransition) Init(
 	if dpos_api != nil {
 		st.dpos_contract = dpos_api.NewContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_dpos_reader(state_desc.BlockNum), &st.evm)
 	}
-	if slashing_api != nil {
-		st.slashing_contract = slashing_api.NewContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_slashing_reader(state_desc.BlockNum), &st.evm)
+	if dpos_api != nil {
+		st.slashing_contract = dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_slashing_reader(state_desc.BlockNum), &st.evm)
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
 		st.begin_block()
