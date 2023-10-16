@@ -315,3 +315,50 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 	// Check that we tested all events from the ABI
 	tc.Assert.Equal(count, len(Abi.Events))
 }
+
+func TestJailedValidatorsList(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.MagnoliaHf.JailTime = 10
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, DefaultChainCfg)
+	defer test.End()
+
+	proof_author := addr(1)
+
+	pubkey1, privkey1 := generateKeyPair()
+	malicious_vote_author1 := common.BytesToAddress(keccak256.Hash(pubkey1[1:])[12:])
+	vote_a := DefaultVote
+	signVote(&vote_a, privkey1)
+
+	vote_b := DefaultVote
+	vote_b.BlockHash = common.Hash{0x2}
+	signVote(&vote_b, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote_a), GetVoteRlp(&vote_b)), util.ErrorString(""), util.ErrorString(""))
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	unjail_block := uint64(0)
+	test.Unpack(&unjail_block, "getJailBlock", result.CodeRetval)
+	tc.Assert.Equal(1+DefaultChainCfg.Hardforks.MagnoliaHf.JailTime, unjail_block)
+
+	// Check list of jailed validators. We need to get it directly from reader later
+	{
+		jailed := test.St.GetJailedValidators()
+		tc.Assert.Equal(1, len(jailed))
+		tc.Assert.Equal(malicious_vote_author1, jailed[0])
+	}
+
+	for {
+		test.AdvanceBlock(nil, nil)
+		if test.BlockNumber() >= (unjail_block + uint64(test.Chain_cfg.DPOS.DelegationDelay)) {
+			break
+		}
+	}
+	{
+		jailed := test.St.GetJailedValidators()
+		tc.Assert.Equal(0, len(jailed))
+	}
+}

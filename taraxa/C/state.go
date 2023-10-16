@@ -352,7 +352,7 @@ func taraxa_evm_state_api_dpos_eligible_vote_count(
 	cb_err C.taraxa_evm_BytesCallback,
 ) uint64 {
 	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).EligibleVoteCount()
+	return state_API_instances[ptr].DPOSReader(blk_n).TotalEligibleVoteCount()
 }
 
 //export taraxa_evm_state_api_dpos_get_eligible_vote_count
