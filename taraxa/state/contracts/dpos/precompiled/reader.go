@@ -39,7 +39,6 @@ func (r Reader) TotalEligibleVoteCount() (ret uint64) {
 		ret = bin.DEC_b_endian_compact_64(bytes)
 	})
 	for _, addr := range r.slashing_reader.GetJailedValidators() {
-		// TODO: cache it for jailed validators?
 		ret -= r.GetEligibleVoteCount(&addr)
 	}
 	return

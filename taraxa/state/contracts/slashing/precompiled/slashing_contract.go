@@ -13,6 +13,7 @@ import (
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"golang.org/x/exp/slices"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -296,9 +297,10 @@ func (c *Contract) jailValidator(current_block types.BlockNum, validator *common
 func (c *Contract) addToJailedValidators(validator *common.Address) {
 	jailed_validators_key := common.BytesToHash(field_jailed_validators)
 	jailed_validators := c.delayedReader.GetJailedValidators()
-	// TODO: check if validator is in the list already?
+	if slices.Contains(jailed_validators, *validator) {
+		return
+	}
 	jailed_validators = append(jailed_validators, *validator)
-	// fmt.Println("Putting jailed validators: ", rlp.MustEncodeToBytes(jailed_validators))
 	c.storage.Put(&jailed_validators_key, rlp.MustEncodeToBytes(jailed_validators))
 }
 
