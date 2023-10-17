@@ -5,6 +5,7 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
+	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 
@@ -80,8 +81,19 @@ func (self *API) NewContract(storage contract_storage.Storage, reader Reader, ev
 	return new(Contract).Init(self.config, storage, reader, evm)
 }
 
+func (self *API) NewSlashingContract(storage contract_storage.Storage, reader slashing.Reader, evm *vm.EVM) *slashing.Contract {
+	return new(slashing.Contract).Init(self.config, storage, reader, evm)
+}
+
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, storage_factory)
+	return
+}
+
+func (self *API) NewSlashingReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret slashing.Reader) {
+	cfg := self.GetConfigByBlockNum(blk_n)
+	dpos_reader := self.NewReader(blk_n, storage_factory)
+	ret.Init(&cfg, blk_n, dpos_reader, storage_factory)
 	return
 }

@@ -530,7 +530,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.delayedStorage.IsEligible(&args.Validator))
 
 	case "getTotalEligibleVotesCount":
-		return method.Outputs.Pack(self.delayedStorage.EligibleVoteCount())
+		return method.Outputs.Pack(self.delayedStorage.TotalEligibleVoteCount())
 
 	case "getValidatorEligibleVotesCount":
 		var args dpos_sol.ValidatorAddressArgs

@@ -21,7 +21,6 @@ type DryRunner struct {
 	get_block_hash      vm.GetHashFunc
 	dpos_api            *dpos.API
 	get_dpos_reader     func(types.BlockNum) dpos.Reader
-	slashing_api        *slashing.API
 	get_slashing_reader func(types.BlockNum) slashing.Reader
 	chain_config        *chain_config.ChainConfig
 }
@@ -31,7 +30,6 @@ func (self *DryRunner) Init(
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
 	get_dpos_reader func(types.BlockNum) dpos.Reader,
-	slashing_api *slashing.API,
 	get_slashing_reader func(types.BlockNum) slashing.Reader,
 	chain_config *chain_config.ChainConfig,
 ) *DryRunner {
@@ -39,7 +37,6 @@ func (self *DryRunner) Init(
 	self.get_block_hash = get_block_hash
 	self.dpos_api = dpos_api
 	self.get_dpos_reader = get_dpos_reader
-	self.slashing_api = slashing_api
 	self.get_slashing_reader = get_slashing_reader
 	self.chain_config = chain_config
 	return self
@@ -63,8 +60,8 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionRes
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_dpos_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
-	if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) && self.slashing_api != nil {
-		self.slashing_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+	if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) && self.dpos_api != nil {
+		self.dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
 	}
 	ret, err := evm.Main(trx)
 	if err == vm.ErrExecutionReverted {

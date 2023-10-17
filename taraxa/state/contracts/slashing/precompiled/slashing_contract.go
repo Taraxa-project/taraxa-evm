@@ -13,6 +13,7 @@ import (
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
+	"golang.org/x/exp/slices"
 
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -39,6 +40,7 @@ const (
 var (
 	ErrInvalidVoteSignature        = util.ErrorString("Invalid vote signature")
 	ErrInvalidVotesValidator       = util.ErrorString("Votes validators differ")
+	ErrNotAValidator               = util.ErrorString("Votes validators is not a validator")
 	ErrInvalidVotesPeriodRoundStep = util.ErrorString("Votes period/round/step differ")
 	ErrInvalidVotesBlockHash       = util.ErrorString("Invalid votes block hash")
 	ErrIdenticalVotes              = util.ErrorString("Votes are identical")
@@ -49,6 +51,7 @@ var (
 var (
 	field_validators_jail_block = []byte{0}
 	field_double_voting_proofs  = []byte{1}
+	field_jailed_validators     = []byte{2}
 )
 
 type VrfPbftSortition struct {
@@ -79,9 +82,9 @@ type VoteHashData struct {
 	VrfSortitionBytes []byte
 }
 
-func (self *Vote) GetHash() *common.Hash {
+func (vote *Vote) GetHash() *common.Hash {
 	// Only blockhash and vrf are used for hash, which is signed
-	rlp := rlp.MustEncodeToBytes(VoteHashData{BlockHash: self.BlockHash, VrfSortitionBytes: self.VrfSortitionBytes})
+	rlp := rlp.MustEncodeToBytes(VoteHashData{BlockHash: vote.BlockHash, VrfSortitionBytes: vote.VrfSortitionBytes})
 	return keccak256.Hash(rlp)
 }
 
@@ -95,47 +98,49 @@ func NewVote(vote_rlp []byte) Vote {
 
 // Main contract class
 type Contract struct {
-	cfg chain_config.MagnoliaHfConfig
+	cfg chain_config.ChainConfig
 
 	// current storage
 	storage contract_storage.StorageWrapper
 	// delayed storage for PBFT
-	read_storage Reader
+	delayedReader Reader
 
 	// ABI of the contract
 	Abi abi.ABI
 	evm *vm.EVM
 
 	logs Logs
+
+	nextCleanUpBlock types.BlockNum
 }
 
 // Initialize contract class
-func (self *Contract) Init(cfg chain_config.MagnoliaHfConfig, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
-	self.cfg = cfg
-	self.storage.Init(slashing_contract_address, storage)
-	self.read_storage = read_storage
-	self.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
-	self.logs = *new(Logs).Init(self.Abi.Events)
-	self.evm = evm
-	return self
+func (c *Contract) Init(cfg chain_config.ChainConfig, storage contract_storage.Storage, read_storage Reader, evm *vm.EVM) *Contract {
+	c.cfg = cfg
+	c.storage.Init(slashing_contract_address, storage)
+	c.delayedReader = read_storage
+	c.Abi, _ = abi.JSON(strings.NewReader(slashing_sol.TaraxaSlashingClientMetaData))
+	c.logs = *new(Logs).Init(c.Abi.Events)
+	c.evm = evm
+	return c
 }
 
-func (self *Contract) storageInitialization() {
+func (c *Contract) storageInitialization() {
 	// This needs to be done just once
-	if self.storage.GetNonce(slashing_contract_address).Cmp(big.NewInt(0)) == 0 {
-		self.storage.IncrementNonce(slashing_contract_address)
+	if c.storage.GetNonce(slashing_contract_address).Cmp(big.NewInt(0)) == 0 {
+		c.storage.IncrementNonce(slashing_contract_address)
 	}
 }
 
 // Register this precompiled contract
-func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
+func (c *Contract) Register(registry func(*common.Address, vm.PrecompiledContract)) {
 	defensive_copy := *slashing_contract_address
-	registry(&defensive_copy, self)
+	registry(&defensive_copy, c)
 }
 
 // Calculate required gas for call to this contract
-func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
-	method, err := self.Abi.MethodById(ctx.Input)
+func (c *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	method, err := c.Abi.MethodById(ctx.Input)
 	if err != nil {
 		return 0
 	}
@@ -145,6 +150,8 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return CommitDoubleVotingProofGas
 	case "getJailBlock":
 		return getJailBlockGas
+	case "getJailedValidators":
+		return getJailBlockGas
 	default:
 	}
 
@@ -152,16 +159,16 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 }
 
 // Should be called on each block commit
-func (self *Contract) CommitCall(read_storage Reader) {
-	defer self.storage.ClearCache()
+func (c *Contract) CommitCall(read_storage Reader) {
+	defer c.storage.ClearCache()
 	// Update read storage
-	self.read_storage = read_storage
+	c.delayedReader = read_storage
 }
 
 // This is called on each call to contract
 // It translates call and tries to execute them
-func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
-	method, err := self.Abi.MethodById(ctx.Input)
+func (c *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
+	method, err := c.Abi.MethodById(ctx.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +184,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return nil, self.commitDoubleVotingProof(ctx, evm.GetBlock().Number, args)
+		return nil, c.commitDoubleVotingProof(ctx, evm.GetBlock().Number, args)
 
 	case "getJailBlock":
 		var args slashing_sol.ValidatorArg
@@ -186,8 +193,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 
-		return method.Outputs.Pack(self.getJailBlock(&args.Validator))
+		return method.Outputs.Pack(c.getJailBlock(&args.Validator))
 
+	case "getJailedValidators":
+		return method.Outputs.Pack(c.delayedReader.GetJailedValidators())
 	default:
 	}
 
@@ -196,20 +205,20 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 // Delegates specified number of tokens to specified validator and creates new delegation object
 // It also increase total stake of specified validator and creates new state if necessary
-func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args slashing_sol.CommitDoubleVotingProofArgs) error {
+func (c *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNum, args slashing_sol.CommitDoubleVotingProofArgs) error {
 	vote_a := NewVote(args.VoteA)
 	vote_a_hash := vote_a.GetHash()
 
 	vote_b := NewVote(args.VoteB)
 	vote_b_hash := vote_b.GetHash()
 
-	if bytes.Compare(vote_a_hash.Bytes(), vote_b_hash.Bytes()) == 0 {
+	if bytes.Equal(vote_a_hash.Bytes(), vote_b_hash.Bytes()) {
 		return ErrIdenticalVotes
 	}
 
 	// Check for existing proof
-	proof_db_key := self.genDoubleVotingProofDbKey(vote_a_hash, vote_b_hash)
-	if self.doubleVotingProoExists(proof_db_key) {
+	proof_db_key := c.genDoubleVotingProofDbKey(vote_a_hash, vote_b_hash)
+	if c.doubleVotingProoExists(proof_db_key) {
 		return ErrExistingDoubleVotingProof
 	}
 
@@ -219,14 +228,14 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 	}
 
 	// Validate voted blocks hashes
-	if bytes.Compare(vote_a.BlockHash.Bytes(), vote_b.BlockHash.Bytes()) == 0 {
+	if bytes.Equal(vote_a.BlockHash.Bytes(), vote_b.BlockHash.Bytes()) {
 		return ErrInvalidVotesBlockHash
 	}
 
 	// Validators can create 2 votes for each second finishing step - one for nullblockhash and one for some specific block
 	if vote_a.VrfSortition.Step >= 5 && vote_a.VrfSortition.Step%2 == 1 {
-		vote_a_is_zero_hash := bytes.Compare(vote_a.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
-		vote_b_is_zero_hash := bytes.Compare(vote_b.BlockHash.Bytes(), common.ZeroHash.Bytes()) == 0
+		vote_a_is_zero_hash := bytes.Equal(vote_a.BlockHash.Bytes(), common.ZeroHash.Bytes())
+		vote_b_is_zero_hash := bytes.Equal(vote_b.BlockHash.Bytes(), common.ZeroHash.Bytes())
 
 		if (vote_a_is_zero_hash && !vote_b_is_zero_hash) || (!vote_a_is_zero_hash && vote_b_is_zero_hash) {
 			return ErrInvalidVotesBlockHash
@@ -243,16 +252,21 @@ func (self *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.Bloc
 		return ErrInvalidVoteSignature
 	}
 
-	if bytes.Compare(vote_a_validator.Bytes(), vote_b_validator.Bytes()) != 0 {
+	if !bytes.Equal(vote_a_validator.Bytes(), vote_b_validator.Bytes()) {
 		return ErrInvalidVotesValidator
 	}
 
-	// Save jail block for the malicious validator
-	jail_block := self.jailValidator(block, vote_a_validator)
-	// Save double voting proof
-	self.saveDoubleVotingProof(proof_db_key)
+	// Check if validator is validator
+	if !c.delayedReader.IsEligible(vote_a_validator) {
+		return ErrNotAValidator
+	}
 
-	self.evm.AddLog(self.logs.MakeJailedLog(vote_a_validator, block, jail_block, DOUBLE_VOTING))
+	// Save jail block for the malicious validator
+	jail_block := c.jailValidator(block, vote_a_validator)
+	// Save double voting proof
+	c.saveDoubleVotingProof(proof_db_key)
+
+	c.evm.AddLog(c.logs.MakeJailedLog(vote_a_validator, block, jail_block, DOUBLE_VOTING))
 
 	return nil
 }
@@ -268,31 +282,79 @@ func validateVoteSig(vote_hash *common.Hash, signature []byte) (*common.Address,
 }
 
 // Jails validator and returns block number, until which he is jailed
-func (self *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) types.BlockNum {
-	jail_block := current_block + self.cfg.JailTime
+func (c *Contract) jailValidator(current_block types.BlockNum, validator *common.Address) types.BlockNum {
+	jail_block := current_block + c.cfg.Hardforks.MagnoliaHf.JailTime
 
-	var currrent_jail_block *types.BlockNum
+	var current_jail_block *types.BlockNum
 	db_key := contract_storage.Stor_k_1(field_validators_jail_block, validator.Bytes())
-	self.storage.Get(db_key, func(bytes []byte) {
-		currrent_jail_block = new(types.BlockNum)
-		rlp.MustDecodeBytes(bytes, currrent_jail_block)
+	c.storage.Get(db_key, func(bytes []byte) {
+		current_jail_block = new(types.BlockNum)
+		rlp.MustDecodeBytes(bytes, current_jail_block)
 	})
 
-	self.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
-
+	c.storage.Put(db_key, rlp.MustEncodeToBytes(jail_block))
+	c.addToJailedValidators(validator)
 	// This will be run just once after first write
-	self.storageInitialization()
+	c.storageInitialization()
 
 	return jail_block
+}
+
+func (c *Contract) addToJailedValidators(validator *common.Address) {
+	jailed_validators_key := common.BytesToHash(field_jailed_validators)
+	jailed_validators := c.delayedReader.GetJailedValidators()
+	if slices.Contains(jailed_validators, *validator) {
+		return
+	}
+	jailed_validators = append(jailed_validators, *validator)
+	c.storage.Put(&jailed_validators_key, rlp.MustEncodeToBytes(jailed_validators))
+}
+
+func (c *Contract) CleanupJailedValidators(currentBlock types.BlockNum) {
+	if c.nextCleanUpBlock > currentBlock {
+		return
+	}
+	// we need it to read current data, not delayed one
+	reader := new(Reader).Init(&c.cfg, currentBlock, nil, func(uint64) contract_storage.StorageReader {
+		return c.storage
+	})
+	jailed_validators := reader.GetJailedValidators()
+
+	if len(jailed_validators) == 0 {
+		return
+	}
+	min_unjail_block := uint64(0)
+	i := 0
+	for _, validator := range jailed_validators {
+		_, jail_block := reader.getJailBlock(&validator)
+
+		// keep it in list, if it is not unjailed yet
+		if jail_block > currentBlock {
+			// copy and increment index
+			jailed_validators[i] = validator
+			i++
+		}
+
+		if min_unjail_block == 0 || jail_block < min_unjail_block {
+			min_unjail_block = jail_block
+		}
+	}
+	if min_unjail_block != 0 {
+		c.nextCleanUpBlock = min_unjail_block
+	}
+	// resize list
+	jailed_validators = jailed_validators[:i]
+	jailed_validators_key := common.BytesToHash(field_jailed_validators)
+	c.storage.Put(&jailed_validators_key, rlp.MustEncodeToBytes(jailed_validators))
 }
 
 // Return validator's jail time - block until he is jailed. 0 in case he was never jailed
-func (self *Contract) getJailBlock(validator *common.Address) types.BlockNum {
-	_, jail_block := self.read_storage.getJailBlock(validator)
+func (c *Contract) getJailBlock(validator *common.Address) types.BlockNum {
+	_, jail_block := c.delayedReader.getJailBlock(validator)
 	return jail_block
 }
 
-func (self *Contract) genDoubleVotingProofDbKey(votea_hash *common.Hash, vote_b_hash *common.Hash) (db_key *common.Hash) {
+func (c *Contract) genDoubleVotingProofDbKey(votea_hash *common.Hash, vote_b_hash *common.Hash) (db_key *common.Hash) {
 	var smaller_vote_hash *common.Hash
 	var greater_vote_hash *common.Hash
 
@@ -313,14 +375,12 @@ func (self *Contract) genDoubleVotingProofDbKey(votea_hash *common.Hash, vote_b_
 	return
 }
 
-func (self *Contract) saveDoubleVotingProof(db_key *common.Hash) {
-	self.storage.Put(db_key, rlp.MustEncodeToBytes(true))
-	return
+func (c *Contract) saveDoubleVotingProof(db_key *common.Hash) {
+	c.storage.Put(db_key, rlp.MustEncodeToBytes(true))
 }
 
-func (self *Contract) doubleVotingProoExists(db_key *common.Hash) (ret bool) {
-	ret = false
-	self.storage.Get(db_key, func(bytes []byte) {
+func (c *Contract) doubleVotingProoExists(db_key *common.Hash) (ret bool) {
+	c.storage.Get(db_key, func(bytes []byte) {
 		ret = true
 	})
 

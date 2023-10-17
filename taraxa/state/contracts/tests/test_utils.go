@@ -29,7 +29,7 @@ type ContractTest struct {
 	Chain_cfg     chain_config.ChainConfig
 	St            state.StateTransition
 	contract_addr common.Address
-	statedb       *state_db_rocksdb.DB
+	Statedb       *state_db_rocksdb.DB
 	tc            *tests.TestCtx
 	SUT           *state.API
 	blk_n         types.BlockNum
@@ -47,11 +47,11 @@ func (self *ContractTest) init(contract_addr common.Address, contract_abi string
 	self.tc = t
 	self.Chain_cfg = cfg
 
-	self.statedb = new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
+	self.Statedb = new(state_db_rocksdb.DB).Init(state_db_rocksdb.Opts{
 		Path: self.tc.DataDir(),
 	})
 	self.SUT = new(state.API).Init(
-		self.statedb,
+		self.Statedb,
 		func(num types.BlockNum) *big.Int { panic("unexpected") },
 		&self.Chain_cfg,
 		state.APIOpts{},
@@ -134,9 +134,19 @@ func (self *ContractTest) ExecuteAndCheck(from common.Address, value *big.Int, i
 	return res
 }
 
+func (self *ContractTest) BlockNumber() uint64 {
+	return self.blk_n
+}
+
 func (self *ContractTest) End() {
-	self.statedb.Close()
+	self.Statedb.Close()
 	self.tc.Close()
+}
+
+func (self *ContractTest) GetJailedValidators() (jailed_validators []common.Address) {
+	result := self.ExecuteAndCheck(tests.Addr(1), big.NewInt(0), self.Pack("getJailedValidators"), util.ErrorString(""), util.ErrorString(""))
+	self.Unpack(&jailed_validators, "getJailedValidators", result.CodeRetval)
+	return
 }
 
 func (self *ContractTest) Pack(name string, args ...interface{}) []byte {

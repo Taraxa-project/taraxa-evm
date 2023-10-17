@@ -38,144 +38,143 @@ type Opts struct {
 	Trie     TrieSinkOpts
 }
 
-func (self *StateTransition) Init(
+func (st *StateTransition) Init(
 	state state_db.LatestState,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
 	get_dpos_reader func(types.BlockNum) dpos.Reader,
-	slashing_api *slashing.API,
 	get_slashing_reader func(types.BlockNum) slashing.Reader,
 	chain_config *chain_config.ChainConfig,
 	opts Opts,
 ) *StateTransition {
-	self.chain_config = chain_config
-	self.state = state
-	self.evm_state.Init(opts.EVMState)
-	self.get_dpos_reader = get_dpos_reader
-	self.get_slashing_reader = get_slashing_reader
-	self.evm.Init(get_block_hash, &self.evm_state, vm.Opts{
+	st.chain_config = chain_config
+	st.state = state
+	st.evm_state.Init(opts.EVMState)
+	st.get_dpos_reader = get_dpos_reader
+	st.get_slashing_reader = get_slashing_reader
+	st.evm.Init(get_block_hash, &st.evm_state, vm.Opts{
 		// 24MB total
 		PreallocatedMem: 8 * 1024 * 1024,
-	}, self.chain_config.EVMChainConfig, vm.Config{})
+	}, st.chain_config.EVMChainConfig, vm.Config{})
 	state_desc := state.GetCommittedDescriptor()
-	self.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
+	st.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
-		self.dpos_contract = dpos_api.NewContract(contract_storage.EVMStateStorage{&self.evm_state}, get_dpos_reader(state_desc.BlockNum), &self.evm)
+		st.dpos_contract = dpos_api.NewContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_dpos_reader(state_desc.BlockNum), &st.evm)
 	}
-	if slashing_api != nil {
-		self.slashing_contract = slashing_api.NewContract(contract_storage.EVMStateStorage{&self.evm_state}, get_slashing_reader(state_desc.BlockNum), &self.evm)
+	if dpos_api != nil {
+		st.slashing_contract = dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_slashing_reader(state_desc.BlockNum), &st.evm)
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
-		self.begin_block()
-		asserts.Holds(self.pending_blk_state.GetNumber() == 0)
-		for addr, balance := range self.chain_config.GenesisBalances {
-			self.evm_state.GetAccount(&addr).AddBalance(balance)
+		st.begin_block()
+		asserts.Holds(st.pending_blk_state.GetNumber() == 0)
+		for addr, balance := range st.chain_config.GenesisBalances {
+			st.evm_state.GetAccount(&addr).AddBalance(balance)
 		}
-		if self.dpos_contract != nil {
-			util.PanicIfNotNil(self.dpos_contract.ApplyGenesis(self.evm_state.GetAccount))
+		if st.dpos_contract != nil {
+			util.PanicIfNotNil(st.dpos_contract.ApplyGenesis(st.evm_state.GetAccount))
 		}
-		self.evm_state_checkpoint()
-		self.Commit()
+		st.evm_state_checkpoint()
+		st.Commit()
 	}
 	// we need genesis balances later, so it is commented
-	// self.chain_config.GenesisBalances = nil
-	return self
+	// st.chain_config.GenesisBalances = nil
+	return st
 }
 
-func (self *StateTransition) UpdateConfig(cfg *chain_config.ChainConfig) {
-	self.new_chain_config = cfg
+func (st *StateTransition) UpdateConfig(cfg *chain_config.ChainConfig) {
+	st.new_chain_config = cfg
 }
 
-func (self *StateTransition) Close() {
-	self.trie_sink.Close()
+func (st *StateTransition) Close() {
+	st.trie_sink.Close()
 }
 
-func (self *StateTransition) begin_block() {
-	self.pending_blk_state = self.state.BeginPendingBlock()
-	self.evm_state.SetInput(state_db.ExtendedReader{self.pending_blk_state})
-	self.trie_sink.SetIO(self.pending_blk_state)
+func (st *StateTransition) begin_block() {
+	st.pending_blk_state = st.state.BeginPendingBlock()
+	st.evm_state.SetInput(state_db.ExtendedReader{Reader: st.pending_blk_state})
+	st.trie_sink.SetIO(st.pending_blk_state)
 }
 
-func (self *StateTransition) evm_state_checkpoint() {
-	self.evm_state.CommitTransaction(&self.trie_sink)
+func (st *StateTransition) evm_state_checkpoint() {
+	st.evm_state.CommitTransaction(&st.trie_sink)
 }
 
-func (self *StateTransition) BlockNumber() types.BlockNum {
-	return self.pending_blk_state.GetNumber()
+func (st *StateTransition) BlockNumber() types.BlockNum {
+	return st.pending_blk_state.GetNumber()
 }
 
-func (self *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
-	self.begin_block()
-	blk_n := self.pending_blk_state.GetNumber()
-	rules_changed := self.evm.SetBlock(&vm.Block{blk_n, *blk_info} /*self.chain_config.EVMChainConfig.Rules(blk_n)*/)
-	if self.dpos_contract != nil && rules_changed {
-		self.dpos_contract.Register(self.evm.RegisterPrecompiledContract)
+func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
+	st.begin_block()
+	blk_n := st.pending_blk_state.GetNumber()
+	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info} /*st.chain_config.EVMChainConfig.Rules(blk_n)*/)
+	if st.dpos_contract != nil && rules_changed {
+		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
 	}
-	if self.slashing_contract != nil && self.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
-		self.slashing_contract.Register(self.evm.RegisterPrecompiledContract)
+	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
+		st.slashing_contract.Register(st.evm.RegisterPrecompiledContract)
 	}
 }
 
-func (self *StateTransition) ExecuteTransaction(tx *vm.Transaction) (ret vm.ExecutionResult) {
-	ret, _ = self.evm.Main(tx)
-	self.evm_state_checkpoint()
+func (st *StateTransition) ExecuteTransaction(tx *vm.Transaction) (ret vm.ExecutionResult) {
+	ret, _ = st.evm.Main(tx)
+	st.evm_state_checkpoint()
 	return
 }
 
-func (self *StateTransition) GetChainConfig() (ret *chain_config.ChainConfig) {
-	ret = self.chain_config
+func (st *StateTransition) GetChainConfig() (ret *chain_config.ChainConfig) {
+	ret = st.chain_config
 	return
 }
 
-func (self *StateTransition) GetEvmState() *state_evm.EVMState {
-	return &self.evm_state
+func (st *StateTransition) GetEvmState() *state_evm.EVMState {
+	return &st.evm_state
 }
 
-func (self *StateTransition) DistributeRewards(rewardsStats *rewards_stats.RewardsStats) (totalReward *uint256.Int) {
-	if self.chain_config.RewardsEnabled() && rewardsStats != nil {
-		if self.dpos_contract == nil {
+func (st *StateTransition) DistributeRewards(rewardsStats *rewards_stats.RewardsStats) (totalReward *uint256.Int) {
+	if st.chain_config.RewardsEnabled() && rewardsStats != nil {
+		if st.dpos_contract == nil {
 			panic("Stats rewards enabled but no dpos contract registered")
 		}
-		totalReward = self.dpos_contract.DistributeRewards(rewardsStats)
-		self.evm_state_checkpoint()
+		totalReward = st.dpos_contract.DistributeRewards(rewardsStats)
+		st.evm_state_checkpoint()
 	}
 
 	return
 }
 
-func (self *StateTransition) EndBlock() {
-	self.LastBlockNum = self.evm.GetBlock().Number
-	if self.dpos_contract != nil {
-		self.dpos_contract.EndBlockCall(self.LastBlockNum)
-		self.evm_state_checkpoint()
+func (st *StateTransition) EndBlock() {
+	st.LastBlockNum = st.evm.GetBlock().Number
+	if st.dpos_contract != nil {
+		st.dpos_contract.EndBlockCall(st.LastBlockNum)
+		st.slashing_contract.CleanupJailedValidators(st.LastBlockNum)
+		st.evm_state_checkpoint()
 	}
-	self.pending_blk_state = nil
+	st.pending_blk_state = nil
+}
+
+func (st *StateTransition) PrepareCommit() common.Hash {
+	st.evm_state.Commit()
+	st.evm_state.SetInput(nil)
+	st.pending_state_root = st.trie_sink.Commit()
+	st.trie_sink.SetIO(nil)
+	return st.pending_state_root
+}
+
+func (st *StateTransition) Commit() (state_root common.Hash) {
+	if st.pending_state_root == common.ZeroHash {
+		st.PrepareCommit()
+	}
+	state_root, st.pending_state_root = st.pending_state_root, common.ZeroHash
+	util.PanicIfNotNil(st.state.Commit(state_root)) // TODO move out of here, this should be async
+	if st.dpos_contract != nil {
+		st.dpos_contract.CommitCall(st.get_dpos_reader(st.evm.GetBlock().Number))
+	}
+	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(st.evm.GetBlock().Number) {
+		st.slashing_contract.CommitCall(st.get_slashing_reader(st.evm.GetBlock().Number))
+	}
 	return
 }
 
-func (self *StateTransition) PrepareCommit() common.Hash {
-	self.evm_state.Commit()
-	self.evm_state.SetInput(nil)
-	self.pending_state_root = self.trie_sink.Commit()
-	self.trie_sink.SetIO(nil)
-	return self.pending_state_root
-}
-
-func (self *StateTransition) Commit() (state_root common.Hash) {
-	if self.pending_state_root == common.ZeroHash {
-		self.PrepareCommit()
-	}
-	state_root, self.pending_state_root = self.pending_state_root, common.ZeroHash
-	util.PanicIfNotNil(self.state.Commit(state_root)) // TODO move out of here, this should be async
-	if self.dpos_contract != nil {
-		self.dpos_contract.CommitCall(self.get_dpos_reader(self.evm.GetBlock().Number))
-	}
-	if self.slashing_contract != nil && self.chain_config.Hardforks.IsMagnoliaHardfork(self.evm.GetBlock().Number) {
-		self.slashing_contract.CommitCall(self.get_slashing_reader(self.evm.GetBlock().Number))
-	}
-	return
-}
-
-func (self *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int) {
-	self.evm_state.GetAccount(account).AddBalance(tx_fee.ToBig())
+func (st *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int) {
+	st.evm_state.GetAccount(account).AddBalance(tx_fee.ToBig())
 }
