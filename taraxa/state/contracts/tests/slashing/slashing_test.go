@@ -338,7 +338,6 @@ func TestJailedValidatorsList(t *testing.T) {
 
 	proofs := make([]VoteProof, test_voters_count)
 	// execute commitDoubleVotingProof + generate DelegationDelay blocks
-	blocks_per_iteration := uint64(cfg.DPOS.DelegationDelay + 1)
 	for i := uint64(0); i < test_voters_count; i++ {
 		privkey1, author := addValidator(&cfg)
 		proofs[i].author = author
@@ -363,7 +362,7 @@ func TestJailedValidatorsList(t *testing.T) {
 	}
 
 	// Check list of jailed validators. We need to get it directly from reader later
-	jailed_from_contract := test.St.GetJailedValidators()
+	jailed_from_contract := test.GetJailedValidators()
 	tc.Assert.Equal(test_voters_count, uint64(len(jailed_from_contract)))
 	{
 		jailed := make([]common.Address, test_voters_count)
@@ -373,12 +372,14 @@ func TestJailedValidatorsList(t *testing.T) {
 		tc.Assert.Equal(jailed, jailed_from_contract)
 	}
 	first_unjail_block := uint64(0)
+	// Every execute is + 1 block, so add it to delegation delay
+	blocks_per_iteration := uint64(test.Chain_cfg.DPOS.DelegationDelay + 1)
 	for i := uint64(0); i < test_voters_count; i++ {
 		result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", proofs[i].author), util.ErrorString(""), util.ErrorString(""))
 		unjail_block := uint64(0)
 		test.Unpack(&unjail_block, "getJailBlock", result.CodeRetval)
 		expected_unjail := 1 + cfg.Hardforks.MagnoliaHf.JailTime + i*blocks_per_iteration
-		tc.Assert.Equal(expected_unjail, unjail_block)
+		tc.Assert.Equal(int(expected_unjail), int(unjail_block))
 
 		if first_unjail_block == 0 {
 			first_unjail_block = unjail_block
@@ -396,7 +397,7 @@ func TestJailedValidatorsList(t *testing.T) {
 	}
 
 	for i := uint64(0); i < test_voters_count; i++ {
-		jailed_from_contract := test.St.GetJailedValidators()
+		jailed_from_contract := test.GetJailedValidators()
 		tc.Assert.Equal(test_voters_count-i, uint64(len(jailed_from_contract)))
 		jailed := make([]common.Address, test_voters_count)
 		for i := uint64(0); i < test_voters_count; i++ {
@@ -404,7 +405,8 @@ func TestJailedValidatorsList(t *testing.T) {
 		}
 		tc.Assert.Equal(jailed[i:], jailed_from_contract)
 
-		for i := uint64(0); i < blocks_per_iteration; i++ {
+		// Every get is + 1 block, so advance only by DelegationDelay
+		for i := uint64(0); i < uint64(test.Chain_cfg.DPOS.DelegationDelay); i++ {
 			test.AdvanceBlock(nil, nil)
 		}
 	}
@@ -441,7 +443,7 @@ func TestDoubleJailing(t *testing.T) {
 		test.AdvanceBlock(nil, nil)
 	}
 
-	jailed_from_contract := test.St.GetJailedValidators()
+	jailed_from_contract := test.GetJailedValidators()
 	tc.Assert.Equal(1, len(jailed_from_contract))
 
 }

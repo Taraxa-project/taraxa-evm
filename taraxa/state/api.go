@@ -115,7 +115,6 @@ type StateTransition interface {
 	EndBlock()
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)
-	GetJailedValidators() (jailed_validators []common.Address)
 }
 
 func (self *API) GetStateTransition() StateTransition {

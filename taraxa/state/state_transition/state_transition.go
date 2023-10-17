@@ -178,9 +178,3 @@ func (st *StateTransition) Commit() (state_root common.Hash) {
 func (st *StateTransition) AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int) {
 	st.evm_state.GetAccount(account).AddBalance(tx_fee.ToBig())
 }
-
-// TODO: remove after implementing proper test
-func (st *StateTransition) GetJailedValidators() (jailed_validators []common.Address) {
-	reader := st.get_slashing_reader(st.evm.GetBlock().Number)
-	return reader.GetJailedValidators()
-}

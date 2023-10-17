@@ -143,6 +143,12 @@ func (self *ContractTest) End() {
 	self.tc.Close()
 }
 
+func (self *ContractTest) GetJailedValidators() (jailed_validators []common.Address) {
+	result := self.ExecuteAndCheck(tests.Addr(1), big.NewInt(0), self.Pack("getJailedValidators"), util.ErrorString(""), util.ErrorString(""))
+	self.Unpack(&jailed_validators, "getJailedValidators", result.CodeRetval)
+	return
+}
+
 func (self *ContractTest) Pack(name string, args ...interface{}) []byte {
 	packed, err := self.abi.Pack(name, args...)
 	if err != nil {
