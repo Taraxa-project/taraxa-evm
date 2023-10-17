@@ -40,17 +40,6 @@ func (self *AddressesIMap) GetAccounts(batch uint32, count uint32) (result []com
 	return
 }
 
-func (self *AddressesIMap) GetAllAccounts() []common.Address {
-	items, _ := self.addresses.GetItems(0, self.addresses.GetCount())
-
-	result := make([]common.Address, len(items))
-	for idx := 0; idx < len(items); idx++ {
-		result[idx] = common.BytesToAddress(items[idx])
-	}
-
-	return result
-}
-
 // Returns number of stored items
 func (self *AddressesIMap) GetCount() (count uint32) {
 	return self.addresses.GetCount()

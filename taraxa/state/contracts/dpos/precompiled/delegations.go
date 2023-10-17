@@ -109,11 +109,6 @@ func (self *Delegations) GetDelegatorValidatorsAddresses(delegator_address *comm
 	return delegator_validators.GetAccounts(batch, count)
 }
 
-func (self *Delegations) GetAllDelegatorValidatorsAddresses(delegator_address *common.Address) []common.Address {
-	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
-	return delegator_validators.GetAllAccounts()
-}
-
 func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *contract_storage.AddressesIMap {
 	delegator_validators, found := self.delegators_validators[*delegator_address]
 	if found == false {
