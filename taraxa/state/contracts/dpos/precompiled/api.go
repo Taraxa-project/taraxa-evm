@@ -85,6 +85,13 @@ func (self *API) NewSlashingContract(storage contract_storage.Storage, reader sl
 	return new(slashing.Contract).Init(self.config, storage, reader, evm)
 }
 
+func (self *API) InitAndRegisterAllContracts(storage contract_storage.Storage, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader, evm *vm.EVM, registry func(*common.Address, vm.PrecompiledContract)) {
+	new(Contract).Init(self.config, storage, self.NewReader(blk_n, storage_factory), evm).Register(registry)
+	if self.config.Hardforks.IsMagnoliaHardfork(blk_n) {
+		new(slashing.Contract).Init(self.config, storage, self.NewSlashingReader(blk_n, storage_factory), evm).Register(registry)
+	}
+}
+
 func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
 	cfg := self.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, storage_factory)

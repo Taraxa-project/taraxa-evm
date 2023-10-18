@@ -83,8 +83,11 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.SlashingReader, self.config)
-	self.trace_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.SlashingReader, self.config)
+	reader := func(blk_n types.BlockNum) contract_storage.StorageReader {
+		return self.ReadBlock(blk_n)
+	}
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, reader, self.config)
+	self.trace_runner.Init(self.db, get_block_hash, self.dpos, reader, self.config)
 	return self
 }
 

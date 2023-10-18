@@ -5,6 +5,8 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
+	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
@@ -26,8 +28,21 @@ type HardforksConfig struct {
 	MagnoliaHf                   MagnoliaHfConfig
 }
 
-func (self *HardforksConfig) IsMagnoliaHardfork(block uint64) bool {
-	return block >= self.MagnoliaHf.BlockNum
+func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
+	return block >= c.MagnoliaHf.BlockNum
+}
+
+func isForked(fork_start, block_num types.BlockNum) bool {
+	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
+		return false
+	}
+	return fork_start <= block_num
+}
+
+func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
+	return vm.Rules{
+		IsMagnolia: isForked(c.MagnoliaHf.BlockNum, num),
+	}
 }
 
 type GenesisValidator struct {

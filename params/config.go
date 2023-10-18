@@ -16,10 +16,6 @@
 
 package params
 
-import (
-	"github.com/Taraxa-project/taraxa-evm/core/types"
-)
-
 var (
 	MainnetChainConfig = &ChainConfig{
 		ChainId: 841,
@@ -31,23 +27,4 @@ var (
 
 type ChainConfig struct {
 	ChainId uint64 `json:"chainId"`
-	// HomesteadBlock types.BlockNum `json:"homesteadBlock,omitempty"` // Homestead switch block (nil = no fork, 0 = already homestead)
 }
-
-func isForked(fork_start, block_num types.BlockNum) bool {
-	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
-		return false
-	}
-	return fork_start <= block_num
-}
-
-// func (c *ChainConfig) Rules(num types.BlockNum) vm.Rules {
-// 	return vm.Rules{
-// 		IsHomestead:      isForked(c.HomesteadBlock, num),
-// 		IsEIP150:         isForked(c.EIP150Block, num),
-// 		IsEIP158:         isForked(c.EIP158Block, num),
-// 		IsByzantium:      isForked(c.ByzantiumBlock, num),
-// 		IsConstantinople: isForked(c.ConstantinopleBlock, num),
-// 		IsPetersburg:     isForked(c.PetersburgBlock, num) || c.PetersburgBlock == types.BlockNumberNIL && isForked(c.ConstantinopleBlock, num),
-// 	}
-// }
