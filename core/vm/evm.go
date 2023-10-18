@@ -53,9 +53,9 @@ type EVM struct {
 	state    State
 	block    Block
 	// virtual machine configuration options used to initialize the evm
-	vmConfig    Config
-	chainConfig params.ChainConfig
-	// rules             Rules
+	vmConfig          Config
+	chainConfig       params.ChainConfig
+	rules             Rules
 	rules_initialized bool
 	precompiles       Precompiles
 	instruction_set   InstructionSet
@@ -78,9 +78,9 @@ type Opts = struct {
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
 
-//	type Rules struct {
-//		IsHomestead, IsEIP150, IsEIP158, IsByzantium, IsConstantinople, IsPetersburg bool
-//	}
+type Rules struct {
+	IsMagnolia bool
+}
 type Block struct {
 	Number types.BlockNum
 	BlockInfo
@@ -122,9 +122,9 @@ func (self *EVM) AddLog(log LogRecord) {
 	self.state.AddLog(log)
 }
 
-// func (self *EVM) GetRules() Rules {
-// 	return self.rules
-// }
+func (self *EVM) GetRules() Rules {
+	return self.rules
+}
 
 func (self *EVM) GetDepth() uint16 {
 	return self.depth
@@ -134,12 +134,12 @@ func (self *EVM) GetBlock() Block {
 	return self.block
 }
 
-func (self *EVM) SetBlock(blk *Block /*, rules Rules*/) (rules_changed bool) {
+func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	self.block = *blk
 	if self.rules_initialized {
-		// if self.rules == rules {
-		return false
-		// }
+		if self.rules == rules {
+			return false
+		}
 	} else {
 		self.rules_initialized = true
 	}
@@ -153,7 +153,7 @@ func (self *EVM) SetBlock(blk *Block /*, rules Rules*/) (rules_changed bool) {
 	self.instruction_set = californicumInstructionSet
 	self.gas_table = GasTableCalifornicum
 	// }
-	// self.rules = rules
+	self.rules = rules
 	return true
 }
 

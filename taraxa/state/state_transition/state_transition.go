@@ -60,8 +60,6 @@ func (st *StateTransition) Init(
 	st.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
 		st.dpos_contract = dpos_api.NewContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_dpos_reader(state_desc.BlockNum), &st.evm)
-	}
-	if dpos_api != nil {
 		st.slashing_contract = dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{EVMState: &st.evm_state}, get_slashing_reader(state_desc.BlockNum), &st.evm)
 	}
 	if state_common.IsEmptyStateRoot(&state_desc.StateRoot) {
@@ -106,7 +104,7 @@ func (st *StateTransition) BlockNumber() types.BlockNum {
 func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	st.begin_block()
 	blk_n := st.pending_blk_state.GetNumber()
-	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info} /*st.chain_config.EVMChainConfig.Rules(blk_n)*/)
+	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if st.dpos_contract != nil && rules_changed {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
 	}

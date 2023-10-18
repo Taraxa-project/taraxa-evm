@@ -69,12 +69,12 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 		}
 
 		evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
-		evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
+		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 		if self.dpos_api != nil {
 			self.dpos_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_dpos_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
-		}
-		if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) && self.dpos_api != nil {
-			self.dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+			if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) {
+				self.dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+			}
 		}
 
 		ret, _ := evm.Main(&trx)

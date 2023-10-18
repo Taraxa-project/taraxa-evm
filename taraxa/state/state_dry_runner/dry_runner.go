@@ -56,13 +56,14 @@ func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionRes
 	trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
 	var evm vm.EVM
 	evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{})
-	evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
+	evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 	if self.dpos_api != nil {
 		self.dpos_api.NewContract(contract_storage.EVMStateStorage{&evm_state}, self.get_dpos_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+		if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) {
+			self.dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+		}
 	}
-	if self.chain_config.Hardforks.IsMagnoliaHardfork(blk.Number) && self.dpos_api != nil {
-		self.dpos_api.NewSlashingContract(contract_storage.EVMStateStorage{&evm_state}, self.get_slashing_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
-	}
+
 	ret, err := evm.Main(trx)
 	if err == vm.ErrExecutionReverted {
 		reason, unpack_err := abi.UnpackRevert(ret.CodeRetval)
