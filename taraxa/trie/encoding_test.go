@@ -102,13 +102,3 @@ func BenchmarkHexToKeybytes(b *testing.B) {
 		hexToKeybytes(testBytes)
 	}
 }
-
-func hexToCompact(hex []byte) []byte {
-	return hex_to_compact(hex, &hex_key_compact{})
-}
-
-func hexToKeybytes(hex []byte) (key []byte) {
-	key = make([]byte, len(hex)/2)
-	hex_to_keybytes(hex, key)
-	return
-}

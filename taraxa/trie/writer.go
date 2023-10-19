@@ -2,6 +2,7 @@ package trie
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -69,9 +70,8 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 				if val, cached = val_n.val.(internal_value); !cached {
 					val.enc_storage, val.enc_hash = val_n.val.EncodeForTrie()
 					val_n.val = val
-					key := new(common.Hash)
-					hex_to_keybytes(append(key_prefix, n.key_part...), key[:])
-					db_tx.PutValue(key, val.enc_storage)
+					key := common.BytesToHash(hexToKeybytes(append(key_prefix, n.key_part...)))
+					db_tx.PutValue(&key, val.enc_storage)
 				}
 				ctx.enc_hash.AppendString(val.enc_hash)
 			} else {
@@ -90,7 +90,8 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 		}
 		ctx.enc_storage.ListEnd(storage_list_start)
 		if is_root {
-			db_tx.PutNode(n.hash.common_hash(), ctx.enc_storage.ToBytes(storage_list_start))
+			fmt.Println("PutNode(is_root)", n.get_hash().common_hash().Hex(), common.Bytes2Hex(ctx.enc_storage.ToBytes(storage_list_start)))
+			db_tx.PutNode(n.get_hash().common_hash(), ctx.enc_storage.ToBytes(storage_list_start))
 		}
 		return n
 	case *full_node:
@@ -112,10 +113,10 @@ func (self *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte,
 			}
 		}
 		ctx.enc_storage.ListEnd(storage_list_start)
-		ctx.enc_hash.AppendString(nil)
 		ctx.enc_hash.ListEnd(hash_list_start, is_root, &n.hash)
 		if n.hash != nil {
-			db_tx.PutNode(n.hash.common_hash(), ctx.enc_storage.ToBytes(storage_list_start))
+			fmt.Println("PutNode", n.get_hash().common_hash().Hex(), common.Bytes2Hex(ctx.enc_storage.ToBytes(storage_list_start)))
+			db_tx.PutNode(n.get_hash().common_hash(), ctx.enc_storage.ToBytes(storage_list_start))
 			if !is_root {
 				ctx.enc_storage.RevertToListStart(storage_list_start)
 				ctx.enc_storage.AppendString(n.hash[:])

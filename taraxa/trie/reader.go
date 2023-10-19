@@ -1,6 +1,9 @@
 package trie
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
@@ -11,31 +14,53 @@ import (
 type Reader struct{ Schema }
 type KVCallback = func(*common.Hash, Value)
 
-func (self Reader) ForEach(db_tx Input, root_hash *common.Hash, with_values bool, cb KVCallback) {
-	var kbuf hex_key
-	self.for_each(db_tx, (*node_hash)(root_hash), with_values, cb, kbuf[:0])
+type ResolveValFn = func([]byte) value_node
+type Resolver struct {
+	Reader
+	DbTx   Input
+	Prefix []byte
 }
 
-func (self Reader) ForEachNodeHash(db_tx Input, root_hash *common.Hash, cb func(*common.Hash, []byte)) {
-	var kbuf hex_key
-	self.for_each_node_hash(db_tx, (*node_hash)(root_hash), cb, kbuf[:0])
+func (r *Resolver) CopyWithPrefix(p byte) (ret *Resolver) {
+	ret = new(Resolver)
+	*ret = *r
+	ret.Prefix = append(ret.Prefix, r.Prefix...)
+	ret.Prefix = append(ret.Prefix, p)
+	return
 }
 
-func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash, []byte), prefix []byte) {
+func (r *Resolver) resolve_val_n(key []byte) (ret value_node) {
+	key_extended := append(r.Prefix, key...)
+	fmt.Println("Originalkey", common.Bytes2Hex(key), common.Bytes2Hex(key_extended), len(key), len(key_extended))
+	k := common.BytesToHash(hexToKeybytes(key_extended))
+	return r.Reader.resolve_val_n(r.DbTx, &k)
+}
+
+func (r Reader) ForEach(db_tx Input, root_hash *common.Hash, with_values bool, cb KVCallback) {
+	var kbuf hex_key
+	r.for_each(db_tx, (*node_hash)(root_hash), with_values, cb, kbuf[:0])
+}
+
+func (r Reader) ForEachNodeHash(db_tx Input, root_hash *common.Hash, cb func(*common.Hash, []byte)) {
+	var kbuf hex_key
+	r.for_each_node_hash(db_tx, (*node_hash)(root_hash), cb, kbuf[:0])
+}
+
+func (r Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash, []byte), prefix []byte) {
 	switch n := n.(type) {
 	case *node_hash:
-		ret_node, ret_bytes := self.resolve(db_tx, n, prefix)
+		ret_node, ret_bytes := r.resolve(db_tx, n, prefix)
 		cb(n.common_hash(), ret_bytes)
-		self.for_each_node_hash(db_tx, ret_node, cb, prefix)
+		r.for_each_node_hash(db_tx, ret_node, cb, prefix)
 	case *short_node:
 		key_extended := append(prefix, n.key_part...)
 		if _, has_val := n.val.(value_node); !has_val {
-			self.for_each_node_hash(db_tx, n.val, cb, key_extended)
+			r.for_each_node_hash(db_tx, n.val, cb, key_extended)
 		}
 	case *full_node:
 		for i := 0; i < full_node_child_cnt; i++ {
 			if c := n.children[i]; c != nil {
-				self.for_each_node_hash(db_tx, c, cb, append(prefix, byte(i)))
+				r.for_each_node_hash(db_tx, c, cb, append(prefix, byte(i)))
 			}
 		}
 	default:
@@ -43,44 +68,128 @@ func (self Reader) for_each_node_hash(db_tx Input, n node, cb func(*common.Hash,
 	}
 }
 
-func (self Reader) for_each(db_tx Input, n node, with_values bool, cb KVCallback, prefix []byte) {
+func (r Reader) for_each(db_tx Input, n node, with_values bool, cb KVCallback, prefix []byte) {
+	nodes := make([]node, 0)
 	switch n := n.(type) {
 	case *node_hash:
-		ret_node, _ := self.resolve(db_tx, n, prefix)
-		self.for_each(db_tx, ret_node, with_values, cb, prefix)
+		ret_node, _ := r.resolve(db_tx, n, prefix)
+		r.for_each(db_tx, ret_node, with_values, cb, prefix)
 	case *short_node:
 		key_extended := append(prefix, n.key_part...)
+		fmt.Println("short_node", common.Bytes2Hex(prefix), common.Bytes2Hex(n.key_part), common.Bytes2Hex(key_extended))
 		if val_n, has_val := n.val.(value_node); has_val {
-			var key common.Hash
-			hex_to_keybytes(key_extended, key[:])
+			key := common.BytesToHash(hexToKeybytes(key_extended))
 			if val_n == nil_val_node && with_values {
-				val_n = self.resolve_val_n(db_tx, &key)
+				val_n = r.resolve_val_n(db_tx, &key)
 			}
+			fmt.Println("Resolved val_n", key.Hex(), val_n)
+			fmt.Println("appending short node", n.get_hash().common_hash().Hex(), common.Bytes2Hex(prefix))
+			nodes = append(nodes, n)
 			cb(&key, val_n.val)
 		} else {
-			self.for_each(db_tx, n.val, with_values, cb, key_extended)
+			r.for_each(db_tx, n.val, with_values, cb, key_extended)
 		}
 	case *full_node:
+		fmt.Println("fullNode", n.String())
+		nodes = append(nodes, n)
 		for i := 0; i < full_node_child_cnt; i++ {
 			if c := n.children[i]; c != nil {
-				self.for_each(db_tx, c, with_values, cb, append(prefix, byte(i)))
+				r.for_each(db_tx, c, with_values, cb, append(prefix, byte(i)))
 			}
 		}
+		fmt.Println("appending full node", n.get_hash().common_hash().Hex(), common.Bytes2Hex(prefix))
 	default:
 		panic("impossible")
 	}
+	for i, n := range nodes {
+		fmt.Println("nodes", i, common.Bytes2Hex(nodeToBytes(n, &Resolver{r, db_tx, prefix})))
+	}
+	fmt.Println("====================================================")
 }
 
-func (self Reader) resolve(db_tx Input, hash *node_hash, key_prefix []byte) (ret node, ret_bytes []byte) {
+func (r Reader) Prove(db_tx Input, root_hash *common.Hash, key []byte) (ret [][]byte, err error) {
+	fmt.Println("Prove", common.Bytes2Hex(key), key[0])
+	// Collect all nodes on the path to key.
+	var tn node
+	tn = (*node_hash)(root_hash)
+	var (
+		prefix []byte
+		nodes  []node
+	)
+
+	key = keybytesToHex(key)
+	for len(key) > 0 && tn != nil {
+		switch n := tn.(type) {
+		case *short_node:
+			key_extended := append(prefix, n.key_part...)
+			// fmt.Println("shortNode", n.String())
+			if val_n, has_val := n.val.(value_node); has_val {
+				key := common.BytesToHash(hexToKeybytes(key_extended))
+				fmt.Println("short_node", common.Bytes2Hex(prefix), common.Bytes2Hex(n.key_part), key.Hex())
+				if val_n == nil_val_node {
+					val_n = r.resolve_val_n(db_tx, &key)
+				}
+				n.val = val_n
+			}
+			if len(key) < len(n.key_part) || !bytes.Equal(n.key_part, key[:len(n.key_part)]) {
+				// The trie doesn't contain the key.
+				tn = nil
+			} else {
+				tn = n.val
+				prefix = append(prefix, n.key_part...)
+				key = key[len(n.key_part):]
+			}
+
+			nodes = append(nodes, n)
+			fmt.Println("appending short node", n.get_hash().common_hash().Hex(), common.Bytes2Hex(prefix))
+		case *full_node:
+			tn = n.children[key[0]]
+			fmt.Println("fullNode", n.children, key[0])
+			nodes = append(nodes, n)
+			prefix = append(prefix, key[0])
+			key = key[1:]
+			fmt.Println("appending full node", n.get_hash().common_hash().Hex(), common.Bytes2Hex(prefix))
+		case *node_hash:
+			tn, _ = r.resolve(db_tx, n, prefix)
+		default:
+			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
+		}
+	}
+
+	for i, n := range nodes {
+		hasher := newHasher(false, nil)
+		defer returnHasherToPool(hasher)
+
+		var hn node
+		fmt.Println("Proving", i, n.String())
+
+		n, hn = hasher.proofHash(n)
+		if hash, ok := hn.(*node_hash); ok || i == 0 {
+			// If the node's database encoding is a hash (or is the
+			// root node), it becomes a proof element.
+			enc := nodeToBytes(n, nil)
+			// Resolver{r, db_tx, []byte{}} prefixes[i]
+			if !ok {
+				hash = hasher.hashData(enc)
+			}
+
+			fmt.Println("Proof", i, common.Bytes2Hex(enc), hash, n.get_hash())
+			ret = append(ret, enc)
+		}
+	}
+	return ret, nil
+}
+
+func (r Reader) resolve(db_tx Input, hash *node_hash, key_prefix []byte) (ret node, ret_bytes []byte) {
 	db_tx.GetNode(hash.common_hash(), func(bytes []byte) {
-		ret, _ = self.dec_node(db_tx, key_prefix, hash, bytes)
+		ret, _ = r.dec_node(db_tx, key_prefix, hash, bytes)
 		ret_bytes = common.CopyBytes(bytes)
 	})
 	asserts.Holds(ret != nil)
 	return
 }
 
-func (self Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, buf []byte) (node, []byte) {
+func (r Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, buf []byte) (node, []byte) {
 	kind, tagsize, total_size, err := rlp.ReadKind(buf)
 	util.PanicIfNotNil(err)
 	payload, rest := buf[tagsize:total_size], buf[total_size:]
@@ -90,9 +199,9 @@ func (self Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, 
 		util.PanicIfNotNil(err)
 		switch size {
 		case 1, 2:
-			return self.dec_short(db_tx, key_prefix, db_hash, buf[:total_size], tagsize), rest
+			return r.dec_short(db_tx, key_prefix, db_hash, buf[:total_size], tagsize), rest
 		case full_node_child_cnt:
-			return self.dec_full(db_tx, key_prefix, db_hash, payload), rest
+			return r.dec_full(db_tx, key_prefix, db_hash, payload), rest
 		default:
 			panic("impossible " + db_hash.common_hash().Hex())
 		}
@@ -110,14 +219,14 @@ func (self Reader) dec_node(db_tx Input, key_prefix []byte, db_hash *node_hash, 
 	}
 }
 
-func (self Reader) dec_short(db_tx Input, key_prefix []byte, db_hash *node_hash, buf []byte, payload_start byte) *short_node {
+func (r Reader) dec_short(db_tx Input, key_prefix []byte, db_hash *node_hash, buf []byte, payload_start byte) *short_node {
 	key_ext, content, err := rlp.SplitString(buf[payload_start:])
 	util.PanicIfNotNil(err)
 	key_ext = compact_to_hex(key_ext)
 	ret := &short_node{key_part: key_ext, hash: db_hash}
 	if hasTerm(key_ext) {
 		if len(content) == 0 {
-			ret.val = self.resolve_val_n_by_hex_k(db_tx, append(key_prefix, key_ext...))
+			ret.val = r.resolve_val_n_by_hex_k(db_tx, append(key_prefix, key_ext...))
 			return ret
 		}
 		content, _, err = rlp.SplitString(content)
@@ -127,37 +236,36 @@ func (self Reader) dec_short(db_tx Input, key_prefix []byte, db_hash *node_hash,
 			ret.hash = (*node_hash)(keccak256.HashView(content))
 			ret.val = nil_val_node
 		} else {
-			asserts.Holds(0 < l && l <= self.MaxValueSizeToStoreInTrie())
-			ret.val = value_node{internal_value{content, self.ValueStorageToHashEncoding(content)}}
+			asserts.Holds(0 < l && l <= r.MaxValueSizeToStoreInTrie())
+			ret.val = value_node{internal_value{content, r.ValueStorageToHashEncoding(content)}}
 		}
 		return ret
 	}
-	ret.val, _ = self.dec_node(db_tx, append(key_prefix, key_ext...), nil, content)
+	ret.val, _ = r.dec_node(db_tx, append(key_prefix, key_ext...), nil, content)
 	if _, child_is_hash := ret.val.(*node_hash); child_is_hash && ret.hash == nil {
 		ret.hash = (*node_hash)(keccak256.Hash(buf))
 	}
 	return ret
 }
 
-func (self Reader) dec_full(db_tx Input, key_prefix []byte, db_hash *node_hash, enc []byte) *full_node {
+func (r Reader) dec_full(db_tx Input, key_prefix []byte, db_hash *node_hash, enc []byte) *full_node {
 	ret := &full_node{hash: db_hash}
 	for i := byte(0); i < full_node_child_cnt; i++ {
-		ret.children[i], enc = self.dec_node(db_tx, append(key_prefix, i), nil, enc)
+		ret.children[i], enc = r.dec_node(db_tx, append(key_prefix, i), nil, enc)
 	}
 	return ret
 }
 
 // TODO lazy load? make sure values are not loaded twice
-func (self Reader) resolve_val_n_by_hex_k(db_tx Input, hex_key []byte) (ret value_node) {
-	var key common.Hash
-	hex_to_keybytes(hex_key, key[:])
-	return self.resolve_val_n(db_tx, &key)
+func (r Reader) resolve_val_n_by_hex_k(db_tx Input, hex_key []byte) (ret value_node) {
+	key := common.BytesToHash(hexToKeybytes(hex_key))
+	return r.resolve_val_n(db_tx, &key)
 }
 
-func (self Reader) resolve_val_n(db_tx Input, key *common.Hash) (ret value_node) {
+func (r Reader) resolve_val_n(db_tx Input, key *common.Hash) (ret value_node) {
 	db_tx.GetValue(key, func(enc_storage []byte) {
 		enc_storage = common.CopyBytes(enc_storage)
-		ret.val = internal_value{enc_storage, self.ValueStorageToHashEncoding(enc_storage)}
+		ret.val = internal_value{enc_storage, r.ValueStorageToHashEncoding(enc_storage)}
 	})
 	asserts.Holds(ret.val != nil)
 	return

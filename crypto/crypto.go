@@ -18,6 +18,7 @@ package crypto
 
 import (
 	"errors"
+	"hash"
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -33,6 +34,11 @@ var (
 )
 
 var errInvalidPubkey = errors.New("invalid secp256k1 public key")
+
+type KeccakState interface {
+	hash.Hash
+	Read([]byte) (int, error)
+}
 
 // Keccak256 calculates and returns the Keccak256 hash of the input data.
 func Keccak256(data ...[]byte) []byte {
