@@ -106,7 +106,7 @@ const (
 	VrfKeyLength = 32
 
 	// Length of bls public key
-	BlsKeyLength = 32
+	BlsKeyLength = 129
 
 	// Maximum number of validators per batch that delegator get claim rewards from
 	ClaimAllRewardsMaxCount = 10
