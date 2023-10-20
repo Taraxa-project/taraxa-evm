@@ -91,7 +91,7 @@ type RegisterValidatorArgs struct {
 	Validator   common.Address
 	Proof       []byte
 	VrfKey      []byte
-	BlsKey      []byte
+	BlsKey      []byte `rlp:"nil"`
 	Commission  uint16
 	Description string
 	Endpoint    string
