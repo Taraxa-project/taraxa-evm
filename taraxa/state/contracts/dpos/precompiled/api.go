@@ -51,6 +51,24 @@ func (self *API) Init(cfg chain_config.ChainConfig) *API {
 	//MaxBlockAuthorReward is in %
 	asserts.Holds(cfg.DPOS.MaxBlockAuthorReward <= 100)
 
+	// Make sure aspen hardfork is done during reward votes distribution
+	if len(cfg.Hardforks.RewardsDistributionFrequency) != 0 {
+		latest_frequency_change_block := uint64(0)
+		latest_frequency_change := uint64(1)
+		for block_num, frequency := range cfg.Hardforks.RewardsDistributionFrequency {
+			if block_num > cfg.Hardforks.AspenHfBlockNum {
+				continue
+			}
+
+			// Find the latest frequency change
+			if block_num > latest_frequency_change_block {
+				latest_frequency_change_block = block_num
+				latest_frequency_change = uint64(frequency)
+			}
+		}
+		asserts.Holds(cfg.Hardforks.AspenHfBlockNum%latest_frequency_change == 0)
+	}
+
 	self.config = cfg
 	return self
 }
