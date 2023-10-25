@@ -123,6 +123,9 @@ var (
 
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
+
+	field_current_total_supply = []byte{6}
+	field_current_yield        = []byte{7}
 )
 
 // State of the rewards distribution algorithm
@@ -145,6 +148,9 @@ type Contract struct {
 	logs Logs
 	evm  *vm.EVM
 
+	// Yield curve
+	yield_curve YieldCurve
+
 	// Iterable storages
 	validators    Validators
 	delegations   Delegations
@@ -159,6 +165,9 @@ type Contract struct {
 	yield_percentage         *uint256.Int
 	dag_proposers_reward     *uint256.Int
 	max_block_author_reward  *uint256.Int
+
+	// Total tara supply = genesis balances + block rewards
+	total_supply *uint256.Int
 
 	lazy_init_done bool
 }
@@ -337,6 +346,8 @@ func (self *Contract) lazy_init() {
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
 
+	self.yield_curve.Init(self.cfg)
+
 	self.blocks_per_year = uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))
 	self.yield_percentage = uint256.NewInt(uint64(self.cfg.DPOS.YieldPercentage))
 
@@ -353,6 +364,11 @@ func (self *Contract) lazy_init() {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
+
+	self.total_supply = uint256.NewInt(0)
+	self.storage.Get(contract_storage.Stor_k_1(field_current_total_supply), func(bytes []byte) {
+		self.total_supply = new(uint256.Int).SetBytes(bytes)
+	})
 
 	self.lazy_init_done = true
 }
@@ -613,9 +629,42 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	self.lazy_init()
 	blockAuthorAddr := &rewardsStats.BlockAuthor
 
-	// Calculates number of tokens to be generated as block reward
-	blockReward := new(uint256.Int).Mul(self.amount_delegated, self.yield_percentage)
-	blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
+	blockReward := new(uint256.Int)
+
+	// TODO: can we use self.evm.GetBlock().Number ??? If so, why is it as argument in Run() function ???
+	current_block_num := self.evm.GetBlock().Number
+	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+		if self.cfg.Hardforks.AspenHfBlockNum == current_block_num {
+			if !self.total_supply.IsZero() {
+				errorString := fmt.Sprintf("Total supply (%d) != 0", self.total_supply)
+				fmt.Println(errorString)
+			}
+
+			calc_total_supply, success := self.yield_curve.CalculateTotalSupply(self.delayedStorage)
+			if !success {
+				errorString := fmt.Sprintf("Total supply calculation failed (%d) != 0", calc_total_supply)
+				fmt.Println(errorString)
+
+				// This should never happen - do not distribute rewards as it cannot be calculated
+				return uint256.NewInt(0)
+			}
+
+			self.addAndSaveTotalSupply(calc_total_supply)
+		}
+
+		var yield *uint256.Int
+		// TODO: this is probably another bug - amount_delegated contains also all delegations from the block that is currently being processed...
+		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
+
+		// Save current yield
+		yield_key := contract_storage.Stor_k_1(field_current_yield)
+		self.storage.Put(yield_key, yield.Bytes())
+	} else {
+		// Calculates number of tokens to be generated as block reward
+		// TODO: this is probably another bug - amount_delegated contains also all delegations from the block that is currently being processed...
+		blockReward.Mul(self.amount_delegated, self.yield_percentage)
+		blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
+	}
 
 	totalReward := uint256.NewInt(0)
 	votesReward := uint256.NewInt(0)
@@ -736,6 +785,8 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	}
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
+
+	self.addAndSaveTotalSupply(newMintedRewards)
 
 	return newMintedRewards
 }
@@ -1676,6 +1727,11 @@ func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
+}
+
+func (self *Contract) addAndSaveTotalSupply(amount *uint256.Int) {
+	self.total_supply.Add(self.total_supply, amount)
+	self.storage.Put(contract_storage.Stor_k_1(field_current_total_supply), self.total_supply.Bytes())
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

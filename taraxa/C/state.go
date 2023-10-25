@@ -257,6 +257,7 @@ func taraxa_evm_state_api_distribute_rewards(
 
 	totalReward := uint256.NewInt(0)
 	for i := range params.Rewards_stats {
+		// TODO: total delegation calc (aspen hf) must be run on a block compatible with rewards blocks delta
 		reward := st.DistributeRewards(&params.Rewards_stats[i])
 		if reward != nil {
 			totalReward.Add(totalReward, reward)

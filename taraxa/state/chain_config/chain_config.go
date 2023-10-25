@@ -26,10 +26,15 @@ type HardforksConfig struct {
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+	AspenHfBlockNum              uint64
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= c.MagnoliaHf.BlockNum
+}
+
+func (c *HardforksConfig) IsAspenHardfork(block types.BlockNum) bool {
+	return block >= c.AspenHfBlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
