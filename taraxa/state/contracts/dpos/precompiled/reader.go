@@ -88,18 +88,10 @@ type ValidatorStake struct {
 }
 
 func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
-	// ret = big.NewInt(0)
 	reader := new(storage.AddressesIMapReader)
 	reader.Init(r.storage, append(field_validators, validator_list_index...))
 
-	validators := make([]common.Address, 0)
-	for {
-		addresses, end := reader.GetAccounts(0, 1000)
-		validators = append(validators, addresses...)
-		if end {
-			break
-		}
-	}
+	validators, _ := reader.GetAccounts(0, reader.GetCount())
 
 	for _, addr := range validators {
 		ret = append(ret, ValidatorStake{Address: addr, TotalStake: r.GetStakingBalance(&addr)})

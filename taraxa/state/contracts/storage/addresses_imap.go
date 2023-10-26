@@ -30,7 +30,7 @@ func (self *AddressesIMapReader) GetAccounts(batch uint32, count uint32) (result
 }
 
 // Returns number of stored items
-func (self *AddressesIMap) GetCount() (count uint32) {
+func (self *AddressesIMapReader) GetCount() (count uint32) {
 	return self.addresses.GetCount()
 }
 
