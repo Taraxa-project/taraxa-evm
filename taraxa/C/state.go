@@ -397,6 +397,18 @@ func taraxa_evm_state_api_prune(
 	state_API_instances[ptr].db.Prune(params.StateRootToKeep, params.BlkNum)
 }
 
+//export taraxa_evm_state_api_validators_stakes
+func taraxa_evm_state_api_validators_stakes(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	ret := state_API_instances[ptr].DPOSReader(blk_n).GetValidatorsTotalStakes()
+	enc_rlp(&ret, cb)
+}
+
 type state_API_ptr = byte
 
 const state_API_max_instances = ^state_API_ptr(0)

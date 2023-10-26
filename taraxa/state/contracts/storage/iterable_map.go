@@ -11,16 +11,15 @@ var (
 	field_items_pos   = []byte{2}
 )
 
-// IterableMap storage wrapper
-type IterableMap struct {
-	storage                  *StorageWrapper
+type IterableMapReader struct {
+	storage                  *StorageReaderWrapper
 	items_storage_prefix     []byte       // items are stored under "items_storage_prefix + pos" key
 	items_count_storage_key  *common.Hash // items count is stored under items_count_storage_key
 	items_pos_storage_prefix []byte       // items positions are stored under "items_pos_storage_prefix + item" key
 }
 
-// Inits iterbale map with prefix, so multiple iterbale maps can coexists thanks to different prefixes
-func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
+// Inits iterable map with prefix, so multiple iterbale maps can coexists thanks to different prefixes
+func (self *IterableMapReader) Init(stor *StorageReaderWrapper, prefix []byte) {
 	self.storage = stor
 	self.items_storage_prefix = append(prefix, field_items...)
 	self.items_count_storage_key = Stor_k_1(prefix, field_items_count)
@@ -28,9 +27,94 @@ func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
 }
 
 // Checks is item exists in iterable map
-func (self *IterableMap) ItemExists(item []byte) bool {
+func (self *IterableMapReader) ItemExists(item []byte) bool {
 	item_exists, _ := self.itemExists(item)
 	return item_exists
+}
+
+func (self *IterableMapReader) GetItems(batch uint32, count uint32) (result [][]byte, end bool) {
+	// Gets items count
+	items_count := self.GetCount()
+
+	// No items in iterable map
+	if items_count == 0 {
+		end = true
+		return
+	}
+
+	requested_idx_start := batch * count
+	requested_idx_end := (batch + 1) * count
+
+	// Invalid batch provided - there is not so many items in iterbale map
+	if requested_idx_start >= items_count {
+		end = true
+		return
+	}
+
+	if items_count <= requested_idx_end {
+		result = make([][]byte, items_count-requested_idx_start)
+		end = true
+	} else {
+		result = make([][]byte, count)
+		end = false
+	}
+
+	// Start with index == 1, there is nothing saved on index == 0 as it is reserved to indicate non-existent item
+	var idx uint32
+	for idx = uint32(requested_idx_start + 1); idx <= requested_idx_end && idx <= items_count; idx++ {
+		items_k := Stor_k_1(self.items_storage_prefix, uint32ToBytes(idx))
+
+		var item []byte
+		self.storage.Get(items_k, func(bytes []byte) {
+			item = bytes
+		})
+
+		if len(item) == 0 {
+			// This should never happen
+			panic("Unable to find item " + string(item))
+		}
+
+		result[(idx-1)%count] = item
+	}
+
+	return
+}
+
+// Returns number of stored items
+func (self *IterableMapReader) GetCount() (count uint32) {
+	count = 0
+	self.storage.Get(self.items_count_storage_key, func(bytes []byte) {
+		count = bytesToUint32(bytes)
+	})
+
+	return
+}
+
+// Checks is item exists in iterable map
+// If item exists <true, position> it returned, otheriwse <false, 0>
+func (self *IterableMapReader) itemExists(item []byte) (item_exists bool, item_pos uint32) {
+	pos_k := Stor_k_1(self.items_pos_storage_prefix, item[:])
+	item_pos = 0
+
+	self.storage.Get(pos_k, func(bytes []byte) {
+		item_pos = bytesToUint32(bytes)
+	})
+
+	// pos == 0 means non-existent item
+	item_exists = (item_pos != 0)
+	return
+}
+
+// IterableMap storage wrapper
+type IterableMap struct {
+	IterableMapReader
+	storage *StorageWrapper
+}
+
+// Inits iterable map with prefix, so multiple iterbale maps can coexists thanks to different prefixes
+func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
+	self.storage = stor
+	self.IterableMapReader.Init(&stor.StorageReaderWrapper, prefix)
 }
 
 // Creates item from iterable map
@@ -111,79 +195,6 @@ func (self *IterableMap) RemoveItem(item []byte) uint32 {
 	self.storage.Put(self.items_count_storage_key, uint32ToBytes(items_count-1))
 
 	return items_count - 1
-}
-
-func (self *IterableMap) GetItems(batch uint32, count uint32) (result [][]byte, end bool) {
-	// Gets items count
-	items_count := self.GetCount()
-
-	// No items in iterable map
-	if items_count == 0 {
-		end = true
-		return
-	}
-
-	requested_idx_start := batch * count
-	requested_idx_end := (batch + 1) * count
-
-	// Invalid batch provided - there is not so many items in iterbale map
-	if requested_idx_start >= items_count {
-		end = true
-		return
-	}
-
-	if items_count <= requested_idx_end {
-		result = make([][]byte, items_count-requested_idx_start)
-		end = true
-	} else {
-		result = make([][]byte, count)
-		end = false
-	}
-
-	// Start with index == 1, there is nothing saved on index == 0 as it is reserved to indicate non-existent item
-	var idx uint32
-	for idx = uint32(requested_idx_start + 1); idx <= requested_idx_end && idx <= items_count; idx++ {
-		items_k := Stor_k_1(self.items_storage_prefix, uint32ToBytes(idx))
-
-		var item []byte
-		self.storage.Get(items_k, func(bytes []byte) {
-			item = bytes
-		})
-
-		if len(item) == 0 {
-			// This should never happen
-			panic("Unable to find item " + string(item))
-		}
-
-		result[(idx-1)%count] = item
-	}
-
-	return
-}
-
-// Returns number of stored items
-func (self *IterableMap) GetCount() (count uint32) {
-	count = 0
-	self.storage.Get(self.items_count_storage_key, func(bytes []byte) {
-		count = bytesToUint32(bytes)
-	})
-
-	return
-}
-
-// Checks is item exists in iterable map
-// If item exists <true, position> it returned, otheriwse <false, 0>
-func (self *IterableMap) itemExists(item []byte) (item_exists bool, item_pos uint32) {
-	pos_k := Stor_k_1(self.items_pos_storage_prefix, item[:])
-	item_pos = 0
-
-	self.storage.Get(pos_k, func(bytes []byte) {
-		item_pos = bytesToUint32(bytes)
-	})
-
-	// pos == 0 means non-existent item
-	item_exists = (item_pos != 0)
-	return
 }
 
 func uint32ToBytes(val uint32) []byte {
