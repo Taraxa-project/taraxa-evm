@@ -10,7 +10,7 @@ import (
 // Yield curve description -> https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 
 // Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
-var maxTaraSupply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
+var MaxTaraSupply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
 
 // Yield is calculated with 6 decimal precision
 var YieldDecimalPrecision = uint256.NewInt(1e+6)
@@ -26,8 +26,8 @@ func (self *YieldCurve) Init(cfg chain_config.ChainConfig) {
 // Note: yield is calculated with <yieldDecimalPrecision> decimal precision. To get % it must be divied by yieldDecimalPrecision
 func (self *YieldCurve) calculateCurrentYield(current_total_delegation, current_total_tara_supply *uint256.Int) *uint256.Int {
 	// Current yield = (max supply - current total supply) / current total supply
-	current_yield := new(uint256.Int).Sub(maxTaraSupply, current_total_tara_supply)
-	current_yield.Mul(current_yield, YieldDecimalPrecision)
+	current_yield := new(uint256.Int).Sub(MaxTaraSupply, current_total_tara_supply)
+	current_yield.Mul(current_yield, new(uint256.Int).Mul(YieldDecimalPrecision, uint256.NewInt(100)))
 	current_yield.Div(current_yield, current_total_tara_supply)
 
 	return current_yield
