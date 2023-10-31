@@ -258,7 +258,7 @@ func TestTrieVal(t *testing.T) {
 
 	fmt.Println()
 	fmt.Println()
-	storage_proof := state.ProveAccountStorage(&root, test.ContractAddr)
+	storage_proof, _ := state.GetStorageProof(&root, test.ContractAddr)
 
 	for i, r := range storage_proof {
 		fmt.Println("proof", i, common.Bytes2Hex(r))
@@ -269,7 +269,7 @@ func TestTrieVal(t *testing.T) {
 	fmt.Println()
 	fmt.Println()
 	h := common.HexToHash("0x7673bcbb3401a7cbae68f81d40eea2cf35afdaf7ecd016ebf3f02857fcc1260a")
-	res := state.Prove(test.ContractAddr, &h)
+	res, _ := state.GetProof(test.ContractAddr, &h)
 	for i, r := range res {
 		fmt.Println("proof", i, common.Bytes2Hex(r))
 	}
@@ -286,4 +286,122 @@ func TestTrieVal(t *testing.T) {
 	// nextHash af60076e9315d9b41a8c42adeb78fef8551f24acb234f37d9d7537ef9ad2e78f
 	// rlp node f8f18080a0be6aba9ac1c6352f17e80656c7f0b3953ec8ce0e1f2cfb05ef769bfc37d1d77580a0b7b49995dce6c474becec567a6c96c93da7e0990598ac4dc1affbcd3ad452453a010c7db9de7b9d84c39923dbd3949bce63056bfc5e6f0e8b9c4cab3463b6b878180a09e9e038f1f2f81d0bb0e1f416f50de622e9fcecadb4197c5c2bdce5088c7aa2380a05e1ea58069877ad278bf8365b9e3f5448a10f437314d1d2068d84d927b58c747a0ef4ffe20ccabaf1f61203f68e1d6e00cd25a4f54a782609104630224c2eafc7680a0fb21b3c21a8b1068229c1e1380f327c83bffd17a6036c867839c6eb6552248b880808080
 	// hash 731f155159fc21ab77a156b7735406bd2510206021b4f3137637cd0c32a80721
+}
+
+type StorageProof struct {
+	Key   common.Hash
+	Value []byte
+	Proof [][]byte
+}
+
+func (u StorageProof) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Key   string   `json:"key"`
+		Value string   `json:"value"`
+		Proof []string `json:"proof"`
+	}{
+		Key:   u.Key.Hex(),
+		Value: common.Bytes2Hex(u.Value),
+		Proof: func() (ret []string) {
+			for _, p := range u.Proof {
+				ret = append(ret, common.Bytes2Hex(p))
+			}
+			return
+		}(),
+	})
+}
+
+type FullProof struct {
+	Balance      big.Int
+	CodeHash     common.Hash
+	Nonce        big.Int
+	StorageHash  common.Hash
+	AccountProof [][]byte
+	StorageProof []StorageProof
+}
+
+func (u FullProof) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Balance      string         `json:"balance"`
+		CodeHash     string         `json:"codeHash"`
+		Nonce        string         `json:"nonce"`
+		StorageHash  string         `json:"storageHash"`
+		AccountProof []string       `json:"accountProof"`
+		StorageProof []StorageProof `json:"storageProof"`
+	}{
+		Balance:     u.Balance.String(),
+		CodeHash:    u.CodeHash.Hex(),
+		Nonce:       u.Nonce.String(),
+		StorageHash: u.StorageHash.Hex(),
+		AccountProof: func() (ret []string) {
+			for _, p := range u.AccountProof {
+				ret = append(ret, common.Bytes2Hex(p))
+			}
+			return
+		}(),
+		StorageProof: u.StorageProof,
+	})
+}
+
+func GetProof(blk_state state_db.ExtendedReader, address common.Address, state_root common.Hash, keys []common.Hash) (ret FullProof) {
+	blk_state.GetAccount(&address, func(acc state_db.Account) {
+		ret.Balance = *acc.Balance
+		ret.CodeHash = *acc.CodeHash
+		ret.Nonce = *acc.Nonce
+		ret.StorageHash = *acc.StorageRootHash
+	})
+	var err error
+	ret.AccountProof, err = blk_state.GetStorageProof(&state_root, &address)
+	if err != nil {
+		fmt.Println("GetStorageProof error:", err)
+	}
+	for _, key := range keys {
+		var proof StorageProof
+		proof.Key = key
+		proof.Proof, err = blk_state.GetProof(&address, &key)
+		if err != nil {
+			fmt.Println("GetProof error:", err)
+		}
+		blk_state.GetAccountStorage(&address, &key, func(bytes []byte) {
+			proof.Value = bytes
+		})
+
+		ret.StorageProof = append(ret.StorageProof, proof)
+	}
+	return
+}
+
+func TestGetProof(t *testing.T) {
+	_, test := init_contract_test(t, CopyDefaultChainConfig())
+	defer test.end()
+
+	root, _ := test.AdvanceBlock(nil, nil)
+	fmt.Println("state root", root.Hex())
+	fmt.Println("test contract addr", test.ContractAddr.Hex())
+
+	// for i := 100; i < 230; i++ {
+	// 	code := test.pack("set", big.NewInt(int64(i)), big.NewInt(int64(i+100)))
+	// 	// fmt.Println(common.Bytes2Hex(code))
+	// 	test.Execute(test.Sender, BigZero, code)
+	// }
+	// test.AdvanceBlock(nil, nil, nil)
+
+	state := state_db.ExtendedReader{Reader: test.statedb.GetBlockState(test.blk_n)}
+	// state.GetProof()
+	keys := []common.Hash{
+		common.HexToHash("0x7673bcbb3401a7cbae68f81d40eea2cf35afdaf7ecd016ebf3f02857fcc1260a"), // 100
+		common.HexToHash("0x0bb0d0c2a399402027fb0eaada47a2c630983f3dd97f193c64f3e30465d04ec3"), // 101
+		common.HexToHash("0x7ec3c2f200843fc90126ba954586fc6de68c1a3d419d6f0667702fd695602f05"), // 150
+		common.HexToHash("0x46a4a9204e2252337cfce182401bbabede11720ab2d2e2330f66de6cfcb0b379"), // 170
+		common.HexToHash("0xd83db53d400092e1cd810411bbe8320db49f103fdcd91dec3d07ef7ac3dacd1e"), // 181
+		common.HexToHash("0xef407a61ad059ad1a9edcba0919f1209387c016d49079cb4d982b420eb78a186"), // 221
+	}
+	p := GetProof(state, *test.ContractAddr, root, keys)
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
+	pj, _ := json.Marshal(p)
+	fmt.Println(string(pj))
+	fmt.Println("state root", root.Hex())
+
 }
