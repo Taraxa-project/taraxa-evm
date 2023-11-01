@@ -34,7 +34,7 @@ type GenesisBalances = map[common.Address]*big.Int
 var addr, addr_p = tests.Addr, tests.AddrP
 var (
 	TaraPrecision                      = big.NewInt(1e+18)
-	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000000), TaraPrecision)
+	DefaultBalance                     = bigutil.Mul(big.NewInt(2050000000), TaraPrecision)
 	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
 	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
@@ -62,6 +62,11 @@ var (
 			MagnoliaHf: chain_config.MagnoliaHfConfig{
 				BlockNum: 0,
 				JailTime: 5,
+			},
+			AspenHf: chain_config.AspenHfConfig{
+				BlockNum: 0,
+				// Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
+				MaxSupply: new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 			},
 		},
 	}

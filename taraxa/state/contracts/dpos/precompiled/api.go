@@ -1,6 +1,7 @@
 package dpos
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
@@ -8,6 +9,7 @@ import (
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -51,22 +53,22 @@ func (self *API) Init(cfg chain_config.ChainConfig) *API {
 	//MaxBlockAuthorReward is in %
 	asserts.Holds(cfg.DPOS.MaxBlockAuthorReward <= 100)
 
-	// Make sure aspen hardfork is done during reward votes distribution
-	if len(cfg.Hardforks.RewardsDistributionFrequency) != 0 {
-		latest_frequency_change_block := uint64(0)
-		latest_frequency_change := uint64(1)
-		for block_num, frequency := range cfg.Hardforks.RewardsDistributionFrequency {
-			if block_num > cfg.Hardforks.AspenHfBlockNum {
-				continue
-			}
+	// total supply mus be <= max supply
+	total_supply := cfg.GenesisBalancesSum()
+	asserts.Holds(cfg.Hardforks.AspenHf.MaxSupply.Cmp(total_supply) >= 0, fmt.Sprintf("Hardforks.AspenHf.MaxSupply (%d) must be >= Sum of genesis balances (%d)", cfg.Hardforks.AspenHf.MaxSupply, total_supply))
 
-			// Find the latest frequency change
-			if block_num > latest_frequency_change_block {
-				latest_frequency_change_block = block_num
-				latest_frequency_change = uint64(frequency)
-			}
-		}
-		asserts.Holds(cfg.Hardforks.AspenHfBlockNum%latest_frequency_change == 0)
+	total_supply_uin256, overflow := uint256.FromBig(total_supply)
+	asserts.Holds(overflow == false, "total_supply overflow")
+
+	var yield_curve YieldCurve
+	yield_curve.Init(cfg)
+	_, yield := yield_curve.CalculateBlockReward(uint256.NewInt(0), total_supply_uin256)
+
+	decimal_precision := uint256.NewInt(1e4)
+	ideal_yield := new(uint256.Int).Mul(uint256.NewInt(20), decimal_precision) // 20%
+
+	if yield.Cmp(ideal_yield) == 1 {
+		fmt.Printf("! Warning: Starting yield is %d %%, which is > ideal yield (20 %%). To make the yield some specific number, adjust either GenesisBalances or Hardforks.AspenHf.MaxSupply as Yield = (MaxSupply - Sum of GenesisBalances) / Sum of GenesisBalances\n", new(uint256.Int).Div(yield, decimal_precision))
 	}
 
 	self.config = cfg
