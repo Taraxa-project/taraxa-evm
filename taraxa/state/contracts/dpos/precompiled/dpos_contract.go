@@ -365,7 +365,7 @@ func (self *Contract) lazy_init() {
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
-	self.total_supply = uint256.NewInt(0)
+	// Set self.total_supply only if it was already saved in db, do not set it to 0 otherwise
 	self.storage.Get(contract_storage.Stor_k_1(field_current_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
@@ -394,7 +394,7 @@ func (self *Contract) EndBlockCall(block_num uint64) {
 	}
 }
 
-// Should be called on each block commit - updates delayedStorage
+// Should be called on each block commit - updates readStorage
 func (self *Contract) CommitCall(readStorage Reader) {
 	defer self.storage.ClearCache()
 	// Storage Update
@@ -629,39 +629,26 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	self.lazy_init()
 	blockAuthorAddr := &rewardsStats.BlockAuthor
 
+	// Number of tokens to be generated as block reward
 	blockReward := new(uint256.Int)
 
 	// TODO: can we use self.evm.GetBlock().Number ??? If so, why is it as argument in Run() function ???
 	current_block_num := self.evm.GetBlock().Number
+	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
-		if self.cfg.Hardforks.AspenHfBlockNum == current_block_num {
-			if !self.total_supply.IsZero() {
-				errorString := fmt.Sprintf("Total supply (%d) != 0", self.total_supply)
-				fmt.Println(errorString)
-			}
-
-			calc_total_supply, success := self.yield_curve.CalculateTotalSupply(self.delayedStorage)
-			if !success {
-				errorString := fmt.Sprintf("Total supply calculation failed (%d) != 0", calc_total_supply)
-				fmt.Println(errorString)
-
-				// This should never happen - do not distribute rewards as it cannot be calculated
-				return uint256.NewInt(0)
-			}
-
-			self.addAndSaveTotalSupply(calc_total_supply)
+		if self.total_supply == nil {
+			self.total_supply = self.yield_curve.CalculateTotalSupply(self.delayedStorage)
+			self.saveTotalSupplyDb()
 		}
 
 		var yield *uint256.Int
-		// TODO: this is probably another bug - amount_delegated contains also all delegations from the block that is currently being processed...
 		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
 
-		// Save current yield
+		// Save current yield - it changes every block as total_supply is growing every block
 		yield_key := contract_storage.Stor_k_1(field_current_yield)
 		self.storage.Put(yield_key, yield.Bytes())
 	} else {
-		// Calculates number of tokens to be generated as block reward
-		// TODO: this is probably another bug - amount_delegated contains also all delegations from the block that is currently being processed...
+		// Original fixed yield curve
 		blockReward.Mul(self.amount_delegated, self.yield_percentage)
 		blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
 	}
@@ -786,7 +773,10 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
-	self.addAndSaveTotalSupply(newMintedRewards)
+	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+		self.total_supply.Add(self.total_supply, newMintedRewards)
+		self.saveTotalSupplyDb()
+	}
 
 	return newMintedRewards
 }
@@ -1729,8 +1719,7 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
 }
 
-func (self *Contract) addAndSaveTotalSupply(amount *uint256.Int) {
-	self.total_supply.Add(self.total_supply, amount)
+func (self *Contract) saveTotalSupplyDb() {
 	self.storage.Put(contract_storage.Stor_k_1(field_current_total_supply), self.total_supply.Bytes())
 }
 

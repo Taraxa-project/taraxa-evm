@@ -14,28 +14,29 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
 type Reader struct {
 	cfg             *chain_config.ChainConfig
+	delayed_block_n types.BlockNum
 	storage_factory func(types.BlockNum) storage.StorageReader
 	delayed_storage *storage.StorageReaderWrapper
-	current_storage *storage.StorageReaderWrapper
 	slashing_reader *slashing.Reader
 }
 
 func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) storage.StorageReader) *Reader {
 	r.cfg = cfg
 	r.storage_factory = storage_factory
-	blk_n_actual := uint64(0)
+
+	r.delayed_block_n = uint64(0)
 	if uint64(r.cfg.DPOS.DelegationDelay) < blk_n {
-		blk_n_actual = blk_n - uint64(r.cfg.DPOS.DelegationDelay)
+		r.delayed_block_n = blk_n - uint64(r.cfg.DPOS.DelegationDelay)
 	}
 
-	r.delayed_storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(blk_n_actual))
-	r.current_storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(blk_n))
+	r.delayed_storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(r.delayed_block_n))
 	r.slashing_reader = new(slashing.Reader).Init(cfg, blk_n, r, storage_factory)
 	return r
 }
@@ -58,9 +59,17 @@ func (r Reader) TotalAmountDelegated() (ret *big.Int) {
 	return r.totalAmountDelegated(r.delayed_storage)
 }
 
-func (r Reader) TotalAmountDelegatedForBlock(blk_n types.BlockNum) *big.Int {
+func (r Reader) TotalAmountDelegatedForBlock(blk_n types.BlockNum) *uint256.Int {
 	stor := new(storage.StorageReaderWrapper).Init(dpos_contract_address, r.storage_factory(blk_n))
-	return r.totalAmountDelegated(stor)
+	ret := r.totalAmountDelegated(stor)
+	if ret == nil {
+		return nil
+	}
+
+	total_delegation, overflow := uint256.FromBig(ret)
+	asserts.Holds(overflow == false, "TotalAmountDelegatedForBlock: total delegation oveflow")
+
+	return total_delegation
 }
 
 func (r Reader) totalAmountDelegated(stor *storage.StorageReaderWrapper) (ret *big.Int) {
@@ -122,10 +131,9 @@ func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
 	return
 }
 
-// TODO: can we return float ???
-func (r Reader) GetCurrentYield() uint64 {
+func (r Reader) GetYield() uint64 {
 	yield := uint256.NewInt(0)
-	r.current_storage.Get(contract_storage.Stor_k_1(field_current_yield), func(bytes []byte) {
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_current_yield), func(bytes []byte) {
 		yield = new(uint256.Int).SetBytes(bytes)
 	})
 
@@ -133,4 +141,18 @@ func (r Reader) GetCurrentYield() uint64 {
 	//yield_percentage := float64(yield.ToBig().Int64()) / float64(YieldDecimalPrecision.ToBig().Int64())
 
 	return yield.Uint64()
+}
+
+func (r Reader) GetTotalSupply() *big.Int {
+	// Total supply is saved & updated since Aspen hf
+	if !r.cfg.Hardforks.IsAspenHardfork(r.delayed_block_n) {
+		return big.NewInt(0)
+	}
+
+	total_supply := uint256.NewInt(0)
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_current_total_supply), func(bytes []byte) {
+		total_supply = new(uint256.Int).SetBytes(bytes)
+	})
+
+	return total_supply.ToBig()
 }

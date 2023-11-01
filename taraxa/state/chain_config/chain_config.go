@@ -21,12 +21,17 @@ type MagnoliaHfConfig struct {
 	JailTime uint64 // [number of blocks]
 }
 
+type AspenHfConfig struct {
+	BlockNum  uint64
+	MaxSupply *big.Int
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
-	AspenHfBlockNum              uint64
+	AspenHf                      AspenHfConfig
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
@@ -34,7 +39,7 @@ func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
 }
 
 func (c *HardforksConfig) IsAspenHardfork(block types.BlockNum) bool {
-	return block >= c.AspenHfBlockNum
+	return block >= c.AspenHf.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
@@ -85,4 +90,13 @@ type ChainConfig struct {
 
 func (self *ChainConfig) RewardsEnabled() bool {
 	return self.DPOS.YieldPercentage > 0
+}
+
+func (self *ChainConfig) GenesisBalancesSum() *big.Int {
+	sum := big.NewInt(0)
+	for _, balance := range self.GenesisBalances {
+		sum.Add(sum, balance)
+	}
+
+	return sum
 }
