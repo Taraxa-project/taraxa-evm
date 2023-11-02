@@ -133,24 +133,24 @@ func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
 
 func (r Reader) GetYield() uint64 {
 	yield := uint256.NewInt(0)
-	r.delayed_storage.Get(contract_storage.Stor_k_1(field_current_yield), func(bytes []byte) {
-		yield = new(uint256.Int).SetBytes(bytes)
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_yield), func(bytes []byte) {
+		yield.SetBytes(bytes)
 	})
 
-	// Float percentage yield would be
-	//yield_percentage := float64(yield.ToBig().Int64()) / float64(YieldDecimalPrecision.ToBig().Int64())
+	// To get percents -> yield / 10000
+	// To get fraction -> yield / 1000000 (YieldFractionDecimalPrecision)
 
 	return yield.Uint64()
 }
 
 func (r Reader) GetTotalSupply() *big.Int {
-	// Total supply is saved & updated since Aspen hf
+	// Total supply is saved & updated since Aspen hardfork
 	if !r.cfg.Hardforks.IsAspenHardfork(r.delayed_block_n) {
 		return big.NewInt(0)
 	}
 
 	total_supply := uint256.NewInt(0)
-	r.delayed_storage.Get(contract_storage.Stor_k_1(field_current_total_supply), func(bytes []byte) {
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		total_supply = new(uint256.Int).SetBytes(bytes)
 	})
 

@@ -124,8 +124,8 @@ var (
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
 
-	field_current_total_supply = []byte{6}
-	field_current_yield        = []byte{7}
+	field_total_supply = []byte{6}
+	field_yield        = []byte{7}
 )
 
 // State of the rewards distribution algorithm
@@ -366,7 +366,7 @@ func (self *Contract) lazy_init() {
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
 	// Set self.total_supply only if it was already saved in db, do not set it to 0 otherwise
-	self.storage.Get(contract_storage.Stor_k_1(field_current_total_supply), func(bytes []byte) {
+	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
 
@@ -394,7 +394,7 @@ func (self *Contract) EndBlockCall(block_num uint64) {
 	}
 }
 
-// Should be called on each block commit - updates readStorage
+// Should be called on each block commit - updates delayedStorage
 func (self *Contract) CommitCall(readStorage Reader) {
 	defer self.storage.ClearCache()
 	// Storage Update
@@ -645,7 +645,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
 
 		// Save current yield - it changes every block as total_supply is growing every block
-		yield_key := contract_storage.Stor_k_1(field_current_yield)
+		yield_key := contract_storage.Stor_k_1(field_yield)
 		self.storage.Put(yield_key, yield.Bytes())
 	} else {
 		// Original fixed yield curve
@@ -1720,7 +1720,7 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 }
 
 func (self *Contract) saveTotalSupplyDb() {
-	self.storage.Put(contract_storage.Stor_k_1(field_current_total_supply), self.total_supply.Bytes())
+	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

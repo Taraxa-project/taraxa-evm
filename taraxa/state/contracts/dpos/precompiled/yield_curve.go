@@ -9,7 +9,7 @@ import (
 // Yield curve description -> https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 
 // Yield is calculated with 6 decimal precision
-var YieldDecimalPrecision = uint256.NewInt(1e+6)
+var YieldFractionDecimalPrecision = uint256.NewInt(1e+6)
 
 type YieldCurve struct {
 	cfg        chain_config.ChainConfig
@@ -24,11 +24,11 @@ func (self *YieldCurve) Init(cfg chain_config.ChainConfig) {
 	self.max_supply = max_supply
 }
 
-// Note: yield is calculated with <yieldDecimalPrecision> decimal precision. To get % it must be divied by yieldDecimalPrecision
+// Note: yield is calculated with <YieldFractionDecimalPrecision> decimal precision. To get % it must be divied by YieldFractionDecimalPrecision
 func (self *YieldCurve) calculateCurrentYield(current_total_tara_supply *uint256.Int) *uint256.Int {
 	// Current yield = (max supply - current total supply) / current total supply
 	current_yield := new(uint256.Int).Sub(self.max_supply, current_total_tara_supply)
-	current_yield.Mul(current_yield, YieldDecimalPrecision)
+	current_yield.Mul(current_yield, YieldFractionDecimalPrecision)
 	current_yield.Div(current_yield, current_total_tara_supply)
 
 	return current_yield
@@ -37,7 +37,7 @@ func (self *YieldCurve) calculateCurrentYield(current_total_tara_supply *uint256
 func (self *YieldCurve) CalculateBlockReward(current_total_delegation, current_total_tara_supply *uint256.Int) (block_reward *uint256.Int, yield *uint256.Int) {
 	yield = self.calculateCurrentYield(current_total_tara_supply)
 	block_reward = new(uint256.Int).Mul(current_total_delegation, yield)
-	block_reward.Div(block_reward, new(uint256.Int).Mul(YieldDecimalPrecision, uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))))
+	block_reward.Div(block_reward, new(uint256.Int).Mul(YieldFractionDecimalPrecision, uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))))
 
 	return
 }
