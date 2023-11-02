@@ -409,6 +409,27 @@ func taraxa_evm_state_api_validators_stakes(
 	enc_rlp(&ret, cb)
 }
 
+//export taraxa_evm_state_api_dpos_yield
+func taraxa_evm_state_api_dpos_yield(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb_err C.taraxa_evm_BytesCallback,
+) uint64 {
+	defer handle_err(cb_err)
+	return state_API_instances[ptr].DPOSReader(blk_n).GetYield()
+}
+
+//export taraxa_evm_state_api_dpos_total_supply
+func taraxa_evm_state_api_dpos_total_supply(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).GetTotalSupply().Bytes(), cb)
+}
+
 type state_API_ptr = byte
 
 const state_API_max_instances = ^state_API_ptr(0)

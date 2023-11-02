@@ -647,7 +647,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_stake := new(uint256.Int).Mul(uint256.NewInt(1e+9), uint256.NewInt(1e+18))
 	expected_yield := uint256.NewInt(200000)
 	expected_block_reward := new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
 
 	block_reward, yield := yield_curve.CalculateBlockReward(total_stake, total_supply)
 
@@ -658,7 +658,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(11e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(90909)
 	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
 
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
@@ -669,7 +669,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(115e+8), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(43478)
 	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
 
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
@@ -680,7 +680,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(0)
 	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
 
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
