@@ -17,7 +17,6 @@
 package trie
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/Taraxa-project/taraxa-evm/crypto"
@@ -105,7 +104,6 @@ func (h *hasher) hashShortNodeChildren(n *short_node) (collapsed, cached *short_
 	// Unless the child is a valuenode or hashnode, hash it
 	switch n.val.(type) {
 	case *full_node, *short_node:
-		fmt.Println("HERE", n.val.String())
 		collapsed.val, cached.val = h.hash(n.val, false)
 	}
 	return collapsed, cached

@@ -238,25 +238,8 @@ func TestTrieVal(t *testing.T) {
 	fmt.Println("state root", root.Hex())
 	fmt.Println("test contract addr", test.ContractAddr.Hex())
 
-	// for i := 100; i < 230; i++ {
-	// 	code := test.pack("set", big.NewInt(int64(i)), big.NewInt(int64(i+100)))
-	// 	// fmt.Println(common.Bytes2Hex(code))
-	// 	test.Execute(test.Sender, BigZero, code)
-	// }
-	// test.AdvanceBlock(nil, nil, nil)
-
 	state := state_db.ExtendedReader{Reader: test.statedb.GetBlockState(test.blk_n)}
 
-	// state.GetAccountStorage(test.ContractAddr, &h, func(bytes []byte) {
-	// 	fmt.Println("storage", common.Bytes2Hex(bytes))
-	// })
-
-	// state.ForEachStorage(test.ContractAddr, func(h *common.Hash, bytes []byte) {
-	// 	// fmt.Println("storage", h.String(), common.Bytes2Hex(bytes))
-	// 	fmt.Println("storage", h.String(), common.Bytes2Hex(bytes))
-	// })
-
-	fmt.Println()
 	fmt.Println()
 	storage_proof, _ := state.GetStorageProof(&root, test.ContractAddr)
 
