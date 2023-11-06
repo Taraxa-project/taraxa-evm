@@ -646,9 +646,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply := new(uint256.Int).Mul(uint256.NewInt(10e+9), uint256.NewInt(1e+18))
 	total_stake := new(uint256.Int).Mul(uint256.NewInt(1e+9), uint256.NewInt(1e+18))
 	expected_yield := uint256.NewInt(200000)
-	expected_block_reward := new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
-
+	expected_block_reward := calculateExpectedBlockReward(total_stake, expected_yield, cfg)
 	block_reward, yield := yield_curve.CalculateBlockReward(total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
@@ -657,9 +655,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	// max supply = 12 Billion, total supply = 11 Billion, total stake = 1 Billion, expected yield == 9,0909%
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(11e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(90909)
-	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
-
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
@@ -668,9 +664,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	// max supply = 12 Billion, total supply = 11.5 Billion, total stake = 1 Billion, expected yield == 4,3478%
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(115e+8), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(43478)
-	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
-
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
@@ -679,13 +673,17 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	// max supply = 12 Billion, total supply = 12 Billion, total stake = 1 Billion, expected yield == 0%
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(0)
-	expected_block_reward = new(uint256.Int).Mul(total_stake, expected_yield)
-	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
-
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
 	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
 	tc.Assert.Equal(expected_yield, yield)
+}
+
+func calculateExpectedBlockReward(total_stake *uint256.Int, expected_yield *uint256.Int, cfg chain_config.ChainConfig) *uint256.Int {
+	expected_block_reward := new(uint256.Int).Mul(total_stake, expected_yield)
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	return expected_block_reward
 }
 
 func TestAspenHf(t *testing.T) {

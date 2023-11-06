@@ -645,8 +645,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
 
 		// Save current yield - it changes every block as total_supply is growing every block
-		yield_key := contract_storage.Stor_k_1(field_yield)
-		self.storage.Put(yield_key, yield.Bytes())
+		self.saveYieldDb(yield)
 	} else {
 		// Original fixed yield curve
 		blockReward.Mul(self.amount_delegated, self.yield_percentage)
@@ -1721,6 +1720,11 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 
 func (self *Contract) saveTotalSupplyDb() {
 	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
+}
+
+func (self *Contract) saveYieldDb(yield *uint256.Int) {
+	yield_key := contract_storage.Stor_k_1(field_yield)
+	self.storage.Put(yield_key, yield.Bytes())
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

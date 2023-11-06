@@ -80,6 +80,7 @@ type GetHashFunc = func(types.BlockNum) *big.Int
 
 type Rules struct {
 	IsMagnolia bool
+	IsAspen    bool
 }
 type Block struct {
 	Number types.BlockNum
