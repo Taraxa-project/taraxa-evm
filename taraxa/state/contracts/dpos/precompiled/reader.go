@@ -151,7 +151,7 @@ func (r Reader) GetTotalSupply() *big.Int {
 
 	total_supply := uint256.NewInt(0)
 	r.delayed_storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
-		total_supply = new(uint256.Int).SetBytes(bytes)
+		total_supply.SetBytes(bytes)
 	})
 
 	return total_supply.ToBig()
