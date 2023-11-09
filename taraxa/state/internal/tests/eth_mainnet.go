@@ -25,7 +25,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/hexutil"
-	"github.com/Taraxa-project/taraxa-evm/consensus/ethash"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -182,7 +181,7 @@ func main() {
 					asserts.EQ(*receipt.ContractAddress, res.NewContractAddr)
 				}
 			}
-			st.EndBlock(*(*[]ethash.BlockNumAndCoinbase)(unsafe.Pointer(&b.UncleBlocks)), nil, nil)
+			st.EndBlock()
 		}
 		state_root := st.PrepareCommit()
 		asserts.EQ(block_buf[len(block_buf)-1].StateRoot.Hex(), state_root.Hex())

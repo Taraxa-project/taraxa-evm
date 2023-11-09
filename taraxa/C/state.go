@@ -5,19 +5,15 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
-	"fmt"
 	"math/big"
 	"sync"
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
-
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -198,8 +194,8 @@ func taraxa_evm_state_api_trace_transactions(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_transition_state
-func taraxa_evm_state_api_transition_state(
+//export taraxa_evm_state_api_execute_transactions
+func taraxa_evm_state_api_execute_transactions(
 	ptr C.taraxa_evm_state_API_ptr,
 	params_enc C.taraxa_evm_Bytes,
 	cb C.taraxa_evm_BytesCallback,
@@ -207,52 +203,67 @@ func taraxa_evm_state_api_transition_state(
 ) {
 	defer handle_err(cb_err)
 	var params struct {
-		Blk           vm.BlockInfo
-		Txs           []vm.Transaction
-		TxsValidators []common.Address // Transactions stats: tx hash -> validator that included it as first in his block
-		Uncles        []state_common.UncleBlock
-		Rewards_stats rewards_stats.RewardsStats
+		Blk vm.BlockInfo
+		Txs []vm.Transaction
 	}
 	dec_rlp(params_enc, &params)
 
 	var retval struct {
 		ExecutionResults []vm.ExecutionResult
-		StateRoot        common.Hash
-		TotalReward      *big.Int
 	}
 	self := state_API_instances[ptr]
 	st := self.GetStateTransition()
-
-	disabled_contract_distribution := st.GetChainConfig().RewardsEnabled()
-	if !disabled_contract_distribution && len(params.Txs) != len(params.TxsValidators) {
-		errorString := fmt.Sprintf("Number of txs (%d) != number of txs validators (%d)", len(params.Txs), len(params.TxsValidators))
-		panic(errorString)
-	}
-
-	// What rewards should be distributed to which accounts
-	feesRewards := dpos.NewFeesRewards()
 
 	st.BeginBlock(&params.Blk)
 
 	for i := range params.Txs {
 		tx := &params.Txs[i]
 		txResult := st.ExecuteTransaction(tx)
-		txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
-		g, _ := uint256.FromBig(tx.GasPrice)
-		txFee.Mul(txFee, g)
 
 		// Contract distribution is disabled - just add fee to the block author balance
-		// TODO: once there is a stabilized version - remove this flag and use only dpos contract
-		if disabled_contract_distribution {
+		if st.BlockNumber() < st.GetChainConfig().Hardforks.MagnoliaHf.BlockNum {
+			txFee := new(uint256.Int).SetUint64(txResult.GasUsed)
+			g, _ := uint256.FromBig(tx.GasPrice)
+			txFee.Mul(txFee, g)
 			st.AddTxFeeToBalance(&params.Blk.Author, txFee)
-		} else {
-			// Reward dag block author, who included specified tx as first
-			feesRewards.AddTrxFeeReward(params.TxsValidators[i], txFee)
 		}
 
 		retval.ExecutionResults = append(retval.ExecutionResults, txResult)
 	}
-	totalReward := st.EndBlock(params.Uncles, &params.Rewards_stats, &feesRewards)
+
+	enc_rlp(&retval, cb)
+}
+
+//export taraxa_evm_state_api_distribute_rewards
+func taraxa_evm_state_api_distribute_rewards(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+
+	defer handle_err(cb_err)
+	var params struct {
+		Rewards_stats []rewards_stats.RewardsStats
+	}
+	dec_rlp(params_enc, &params)
+
+	var retval struct {
+		StateRoot   common.Hash
+		TotalReward *big.Int
+	}
+	self := state_API_instances[ptr]
+	st := self.GetStateTransition()
+
+	totalReward := uint256.NewInt(0)
+	for i := range params.Rewards_stats {
+		reward := st.DistributeRewards(&params.Rewards_stats[i])
+		if reward != nil {
+			totalReward.Add(totalReward, reward)
+		}
+	}
+
+	st.EndBlock()
 	if totalReward != nil {
 		retval.TotalReward = totalReward.ToBig()
 	}
@@ -282,6 +293,12 @@ func taraxa_evm_state_api_dpos_is_eligible(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
+
+	// If validator is jailed, return false
+	if state_API_instances[ptr].SlashingReader(params.BlkNum).IsJailed(params.BlkNum, &params.Addr) {
+		return false
+	}
+
 	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
 }
 
@@ -335,7 +352,7 @@ func taraxa_evm_state_api_dpos_eligible_vote_count(
 	cb_err C.taraxa_evm_BytesCallback,
 ) uint64 {
 	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).EligibleVoteCount()
+	return state_API_instances[ptr].DPOSReader(blk_n).TotalEligibleVoteCount()
 }
 
 //export taraxa_evm_state_api_dpos_get_eligible_vote_count
@@ -378,6 +395,18 @@ func taraxa_evm_state_api_prune(
 	}
 	dec_rlp(params_enc, &params)
 	state_API_instances[ptr].db.Prune(params.StateRootToKeep, params.BlkNum)
+}
+
+//export taraxa_evm_state_api_validators_stakes
+func taraxa_evm_state_api_validators_stakes(
+	ptr C.taraxa_evm_state_API_ptr,
+	blk_n uint64,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	ret := state_API_instances[ptr].DPOSReader(blk_n).GetValidatorsTotalStakes()
+	enc_rlp(&ret, cb)
 }
 
 type state_API_ptr = byte

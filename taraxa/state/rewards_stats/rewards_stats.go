@@ -1,6 +1,8 @@
 package rewards_stats
 
 import (
+	"math/big"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
@@ -12,9 +14,15 @@ type ValidatorStats struct {
 
 	// Validator cert voted block weight
 	VoteWeight uint64
+
+	// Fee rewards
+	FeesRewards *big.Int
 }
 
 type RewardsStats struct {
+	// Pbft block author
+	BlockAuthor common.Address
+
 	// Validator stats
 	ValidatorsStats map[common.Address]ValidatorStats
 
@@ -26,11 +34,4 @@ type RewardsStats struct {
 
 	// Max weight of votes in block
 	MaxVotesWeight uint64
-}
-
-func NewRewardsStats() RewardsStats {
-	rewardsStats := RewardsStats{}
-	rewardsStats.ValidatorsStats = make(map[common.Address]ValidatorStats)
-
-	return rewardsStats
 }

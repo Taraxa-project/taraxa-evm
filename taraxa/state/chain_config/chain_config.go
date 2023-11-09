@@ -6,8 +6,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/solidity"
 )
 
 type Redelegation struct {
@@ -16,20 +16,43 @@ type Redelegation struct {
 	Amount    *big.Int
 }
 
-type Hardforks struct {
-	FixRedelegateBlockNum uint64
-	Redelegations         []Redelegation
+type MagnoliaHfConfig struct {
+	BlockNum uint64
+	JailTime uint64 // [number of blocks]
 }
 
-type ChainConfig struct {
-	EVMChainConfig  params.ChainConfig
-	GenesisBalances core.BalanceMap
-	DPOS            DPOSConfig
-	Hardforks       Hardforks
+type HardforksConfig struct {
+	FixRedelegateBlockNum        uint64
+	Redelegations                []Redelegation
+	RewardsDistributionFrequency map[uint64]uint32
+	MagnoliaHf                   MagnoliaHfConfig
 }
 
-func (self *ChainConfig) RewardsEnabled() bool {
-	return self.DPOS.YieldPercentage > 0
+func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
+	return block >= c.MagnoliaHf.BlockNum
+}
+
+func isForked(fork_start, block_num types.BlockNum) bool {
+	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
+		return false
+	}
+	return fork_start <= block_num
+}
+
+func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
+	return vm.Rules{
+		IsMagnolia: isForked(c.MagnoliaHf.BlockNum, num),
+	}
+}
+
+type GenesisValidator struct {
+	Address     common.Address
+	Owner       common.Address
+	VrfKey      []byte
+	Commission  uint16
+	Endpoint    string
+	Description string
+	Delegations core.BalanceMap
 }
 
 type DPOSConfig = struct {
@@ -48,26 +71,13 @@ type DPOSConfig = struct {
 	InitialValidators           []GenesisValidator
 }
 
-type DposConfigWithBlock struct {
-	DposConfig DPOSConfig
-	Blk_n      types.BlockNum
+type ChainConfig struct {
+	EVMChainConfig  params.ChainConfig
+	GenesisBalances core.BalanceMap
+	DPOS            DPOSConfig
+	Hardforks       HardforksConfig
 }
 
-type GenesisValidator struct {
-	Address     common.Address
-	Owner       common.Address
-	VrfKey      []byte
-	Commission  uint16
-	Endpoint    string
-	Description string
-	Delegations core.BalanceMap
-}
-
-func (self *GenesisValidator) GenRegisterValidatorArgs() (vi sol.RegisterValidatorArgs) {
-	vi.VrfKey = self.VrfKey
-	vi.Commission = self.Commission
-	vi.Description = self.Description
-	vi.Endpoint = self.Endpoint
-	vi.Validator = self.Address
-	return
+func (self *ChainConfig) RewardsEnabled() bool {
+	return self.DPOS.YieldPercentage > 0
 }

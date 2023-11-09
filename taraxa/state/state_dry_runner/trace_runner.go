@@ -8,7 +8,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -18,7 +19,7 @@ type TraceRunner struct {
 	db             state_db.DB
 	get_block_hash vm.GetHashFunc
 	dpos_api       *dpos.API
-	get_reader     func(types.BlockNum) dpos.Reader
+	get_reader     func(blk_n types.BlockNum) contract_storage.StorageReader
 	chain_config   *chain_config.ChainConfig
 }
 
@@ -26,7 +27,7 @@ func (self *TraceRunner) Init(
 	db state_db.DB,
 	get_block_hash vm.GetHashFunc,
 	dpos_api *dpos.API,
-	get_reader func(types.BlockNum) dpos.Reader,
+	get_reader func(blk_n types.BlockNum) contract_storage.StorageReader,
 	chain_config *chain_config.ChainConfig,
 ) *TraceRunner {
 	self.db = db
@@ -64,9 +65,9 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 		}
 
 		evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
-		evm.SetBlock(blk /*, self.chain_config.EVMChainConfig.Rules(blk.Number)*/)
+		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 		if self.dpos_api != nil {
-			self.dpos_api.NewContract(dpos.EVMStateStorage{&evm_state}, self.get_reader(blk.Number), &evm).Register(evm.RegisterPrecompiledContract)
+			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{&evm_state}, blk.Number, self.get_reader, &evm, evm.RegisterPrecompiledContract)
 		}
 
 		ret, _ := evm.Main(&trx)

@@ -8,9 +8,11 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
-	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/dpos/precompiled"
+	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
+
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_common"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_dry_runner"
@@ -69,6 +71,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		get_block_hash,
 		self.dpos,
 		self.DPOSReader,
+		self.SlashingReader,
 		self.config,
 		state_transition.Opts{
 			EVMState: state_evm.Opts{
@@ -80,8 +83,11 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 				},
 			},
 		})
-	self.dry_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
-	self.trace_runner.Init(self.db, get_block_hash, self.dpos, self.DPOSReader, self.config)
+	reader := func(blk_n types.BlockNum) contract_storage.StorageReader {
+		return self.ReadBlock(blk_n)
+	}
+	self.dry_runner.Init(self.db, get_block_hash, self.dpos, reader, self.config)
+	self.trace_runner.Init(self.db, get_block_hash, self.dpos, reader, self.config)
 	return self
 }
 
@@ -108,7 +114,8 @@ type StateTransition interface {
 	AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int)
 	GetChainConfig() *chain_config.ChainConfig
 	GetEvmState() *state_evm.EVMState
-	EndBlock([]state_common.UncleBlock, *rewards_stats.RewardsStats, *dpos.FeesRewards) *uint256.Int
+	DistributeRewards(*rewards_stats.RewardsStats) *uint256.Int
+	EndBlock()
 	PrepareCommit() (state_root common.Hash)
 	Commit() (state_root common.Hash)
 }
@@ -134,7 +141,13 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
-	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) dpos.StorageReader {
+	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
+		return self.ReadBlock(blk_n)
+	})
+}
+
+func (self *API) SlashingReader(blk_n types.BlockNum) slashing.Reader {
+	return self.dpos.NewSlashingReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }
