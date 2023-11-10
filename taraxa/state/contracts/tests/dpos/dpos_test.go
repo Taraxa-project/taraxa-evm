@@ -84,7 +84,7 @@ var (
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
 	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
-	DefaultBlsKey                      = common.RightPadBytes([]byte("0x0"), 32)
+	DefaultBlsKey                      = common.RightPadBytes([]byte("0x0"), 129)
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
@@ -1045,7 +1045,7 @@ func TestGenesis(t *testing.T) {
 	delegator := addr(1)
 
 	for i := uint64(1); i < 5; i++ {
-		entry := chain_config.GenesisValidator{Address: addr(i), Owner: addr(i), VrfKey: DefaultVrfKey, Commission: 0, Endpoint: "", Description: "", Delegations: core.BalanceMap{}}
+		entry := chain_config.GenesisValidator{Address: addr(i), Owner: addr(i), VrfKey: DefaultVrfKey, BlsKey: DefaultBlsKey, Commission: 0, Endpoint: "", Description: "", Delegations: core.BalanceMap{}}
 		entry.Delegations[delegator] = DefaultEligibilityBalanceThreshold
 		cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, entry)
 	}
