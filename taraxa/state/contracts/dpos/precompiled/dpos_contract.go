@@ -365,7 +365,7 @@ func (self *Contract) lazy_init() {
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
-	// Set self.total_supply only if it was already saved in db, do not set it to 0 otherwise
+	self.total_supply = uint256.NewInt(0)
 	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
@@ -632,11 +632,10 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	// Number of tokens to be generated as block reward
 	blockReward := new(uint256.Int)
 
-	// TODO: can we use self.evm.GetBlock().Number ??? If so, why is it as argument in Run() function ???
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
-		if self.total_supply == nil {
+		if self.cfg.Hardforks.AspenHf.BlockNum == current_block_num {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.delayedStorage)
 			self.saveTotalSupplyDb()
 		}

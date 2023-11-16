@@ -14,7 +14,6 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
@@ -22,14 +21,12 @@ import (
 type Reader struct {
 	cfg             *chain_config.ChainConfig
 	delayed_block_n types.BlockNum
-	storage_factory func(types.BlockNum) storage.StorageReader
 	delayed_storage *storage.StorageReaderWrapper
 	slashing_reader *slashing.Reader
 }
 
 func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) storage.StorageReader) *Reader {
 	r.cfg = cfg
-	r.storage_factory = storage_factory
 
 	r.delayed_block_n = uint64(0)
 	if uint64(r.cfg.DPOS.DelegationDelay) < blk_n {
@@ -56,25 +53,8 @@ func (r Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
 }
 
 func (r Reader) TotalAmountDelegated() (ret *big.Int) {
-	return r.totalAmountDelegated(r.delayed_storage)
-}
-
-func (r Reader) TotalAmountDelegatedForBlock(blk_n types.BlockNum) *uint256.Int {
-	stor := new(storage.StorageReaderWrapper).Init(dpos_contract_address, r.storage_factory(blk_n))
-	ret := r.totalAmountDelegated(stor)
-	if ret == nil {
-		return nil
-	}
-
-	total_delegation, overflow := uint256.FromBig(ret)
-	asserts.Holds(overflow == false, "TotalAmountDelegatedForBlock: total delegation oveflow")
-
-	return total_delegation
-}
-
-func (r Reader) totalAmountDelegated(stor *storage.StorageReaderWrapper) (ret *big.Int) {
 	ret = big.NewInt(0)
-	stor.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
 	return

@@ -3,6 +3,7 @@ package dpos
 import (
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/holiman/uint256"
 )
 
@@ -42,25 +43,13 @@ func (self *YieldCurve) CalculateBlockReward(current_total_delegation, current_t
 	return
 }
 
-// Calculates total supply based on genesis balances + rewards until Aspen hardfork
+// Calculates total supply based on genesis balances + total generated rewards until Aspen hardfork
 func (self *YieldCurve) CalculateTotalSupply(dpos_reader Reader) *uint256.Int {
 	genesis_balances_sum := self.cfg.GenesisBalancesSum()
-	total_supply, overflow := uint256.FromBig(genesis_balances_sum)
+	total_supply := bigutil.Add(genesis_balances_sum, self.cfg.Hardforks.AspenHf.GeneratedRewards)
+
+	total_supply_uint256, overflow := uint256.FromBig(total_supply)
 	asserts.Holds(overflow == false, "CalculateTotalSupply: Genesis balances sum oveflow")
 
-	yield := uint256.NewInt(uint64(self.cfg.DPOS.YieldPercentage))
-	// * 100 is here because yield is in %
-	block_n_reward_divisor := new(uint256.Int).Mul(uint256.NewInt(100), uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear)))
-
-	for block_n := uint64(1); block_n < self.cfg.Hardforks.AspenHf.BlockNum; block_n++ {
-		block_n_total_delegation := dpos_reader.TotalAmountDelegatedForBlock(block_n)
-		asserts.Holds(block_n_total_delegation != nil, "CalculateTotalSupply: Unable to get total delegation")
-
-		block_n_reward := new(uint256.Int).Mul(block_n_total_delegation, yield)
-		block_n_reward.Div(block_n_reward, block_n_reward_divisor)
-
-		total_supply.Add(total_supply, block_n_reward)
-	}
-
-	return total_supply
+	return total_supply_uint256
 }
