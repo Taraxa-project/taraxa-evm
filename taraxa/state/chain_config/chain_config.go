@@ -22,8 +22,9 @@ type MagnoliaHfConfig struct {
 }
 
 type AspenHfConfig struct {
-	BlockNum  uint64
-	MaxSupply *big.Int
+	BlockNum         uint64
+	MaxSupply        *big.Int
+	GeneratedRewards *big.Int // Total number of generated rewards between block 1 and AspenHf BlockNum
 }
 
 type HardforksConfig struct {
