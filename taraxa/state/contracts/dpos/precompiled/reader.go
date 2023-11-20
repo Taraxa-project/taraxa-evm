@@ -82,6 +82,24 @@ func (r Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	return
 }
 
+type ValidatorStake struct {
+	Address    common.Address
+	TotalStake *big.Int
+}
+
+func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
+	reader := new(storage.AddressesIMapReader)
+	reader.Init(r.storage, append(field_validators, validator_list_index...))
+
+	validators, _ := reader.GetAccounts(0, reader.GetCount())
+
+	for _, addr := range validators {
+		ret = append(ret, ValidatorStake{Address: addr, TotalStake: r.GetStakingBalance(&addr)})
+	}
+
+	return
+}
+
 func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
 	r.storage.Get(storage.Stor_k_1(field_validators, validator_vrf_index, addr[:]), func(bytes []byte) {
 		ret = bytes
