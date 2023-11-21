@@ -4,13 +4,16 @@
 //		 1. To generate ABI:
 //			a) run `solc --abi --overwrite --optimize dpos_contract_interface.sol --output-dir .`
 //			b) replace " by \" and copy&paste the ABI string into the TaraxaDposClientMetaData
-//
+//		 2. To get implementation bytecode(TaraxaDposImplBytecode)
+//			a) run `solc --bin-runtime --overwrite --optimize dpos_contract_impl.sol --output-dir .`
+//			b) Copy bytecode from `DposDummyImpl.bin-runtime` file to `var TaraxaDposImplBytecode` variable in `dpos_contract_solidity_structs.go` file.
 //		 2. To generate solidity interface related structs:
 //		 	a) run `abigen --abi=DposInterface.abi --pkg=taraxaDposClient --out=dpos_contract_interface.go`
 //		    b) copy selected structs into this file
 //
 //		 3. a) remove generated file `rm DposInterface.abi`
 // 		    b) remove generated file `rm dpos_contract_interface.go`
+// 		    c) remove generated file `rm DposDummyImpl.bin-runtime`
 
 package dpos_sol
 

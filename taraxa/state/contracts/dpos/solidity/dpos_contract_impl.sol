@@ -4,7 +4,7 @@
 pragma solidity >=0.8.0;
 
 // We are setting this contract bytecode to the address of precompiled dpos contract. This will fix  to fix calls by interface from other solidity contracts and some issues related to params validation in remix, hardhat and foundry
-contract DposInterface {
+contract DposDummyImpl {
     event Delegated(
         address indexed delegator,
         address indexed validator,
