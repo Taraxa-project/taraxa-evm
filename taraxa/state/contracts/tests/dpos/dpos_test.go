@@ -982,10 +982,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 
 	// Check delgators rewards
-	delegator1_old_balance := test.GetBalance(delegator1_addr)
-	delegator2_old_balance := test.GetBalance(delegator2_addr)
-	delegator3_old_balance := test.GetBalance(delegator3_addr)
-	delegator4_old_balance := test.GetBalance(delegator4_addr)
+	delegator1_old_balance := test.GetBalance(&delegator1_addr)
+	delegator2_old_balance := test.GetBalance(&delegator2_addr)
+	delegator3_old_balance := test.GetBalance(&delegator3_addr)
+	delegator4_old_balance := test.GetBalance(&delegator4_addr)
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	// Check getter
@@ -1005,10 +1005,10 @@ func TestRewardsAndCommission(t *testing.T) {
 		tc.Assert.Equal(clam_res.Logs[1].Topics[0], DelegatedEventHash)
 	}
 
-	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
-	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
-	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
-	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
+	actual_delegator1_reward := bigutil.Sub(test.GetBalance(&delegator1_addr), delegator1_old_balance)
+	actual_delegator2_reward := bigutil.Sub(test.GetBalance(&delegator2_addr), delegator2_old_balance)
+	actual_delegator3_reward := bigutil.Sub(test.GetBalance(&delegator3_addr), delegator3_old_balance)
+	actual_delegator4_reward := bigutil.Sub(test.GetBalance(&delegator4_addr), delegator4_old_balance)
 
 	//Check claim vs getter result
 	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
@@ -1019,9 +1019,9 @@ func TestRewardsAndCommission(t *testing.T) {
 	tc.Assert.Equal(expected_delegator4_reward, actual_delegator4_reward)
 
 	// Check commission rewards
-	validator1_old_balance := test.GetBalance(validator1_owner)
-	validator2_old_balance := test.GetBalance(validator2_owner)
-	validator4_old_balance := test.GetBalance(validator4_owner)
+	validator1_old_balance := test.GetBalance(&validator1_owner)
+	validator2_old_balance := test.GetBalance(&validator2_owner)
+	validator4_old_balance := test.GetBalance(&validator4_owner)
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
@@ -1031,9 +1031,9 @@ func TestRewardsAndCommission(t *testing.T) {
 		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
 	}
 
-	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
-	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
-	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(validator4_owner), validator4_old_balance)
+	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(&validator1_owner), validator1_old_balance)
+	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(&validator2_owner), validator2_old_balance)
+	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(&validator4_owner), validator4_old_balance)
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
@@ -1120,7 +1120,7 @@ func TestGenesis(t *testing.T) {
 	totalAmountDelegated := bigutil.Mul(DefaultEligibilityBalanceThreshold, big.NewInt(4))
 	test.CheckContractBalance(totalAmountDelegated)
 
-	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(delegator))
+	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(&delegator))
 	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().TotalEligibleVoteCount())
 	tc.Assert.Equal(totalAmountDelegated, test.GetDPOSReader().TotalAmountDelegated())
 	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
@@ -1789,7 +1789,7 @@ func TestIterableMapClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	iter_map_prefix := []byte{0}
 	iter_map := contract_storage.AddressesIMap{}
@@ -1862,7 +1862,7 @@ func TestValidatorsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	validators := new(dpos.Validators).Init(&storage, []byte{})
 	field_validators := []byte{0}
@@ -1933,7 +1933,7 @@ func TestDelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	delegations := dpos.Delegations{}
 	field_delegations := []byte{2}
@@ -2003,7 +2003,7 @@ func TestUndelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	undelegations := dpos.Undelegations{}
 	field_undelegations := []byte{3}
@@ -2312,10 +2312,10 @@ func TestRedelegateHF(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 
 	// Check delgators rewards
-	delegator1_old_balance := test.GetBalance(delegator1_addr)
-	delegator2_old_balance := test.GetBalance(delegator2_addr)
-	delegator3_old_balance := test.GetBalance(delegator3_addr)
-	delegator4_old_balance := test.GetBalance(delegator4_addr)
+	delegator1_old_balance := test.GetBalance(&delegator1_addr)
+	delegator2_old_balance := test.GetBalance(&delegator2_addr)
+	delegator3_old_balance := test.GetBalance(&delegator3_addr)
+	delegator4_old_balance := test.GetBalance(&delegator4_addr)
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	// Check getter
@@ -2369,10 +2369,10 @@ func TestRedelegateHF(t *testing.T) {
 
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 
-	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
-	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
-	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
-	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
+	actual_delegator1_reward := bigutil.Sub(test.GetBalance(&delegator1_addr), delegator1_old_balance)
+	actual_delegator2_reward := bigutil.Sub(test.GetBalance(&delegator2_addr), delegator2_old_balance)
+	actual_delegator3_reward := bigutil.Sub(test.GetBalance(&delegator3_addr), delegator3_old_balance)
+	actual_delegator4_reward := bigutil.Sub(test.GetBalance(&delegator4_addr), delegator4_old_balance)
 
 	//Check claim vs getter result
 	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
@@ -2383,9 +2383,9 @@ func TestRedelegateHF(t *testing.T) {
 	tc.Assert.NotEqual(expected_delegator4_reward.Cmp(actual_delegator4_reward), 1)
 
 	// Check commission rewards
-	validator1_old_balance := test.GetBalance(validator1_owner)
-	validator2_old_balance := test.GetBalance(validator2_owner)
-	validator4_old_balance := test.GetBalance(validator4_owner)
+	validator1_old_balance := test.GetBalance(&validator1_owner)
+	validator2_old_balance := test.GetBalance(&validator2_owner)
+	validator4_old_balance := test.GetBalance(&validator4_owner)
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
@@ -2395,9 +2395,9 @@ func TestRedelegateHF(t *testing.T) {
 		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
 	}
 
-	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
-	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
-	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(validator4_owner), validator4_old_balance)
+	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(&validator1_owner), validator1_old_balance)
+	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(&validator2_owner), validator2_old_balance)
+	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(&validator4_owner), validator4_old_balance)
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
