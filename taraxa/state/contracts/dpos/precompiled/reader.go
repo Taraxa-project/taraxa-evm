@@ -93,7 +93,7 @@ type ValidatorStake struct {
 
 func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 	reader := new(storage.AddressesIMapReader)
-	reader.Init(r.storage, append(field_validators, validator_list_index...))
+	reader.Init(r.delayed_storage, append(field_validators, validator_list_index...))
 
 	validators, _ := reader.GetAccounts(0, reader.GetCount())
 
