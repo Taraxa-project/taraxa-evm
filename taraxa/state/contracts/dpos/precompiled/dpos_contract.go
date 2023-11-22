@@ -774,7 +774,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
-		state.RewardsPer1Stake = big.NewInt(0)
+		state.RewardsPer1Stake = old_state.RewardsPer1Stake
 		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
 			state.RewardsPer1Stake.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
 		}
@@ -959,7 +959,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
 			state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
 		} else {
-			state.RewardsPer1Stake = big.NewInt(0)
+			state.RewardsPer1Stake = old_state.RewardsPer1Stake
 		}
 
 		validator_rewards.RewardsPool = big.NewInt(0)
@@ -1081,7 +1081,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			if validator_from.TotalStake.Cmp(big.NewInt(0)) > 0 {
 				state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards_from.RewardsPool, validator_from.TotalStake))
 			} else {
-				state.RewardsPer1Stake = big.NewInt(0)
+				state.RewardsPer1Stake = old_state.RewardsPer1Stake
 			}
 
 			validator_rewards_from.RewardsPool = big.NewInt(0)
@@ -1135,7 +1135,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		if validator_to.TotalStake.Cmp(big.NewInt(0)) > 0 {
 			state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards_to.RewardsPool, validator_to.TotalStake))
 		} else {
-			state.RewardsPer1Stake = big.NewInt(0)
+			state.RewardsPer1Stake = old_state.RewardsPer1Stake
 		}
 
 		validator_rewards_to.RewardsPool = big.NewInt(0)
@@ -1201,7 +1201,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
 			state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
 		} else {
-			state.RewardsPer1Stake = big.NewInt(0)
+			state.RewardsPer1Stake = old_state.RewardsPer1Stake
 		}
 
 		validator_rewards.RewardsPool = big.NewInt(0)
