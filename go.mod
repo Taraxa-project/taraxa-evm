@@ -7,10 +7,10 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/dot v1.2.0
 	github.com/holiman/uint256 v1.2.1
-	github.com/linxGnu/grocksdb v1.6.48
+	github.com/linxGnu/grocksdb v1.8.4
 	github.com/otiai10/copy v1.9.0
 	github.com/schollz/progressbar/v3 v3.3.3
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.3.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sys v0.13.0
@@ -25,5 +25,3 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/linxGnu/grocksdb v1.6.48 => github.com/Taraxa-project/grocksdb v1.6.48-taraxa
