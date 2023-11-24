@@ -20,7 +20,7 @@ type YieldCurve struct {
 func (self *YieldCurve) Init(cfg chain_config.ChainConfig) {
 	self.cfg = cfg
 
-	max_supply, overflow := uint256.FromBig(self.cfg.Hardforks.AspenHf.MaxSupply)
+	max_supply, overflow := uint256.FromBig(self.cfg.Hardforks.AspenHf.PartTwo.MaxSupply)
 	asserts.Holds(overflow == false, "YieldCurve max supply overflow")
 	self.max_supply = max_supply
 }
@@ -43,10 +43,11 @@ func (self *YieldCurve) CalculateBlockReward(current_total_delegation, current_t
 	return
 }
 
-// Calculates total supply based on genesis balances + total generated rewards until Aspen hardfork
-func (self *YieldCurve) CalculateTotalSupply(dpos_reader Reader) *uint256.Int {
+// Calculates total supply based on minted_toknes + genesis balances + total generated rewards until Aspen hardfork
+func (self *YieldCurve) CalculateTotalSupply(minted_tokens *uint256.Int) *uint256.Int {
 	genesis_balances_sum := self.cfg.GenesisBalancesSum()
-	total_supply := bigutil.Add(genesis_balances_sum, self.cfg.Hardforks.AspenHf.GeneratedRewards)
+	total_supply := bigutil.Add(genesis_balances_sum, minted_tokens.ToBig())
+	total_supply.Add(total_supply, bigutil.Add(genesis_balances_sum, self.cfg.Hardforks.AspenHf.PartTwo.GeneratedRewards))
 
 	total_supply_uint256, overflow := uint256.FromBig(total_supply)
 	asserts.Holds(overflow == false, "CalculateTotalSupply: Genesis balances sum oveflow")

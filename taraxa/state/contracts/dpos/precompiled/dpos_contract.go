@@ -124,8 +124,10 @@ var (
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
 
-	field_total_supply = []byte{6}
-	field_yield        = []byte{7}
+	// Aspen hardfork new db fields
+	field_minted_tokens = []byte{6}
+	field_total_supply  = []byte{7}
+	field_yield         = []byte{8}
 )
 
 // State of the rewards distribution algorithm
@@ -165,6 +167,8 @@ type Contract struct {
 	yield_percentage         *uint256.Int
 	dag_proposers_reward     *uint256.Int
 	max_block_author_reward  *uint256.Int
+
+	minted_tokens *uint256.Int
 
 	// Total tara supply = genesis balances + block rewards
 	total_supply *uint256.Int
@@ -370,6 +374,11 @@ func (self *Contract) lazy_init() {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
+
+	self.minted_tokens = uint256.NewInt(0)
+	self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
+		self.minted_tokens = new(uint256.Int).SetBytes(bytes)
+	})
 
 	// Do not set self.total_supply default value to uint256.NewInt(0). Default value should be nil pointer as it is checked in code
 	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
@@ -643,9 +652,9 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
-	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
 		if self.total_supply == nil {
-			self.total_supply = self.yield_curve.CalculateTotalSupply(self.delayedStorage)
+			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
 			self.saveTotalSupplyDb()
 		}
 
@@ -780,9 +789,12 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
-	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
 		self.total_supply.Add(self.total_supply, newMintedRewards)
 		self.saveTotalSupplyDb()
+	} else if self.cfg.Hardforks.IsAspenHardforkPartOne(current_block_num) {
+		self.minted_tokens.Add(self.minted_tokens, newMintedRewards)
+		self.saveMintedTokensDb()
 	}
 
 	return newMintedRewards
@@ -1749,6 +1761,10 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 
 func (self *Contract) saveTotalSupplyDb() {
 	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
+}
+
+func (self *Contract) saveMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
 }
 
 func (self *Contract) saveYieldDb(yield uint64) {

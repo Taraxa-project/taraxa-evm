@@ -109,10 +109,15 @@ var (
 				JailTime: 5,
 			},
 			AspenHf: chain_config.AspenHfConfig{
-				BlockNum: 0,
-				// Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
-				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
-				GeneratedRewards: big.NewInt(0),
+				PartOne: chain_config.AspenHfPartOneConfig{
+					BlockNum: 0,
+				},
+				PartTwo: chain_config.AspenHfPartTwoConfig{
+					BlockNum: 0,
+					// Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
+					MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
+					GeneratedRewards: big.NewInt(0),
+				},
 			},
 		},
 	}
@@ -631,7 +636,7 @@ func TestUndelegateMin(t *testing.T) {
 	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("undelegate", val_addr, bigutil.Mul(DefaultMinimumDeposit, big.NewInt(2))), util.ErrorString(""), util.ErrorString(""))
 }
 
-func TestYieldCurveAspenHf(t *testing.T) {
+func TestYieldCurveAspenPartTwoHf(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -687,11 +692,11 @@ func calculateExpectedBlockReward(total_stake *uint256.Int, expected_yield *uint
 	return expected_block_reward
 }
 
-func TestAspenHf(t *testing.T) {
+func TestAspenPartTwoHf(t *testing.T) {
 	// Test if generated block reward changed from fixed yield to the new dynamic yield curve
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.AspenHf.BlockNum = 4
-	cfg.Hardforks.AspenHf.GeneratedRewards = bigutil.Mul(big.NewInt(5000000), big.NewInt(1e18)) // 5M TARA
+	cfg.Hardforks.AspenHf.PartTwo.BlockNum = 4
+	cfg.Hardforks.AspenHf.PartTwo.GeneratedRewards = bigutil.Mul(big.NewInt(5000000), big.NewInt(1e18)) // 5M TARA
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
@@ -699,7 +704,7 @@ func TestAspenHf(t *testing.T) {
 	for _, balance := range cfg.GenesisBalances {
 		total_supply.Add(total_supply, balance)
 	}
-	total_supply.Add(total_supply, cfg.Hardforks.AspenHf.GeneratedRewards)
+	total_supply.Add(total_supply, cfg.Hardforks.AspenHf.PartTwo.GeneratedRewards)
 
 	validator1_addr, validator1_proof := generateAddrAndProof()
 	validator1_owner := addr(1)
@@ -729,8 +734,8 @@ func TestAspenHf(t *testing.T) {
 	txsFees := bigutil.Mul(trxFee, txsNum)
 
 	contract_balance := new(big.Int).Set(total_stake)
-	// Advance couple of blocks - pre aspen hf with fixed yield
-	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.BlockNum-1; block_n++ {
+	// Advance couple of blocks - pre aspen.PartTwo hf with fixed yield
+	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.PartTwo.BlockNum-1; block_n++ {
 		expected_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
 		expected_reward = bigutil.Div(expected_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
 
@@ -750,8 +755,8 @@ func TestAspenHf(t *testing.T) {
 	var yield_curve dpos.YieldCurve
 	yield_curve.Init(cfg)
 
-	// Advance couple of blocks - after aspen hf with dynamic yield
-	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.BlockNum+20; block_n++ {
+	// Advance couple of blocks - after aspen.PartTwo hf with dynamic yield
+	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.PartTwo.BlockNum+20; block_n++ {
 		expected_reward_uint256, _ := yield_curve.CalculateBlockReward(total_stake_uin256, total_supply_uin256)
 		expected_reward := expected_reward_uint256.ToBig()
 
@@ -770,10 +775,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 
 	// !!! Important: Due to the fact that in tests DistributeRewards(& aspen hf CalculateTotalSupply) is called only inside AdvanceBlock,
-	// not also inside ExecuteAndCheck (which increments block too), we need to set AspenHf.BlockNum in a way that we call AdvanceBlock exactly
-	// during AspenHf.BlockNum.
-	// Anothe roption is to disable aspenHf by setting BlockNum to some big number
-	cfg.Hardforks.AspenHf.BlockNum = 6
+	// not also inside ExecuteAndCheck (which increments block too), we need to set AspenHf.PartTwo.BlockNum in a way that we call AdvanceBlock exactly
+	// during AspenHf.PartTwo.BlockNum.
+	// Another roption is to disable aspenHf.PartTwo by setting BlockNum to some big number
+	cfg.Hardforks.AspenHf.PartTwo.BlockNum = 6
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()

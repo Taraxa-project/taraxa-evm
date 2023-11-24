@@ -21,10 +21,19 @@ type MagnoliaHfConfig struct {
 	JailTime uint64 // [number of blocks]
 }
 
-type AspenHfConfig struct {
+type AspenHfPartOneConfig struct {
+	BlockNum uint64
+}
+
+type AspenHfPartTwoConfig struct {
 	BlockNum         uint64
 	MaxSupply        *big.Int
 	GeneratedRewards *big.Int // Total number of generated rewards between block 1 and AspenHf BlockNum
+}
+
+type AspenHfConfig struct {
+	PartOne AspenHfPartOneConfig
+	PartTwo AspenHfPartTwoConfig
 }
 
 type HardforksConfig struct {
@@ -39,8 +48,12 @@ func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= c.MagnoliaHf.BlockNum
 }
 
-func (c *HardforksConfig) IsAspenHardfork(block types.BlockNum) bool {
-	return block >= c.AspenHf.BlockNum
+func (c *HardforksConfig) IsAspenHardforkPartOne(block types.BlockNum) bool {
+	return block >= c.AspenHf.PartOne.BlockNum
+}
+
+func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
+	return block >= c.AspenHf.PartTwo.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
@@ -52,8 +65,9 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 
 func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 	return vm.Rules{
-		IsMagnolia: isForked(c.MagnoliaHf.BlockNum, num),
-		IsAspen:    isForked(c.AspenHf.BlockNum, num),
+		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
+		IsAspenPartOne: isForked(c.AspenHf.PartOne.BlockNum, num),
+		IsAspenPartTwo: isForked(c.AspenHf.PartTwo.BlockNum, num),
 	}
 }
 
