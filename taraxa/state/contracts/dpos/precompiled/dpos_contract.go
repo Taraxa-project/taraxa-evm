@@ -365,7 +365,7 @@ func (self *Contract) lazy_init() {
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
-	self.total_supply = uint256.NewInt(0)
+	// Do not set self.total_supply default value to uint256.NewInt(0). Default value should be nil pointer as it is checked in code
 	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
@@ -635,7 +635,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
-		if self.cfg.Hardforks.AspenHf.BlockNum == current_block_num {
+		if self.total_supply == nil {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.delayedStorage)
 			self.saveTotalSupplyDb()
 		}
