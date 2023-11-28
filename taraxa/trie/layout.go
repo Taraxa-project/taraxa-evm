@@ -20,7 +20,7 @@ type node interface {
 	String() string
 }
 
-const full_node_child_cnt = 17
+const full_node_child_cnt = 16
 
 type full_node struct {
 	children [full_node_child_cnt]node

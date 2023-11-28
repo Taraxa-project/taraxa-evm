@@ -41,6 +41,7 @@ func (n *full_node) encode(w rlp.EncoderBuffer, res *Resolver) {
 			w.Write(rlp.EmptyString)
 		}
 	}
+	w.Write(rlp.EmptyString)
 	w.ListEnd(offset)
 }
 

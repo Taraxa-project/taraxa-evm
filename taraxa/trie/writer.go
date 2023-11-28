@@ -111,6 +111,7 @@ func (w *Writer) commit(db_tx IO, ctx *commit_context, full_nodes_above byte, ke
 			}
 		}
 		ctx.enc_storage.ListEnd(storage_list_start)
+		ctx.enc_hash.AppendString(nil)
 		ctx.enc_hash.ListEnd(hash_list_start, is_root, &n.hash)
 		if n.hash != nil {
 			db_tx.PutNode(n.get_hash().common_hash(), ctx.enc_storage.ToBytes(storage_list_start))
