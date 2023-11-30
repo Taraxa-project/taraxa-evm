@@ -697,6 +697,7 @@ func TestAspenPartTwoHf(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 	cfg.Hardforks.AspenHf.PartTwo.BlockNum = 4
 	cfg.Hardforks.AspenHf.PartTwo.GeneratedRewards = bigutil.Mul(big.NewInt(5000000), big.NewInt(1e18)) // 5M TARA
+
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
