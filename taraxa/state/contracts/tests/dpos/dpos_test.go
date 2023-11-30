@@ -1045,6 +1045,7 @@ func TestRewardsAndCommission(t *testing.T) {
 func TestClaimAllRewards(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.DPOS.MinimumDeposit = big.NewInt(0)
+	cfg.Hardforks.AspenHf.PartTwo.BlockNum = 1000
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 
@@ -2144,7 +2145,7 @@ func TestRedelegateHF(t *testing.T) {
 	delegator5_stake := DefaultMinimumDeposit
 
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.AspenHf.BlockNum = 1000
+	cfg.Hardforks.AspenHf.PartTwo.BlockNum = 1000
 	cfg.Hardforks.FixRedelegateBlockNum = 12
 	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{Validator: validator2_addr, Delegator: delegator3_addr, Amount: DefaultMinimumDeposit})
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
