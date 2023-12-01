@@ -4,14 +4,42 @@
 pragma solidity >=0.8.0;
 
 interface DposInterface {
-
-    event Delegated(address indexed delegator, address indexed validator, uint256 amount);
-    event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
-    event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
-    event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
-    event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
-    event RewardsClaimed(address indexed account, address indexed validator, uint256 amount);
-    event CommissionRewardsClaimed(address indexed account, address indexed validator, uint256 amount);
+    event Delegated(
+        address indexed delegator,
+        address indexed validator,
+        uint256 amount
+    );
+    event Undelegated(
+        address indexed delegator,
+        address indexed validator,
+        uint256 amount
+    );
+    event UndelegateConfirmed(
+        address indexed delegator,
+        address indexed validator,
+        uint256 amount
+    );
+    event UndelegateCanceled(
+        address indexed delegator,
+        address indexed validator,
+        uint256 amount
+    );
+    event Redelegated(
+        address indexed delegator,
+        address indexed from,
+        address indexed to,
+        uint256 amount
+    );
+    event RewardsClaimed(
+        address indexed account,
+        address indexed validator,
+        uint256 amount
+    );
+    event CommissionRewardsClaimed(
+        address indexed account,
+        address indexed validator,
+        uint256 amount
+    );
     event CommissionSet(address indexed validator, uint16 commission);
     event ValidatorRegistered(address indexed validator);
     event ValidatorInfoSet(address indexed validator);
@@ -100,12 +128,9 @@ interface DposInterface {
     function claimRewards(address validator) external;
 
     /**
-     * @notice Claims staking rewards from all validators (limited by batch) that caller has delegated to
-     *
-     * @param batch Batch number - there is a limit of 10 validators per batch that delegator can claim rewards from in single tranaction
-     * @return end  Flag if there are no more validators left that delegator can claim rewards from
+     * @notice Claims staking rewards from all validators (limited by max dag block gas limit) that caller has delegated to
      **/
-    function claimAllRewards(uint32 batch) external returns (bool end);
+    function claimAllRewards() external;
 
     // Claims tokens from validator's commission rewards
     function claimCommissionRewards(address validator) external;
@@ -139,30 +164,26 @@ interface DposInterface {
     //       considered in terms of performance, etc...
 
     // Returns true if acc is eligible validator, otherwise false
-    function isValidatorEligible(address validator)
-        external
-        view
-        returns (bool);
+    function isValidatorEligible(
+        address validator
+    ) external view returns (bool);
 
     // Returns all validators eligible votes counts
     function getTotalEligibleVotesCount() external view returns (uint64);
 
     // Returns specified validator eligible votes count
-    function getValidatorEligibleVotesCount(address validator)
-        external
-        view
-        returns (uint64);
+    function getValidatorEligibleVotesCount(
+        address validator
+    ) external view returns (uint64);
 
     // Returns validator basic info (everything except list of his delegators)
-    function getValidator(address validator)
-        external
-        view
-        returns (ValidatorBasicInfo memory validator_info);
+    function getValidator(
+        address validator
+    ) external view returns (ValidatorBasicInfo memory validator_info);
 
-    function getValidators(uint32 batch)
-        external
-        view
-        returns (ValidatorData[] memory validators, bool end);
+    function getValidators(
+        uint32 batch
+    ) external view returns (ValidatorData[] memory validators, bool end);
 
     /**
      * @notice Returns list of validators owned by an address
@@ -173,22 +194,21 @@ interface DposInterface {
      * @return validators  Batch of N validators basic info
      * @return end         Flag if there are no more accounts left. To get all accounts, caller should fetch all batches until he sees end == true
      **/
-    function getValidatorsFor(address owner, uint32 batch)
-        external
-        view
-        returns (ValidatorData[] memory validators, bool end);
+    function getValidatorsFor(
+        address owner,
+        uint32 batch
+    ) external view returns (ValidatorData[] memory validators, bool end);
 
     /**
      * @notice Returns total delegation for specified delegator
      *
      * @param delegator Delegator account address
      *
-     * @return total_delegation 
+     * @return total_delegation amount that was delegated
      **/
-    function getTotalDelegation(address delegator)
-        external
-        view
-        returns (uint256 total_delegation);
+    function getTotalDelegation(
+        address delegator
+    ) external view returns (uint256 total_delegation);
 
     /**
      * @notice Returns list of delegations for specified delegator - which validators delegator delegated to
@@ -199,10 +219,10 @@ interface DposInterface {
      * @return delegations  Batch of N delegations
      * @return end          Flag if there are no more delegations left. To get all delegations, caller should fetch all batches until he sees end == true
      **/
-    function getDelegations(address delegator, uint32 batch)
-        external
-        view
-        returns (DelegationData[] memory delegations, bool end);
+    function getDelegations(
+        address delegator,
+        uint32 batch
+    ) external view returns (DelegationData[] memory delegations, bool end);
 
     /**
      * @notice Returns list of undelegations for specified delegator
@@ -213,8 +233,8 @@ interface DposInterface {
      * @return undelegations  Batch of N undelegations
      * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
      **/
-    function getUndelegations(address delegator, uint32 batch)
-        external
-        view
-        returns (UndelegationData[] memory undelegations, bool end);
+    function getUndelegations(
+        address delegator,
+        uint32 batch
+    ) external view returns (UndelegationData[] memory undelegations, bool end);
 }

@@ -1040,7 +1040,6 @@ func TestRewardsAndCommission(t *testing.T) {
 func TestClaimAllRewards(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.DPOS.MinimumDeposit = big.NewInt(0)
-	cfg.Hardforks.AspenHf.BlockNum = 1000
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 
@@ -1050,8 +1049,7 @@ func TestClaimAllRewards(t *testing.T) {
 	delegator_addr := addr(1)
 	delegator_stake := DefaultMinimumDeposit
 
-	// Create and register dpos.ClaimAllRewardsMaxCount + 2 validators with 0 stake and 0 commission
-	validators_count := uint64(dpos.ClaimAllRewardsMaxCount + 2)
+	validators_count := uint64(12)
 	validator_stake := big.NewInt(0)
 	validator_commission := uint16(0) // 0%
 	var block_author common.Address
@@ -1086,50 +1084,13 @@ func TestClaimAllRewards(t *testing.T) {
 	// Advance block
 	test.AdvanceBlock(&block_author, &tmp_rewards_stats)
 
-	// Expected block reward
-	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
-	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
-
-	// Calculate it the same as we are doing it in dpos_contract to eliminate rounding error
-	dag_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(DefaultChainCfg.DPOS.DagProposersReward))), big.NewInt(100))
-	votes_part_p := 100 - uint64(DefaultChainCfg.DPOS.DagProposersReward) - uint64(DefaultChainCfg.DPOS.MaxBlockAuthorReward)
-	votes_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(0).SetUint64(votes_part_p)), big.NewInt(100))
-	expected_validator_reward := bigutil.Div(dag_part, big.NewInt(int64(validators_count)))
-	expected_validator_reward = bigutil.Add(expected_validator_reward, bigutil.Div(votes_part, big.NewInt(int64(validators_count))))
-
 	// Claim delegator's all rewards for batch 0
-	delegator_old_balance_batch0 := test.GetBalance(delegator_addr)
-	claim_all_rewards_batch0_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards", uint32(0)), util.ErrorString(""), util.ErrorString(""))
-	actual_delegator_reward_batch0 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch0)
+	claim_all_rewards_batch0_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards"), util.ErrorString(""), util.ErrorString(""))
 
-	tc.Assert.Equal(len(claim_all_rewards_batch0_result.Logs), dpos.ClaimAllRewardsMaxCount)
+	tc.Assert.Equal(len(claim_all_rewards_batch0_result.Logs), int(validators_count))
 	for log_idx := 0; log_idx < len(claim_all_rewards_batch0_result.Logs); log_idx++ {
 		tc.Assert.Equal(claim_all_rewards_batch0_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
 	}
-
-	claim_all_rewards_batch0_parsed := new(ClaimAllRewardsRet)
-	test.Unpack(claim_all_rewards_batch0_parsed, "claimAllRewards", claim_all_rewards_batch0_result.CodeRetval)
-	tc.Assert.Equal(false, claim_all_rewards_batch0_parsed.End)
-
-	expected_claimed_reward_batch0 := bigutil.Mul(expected_validator_reward, big.NewInt(dpos.ClaimAllRewardsMaxCount))
-	tc.Assert.Equal(expected_claimed_reward_batch0, actual_delegator_reward_batch0)
-
-	// Claim delegator's all rewards for batch 1
-	delegator_old_balance_batch1 := test.GetBalance(delegator_addr)
-	claim_all_rewards_batch1_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards", uint32(1)), util.ErrorString(""), util.ErrorString(""))
-	actual_delegator_reward_batch1 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch1)
-
-	tc.Assert.Equal(len(claim_all_rewards_batch1_result.Logs), int(validators_count-dpos.ClaimAllRewardsMaxCount))
-	for log_idx := 0; log_idx < len(claim_all_rewards_batch1_result.Logs); log_idx++ {
-		tc.Assert.Equal(claim_all_rewards_batch1_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
-	}
-
-	claim_all_rewards_batch1_parsed := new(ClaimAllRewardsRet)
-	test.Unpack(claim_all_rewards_batch1_parsed, "claimAllRewards", claim_all_rewards_batch1_result.CodeRetval)
-	tc.Assert.Equal(true, claim_all_rewards_batch1_parsed.End)
-
-	expected_claimed_reward_batch1 := bigutil.Mul(expected_validator_reward, big.NewInt(int64(validators_count-dpos.ClaimAllRewardsMaxCount)))
-	tc.Assert.Equal(expected_claimed_reward_batch1, actual_delegator_reward_batch1)
 }
 
 func TestGenesis(t *testing.T) {

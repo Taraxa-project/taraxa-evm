@@ -234,18 +234,24 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimAllRewards":
-		// First 4 bytes is method signature !!!!
-		input := ctx.Input[4:]
-		var args dpos_sol.ClaimAllRewardsArgs
-		if err := method.Inputs.Unpack(&args, input); err != nil {
-			// args parsing will fail also during Run() so the tx wont get executed
-			return 0
+		if self.cfg.Hardforks.IsAspenHardfork(evm.GetBlock().Number) {
+			delegations_count := uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address()))
+			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
+		} else {
+			// First 4 bytes is method signature !!!!
+			input := ctx.Input[4:]
+			var args dpos_sol.ClaimAllRewardsArgs
+			if err := method.Inputs.Unpack(&args, input); err != nil {
+				// args parsing will fail also during Run() so the tx wont get executed
+				return 0
+			}
+
+			delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
+			// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
+			// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
+			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 		}
 
-		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
-		// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
-		// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
-		return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
@@ -493,18 +499,21 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, block_num, args)
 
 	case "claimAllRewards":
-		var args dpos_sol.ClaimAllRewardsArgs
-		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse claimAllRewards input args: ", err)
-			return nil, err
-		}
+		if self.cfg.Hardforks.IsAspenHardfork(block_num) {
+			return nil, self.claimAllRewards(ctx, block_num)
+		} else {
+			var args dpos_sol.ClaimAllRewardsArgs
+			if err = method.Inputs.Unpack(&args, input); err != nil {
+				fmt.Println("Unable to parse claimAllRewards input args: ", err)
+				return nil, err
+			}
 
-		result, err := self.claimAllRewards(ctx, block_num, args)
-		if err != nil {
-			return nil, err
+			result, err := self.claimAllRewardsPreAspenHF(ctx, block_num, args)
+			if err != nil {
+				return nil, err
+			}
+			return method.Outputs.Pack(result)
 		}
-		return method.Outputs.Pack(result)
-
 	case "claimCommissionRewards":
 		var args dpos_sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -1274,7 +1283,8 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 }
 
 // Pays off accumulated rewards back to delegator address from multiple validators at a time
-func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
+// NOTE this is old PRE-ASPEN HF version
+func (self *Contract) claimAllRewardsPreAspenHF(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
 	var tmp_claim_rewards_args dpos_sol.ValidatorAddressArgs
 	for _, validator_address := range delegator_validators_addresses {
@@ -1289,6 +1299,21 @@ func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, ar
 
 	err = nil
 	return
+}
+
+// Pays off accumulated rewards back to delegator address from multiple validators at a time
+func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum) error {
+	var tmpClaimRewardsArgs dpos_sol.ValidatorAddressArgs
+	for _, validatorAddress := range self.delegations.GetAllDelegatorValidatorsAddresses(ctx.CallerAccount.Address()) {
+		tmpClaimRewardsArgs.Validator = validatorAddress
+
+		tmp_err := self.claimRewards(ctx, block, tmpClaimRewardsArgs)
+		if tmp_err != nil {
+			return util.ErrorString(tmp_err.Error() + " -> validator: " + validatorAddress.String())
+		}
+	}
+
+	return nil
 }
 
 // Pays off rewards from commission back to validator owner address
