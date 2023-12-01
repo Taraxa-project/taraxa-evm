@@ -784,7 +784,7 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 	v, _ := uint256.FromBig(ctx.Value)
 	self.amount_delegated.Add(self.amount_delegated, v)
 
-	new_vote_count := self.voteCount(validator.TotalStake, self.evm.GetBlock().Number)
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, self.evm.GetBlock().Number)
 
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -823,7 +823,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 		state.Count++
 	}
 
-	prev_vote_count := self.voteCount(validator.TotalStake, block)
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
@@ -880,7 +880,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		return ErrInsufficientDelegation
 	}
 
-	prev_vote_count := self.voteCount(validator.TotalStake, block)
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
@@ -919,7 +919,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	a, _ := uint256.FromBig(args.Amount)
 	self.amount_delegated.Sub(self.amount_delegated, a)
 
-	new_vote_count := self.voteCount(validator.TotalStake, block)
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -990,7 +990,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	}
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
-	prev_vote_count := self.voteCount(validator.TotalStake, block)
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -1039,7 +1039,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	a, _ := uint256.FromBig(undelegation.Amount)
 	self.amount_delegated.Add(self.amount_delegated, a)
 
-	new_vote_count := self.voteCount(validator.TotalStake, block)
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1101,8 +1101,8 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		return ErrValidatorsMaxStakeExceeded
 	}
 
-	prev_vote_count_from := self.voteCount(validator_from.TotalStake, block)
-	prev_vote_count_to := self.voteCount(validator_to.TotalStake, block)
+	prev_vote_count_from := voteCount(validator_from.TotalStake, &self.cfg, block)
+	prev_vote_count_to := voteCount(validator_to.TotalStake, &self.cfg, block)
 	//First we undelegate
 	{
 		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
@@ -1164,7 +1164,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			self.validators.ModifyValidatorRewards(&args.ValidatorFrom, validator_rewards_from)
 		}
 
-		new_vote_count := self.voteCount(validator_from.TotalStake, block)
+		new_vote_count := voteCount(validator_from.TotalStake, &self.cfg, block)
 		if prev_vote_count_from != new_vote_count {
 			self.eligible_vote_count -= prev_vote_count_from
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1210,7 +1210,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 	}
 
-	new_vote_count := self.voteCount(validator_to.TotalStake, block)
+	new_vote_count := voteCount(validator_to.TotalStake, &self.cfg, block)
 	if prev_vote_count_to != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count_to
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1731,13 +1731,6 @@ func (self *Contract) saveYieldDb(yield uint64) {
 	self.storage.Put(yield_key, rlp.MustEncodeToBytes(yield))
 }
 
-func (self *Contract) voteCount(staking_balance *big.Int, block types.BlockNum) uint64 {
-	if self.cfg.Hardforks.IsAspenHardfork(block) {
-		voteCount(staking_balance, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.ValidatorMaximumStake, self.cfg.DPOS.VoteEligibilityBalanceStep)
-	}
-	return voteCount(staking_balance, self.cfg.DPOS.EligibilityBalanceThreshold, nil, self.cfg.DPOS.VoteEligibilityBalanceStep)
-}
-
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {
 	// ctx.Account == contract address
 	// ctx.CallerAccount == caller address
@@ -1756,18 +1749,16 @@ func BlockToBytes(number types.BlockNum) []byte {
 	return big.Bytes()
 }
 
-// Calculates vote count from staking balance based on config values
-// DON'T USE DIRECTLY AS IT'S NOT HANDLING HG
-func voteCount(staking_balance, min_eligibility, max_eligibility, vote_eligibility_balance_step *big.Int) uint64 {
+func voteCount(staking_balance *big.Int, cfg *chain_config.ChainConfig, block types.BlockNum) uint64 {
 	tmp := big.NewInt(0)
-
-	// Nil is before aspen HF
-	if max_eligibility != nil && staking_balance.Cmp(max_eligibility) >= 0 {
-		tmp.Div(max_eligibility, vote_eligibility_balance_step)
+	if cfg.Hardforks.IsAspenHardfork(block) {
+		if staking_balance.Cmp(cfg.DPOS.ValidatorMaximumStake) >= 0 {
+			tmp.Div(cfg.DPOS.ValidatorMaximumStake, cfg.DPOS.VoteEligibilityBalanceStep)
+		}
 	}
 
-	if staking_balance.Cmp(min_eligibility) >= 0 {
-		tmp.Div(staking_balance, vote_eligibility_balance_step)
+	if staking_balance.Cmp(cfg.DPOS.EligibilityBalanceThreshold) >= 0 {
+		tmp.Div(staking_balance, cfg.DPOS.VoteEligibilityBalanceStep)
 	}
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()
