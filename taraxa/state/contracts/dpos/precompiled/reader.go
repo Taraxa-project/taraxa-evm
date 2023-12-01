@@ -49,7 +49,7 @@ func (r Reader) TotalEligibleVoteCount() (ret uint64) {
 }
 
 func (r Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
-	return voteCount(r.GetStakingBalance(addr), r.cfg.DPOS.EligibilityBalanceThreshold, r.cfg.DPOS.VoteEligibilityBalanceStep)
+	return voteCount(r.GetStakingBalance(addr), r.cfg, r.delayed_block_n)
 }
 
 func (r Reader) TotalAmountDelegated() (ret *big.Int) {
