@@ -238,7 +238,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardfork(evm.GetBlock().Number) {
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(evm.GetBlock().Number) {
 			delegations_count := uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address()))
 			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 		} else {
@@ -375,15 +375,18 @@ func (self *Contract) lazy_init() {
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
-	self.minted_tokens = uint256.NewInt(0)
-	self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
-		self.minted_tokens = new(uint256.Int).SetBytes(bytes)
-	})
-
 	// Do not set self.total_supply default value to uint256.NewInt(0). Default value should be nil pointer as it is checked in code
 	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
+
+	self.minted_tokens = uint256.NewInt(0)
+	// minted_tokens are no longer needed in case total_supply was already saved in db
+	if self.total_supply == nil {
+		self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
+			self.minted_tokens = new(uint256.Int).SetBytes(bytes)
+		})
+	}
 
 	self.lazy_init_done = true
 }
@@ -508,7 +511,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, block_num, args)
 
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardfork(block_num) {
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(block_num) {
 			return nil, self.claimAllRewards(ctx, block_num)
 		} else {
 			var args dpos_sol.ClaimAllRewardsArgs
@@ -656,6 +659,9 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 		if self.total_supply == nil {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
 			self.saveTotalSupplyDb()
+
+			// Erase minted_tokens from db as it is no longer needed
+			self.eraseMintedTokensDb()
 		}
 
 		var yield *uint256.Int
@@ -1767,6 +1773,10 @@ func (self *Contract) saveMintedTokensDb() {
 	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
 }
 
+func (self *Contract) eraseMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), nil)
+}
+
 func (self *Contract) saveYieldDb(yield uint64) {
 	yield_key := contract_storage.Stor_k_1(field_yield)
 	self.storage.Put(yield_key, rlp.MustEncodeToBytes(yield))
@@ -1792,7 +1802,7 @@ func BlockToBytes(number types.BlockNum) []byte {
 
 func voteCount(staking_balance *big.Int, cfg *chain_config.ChainConfig, block types.BlockNum) uint64 {
 	tmp := big.NewInt(0)
-	if cfg.Hardforks.IsAspenHardfork(block) {
+	if cfg.Hardforks.IsAspenHardforkPartOne(block) {
 		if staking_balance.Cmp(cfg.DPOS.ValidatorMaximumStake) >= 0 {
 			tmp.Div(cfg.DPOS.ValidatorMaximumStake, cfg.DPOS.VoteEligibilityBalanceStep)
 		}
