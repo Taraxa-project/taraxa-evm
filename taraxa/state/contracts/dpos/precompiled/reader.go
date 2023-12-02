@@ -113,7 +113,7 @@ func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
 
 func (r Reader) GetYield() uint64 {
 	// Yield is saved & updated since Aspen hardfork
-	if !r.cfg.Hardforks.IsAspenHardfork(r.delayed_block_n) {
+	if !r.cfg.Hardforks.IsAspenHardforkPartTwo(r.delayed_block_n) {
 		return 0
 	}
 
@@ -130,7 +130,7 @@ func (r Reader) GetYield() uint64 {
 
 func (r Reader) GetTotalSupply() *big.Int {
 	// Total supply is saved & updated since Aspen hardfork
-	if !r.cfg.Hardforks.IsAspenHardfork(r.delayed_block_n) {
+	if !r.cfg.Hardforks.IsAspenHardforkPartTwo(r.delayed_block_n) {
 		return big.NewInt(0)
 	}
 

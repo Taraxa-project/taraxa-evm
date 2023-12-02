@@ -64,7 +64,8 @@ var (
 				JailTime: 5,
 			},
 			AspenHf: chain_config.AspenHfConfig{
-				BlockNum: 0,
+				BlockNumPartOne: 0,
+				BlockNumPartTwo: 0,
 				// Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),

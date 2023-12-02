@@ -124,8 +124,10 @@ var (
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
 
-	field_total_supply = []byte{6}
-	field_yield        = []byte{7}
+	// Aspen hardfork new db fields
+	field_minted_tokens = []byte{6}
+	field_total_supply  = []byte{7}
+	field_yield         = []byte{8}
 )
 
 // State of the rewards distribution algorithm
@@ -165,6 +167,8 @@ type Contract struct {
 	yield_percentage         *uint256.Int
 	dag_proposers_reward     *uint256.Int
 	max_block_author_reward  *uint256.Int
+
+	minted_tokens *uint256.Int
 
 	// Total tara supply = genesis balances + block rewards
 	total_supply *uint256.Int
@@ -234,7 +238,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardfork(evm.GetBlock().Number) {
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(evm.GetBlock().Number) {
 			delegations_count := uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address()))
 			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 		} else {
@@ -376,6 +380,14 @@ func (self *Contract) lazy_init() {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
 
+	self.minted_tokens = uint256.NewInt(0)
+	// minted_tokens are no longer needed in case total_supply was already saved in db
+	if self.total_supply == nil {
+		self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
+			self.minted_tokens = new(uint256.Int).SetBytes(bytes)
+		})
+	}
+
 	self.lazy_init_done = true
 }
 
@@ -499,7 +511,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, block_num, args)
 
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardfork(block_num) {
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(block_num) {
 			return nil, self.claimAllRewards(ctx, block_num)
 		} else {
 			var args dpos_sol.ClaimAllRewardsArgs
@@ -643,10 +655,13 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
-	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
 		if self.total_supply == nil {
-			self.total_supply = self.yield_curve.CalculateTotalSupply(self.delayedStorage)
+			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
 			self.saveTotalSupplyDb()
+
+			// Erase minted_tokens from db as it is no longer needed
+			self.eraseMintedTokensDb()
 		}
 
 		var yield *uint256.Int
@@ -780,9 +795,12 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
-	if self.cfg.Hardforks.IsAspenHardfork(current_block_num) {
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
 		self.total_supply.Add(self.total_supply, newMintedRewards)
 		self.saveTotalSupplyDb()
+	} else if self.cfg.Hardforks.IsAspenHardforkPartOne(current_block_num) {
+		self.minted_tokens.Add(self.minted_tokens, newMintedRewards)
+		self.saveMintedTokensDb()
 	}
 
 	return newMintedRewards
@@ -1751,6 +1769,14 @@ func (self *Contract) saveTotalSupplyDb() {
 	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
 }
 
+func (self *Contract) saveMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
+}
+
+func (self *Contract) eraseMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), nil)
+}
+
 func (self *Contract) saveYieldDb(yield uint64) {
 	yield_key := contract_storage.Stor_k_1(field_yield)
 	self.storage.Put(yield_key, rlp.MustEncodeToBytes(yield))
@@ -1776,7 +1802,7 @@ func BlockToBytes(number types.BlockNum) []byte {
 
 func voteCount(staking_balance *big.Int, cfg *chain_config.ChainConfig, block types.BlockNum) uint64 {
 	tmp := big.NewInt(0)
-	if cfg.Hardforks.IsAspenHardfork(block) {
+	if cfg.Hardforks.IsAspenHardforkPartOne(block) {
 		if staking_balance.Cmp(cfg.DPOS.ValidatorMaximumStake) >= 0 {
 			tmp.Div(cfg.DPOS.ValidatorMaximumStake, cfg.DPOS.VoteEligibilityBalanceStep)
 		}

@@ -39,14 +39,13 @@ func (self *YieldCurve) CalculateBlockReward(current_total_delegation, current_t
 	yield = self.calculateCurrentYield(current_total_tara_supply)
 	block_reward = new(uint256.Int).Mul(current_total_delegation, yield)
 	block_reward.Div(block_reward, new(uint256.Int).Mul(YieldFractionDecimalPrecision, uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))))
-
 	return
 }
 
-// Calculates total supply based on genesis balances + total generated rewards until Aspen hardfork
-func (self *YieldCurve) CalculateTotalSupply(dpos_reader Reader) *uint256.Int {
-	genesis_balances_sum := self.cfg.GenesisBalancesSum()
-	total_supply := bigutil.Add(genesis_balances_sum, self.cfg.Hardforks.AspenHf.GeneratedRewards)
+// Calculates total supply based on minted_toknes + genesis balances + total generated rewards until Aspen hardfork
+func (self *YieldCurve) CalculateTotalSupply(minted_tokens *uint256.Int) *uint256.Int {
+	total_supply := bigutil.Add(self.cfg.GenesisBalancesSum(), minted_tokens.ToBig())
+	total_supply.Add(total_supply, self.cfg.Hardforks.AspenHf.GeneratedRewards)
 
 	total_supply_uint256, overflow := uint256.FromBig(total_supply)
 	asserts.Holds(overflow == false, "CalculateTotalSupply: Genesis balances sum oveflow")
