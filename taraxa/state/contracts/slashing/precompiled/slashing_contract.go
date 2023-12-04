@@ -25,8 +25,8 @@ import (
 // Fixed contract address
 var slashing_contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000EE"))
 
-func ContractAddress() common.Address {
-	return *slashing_contract_address
+func ContractAddress() *common.Address {
+	return slashing_contract_address
 }
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas

@@ -43,8 +43,8 @@ import (
 // Fixed contract address
 var dpos_contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
 
-func ContractAddress() common.Address {
-	return *dpos_contract_address
+func ContractAddress() *common.Address {
+	return dpos_contract_address
 }
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
