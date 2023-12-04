@@ -108,7 +108,7 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if st.dpos_contract != nil && rules_changed {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
-		if st.chain_config.Hardforks.IsAspenHardfork(blk_n) {
+		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
 			if acc.GetCodeSize() == 0 {
 				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
