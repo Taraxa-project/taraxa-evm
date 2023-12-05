@@ -64,6 +64,11 @@ var (
 				BlockNum: 0,
 				JailTime: 5,
 			},
+			FicusHf: chain_config.FicusHfConfig{
+				BlockNum:              0,
+				PillarBlockPeriods:    10,
+				SignatureCheckPeriods: 5,
+			},
 		},
 	}
 )
