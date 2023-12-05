@@ -116,7 +116,11 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
-			FicusHfBlockNum: 0,
+			FicusHf: chain_config.FicusHfConfig{
+				BlockNum:              0,
+				PillarBlockPeriods:    10,
+				SignatureCheckPeriods: 5,
+			},
 		},
 	}
 )
@@ -528,7 +532,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 func TestFicusHardforkRegisterValidator(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.FicusHfBlockNum = 5
+	cfg.Hardforks.FicusHf.BlockNum = 5
 
 	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -543,7 +547,7 @@ func TestFicusHardforkRegisterValidator(t *testing.T) {
 	test.CheckContractBalance(DefaultMinimumDeposit)
 
 	// Advance few block so we are sure the current block already passed hardfork block num
-	for i := uint64(0); i < cfg.Hardforks.FicusHfBlockNum; i++ {
+	for i := uint64(0); i < cfg.Hardforks.FicusHf.BlockNum; i++ {
 		test.AdvanceBlock(nil, nil)
 	}
 
@@ -563,7 +567,7 @@ func TestFicusHardforkRegisterValidator(t *testing.T) {
 
 func TestFicusHardforkUpdateBlsKey(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.FicusHfBlockNum = 5
+	cfg.Hardforks.FicusHf.BlockNum = 5
 
 	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -577,7 +581,7 @@ func TestFicusHardforkUpdateBlsKey(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("updateBlsKey", validator1_addr, []byte{}), dpos.ErrUnsupportedBlsKey, util.ErrorString(""))
 
 	// Advance few block so we are sure the current block already passed hardfork block num
-	for i := uint64(0); i < cfg.Hardforks.FicusHfBlockNum; i++ {
+	for i := uint64(0); i < cfg.Hardforks.FicusHf.BlockNum; i++ {
 		test.AdvanceBlock(nil, nil)
 	}
 

@@ -71,6 +71,11 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
+			FicusHf: chain_config.FicusHfConfig{
+				BlockNum:              0,
+				PillarBlockPeriods:    10,
+				SignatureCheckPeriods: 5,
+			},
 		},
 	}
 )
