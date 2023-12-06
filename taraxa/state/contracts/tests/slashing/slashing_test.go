@@ -40,6 +40,7 @@ var (
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
 	DefaultMinimumDeposit              = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultVrfKey                      = common.RightPadBytes([]byte("0x0"), 32)
+	DefaultBlsKey                      = common.RightPadBytes([]byte("0x0"), 129)
 
 	DefaultChainCfg = chain_config.ChainConfig{
 		GenesisBalances: GenesisBalances{addr(1): DefaultBalance, addr(2): DefaultBalance, addr(3): DefaultBalance, addr(4): DefaultBalance, addr(5): DefaultBalance},
@@ -62,6 +63,11 @@ var (
 			MagnoliaHf: chain_config.MagnoliaHfConfig{
 				BlockNum: 0,
 				JailTime: 5,
+			},
+			FicusHf: chain_config.FicusHfConfig{
+				BlockNum:              0,
+				PillarBlockPeriods:    10,
+				SignatureCheckPeriods: 5,
 			},
 		},
 	}
@@ -98,7 +104,7 @@ func generateKeyPair() (pubkey, privkey []byte) {
 func addValidator(cfg *chain_config.ChainConfig) (privkey []byte, address common.Address) {
 	pubkey, privkey := generateKeyPair()
 	address = common.BytesToAddress(keccak256.Hash(pubkey[1:])[12:])
-	cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, chain_config.GenesisValidator{Address: address, Owner: address, VrfKey: common.Hash{}.Bytes(), Commission: 0, Endpoint: "", Description: "", Delegations: map[common.Address]*big.Int{addr(1): DefaultValidatorMaximumStake}})
+	cfg.DPOS.InitialValidators = append(cfg.DPOS.InitialValidators, chain_config.GenesisValidator{Address: address, Owner: address, VrfKey: common.Hash{}.Bytes(), BlsKey: DefaultBlsKey, Commission: 0, Endpoint: "", Description: "", Delegations: map[common.Address]*big.Int{addr(1): DefaultValidatorMaximumStake}})
 	return
 }
 

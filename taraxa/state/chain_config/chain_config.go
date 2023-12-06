@@ -21,11 +21,18 @@ type MagnoliaHfConfig struct {
 	JailTime uint64 // [number of blocks]
 }
 
+type FicusHfConfig struct {
+	BlockNum              uint64
+	PillarBlockPeriods    uint64 // [number of blocks]
+	SignatureCheckPeriods uint64 // [number of blocks]
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+	FicusHf                      FicusHfConfig
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
@@ -45,10 +52,15 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 	}
 }
 
+func (self *HardforksConfig) IsFicusHardfork(block uint64) bool {
+	return block >= self.FicusHf.BlockNum
+}
+
 type GenesisValidator struct {
 	Address     common.Address
 	Owner       common.Address
 	VrfKey      []byte
+	BlsKey      []byte
 	Commission  uint16
 	Endpoint    string
 	Description string

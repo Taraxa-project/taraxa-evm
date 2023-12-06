@@ -65,6 +65,7 @@ type Validators struct {
 	validator_rewards_field []byte
 	validator_owner_field   []byte
 	validator_vrf_key_field []byte
+	validator_bls_key_field []byte
 }
 
 var (
@@ -74,6 +75,7 @@ var (
 	validator_owner_index   = []byte{3}
 	validator_vrf_index     = []byte{4}
 	validator_list_index    = []byte{5}
+	validator_bls_index     = []byte{6}
 )
 
 func (self *Validators) Init(stor *contract_storage.StorageWrapper, prefix []byte) *Validators {
@@ -85,6 +87,7 @@ func (self *Validators) Init(stor *contract_storage.StorageWrapper, prefix []byt
 	self.validator_rewards_field = append(prefix, validator_rewards_index...)
 	self.validator_owner_field = append(prefix, validator_owner_index...)
 	self.validator_vrf_key_field = append(prefix, validator_vrf_index...)
+	self.validator_bls_key_field = append(prefix, validator_bls_index...)
 
 	self.validators_list.Init(self.storage, append(prefix, validator_list_index...))
 
@@ -115,6 +118,21 @@ func (self *Validators) GetVrfKey(validator *common.Address) (ret []byte) {
 	return
 }
 
+// Saves public bls key for validator
+func (self *Validators) SaveBlsKey(validator *common.Address, bls_key []byte) {
+	validator_bls_key := contract_storage.Stor_k_1(self.validator_bls_key_field, validator[:])
+	self.storage.Put(validator_bls_key, bls_key)
+}
+
+// Returns public bls key for validator
+func (self *Validators) GetBlsKey(validator *common.Address) (ret []byte) {
+	key := contract_storage.Stor_k_1(self.validator_bls_key_field, validator[:])
+	self.storage.Get(key, func(bytes []byte) {
+		ret = bytes
+	})
+	return
+}
+
 // Checks is validator exists
 func (self *Validators) ValidatorExists(validator_address *common.Address) bool {
 	return self.validators_list.AccountExists(validator_address)
@@ -128,7 +146,9 @@ func (self *Validators) GetValidatorsCount() uint32 {
 	return self.validators_list.GetCount()
 }
 
-func (self *Validators) CreateValidator(extended_validator bool, owner_address *common.Address, validator_address *common.Address, vrf_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) (validator *Validator) {
+func (self *Validators) CreateValidator(extended_validator bool, owner_address *common.Address, validator_address *common.Address,
+	vrf_key []byte, bls_key []byte, block types.BlockNum, commission uint16, description string, endpoint string) (validator *Validator) {
+
 	// Creates Validator object in storage
 	validator = new(Validator)
 	validator.ValidatorV1 = new(ValidatorV1)
@@ -162,6 +182,11 @@ func (self *Validators) CreateValidator(extended_validator bool, owner_address *
 	validator_vrf_key := contract_storage.Stor_k_1(self.validator_vrf_key_field, validator_address[:])
 	self.storage.Put(validator_vrf_key, vrf_key)
 
+	// Pre ficus hardfork code did not use bls key
+	if len(bls_key) > 0 {
+		self.SaveBlsKey(validator_address, bls_key)
+	}
+
 	// Adds validator into the list of all validators
 	self.validators_list.CreateAccount(validator_address)
 
@@ -180,6 +205,9 @@ func (self *Validators) DeleteValidator(validator_address *common.Address) {
 
 	validator_vrf_key := contract_storage.Stor_k_1(self.validator_vrf_key_field, validator_address[:])
 	self.storage.Put(validator_vrf_key, nil)
+
+	validator_bls_key := contract_storage.Stor_k_1(self.validator_bls_key_field, validator_address[:])
+	self.storage.Put(validator_bls_key, nil)
 
 	rewards_key := contract_storage.Stor_k_1(self.validator_rewards_field, validator_address[:])
 	self.storage.Put(rewards_key, nil)

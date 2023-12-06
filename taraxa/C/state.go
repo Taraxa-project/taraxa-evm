@@ -334,6 +334,22 @@ func taraxa_evm_state_api_dpos_get_vrf_key(
 	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetVrfKey(&params.Addr), cb)
 }
 
+//export taraxa_evm_state_api_dpos_get_bls_key
+func taraxa_evm_state_api_dpos_get_bls_key(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum types.BlockNum
+		Addr   common.Address
+	}
+	dec_rlp(params_enc, &params)
+	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetBlsKey(&params.Addr), cb)
+}
+
 //export taraxa_evm_state_api_dpos_total_amount_delegated
 func taraxa_evm_state_api_dpos_total_amount_delegated(
 	ptr C.taraxa_evm_state_API_ptr,
