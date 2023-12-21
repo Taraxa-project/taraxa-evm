@@ -27,6 +27,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/tests"
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/holiman/uint256"
 )
 
 // This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
@@ -78,7 +79,7 @@ type GenesisBalances = map[common.Address]*big.Int
 
 var (
 	TaraPrecision                      = big.NewInt(1e+18)
-	DefaultBalance                     = bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+	DefaultBalance                     = bigutil.Mul(big.NewInt(2050000000), TaraPrecision)
 	DefaultEligibilityBalanceThreshold = bigutil.Mul(big.NewInt(1000000), TaraPrecision)
 	DefaultVoteEligibilityBalanceStep  = bigutil.Mul(big.NewInt(1000), TaraPrecision)
 	DefaultValidatorMaximumStake       = bigutil.Mul(big.NewInt(10000000), TaraPrecision)
@@ -106,6 +107,13 @@ var (
 			MagnoliaHf: chain_config.MagnoliaHfConfig{
 				BlockNum: 0,
 				JailTime: 5,
+			},
+			AspenHf: chain_config.AspenHfConfig{
+				BlockNumPartOne: 0,
+				BlockNumPartTwo: 0,
+				// Max token supply is 12 Billion TARA -> 12e+9(12 billion) * 1e+18(tara precision)
+				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
+				GeneratedRewards: big.NewInt(0),
 			},
 		},
 	}
@@ -237,18 +245,20 @@ func TestDelegateMinMax(t *testing.T) {
 	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
+	delegation := bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+
 	val_addr, proof := generateAddrAndProof()
 	test.ExecuteAndCheck(addr(1), DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
-	test.ExecuteAndCheck(addr(1), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance := bigutil.Sub(DefaultBalance, DefaultMinimumDeposit)
+	test.ExecuteAndCheck(addr(1), bigutil.Sub(delegation, DefaultMinimumDeposit), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Sub(delegation, DefaultMinimumDeposit)
 	totalBalance.Add(totalBalance, DefaultMinimumDeposit)
 	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultMinimumDeposit, big.NewInt(1)), test.Pack("delegate", val_addr), dpos.ErrInsufficientDelegation, util.ErrorString(""))
-	test.ExecuteAndCheck(addr(3), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance.Add(totalBalance, bigutil.Sub(DefaultBalance, DefaultMinimumDeposit))
+	test.ExecuteAndCheck(addr(3), bigutil.Sub(delegation, DefaultMinimumDeposit), test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, bigutil.Sub(delegation, DefaultMinimumDeposit))
 	test.CheckContractBalance(totalBalance)
-	test.ExecuteAndCheck(addr(2), bigutil.Sub(DefaultBalance, DefaultMinimumDeposit), test.Pack("delegate", val_addr), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), bigutil.Sub(delegation, DefaultMinimumDeposit), test.Pack("delegate", val_addr), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
 	test.ExecuteAndCheck(addr(2), DefaultMinimumDeposit, test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	totalBalance.Add(totalBalance, DefaultMinimumDeposit)
 	test.CheckContractBalance(totalBalance)
@@ -317,17 +327,19 @@ func TestRedelegateMinMax(t *testing.T) {
 
 	init_stake := bigutil.Mul(DefaultMinimumDeposit, big.NewInt(2))
 
+	delegation := bigutil.Mul(big.NewInt(5000000), TaraPrecision)
+
 	test.ExecuteAndCheck(validator1_owner, init_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(validator2_owner, init_stake, test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	totalBalance := bigutil.Add(init_stake, init_stake)
 	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, bigutil.Add(DefaultMinimumDeposit, big.NewInt(1))), dpos.ErrInsufficientDelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
-	test.ExecuteAndCheck(validator2_owner, bigutil.Sub(DefaultBalance, init_stake), test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance.Add(totalBalance, bigutil.Sub(DefaultBalance, init_stake))
+	test.ExecuteAndCheck(validator2_owner, bigutil.Sub(delegation, init_stake), test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, bigutil.Sub(delegation, init_stake))
 	test.CheckContractBalance(totalBalance)
-	test.ExecuteAndCheck(addr(3), DefaultBalance, test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
-	totalBalance.Add(totalBalance, DefaultBalance)
+	test.ExecuteAndCheck(addr(3), delegation, test.Pack("delegate", validator2_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance.Add(totalBalance, delegation)
 	test.CheckContractBalance(totalBalance)
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, big.NewInt(1)), dpos.ErrValidatorsMaxStakeExceeded, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
@@ -620,8 +632,157 @@ func TestUndelegateMin(t *testing.T) {
 	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("undelegate", val_addr, bigutil.Mul(DefaultMinimumDeposit, big.NewInt(2))), util.ErrorString(""), util.ErrorString(""))
 }
 
+func TestYieldCurveAspenHf(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	var yield_curve dpos.YieldCurve
+	yield_curve.Init(cfg)
+
+	// yield = (max supply - total supply) / total supply
+	// block reward = yield * total stake / blocks per year
+
+	// max supply has hardcoded value of 12 Billion TARA
+	// total supply = 10 Billion, total stake = 1 Billion, expected yield == 20%
+	total_supply := new(uint256.Int).Mul(uint256.NewInt(10e+9), uint256.NewInt(1e+18))
+	total_stake := new(uint256.Int).Mul(uint256.NewInt(1e+9), uint256.NewInt(1e+18))
+	expected_yield := uint256.NewInt(200000)
+	expected_block_reward := calculateExpectedBlockReward(total_stake, expected_yield, cfg)
+	block_reward, yield := yield_curve.CalculateBlockReward(total_stake, total_supply)
+
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+
+	// max supply = 12 Billion, total supply = 11 Billion, total stake = 1 Billion, expected yield == 9,0909%
+	total_supply = new(uint256.Int).Mul(uint256.NewInt(11e+9), uint256.NewInt(1e+18))
+	expected_yield = uint256.NewInt(90909)
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
+	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+
+	// max supply = 12 Billion, total supply = 11.5 Billion, total stake = 1 Billion, expected yield == 4,3478%
+	total_supply = new(uint256.Int).Mul(uint256.NewInt(115e+8), uint256.NewInt(1e+18))
+	expected_yield = uint256.NewInt(43478)
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
+	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+
+	// max supply = 12 Billion, total supply = 12 Billion, total stake = 1 Billion, expected yield == 0%
+	total_supply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
+	expected_yield = uint256.NewInt(0)
+	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
+	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+}
+
+func calculateExpectedBlockReward(total_stake *uint256.Int, expected_yield *uint256.Int, cfg chain_config.ChainConfig) *uint256.Int {
+	expected_block_reward := new(uint256.Int).Mul(total_stake, expected_yield)
+	expected_block_reward.Div(expected_block_reward, new(uint256.Int).Mul(dpos.YieldFractionDecimalPrecision, uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))))
+	return expected_block_reward
+}
+
+func TestAspenHf(t *testing.T) {
+	// Test if generated block reward changed from fixed yield to the new dynamic yield curve
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.AspenHf.BlockNumPartOne = 5
+	cfg.Hardforks.AspenHf.BlockNumPartTwo = 10
+	cfg.Hardforks.AspenHf.GeneratedRewards = bigutil.Mul(big.NewInt(5000000), big.NewInt(1e18)) // 5M TARA
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	total_supply := big.NewInt(0)
+	for _, balance := range cfg.GenesisBalances {
+		total_supply.Add(total_supply, balance)
+	}
+	total_supply.Add(total_supply, cfg.Hardforks.AspenHf.GeneratedRewards)
+
+	validator1_addr, validator1_proof := generateAddrAndProof()
+	validator1_owner := addr(1)
+	validator1_commission := uint16(500) // 5%
+	delegator1_stake := DefaultValidatorMaximumStake
+
+	// Creates single validator
+	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	total_stake := delegator1_stake
+
+	// Empty rewards statistics
+	trxFee := bigutil.Div(TaraPrecision, big.NewInt(1000)) //  0.001 TARA
+	tmp_rewards_stats := NewRewardsStats(&validator1_addr)
+
+	validator1_stats := rewards_stats.ValidatorStats{}
+	validator1_stats.DagBlocksCount = 10
+	validator1_stats.VoteWeight = 1
+	validator1_stats.FeesRewards = big.NewInt(int64(validator1_stats.DagBlocksCount))
+	validator1_stats.FeesRewards.Mul(validator1_stats.FeesRewards, trxFee)
+	tmp_rewards_stats.ValidatorsStats[validator1_addr] = validator1_stats
+
+	tmp_rewards_stats.TotalDagBlocksCount = validator1_stats.DagBlocksCount
+	tmp_rewards_stats.TotalVotesWeight = 1
+	tmp_rewards_stats.MaxVotesWeight = 1
+
+	txsNum := big.NewInt(int64(tmp_rewards_stats.TotalDagBlocksCount))
+	txsFees := bigutil.Mul(trxFee, txsNum)
+
+	contract_balance := new(big.Int).Set(total_stake)
+	// Advance couple of blocks - pre aspen.PartTwo hf with fixed yield
+	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.BlockNumPartTwo-1; block_n++ {
+		expected_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
+		expected_reward = bigutil.Div(expected_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
+
+		reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats).ToBig()
+		tc.Assert.Equal(expected_reward, reward)
+
+		contract_balance.Add(contract_balance, reward)
+		contract_balance.Add(contract_balance, txsFees)
+		test.CheckContractBalance(contract_balance)
+
+		if block_n >= cfg.Hardforks.AspenHf.BlockNumPartOne-1 {
+			total_supply.Add(total_supply, reward)
+		}
+	}
+
+	// Expected block reward
+	var yield_curve dpos.YieldCurve
+	yield_curve.Init(cfg)
+
+	// Advance couple of blocks - after aspen.PartTwo hf with dynamic yield
+	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.BlockNumPartTwo+20; block_n++ {
+		total_supply_uin256, _ := uint256.FromBig(total_supply)
+		total_stake_uin256, _ := uint256.FromBig(total_stake)
+		expected_reward_uint256, _ := yield_curve.CalculateBlockReward(total_stake_uin256, total_supply_uin256)
+		expected_reward := expected_reward_uint256.ToBig()
+
+		reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats)
+		reward_big := reward.ToBig()
+		tc.Assert.Equal(expected_reward, reward_big)
+
+		contract_balance.Add(contract_balance, reward_big)
+		contract_balance.Add(contract_balance, txsFees)
+		total_supply.Add(total_supply, reward_big)
+		test.CheckContractBalance(contract_balance)
+	}
+
+	// Advance cfg.DPOS.DelegationDelay blocks and do not add rewards to the total_supply to make it equal to the test.GetDPOSReader().GetTotalSupply().
+	// test.GetDPOSReader().GetTotalSupply() returns delayed data by cfg.DPOS.DelegationDelay blocks so after
+	for idx := uint32(0); idx < cfg.DPOS.DelegationDelay; idx++ {
+		test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats)
+	}
+
+	tc.Assert.Equal(total_supply, test.GetDPOSReader().GetTotalSupply())
+}
+
 func TestRewardsAndCommission(t *testing.T) {
-	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
+	cfg := CopyDefaultChainConfig()
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
 	trxFee := bigutil.Div(TaraPrecision, big.NewInt(1000)) //  0.001 TARA
@@ -738,9 +899,18 @@ func TestRewardsAndCommission(t *testing.T) {
 	totalBalance.Add(totalBalance, bigutil.Mul(trxFee, numberOfTrxs))
 	test.CheckContractBalance(totalBalance)
 
+	total_supply := big.NewInt(0)
+	for _, balance := range cfg.GenesisBalances {
+		total_supply.Add(total_supply, balance)
+	}
+	total_supply_uin256, _ := uint256.FromBig(total_supply)
+	total_stake_uin256, _ := uint256.FromBig(total_stake)
+
 	// Expected block reward
-	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
-	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
+	var yield_curve dpos.YieldCurve
+	yield_curve.Init(cfg)
+	expected_block_reward_uint256, _ := yield_curve.CalculateBlockReward(total_stake_uin256, total_supply_uin256)
+	expected_block_reward := expected_block_reward_uint256.ToBig()
 
 	// Splitting block rewards between votes and blocks
 	expected_dag_reward := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(test.Chain_cfg.DPOS.DagProposersReward))), big.NewInt(100))
@@ -812,10 +982,10 @@ func TestRewardsAndCommission(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 
 	// Check delgators rewards
-	delegator1_old_balance := test.GetBalance(delegator1_addr)
-	delegator2_old_balance := test.GetBalance(delegator2_addr)
-	delegator3_old_balance := test.GetBalance(delegator3_addr)
-	delegator4_old_balance := test.GetBalance(delegator4_addr)
+	delegator1_old_balance := test.GetBalance(&delegator1_addr)
+	delegator2_old_balance := test.GetBalance(&delegator2_addr)
+	delegator3_old_balance := test.GetBalance(&delegator3_addr)
+	delegator4_old_balance := test.GetBalance(&delegator4_addr)
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	// Check getter
@@ -835,10 +1005,10 @@ func TestRewardsAndCommission(t *testing.T) {
 		tc.Assert.Equal(clam_res.Logs[1].Topics[0], DelegatedEventHash)
 	}
 
-	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
-	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
-	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
-	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
+	actual_delegator1_reward := bigutil.Sub(test.GetBalance(&delegator1_addr), delegator1_old_balance)
+	actual_delegator2_reward := bigutil.Sub(test.GetBalance(&delegator2_addr), delegator2_old_balance)
+	actual_delegator3_reward := bigutil.Sub(test.GetBalance(&delegator3_addr), delegator3_old_balance)
+	actual_delegator4_reward := bigutil.Sub(test.GetBalance(&delegator4_addr), delegator4_old_balance)
 
 	//Check claim vs getter result
 	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
@@ -849,9 +1019,9 @@ func TestRewardsAndCommission(t *testing.T) {
 	tc.Assert.Equal(expected_delegator4_reward, actual_delegator4_reward)
 
 	// Check commission rewards
-	validator1_old_balance := test.GetBalance(validator1_owner)
-	validator2_old_balance := test.GetBalance(validator2_owner)
-	validator4_old_balance := test.GetBalance(validator4_owner)
+	validator1_old_balance := test.GetBalance(&validator1_owner)
+	validator2_old_balance := test.GetBalance(&validator2_owner)
+	validator4_old_balance := test.GetBalance(&validator4_owner)
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
@@ -861,9 +1031,9 @@ func TestRewardsAndCommission(t *testing.T) {
 		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
 	}
 
-	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
-	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
-	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(validator4_owner), validator4_old_balance)
+	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(&validator1_owner), validator1_old_balance)
+	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(&validator2_owner), validator2_old_balance)
+	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(&validator4_owner), validator4_old_balance)
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)
@@ -877,6 +1047,7 @@ func TestRewardsAndCommission(t *testing.T) {
 func TestClaimAllRewards(t *testing.T) {
 	cfg := DefaultChainCfg
 	cfg.DPOS.MinimumDeposit = big.NewInt(0)
+	cfg.Hardforks.AspenHf.BlockNumPartTwo = 1000
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 
@@ -886,8 +1057,7 @@ func TestClaimAllRewards(t *testing.T) {
 	delegator_addr := addr(1)
 	delegator_stake := DefaultMinimumDeposit
 
-	// Create and register dpos.ClaimAllRewardsMaxCount + 2 validators with 0 stake and 0 commission
-	validators_count := uint64(dpos.ClaimAllRewardsMaxCount + 2)
+	validators_count := uint64(12)
 	validator_stake := big.NewInt(0)
 	validator_commission := uint16(0) // 0%
 	var block_author common.Address
@@ -922,50 +1092,13 @@ func TestClaimAllRewards(t *testing.T) {
 	// Advance block
 	test.AdvanceBlock(&block_author, &tmp_rewards_stats)
 
-	// Expected block reward
-	expected_block_reward := bigutil.Mul(total_stake, big.NewInt(int64(test.Chain_cfg.DPOS.YieldPercentage)))
-	expected_block_reward = bigutil.Div(expected_block_reward, bigutil.Mul(big.NewInt(100), big.NewInt(int64(test.Chain_cfg.DPOS.BlocksPerYear))))
-
-	// Calculate it the same as we are doing it in dpos_contract to eliminate rounding error
-	dag_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(int64(DefaultChainCfg.DPOS.DagProposersReward))), big.NewInt(100))
-	votes_part_p := 100 - uint64(DefaultChainCfg.DPOS.DagProposersReward) - uint64(DefaultChainCfg.DPOS.MaxBlockAuthorReward)
-	votes_part := bigutil.Div(bigutil.Mul(expected_block_reward, big.NewInt(0).SetUint64(votes_part_p)), big.NewInt(100))
-	expected_validator_reward := bigutil.Div(dag_part, big.NewInt(int64(validators_count)))
-	expected_validator_reward = bigutil.Add(expected_validator_reward, bigutil.Div(votes_part, big.NewInt(int64(validators_count))))
-
 	// Claim delegator's all rewards for batch 0
-	delegator_old_balance_batch0 := test.GetBalance(delegator_addr)
-	claim_all_rewards_batch0_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards", uint32(0)), util.ErrorString(""), util.ErrorString(""))
-	actual_delegator_reward_batch0 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch0)
+	claim_all_rewards_batch0_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards"), util.ErrorString(""), util.ErrorString(""))
 
-	tc.Assert.Equal(len(claim_all_rewards_batch0_result.Logs), dpos.ClaimAllRewardsMaxCount)
+	tc.Assert.Equal(len(claim_all_rewards_batch0_result.Logs), int(validators_count))
 	for log_idx := 0; log_idx < len(claim_all_rewards_batch0_result.Logs); log_idx++ {
 		tc.Assert.Equal(claim_all_rewards_batch0_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
 	}
-
-	claim_all_rewards_batch0_parsed := new(ClaimAllRewardsRet)
-	test.Unpack(claim_all_rewards_batch0_parsed, "claimAllRewards", claim_all_rewards_batch0_result.CodeRetval)
-	tc.Assert.Equal(false, claim_all_rewards_batch0_parsed.End)
-
-	expected_claimed_reward_batch0 := bigutil.Mul(expected_validator_reward, big.NewInt(dpos.ClaimAllRewardsMaxCount))
-	tc.Assert.Equal(expected_claimed_reward_batch0, actual_delegator_reward_batch0)
-
-	// Claim delegator's all rewards for batch 1
-	delegator_old_balance_batch1 := test.GetBalance(delegator_addr)
-	claim_all_rewards_batch1_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("claimAllRewards", uint32(1)), util.ErrorString(""), util.ErrorString(""))
-	actual_delegator_reward_batch1 := bigutil.Sub(test.GetBalance(delegator_addr), delegator_old_balance_batch1)
-
-	tc.Assert.Equal(len(claim_all_rewards_batch1_result.Logs), int(validators_count-dpos.ClaimAllRewardsMaxCount))
-	for log_idx := 0; log_idx < len(claim_all_rewards_batch1_result.Logs); log_idx++ {
-		tc.Assert.Equal(claim_all_rewards_batch1_result.Logs[log_idx].Topics[0], RewardsClaimedEventHash)
-	}
-
-	claim_all_rewards_batch1_parsed := new(ClaimAllRewardsRet)
-	test.Unpack(claim_all_rewards_batch1_parsed, "claimAllRewards", claim_all_rewards_batch1_result.CodeRetval)
-	tc.Assert.Equal(true, claim_all_rewards_batch1_parsed.End)
-
-	expected_claimed_reward_batch1 := bigutil.Mul(expected_validator_reward, big.NewInt(int64(validators_count-dpos.ClaimAllRewardsMaxCount)))
-	tc.Assert.Equal(expected_claimed_reward_batch1, actual_delegator_reward_batch1)
 }
 
 func TestGenesis(t *testing.T) {
@@ -987,7 +1120,7 @@ func TestGenesis(t *testing.T) {
 	totalAmountDelegated := bigutil.Mul(DefaultEligibilityBalanceThreshold, big.NewInt(4))
 	test.CheckContractBalance(totalAmountDelegated)
 
-	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(delegator))
+	tc.Assert.Equal(bigutil.Sub(DefaultBalance, totalAmountDelegated), test.GetBalance(&delegator))
 	tc.Assert.Equal(accVoteCount.Uint64()*4, test.GetDPOSReader().TotalEligibleVoteCount())
 	tc.Assert.Equal(totalAmountDelegated, test.GetDPOSReader().TotalAmountDelegated())
 	tc.Assert.Equal(accVoteCount.Uint64(), test.GetDPOSReader().GetEligibleVoteCount(addr_p(1)))
@@ -1091,8 +1224,9 @@ func TestGetValidators(t *testing.T) {
 
 	// Set some balance to validators
 	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
 	for _, validator := range gen_validators {
-		cfg.GenesisBalances[validator.owner] = DefaultBalance
+		cfg.GenesisBalances[validator.owner] = validator_balance
 	}
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1173,8 +1307,9 @@ func TestGetValidatorsFor(t *testing.T) {
 
 	// Set some balance to validators
 	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
 	for _, validator := range gen_validators {
-		cfg.GenesisBalances[validator.owner] = DefaultBalance
+		cfg.GenesisBalances[validator.owner] = validator_balance
 	}
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1244,13 +1379,14 @@ func TestGetTotalDelegation(t *testing.T) {
 
 	// Set some balance to validators
 	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
 	for _, validator := range gen_validators {
-		cfg.GenesisBalances[validator.owner] = DefaultBalance
+		cfg.GenesisBalances[validator.owner] = validator_balance
 	}
 
 	// Generate delegator and set some balance to him
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
-	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+	cfg.GenesisBalances[delegator1_addr] = validator_balance
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1299,13 +1435,14 @@ func TestGetDelegations(t *testing.T) {
 
 	// Set some balance to validators
 	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
 	for _, validator := range gen_validators {
-		cfg.GenesisBalances[validator.owner] = DefaultBalance
+		cfg.GenesisBalances[validator.owner] = validator_balance
 	}
 
 	// Generate  delegator and set some balance to him
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
-	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+	cfg.GenesisBalances[delegator1_addr] = validator_balance
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1393,15 +1530,16 @@ func TestGetUndelegations(t *testing.T) {
 
 	// Set some balance to validators
 	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
 	for _, validator := range gen_validators {
-		cfg.GenesisBalances[validator.owner] = DefaultBalance
+		cfg.GenesisBalances[validator.owner] = validator_balance
 	}
 
 	cfg.Hardforks.MagnoliaHf.BlockNum = 1000
 
 	// Generate 2 delegators and set some balance to them
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
-	cfg.GenesisBalances[delegator1_addr] = DefaultBalance
+	cfg.GenesisBalances[delegator1_addr] = validator_balance
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1651,7 +1789,7 @@ func TestIterableMapClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	iter_map_prefix := []byte{0}
 	iter_map := contract_storage.AddressesIMap{}
@@ -1724,7 +1862,7 @@ func TestValidatorsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	validators := new(dpos.Validators).Init(&storage, []byte{})
 	field_validators := []byte{0}
@@ -1795,7 +1933,7 @@ func TestDelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	delegations := dpos.Delegations{}
 	field_delegations := []byte{2}
@@ -1865,7 +2003,7 @@ func TestUndelegationsClass(t *testing.T) {
 	var storage contract_storage.StorageWrapper
 	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(&dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
 
 	undelegations := dpos.Undelegations{}
 	field_undelegations := []byte{3}
@@ -2009,6 +2147,7 @@ func TestRedelegateHF(t *testing.T) {
 	delegator5_stake := DefaultMinimumDeposit
 
 	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.AspenHf.BlockNumPartTwo = 1000
 	cfg.Hardforks.FixRedelegateBlockNum = 12
 	cfg.Hardforks.Redelegations = append(cfg.Hardforks.Redelegations, chain_config.Redelegation{Validator: validator2_addr, Delegator: delegator3_addr, Amount: DefaultMinimumDeposit})
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
@@ -2173,10 +2312,10 @@ func TestRedelegateHF(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("claimRewards", validator2_addr), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 
 	// Check delgators rewards
-	delegator1_old_balance := test.GetBalance(delegator1_addr)
-	delegator2_old_balance := test.GetBalance(delegator2_addr)
-	delegator3_old_balance := test.GetBalance(delegator3_addr)
-	delegator4_old_balance := test.GetBalance(delegator4_addr)
+	delegator1_old_balance := test.GetBalance(&delegator1_addr)
+	delegator2_old_balance := test.GetBalance(&delegator2_addr)
+	delegator3_old_balance := test.GetBalance(&delegator3_addr)
+	delegator4_old_balance := test.GetBalance(&delegator4_addr)
 	delegator4_old_balance.Sub(delegator4_old_balance, DefaultMinimumDeposit)
 
 	// Check getter
@@ -2230,10 +2369,10 @@ func TestRedelegateHF(t *testing.T) {
 
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
 
-	actual_delegator1_reward := bigutil.Sub(test.GetBalance(delegator1_addr), delegator1_old_balance)
-	actual_delegator2_reward := bigutil.Sub(test.GetBalance(delegator2_addr), delegator2_old_balance)
-	actual_delegator3_reward := bigutil.Sub(test.GetBalance(delegator3_addr), delegator3_old_balance)
-	actual_delegator4_reward := bigutil.Sub(test.GetBalance(delegator4_addr), delegator4_old_balance)
+	actual_delegator1_reward := bigutil.Sub(test.GetBalance(&delegator1_addr), delegator1_old_balance)
+	actual_delegator2_reward := bigutil.Sub(test.GetBalance(&delegator2_addr), delegator2_old_balance)
+	actual_delegator3_reward := bigutil.Sub(test.GetBalance(&delegator3_addr), delegator3_old_balance)
+	actual_delegator4_reward := bigutil.Sub(test.GetBalance(&delegator4_addr), delegator4_old_balance)
 
 	//Check claim vs getter result
 	tc.Assert.Equal(batch0_parsed_result.Delegations[0].Delegation.Rewards, actual_delegator1_reward)
@@ -2244,9 +2383,9 @@ func TestRedelegateHF(t *testing.T) {
 	tc.Assert.NotEqual(expected_delegator4_reward.Cmp(actual_delegator4_reward), 1)
 
 	// Check commission rewards
-	validator1_old_balance := test.GetBalance(validator1_owner)
-	validator2_old_balance := test.GetBalance(validator2_owner)
-	validator4_old_balance := test.GetBalance(validator4_owner)
+	validator1_old_balance := test.GetBalance(&validator1_owner)
+	validator2_old_balance := test.GetBalance(&validator2_owner)
+	validator4_old_balance := test.GetBalance(&validator4_owner)
 
 	test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator1_addr), util.ErrorString(""), util.ErrorString(""))
 	test.ExecuteAndCheck(delegator2_addr, big.NewInt(0), test.Pack("claimCommissionRewards", validator2_addr), util.ErrorString(""), util.ErrorString(""))
@@ -2256,9 +2395,9 @@ func TestRedelegateHF(t *testing.T) {
 		tc.Assert.Equal(claim_res.Logs[0].Topics[0], CommissionRewardsClaimedEventHash)
 	}
 
-	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(validator1_owner), validator1_old_balance)
-	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(validator2_owner), validator2_old_balance)
-	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(validator4_owner), validator4_old_balance)
+	actual_validator1_commission_reward := bigutil.Sub(test.GetBalance(&validator1_owner), validator1_old_balance)
+	actual_validator2_commission_reward := bigutil.Sub(test.GetBalance(&validator2_owner), validator2_old_balance)
+	actual_validator4_commission_reward := bigutil.Sub(test.GetBalance(&validator4_owner), validator4_old_balance)
 
 	tc.Assert.Equal(expected_validator1_commission_reward, actual_validator1_commission_reward)
 	tc.Assert.Equal(expected_validator2_commission_reward, actual_validator2_commission_reward)

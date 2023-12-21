@@ -43,8 +43,8 @@ import (
 // Fixed contract address
 var dpos_contract_address = new(common.Address).SetBytes(common.FromHex("0x00000000000000000000000000000000000000FE"))
 
-func ContractAddress() common.Address {
-	return *dpos_contract_address
+func ContractAddress() *common.Address {
+	return dpos_contract_address
 }
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
@@ -123,6 +123,11 @@ var (
 
 	field_eligible_vote_count = []byte{4}
 	field_amount_delegated    = []byte{5}
+
+	// Aspen hardfork new db fields
+	field_minted_tokens = []byte{6}
+	field_total_supply  = []byte{7}
+	field_yield         = []byte{8}
 )
 
 // State of the rewards distribution algorithm
@@ -145,6 +150,9 @@ type Contract struct {
 	logs Logs
 	evm  *vm.EVM
 
+	// Yield curve
+	yield_curve YieldCurve
+
 	// Iterable storages
 	validators    Validators
 	delegations   Delegations
@@ -159,6 +167,11 @@ type Contract struct {
 	yield_percentage         *uint256.Int
 	dag_proposers_reward     *uint256.Int
 	max_block_author_reward  *uint256.Int
+
+	minted_tokens *uint256.Int
+
+	// Total tara supply = genesis balances + block rewards
+	total_supply *uint256.Int
 
 	lazy_init_done bool
 }
@@ -225,18 +238,24 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimAllRewards":
-		// First 4 bytes is method signature !!!!
-		input := ctx.Input[4:]
-		var args dpos_sol.ClaimAllRewardsArgs
-		if err := method.Inputs.Unpack(&args, input); err != nil {
-			// args parsing will fail also during Run() so the tx wont get executed
-			return 0
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(evm.GetBlock().Number) {
+			delegations_count := uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address()))
+			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
+		} else {
+			// First 4 bytes is method signature !!!!
+			input := ctx.Input[4:]
+			var args dpos_sol.ClaimAllRewardsArgs
+			if err := method.Inputs.Unpack(&args, input); err != nil {
+				// args parsing will fail also during Run() so the tx wont get executed
+				return 0
+			}
+
+			delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
+			// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
+			// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
+			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 		}
 
-		delegations_count := self.batch_items_count(uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address())), uint64(args.Batch), ClaimAllRewardsMaxCount)
-		// delegations_count * DposBatchGetMethodsGas is the price for getting all validators from db(1:1 to getValidators gas) and
-		// delegations_count * ClaimRewardsGas is for calling claimRewards for each validator
-		return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 	case "getValidators":
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
@@ -337,6 +356,8 @@ func (self *Contract) lazy_init() {
 	self.delegations.Init(&self.storage, field_delegations)
 	self.undelegations.Init(&self.storage, field_undelegations)
 
+	self.yield_curve.Init(self.cfg)
+
 	self.blocks_per_year = uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))
 	self.yield_percentage = uint256.NewInt(uint64(self.cfg.DPOS.YieldPercentage))
 
@@ -353,6 +374,19 @@ func (self *Contract) lazy_init() {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
+
+	// Do not set self.total_supply default value to uint256.NewInt(0). Default value should be nil pointer as it is checked in code
+	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
+		self.total_supply = new(uint256.Int).SetBytes(bytes)
+	})
+
+	self.minted_tokens = uint256.NewInt(0)
+	// minted_tokens are no longer needed in case total_supply was already saved in db
+	if self.total_supply == nil {
+		self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
+			self.minted_tokens = new(uint256.Int).SetBytes(bytes)
+		})
+	}
 
 	self.lazy_init_done = true
 }
@@ -477,18 +511,21 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, block_num, args)
 
 	case "claimAllRewards":
-		var args dpos_sol.ClaimAllRewardsArgs
-		if err = method.Inputs.Unpack(&args, input); err != nil {
-			fmt.Println("Unable to parse claimAllRewards input args: ", err)
-			return nil, err
-		}
+		if self.cfg.Hardforks.IsAspenHardforkPartOne(block_num) {
+			return nil, self.claimAllRewards(ctx, block_num)
+		} else {
+			var args dpos_sol.ClaimAllRewardsArgs
+			if err = method.Inputs.Unpack(&args, input); err != nil {
+				fmt.Println("Unable to parse claimAllRewards input args: ", err)
+				return nil, err
+			}
 
-		result, err := self.claimAllRewards(ctx, block_num, args)
-		if err != nil {
-			return nil, err
+			result, err := self.claimAllRewardsPreAspenHF(ctx, block_num, args)
+			if err != nil {
+				return nil, err
+			}
+			return method.Outputs.Pack(result)
 		}
-		return method.Outputs.Pack(result)
-
 	case "claimCommissionRewards":
 		var args dpos_sol.ValidatorAddressArgs
 		if err = method.Inputs.Unpack(&args, input); err != nil {
@@ -613,9 +650,30 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	self.lazy_init()
 	blockAuthorAddr := &rewardsStats.BlockAuthor
 
-	// Calculates number of tokens to be generated as block reward
-	blockReward := new(uint256.Int).Mul(self.amount_delegated, self.yield_percentage)
-	blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
+	// Number of tokens to be generated as block reward
+	blockReward := new(uint256.Int)
+
+	current_block_num := self.evm.GetBlock().Number
+	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
+		if self.total_supply == nil {
+			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
+			self.saveTotalSupplyDb()
+
+			// Erase minted_tokens from db as it is no longer needed
+			self.eraseMintedTokensDb()
+		}
+
+		var yield *uint256.Int
+		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
+
+		// Save current yield - it changes every block as total_supply is growing every block
+		self.saveYieldDb(yield.Uint64())
+	} else {
+		// Original fixed yield curve
+		blockReward.Mul(self.amount_delegated, self.yield_percentage)
+		blockReward.Div(blockReward, new(uint256.Int).Mul(uint256.NewInt(100), self.blocks_per_year))
+	}
 
 	totalReward := uint256.NewInt(0)
 	votesReward := uint256.NewInt(0)
@@ -737,6 +795,14 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
+		self.total_supply.Add(self.total_supply, newMintedRewards)
+		self.saveTotalSupplyDb()
+	} else if self.cfg.Hardforks.IsAspenHardforkPartOne(current_block_num) {
+		self.minted_tokens.Add(self.minted_tokens, newMintedRewards)
+		self.saveMintedTokensDb()
+	}
+
 	return newMintedRewards
 }
 
@@ -744,7 +810,8 @@ func (self *Contract) delegate_update_values(ctx vm.CallFrame, validator *Valida
 	validator.TotalStake.Add(validator.TotalStake, ctx.Value)
 	v, _ := uint256.FromBig(ctx.Value)
 	self.amount_delegated.Add(self.amount_delegated, v)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, self.evm.GetBlock().Number)
 
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
@@ -783,7 +850,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 		state.Count++
 	}
 
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	if delegation == nil {
 		self.delegations.CreateDelegation(ctx.CallerAccount.Address(), &args.Validator, block, ctx.Value)
@@ -840,7 +907,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		return ErrInsufficientDelegation
 	}
 
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	state, state_k := self.state_get(args.Validator[:], BlockToBytes(block))
 	if state == nil {
@@ -878,7 +945,9 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 
 	a, _ := uint256.FromBig(args.Amount)
 	self.amount_delegated.Sub(self.amount_delegated, a)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
+
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -947,7 +1016,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 		return ErrNonExistentValidator
 	}
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
-	prev_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+
+	prev_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 
 	undelegation := self.undelegations.GetUndelegation(ctx.CallerAccount.Address(), &args.Validator)
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &args.Validator)
@@ -995,7 +1065,8 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 
 	a, _ := uint256.FromBig(undelegation.Amount)
 	self.amount_delegated.Add(self.amount_delegated, a)
-	new_vote_count := voteCount(validator.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+
+	new_vote_count := voteCount(validator.TotalStake, &self.cfg, block)
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1057,8 +1128,8 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		return ErrValidatorsMaxStakeExceeded
 	}
 
-	prev_vote_count_from := voteCount(validator_from.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
-	prev_vote_count_to := voteCount(validator_to.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+	prev_vote_count_from := voteCount(validator_from.TotalStake, &self.cfg, block)
+	prev_vote_count_to := voteCount(validator_to.TotalStake, &self.cfg, block)
 	//First we undelegate
 	{
 		delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.ValidatorFrom)
@@ -1120,7 +1191,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			self.validators.ModifyValidatorRewards(&args.ValidatorFrom, validator_rewards_from)
 		}
 
-		new_vote_count := voteCount(validator_from.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+		new_vote_count := voteCount(validator_from.TotalStake, &self.cfg, block)
 		if prev_vote_count_from != new_vote_count {
 			self.eligible_vote_count -= prev_vote_count_from
 			self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1166,7 +1237,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		validator_to.TotalStake.Add(validator_to.TotalStake, args.Amount)
 	}
 
-	new_vote_count := voteCount(validator_to.TotalStake, self.cfg.DPOS.EligibilityBalanceThreshold, self.cfg.DPOS.VoteEligibilityBalanceStep)
+	new_vote_count := voteCount(validator_to.TotalStake, &self.cfg, block)
 	if prev_vote_count_to != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count_to
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
@@ -1230,7 +1301,8 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 }
 
 // Pays off accumulated rewards back to delegator address from multiple validators at a time
-func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
+// NOTE this is old PRE-ASPEN HF version
+func (self *Contract) claimAllRewardsPreAspenHF(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
 	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
 	var tmp_claim_rewards_args dpos_sol.ValidatorAddressArgs
 	for _, validator_address := range delegator_validators_addresses {
@@ -1245,6 +1317,21 @@ func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum, ar
 
 	err = nil
 	return
+}
+
+// Pays off accumulated rewards back to delegator address from multiple validators at a time
+func (self *Contract) claimAllRewards(ctx vm.CallFrame, block types.BlockNum) error {
+	var tmpClaimRewardsArgs dpos_sol.ValidatorAddressArgs
+	for _, validatorAddress := range self.delegations.GetAllDelegatorValidatorsAddresses(ctx.CallerAccount.Address()) {
+		tmpClaimRewardsArgs.Validator = validatorAddress
+
+		tmp_err := self.claimRewards(ctx, block, tmpClaimRewardsArgs)
+		if tmp_err != nil {
+			return util.ErrorString(tmp_err.Error() + " -> validator: " + validatorAddress.String())
+		}
+	}
+
+	return nil
 }
 
 // Pays off rewards from commission back to validator owner address
@@ -1678,6 +1765,23 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
 }
 
+func (self *Contract) saveTotalSupplyDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
+}
+
+func (self *Contract) saveMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
+}
+
+func (self *Contract) eraseMintedTokensDb() {
+	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), nil)
+}
+
+func (self *Contract) saveYieldDb(yield uint64) {
+	yield_key := contract_storage.Stor_k_1(field_yield)
+	self.storage.Put(yield_key, rlp.MustEncodeToBytes(yield))
+}
+
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {
 	// ctx.Account == contract address
 	// ctx.CallerAccount == caller address
@@ -1696,11 +1800,16 @@ func BlockToBytes(number types.BlockNum) []byte {
 	return big.Bytes()
 }
 
-// Calculates vote count from staking balance based on config values
-func voteCount(staking_balance, eligibility_threshold, vote_eligibility_balance_step *big.Int) uint64 {
+func voteCount(staking_balance *big.Int, cfg *chain_config.ChainConfig, block types.BlockNum) uint64 {
 	tmp := big.NewInt(0)
-	if staking_balance.Cmp(eligibility_threshold) >= 0 {
-		tmp.Div(staking_balance, vote_eligibility_balance_step)
+	if cfg.Hardforks.IsAspenHardforkPartOne(block) {
+		if staking_balance.Cmp(cfg.DPOS.ValidatorMaximumStake) >= 0 {
+			tmp.Div(cfg.DPOS.ValidatorMaximumStake, cfg.DPOS.VoteEligibilityBalanceStep)
+		}
+	}
+
+	if staking_balance.Cmp(cfg.DPOS.EligibilityBalanceThreshold) >= 0 {
+		tmp.Div(staking_balance, cfg.DPOS.VoteEligibilityBalanceStep)
 	}
 	asserts.Holds(tmp.IsUint64())
 	return tmp.Uint64()

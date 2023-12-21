@@ -21,15 +21,31 @@ type MagnoliaHfConfig struct {
 	JailTime uint64 // [number of blocks]
 }
 
+type AspenHfConfig struct {
+	BlockNumPartOne  uint64 // part 1 just starts to save minted tokens (rewards) in db
+	BlockNumPartTwo  uint64 // part 2 implements new dynamic yield curve
+	MaxSupply        *big.Int
+	GeneratedRewards *big.Int // Total number of generated rewards between block 0 and AspenHf BlockNum
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+	AspenHf                      AspenHfConfig
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= c.MagnoliaHf.BlockNum
+}
+
+func (c *HardforksConfig) IsAspenHardforkPartOne(block types.BlockNum) bool {
+	return block >= c.AspenHf.BlockNumPartOne
+}
+
+func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
+	return block >= c.AspenHf.BlockNumPartTwo
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
@@ -41,7 +57,9 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 
 func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 	return vm.Rules{
-		IsMagnolia: isForked(c.MagnoliaHf.BlockNum, num),
+		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
+		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
+		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
 	}
 }
 
@@ -80,4 +98,13 @@ type ChainConfig struct {
 
 func (self *ChainConfig) RewardsEnabled() bool {
 	return self.DPOS.YieldPercentage > 0
+}
+
+func (self *ChainConfig) GenesisBalancesSum() *big.Int {
+	sum := big.NewInt(0)
+	for _, balance := range self.GenesisBalances {
+		sum.Add(sum, balance)
+	}
+
+	return sum
 }

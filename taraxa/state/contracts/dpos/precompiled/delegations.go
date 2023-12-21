@@ -120,6 +120,11 @@ func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Ad
 	return delegator_validators
 }
 
+func (self *Delegations) GetAllDelegatorValidatorsAddresses(delegator_address *common.Address) []common.Address {
+	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
+	return delegator_validators.GetAllAccounts()
+}
+
 func (self *Delegations) removeDelegatorValidatorsList(delegator_address *common.Address) {
 	delete(self.delegators_validators, *delegator_address)
 }
