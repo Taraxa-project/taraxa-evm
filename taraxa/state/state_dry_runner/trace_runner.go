@@ -3,7 +3,6 @@ package state_dry_runner
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
@@ -12,7 +11,6 @@ import (
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_evm"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 )
 
 type TraceRunner struct {
@@ -53,8 +51,6 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 	evm_state.SetInput(state_db.GetBlockState(self.db, blk.Number))
 	output := make([]any, len(*trxs))
 	for index, trx := range *trxs {
-		// we don't need to specify nonce for eth_call. So set correct one
-		trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
 		var evm vm.EVM
 		var tracer vm.Tracer
 		if conf != nil {
