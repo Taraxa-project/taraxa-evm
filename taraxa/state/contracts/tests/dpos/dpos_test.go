@@ -785,7 +785,7 @@ func TestAspenHf(t *testing.T) {
 	delegator1_stake := DefaultValidatorMaximumStake
 
 	// Creates single validator
-	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(validator1_owner, delegator1_stake, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, DefaultBlsKey, validator1_commission, "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	total_stake := delegator1_stake
 
 	// Empty rewards statistics
@@ -1308,7 +1308,7 @@ func TestGetValidators(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	intristic_gas_batch0 := 21400
@@ -1391,7 +1391,7 @@ func TestGetValidatorsFor(t *testing.T) {
 
 	// Register validators
 	for idx, validator := range gen_validators {
-		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "signer_addr_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, DefaultBlsKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	intristic_gas_batch0 := 21656
