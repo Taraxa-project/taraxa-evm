@@ -1270,7 +1270,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 			self.validators.DeleteValidator(&args.Validator)
 			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		} else {
-			if block >= self.cfg.Hardforks.FixCommissionBlockNum {
+			if self.isCoraHardfork(block) {
 				self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 			}
 		}
@@ -1680,6 +1680,10 @@ func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
+}
+
+func (self *Contract) isCoraHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsCoraHardfork(block)
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

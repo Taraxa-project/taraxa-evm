@@ -23,10 +23,14 @@ type MagnoliaHfConfig struct {
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
-	FixCommissionBlockNum        uint64
+	CoraHfBlockNum               uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+}
+
+func (c *HardforksConfig) IsCoraHardfork(block types.BlockNum) bool {
+	return block >= c.CoraHfBlockNum
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
