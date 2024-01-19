@@ -591,6 +591,12 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegations(args))
+	case "burn":
+		fmt.Println("Burn called", block_num, self.cfg.Hardforks.PhalaenopsisHfBlockNum)
+		if !self.cfg.Hardforks.IsPhalaenopsisHardfork(block_num) {
+			return nil, abi.MethodNotFoundError(ctx.Input[:4])
+		}
+		return nil, nil
 	default:
 	}
 
@@ -1270,7 +1276,7 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 			self.validators.DeleteValidator(&args.Validator)
 			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		} else {
-			if self.isCoraHardfork(block) {
+			if self.IsPhalaenopsisHardfork(block) {
 				self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 			}
 		}
@@ -1682,8 +1688,8 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
 }
 
-func (self *Contract) isCoraHardfork(block types.BlockNum) bool {
-	return self.cfg.Hardforks.IsCoraHardfork(block)
+func (self *Contract) IsPhalaenopsisHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsPhalaenopsisHardfork(block)
 }
 
 func transferContractBalance(ctx *vm.CallFrame, balance *big.Int) {

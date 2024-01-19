@@ -6,7 +6,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"math/big"
 	"strings"
 	"testing"
@@ -1716,8 +1715,6 @@ func TestValidatorsClass(t *testing.T) {
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
 
-	log.Println("\n\n********* yu dms")
-
 	// Must be here to setup some internal data in evm_state, otherwise it is not possible to write into contract storage
 	test.St.BeginBlock(&vm.BlockInfo{})
 
@@ -2267,4 +2264,28 @@ func TestRedelegateHF(t *testing.T) {
 	if contractBalance.Cmp(total_stake) == -1 {
 		t.Errorf("Balance left %d expected: %d", contractBalance, total_stake)
 	}
+}
+
+func TestPhalaenopsisHF(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.PhalaenopsisHfBlockNum = 3
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	testingAccount := addr(1)
+	testingAccountBalance := test.GetBalance(testingAccount)
+	burnAmount := big.NewInt(1000000)
+	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), test.Pack("burn"), util.ErrorString("no method with id: 0x44df8e70"), util.ErrorString(""))
+	tc.Assert.Equal(testingAccountBalance, test.GetBalance(testingAccount))
+
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+
+	dposBalanceBefore := test.GetBalance(dpos.ContractAddress())
+	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), test.Pack("burn"), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(testingAccountBalance.Sub(testingAccountBalance, burnAmount), test.GetBalance(testingAccount))
+	tc.Assert.Equal(dposBalanceBefore.Add(dposBalanceBefore, burnAmount), test.GetBalance(dpos.ContractAddress()))
+
+	// totalBalance := bigutil.Add(total_stake, reward)
+
 }
