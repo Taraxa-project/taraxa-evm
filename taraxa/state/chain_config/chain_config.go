@@ -23,6 +23,7 @@ type MagnoliaHfConfig struct {
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
+	FixCommissionBlockNum        uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig

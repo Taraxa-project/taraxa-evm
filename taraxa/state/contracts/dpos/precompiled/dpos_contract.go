@@ -1269,6 +1269,10 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		if !self.isMagnoliaHardfork(block) || validator.UndelegationsCount == 0 {
 			self.validators.DeleteValidator(&args.Validator)
 			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+		} else {
+			if block >= self.cfg.Hardforks.FixCommissionBlockNum {
+				self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
+			}
 		}
 	} else {
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
