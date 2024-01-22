@@ -37,9 +37,9 @@ type ContractTest struct {
 	abi           abi.ABI
 }
 
-func Init_test(contract_addr common.Address, contract_abi string, t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test ContractTest) {
+func Init_test(contract_addr *common.Address, contract_abi string, t *testing.T, cfg chain_config.ChainConfig) (tc tests.TestCtx, test ContractTest) {
 	tc = tests.NewTestCtx(t)
-	test.init(contract_addr, contract_abi, &tc, cfg)
+	test.init(*contract_addr, contract_abi, &tc, cfg)
 	return
 }
 
@@ -98,9 +98,9 @@ func (self *ContractTest) AdvanceBlock(author *common.Address, rewardsStats *rew
 	return
 }
 
-func (self *ContractTest) GetBalance(account common.Address) *big.Int {
+func (self *ContractTest) GetBalance(account *common.Address) *big.Int {
 	var bal_actual *big.Int
-	self.SUT.ReadBlock(self.blk_n).GetAccount(&account, func(account state_db.Account) {
+	self.SUT.ReadBlock(self.blk_n).GetAccount(account, func(account state_db.Account) {
 		bal_actual = account.Balance
 	})
 	return bal_actual
