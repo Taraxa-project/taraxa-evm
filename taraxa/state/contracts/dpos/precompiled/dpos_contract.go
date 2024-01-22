@@ -62,6 +62,7 @@ const (
 	DposGetMethodsGas         uint64 = 5000
 	DposBatchGetMethodsGas    uint64 = 5000
 	DefaultDposMethodGas      uint64 = 20000
+	BurnGas                   uint64 = 1000
 )
 
 // Contract methods error return values
@@ -315,6 +316,11 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
 		return undelegations_count * DposBatchGetMethodsGas
+	case "burn":
+		if !self.isPhalaenopsisHardfork(evm.GetBlock().Number) {
+			return 0
+		}
+		return BurnGas
 	default:
 	}
 
@@ -628,6 +634,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegations(args))
+	case "burn":
+		if !self.isPhalaenopsisHardfork(block_num) {
+			return nil, abi.MethodNotFoundError(ctx.Input[:4])
+		}
+		return nil, nil
 	default:
 	}
 
@@ -1356,6 +1367,10 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 		if !self.isMagnoliaHardfork(block) || validator.UndelegationsCount == 0 {
 			self.validators.DeleteValidator(&args.Validator)
 			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+		} else {
+			if self.isPhalaenopsisHardfork(block) {
+				self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
+			}
 		}
 	} else {
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
@@ -1763,6 +1778,10 @@ func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *
 
 func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
+}
+
+func (self *Contract) isPhalaenopsisHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsPhalaenopsisHardfork(block)
 }
 
 func (self *Contract) saveTotalSupplyDb() {

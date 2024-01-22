@@ -30,10 +30,15 @@ type AspenHfConfig struct {
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
+	PhalaenopsisHfBlockNum       uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
 	AspenHf                      AspenHfConfig
+}
+
+func (c *HardforksConfig) IsPhalaenopsisHardfork(block types.BlockNum) bool {
+	return block >= c.PhalaenopsisHfBlockNum
 }
 
 func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {

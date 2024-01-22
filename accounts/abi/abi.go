@@ -137,6 +137,10 @@ func (abi *ABI) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func MethodNotFoundError(id []byte) error {
+	return fmt.Errorf("no method with id: %#x", id)
+}
+
 // MethodById looks up a method by the 4-byte id
 // returns nil if none found
 func (abi *ABI) MethodById(sigdata []byte) (*Method, error) {
@@ -148,7 +152,7 @@ func (abi *ABI) MethodById(sigdata []byte) (*Method, error) {
 			return &method, nil
 		}
 	}
-	return nil, fmt.Errorf("no method with id: %#x", sigdata[:4])
+	return nil, MethodNotFoundError(sigdata[:4])
 }
 
 var revertSelector = crypto.Keccak256([]byte("Error(string)"))[:4]

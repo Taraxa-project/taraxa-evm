@@ -196,4 +196,9 @@ interface DposInterface {
         external
         view
         returns (UndelegationData[] memory undelegations, bool end);
+
+    /**
+     * @dev Burns the specified TARA value by transferring them to the dpos contract balance
+     */
+    function burn() external payable;
 }
