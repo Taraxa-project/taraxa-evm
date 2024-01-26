@@ -1,6 +1,7 @@
 package dpos
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -49,21 +50,23 @@ func ContractAddress() common.Address {
 
 // Gas constants - gas is determined based on storage writes. Each 32Bytes == 20k gas
 const (
-	RegisterValidatorGas      uint64 = 80000
-	SetCommissionGas          uint64 = 20000
-	DelegateGas               uint64 = 40000
-	UndelegateGas             uint64 = 60000
-	ConfirmUndelegateGas      uint64 = 20000
-	CancelUndelegateGas       uint64 = 60000
-	ReDelegateGas             uint64 = 80000
-	ClaimRewardsGas           uint64 = 40000
-	ClaimCommissionRewardsGas uint64 = 20000
-	SetValidatorInfoGas       uint64 = 20000
-	DposGetMethodsGas         uint64 = 5000
-	DposBatchGetMethodsGas    uint64 = 5000
-	DefaultDposMethodGas      uint64 = 20000
-	BurnGas                   uint64 = 1000
+	RegisterValidatorGas        uint64 = 80000
+	SetCommissionGas            uint64 = 20000
+	DelegateGas                 uint64 = 40000
+	UndelegateGas               uint64 = 60000
+	ConfirmUndelegateGas        uint64 = 20000
+	CancelUndelegateGas         uint64 = 60000
+	ReDelegateGas               uint64 = 80000
+	ClaimRewardsGas             uint64 = 40000
+	ClaimCommissionRewardsGas   uint64 = 20000
+	SetValidatorInfoGas         uint64 = 20000
+	DposGetMethodsGas           uint64 = 5000
+	DposBatchGetMethodsGas      uint64 = 5000
+	DefaultDposMethodGas        uint64 = 20000
+	TransferIntoDPoSContractGas uint64 = 1000
 )
+
+var TransferIntoDPoSContractMethod []byte = common.Hex2Bytes("44df8e70")
 
 // Contract methods error return values
 var (
@@ -189,6 +192,16 @@ func (self *Contract) Register(registry func(*common.Address, vm.PrecompiledCont
 	registry(&defensive_copy, self)
 }
 
+func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.BlockNum) bool {
+	if !bytes.Equal(input, TransferIntoDPoSContractMethod) {
+		return false
+	}
+	if !self.isPhalaenopsisHardfork(blockNum) {
+		return false
+	}
+	return true
+}
+
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
@@ -196,6 +209,9 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
+		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
+			return TransferIntoDPoSContractGas
+		}
 		return 0
 	}
 
@@ -297,11 +313,6 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
 		return undelegations_count * DposBatchGetMethodsGas
-	case "burn":
-		if !self.isPhalaenopsisHardfork(evm.GetBlock().Number) {
-			return 0
-		}
-		return BurnGas
 	default:
 	}
 
@@ -426,6 +437,9 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
+		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -597,11 +611,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegations(args))
-	case "burn":
-		if !self.isPhalaenopsisHardfork(block_num) {
-			return nil, abi.MethodNotFoundError(ctx.Input[:4])
-		}
-		return nil, nil
 	default:
 	}
 
