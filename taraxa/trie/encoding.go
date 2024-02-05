@@ -51,6 +51,23 @@ func hex_to_compact(in []byte, buf *hex_key_compact) (ret []byte) {
 	return
 }
 
+func hexToCompact(hex []byte) []byte {
+	terminator := byte(0)
+	if hasTerm(hex) {
+		terminator = 1
+		hex = hex[:len(hex)-1]
+	}
+	buf := make([]byte, len(hex)/2+1)
+	buf[0] = terminator << 5 // the flag byte
+	if len(hex)&1 == 1 {
+		buf[0] |= 1 << 4 // odd flag
+		buf[0] |= hex[0] // first nibble is contained in the first byte
+		hex = hex[1:]
+	}
+	decodeNibbles(hex, buf[1:])
+	return buf
+}
+
 func compact_to_hex(compact []byte) (ret []byte) {
 	ret = keybytesToHex(compact)
 	// delete terminator flag
@@ -76,16 +93,17 @@ func keybytesToHex(str []byte) (nibbles []byte) {
 	return
 }
 
-// hexToKeybytes turns hex nibbles into key bytes.
-// This can only be used for keys of even length.
-func hex_to_keybytes(in, out []byte) {
-	if hasTerm(in) {
-		in = in[:len(in)-1]
+func hexToKeybytes(hex []byte) []byte {
+	if hasTerm(hex) {
+		hex = hex[:len(hex)-1]
 	}
-	if len(in)&1 != 0 {
+	if len(hex)&1 != 0 {
 		panic("can't convert hex key of odd length")
 	}
-	decodeNibbles(in, out)
+
+	key := make([]byte, len(hex)/2)
+	decodeNibbles(hex, key)
+	return key
 }
 
 func decodeNibbles(nibbles []byte, bytes []byte) {
@@ -110,5 +128,6 @@ func prefixLen(a, b []byte) int {
 
 // hasTerm returns whether a hex key has the terminator flag.
 func hasTerm(s []byte) bool {
+	// return len(s)&1 != 0 && s[len(s)-1] == 16
 	return len(s) > 0 && s[len(s)-1] == 16
 }

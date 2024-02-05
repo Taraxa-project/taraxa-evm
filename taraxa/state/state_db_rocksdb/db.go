@@ -375,7 +375,7 @@ func (self *DB) GetDPOSConfigChanges() map[uint64][]byte {
 	it := self.db.NewIteratorCF(&ro, self.cf_handles[col_config_changes])
 	defer it.Close()
 	it.SeekToFirst()
-	for it = it; it.Valid(); it.Next() {
+	for ; it.Valid(); it.Next() {
 		key := big.NewInt(0).SetBytes(it.Key().Data()).Uint64()
 		// make a copy of bytes
 		res[key] = append([]byte(nil), it.Value().Data()...)

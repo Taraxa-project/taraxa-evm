@@ -30,7 +30,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bin"
 )
 
-const EmptyString = 0x80
+const EmptyString = byte(0x80)
 
 var encoderInterface = reflect.TypeOf(new(RLPEncodable)).Elem()
 

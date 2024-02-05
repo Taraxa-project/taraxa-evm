@@ -5,12 +5,14 @@ package main
 //#include <rocksdb/c.h>
 import "C"
 import (
+	"fmt"
 	"math/big"
 	"sync"
 	"unsafe"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 	"github.com/holiman/uint256"
 
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db_rocksdb"
@@ -406,6 +408,65 @@ func taraxa_evm_state_api_validators_stakes(
 ) {
 	defer handle_err(cb_err)
 	ret := state_API_instances[ptr].DPOSReader(blk_n).GetValidatorsTotalStakes()
+	enc_rlp(&ret, cb)
+}
+
+//export taraxa_evm_state_api_get_proof
+func taraxa_evm_state_api_get_proof(
+	ptr C.taraxa_evm_state_API_ptr,
+	params_enc C.taraxa_evm_Bytes,
+	cb C.taraxa_evm_BytesCallback,
+	cb_err C.taraxa_evm_BytesCallback,
+) {
+	defer handle_err(cb_err)
+	var params struct {
+		BlkNum    types.BlockNum
+		Addr      common.Address
+		StateRoot common.Hash
+		Keys      []common.Hash
+	}
+	dec_rlp(params_enc, &params)
+
+	type StorageProof struct {
+		Key   common.Hash
+		Value []byte
+		Proof [][]byte
+	}
+	var ret struct {
+		Balance      big.Int
+		CodeHash     common.Hash
+		Nonce        big.Int
+		StorageHash  common.Hash
+		AccountProof [][]byte
+		StorageProof []StorageProof
+	}
+
+	blk_state := state_API_instances[ptr].ReadBlock(params.BlkNum)
+	blk_state.GetAccount(&params.Addr, func(acc state_db.Account) {
+		ret.Balance = *acc.Balance
+		ret.CodeHash = *acc.CodeHash
+		ret.Nonce = *acc.Nonce
+		ret.StorageHash = *acc.StorageRootHash
+	})
+	var err error
+	ret.AccountProof, err = blk_state.GetStorageProof(&params.StateRoot, &params.Addr)
+	if err != nil {
+		fmt.Println("GetStorageProof error:", err)
+	}
+	for _, key := range params.Keys {
+		var proof StorageProof
+		proof.Key = key
+		proof.Proof, err = blk_state.GetProof(&params.Addr, &key)
+		if err != nil {
+			fmt.Println("GetProof error:", err)
+		}
+		blk_state.GetAccountStorage(&params.Addr, &key, func(bytes []byte) {
+			proof.Value = bytes
+		})
+
+		ret.StorageProof = append(ret.StorageProof, proof)
+	}
+
 	enc_rlp(&ret, cb)
 }
 

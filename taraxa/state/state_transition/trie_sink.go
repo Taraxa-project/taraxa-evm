@@ -55,7 +55,7 @@ func (self *TrieSink) StartMutation(addr *common.Address) state_evm.AccountMutat
 func (self *TrieSink) Delete(addr *common.Address) {
 	io := self.io
 	self.thread_main_trie_write.Submit(func() {
-		self.main_trie_writer.Delete(state_db.MainTrieIOAdapter{io}, keccak256.Hash(addr[:]))
+		self.main_trie_writer.Delete(state_db.MainTrieIOAdapter{ReadWriter: io}, keccak256.Hash(addr[:]))
 	})
 }
 
@@ -78,7 +78,7 @@ func (self *TrieSinkAccountMutation) Update(upd state_evm.AccountChange) {
 	if !self.pending {
 		self.pending = true
 		self.host.thread_main_trie_write.Submit(func() {
-			self.host.main_trie_writer.Put(state_db.MainTrieIOAdapter{io}, keccak256.Hash(self.addr[:]), self)
+			self.host.main_trie_writer.Put(state_db.MainTrieIOAdapter{ReadWriter: io}, keccak256.Hash(self.addr[:]), self)
 		})
 	}
 	self.thread.Submit(func() {
@@ -91,7 +91,7 @@ func (self *TrieSinkAccountMutation) Update(upd state_evm.AccountChange) {
 				Init(state_db.AccountTrieSchema{}, upd.StorageRootHash, trie.WriterOpts{})
 		}
 		var big_conv bigconv.BigConv
-		trie_io := state_db.AccountTrieIOAdapter{self.addr, io}
+		trie_io := state_db.AccountTrieIOAdapter{Addr: self.addr, ReadWriter: io}
 		for k, v := range upd.StorageDirty {
 			if k_h := keccak256.Hash(big_conv.ToHash(k.Int())[:]); v.Sign() == 0 {
 				self.trie_writer.Delete(trie_io, k_h)
@@ -117,7 +117,7 @@ func (self *TrieSinkAccountMutation) Commit() {
 	io := self.host.io
 	self.thread.Submit(func() {
 		if self.trie_writer != nil {
-			self.acc.StorageRootHash = self.trie_writer.Commit(state_db.AccountTrieIOAdapter{self.addr, io})
+			self.acc.StorageRootHash = self.trie_writer.Commit(state_db.AccountTrieIOAdapter{Addr: self.addr, ReadWriter: io})
 		}
 		self.enc_storage, self.enc_hash = self.acc.EncodeForTrie()
 	})
@@ -132,7 +132,7 @@ func (self *TrieSink) Commit() (state_root common.Hash) {
 	state_root = state_common.EmptyRLPListHash
 	io := self.io
 	self.thread_main_trie_write.Submit(func() {
-		if state_root_p := self.main_trie_writer.Commit(state_db.MainTrieIOAdapter{io}); state_root_p != nil {
+		if state_root_p := self.main_trie_writer.Commit(state_db.MainTrieIOAdapter{ReadWriter: io}); state_root_p != nil {
 			state_root = *state_root_p
 		}
 	})
