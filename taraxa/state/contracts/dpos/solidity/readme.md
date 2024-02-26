@@ -24,3 +24,11 @@ run
 ```
 abigen --abi=DposInterface.abi --pkg=taraxaDposClient --out=dpos_contract_interface.go
 ```
+
+#### Create implementation bytecode 
+
+run
+```
+solc --bin-runtime --overwrite --optimize dpos_contract_impl.sol --output-dir .
+```
+Copy bytecode from `DposDummyImpl.bin-runtime` file to `var TaraxaDposImplBytecode` variable in `dpos_contract_solidity_structs.go` file. 
