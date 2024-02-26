@@ -2414,14 +2414,14 @@ func TestPhalaenopsisHF(t *testing.T) {
 	testingAccount := addr(1)
 	testingAccountBalance := test.GetBalance(&testingAccount)
 	burnAmount := big.NewInt(1000000)
-	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), test.Pack("burn"), util.ErrorString("no method with id: 0x44df8e70"), util.ErrorString(""))
+	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), dpos.TransferIntoDPoSContractMethod, util.ErrorString("no method with id: 0x44df8e70"), util.ErrorString(""))
 	tc.Assert.Equal(testingAccountBalance, test.GetBalance(&testingAccount))
 
 	test.AdvanceBlock(nil, nil)
 	test.AdvanceBlock(nil, nil)
 
 	dposBalanceBefore := test.GetBalance(dpos.ContractAddress())
-	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), test.Pack("burn"), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(testingAccount, big.NewInt(1000000), dpos.TransferIntoDPoSContractMethod, util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(testingAccountBalance.Sub(testingAccountBalance, burnAmount), test.GetBalance(&testingAccount))
 	tc.Assert.Equal(dposBalanceBefore.Add(dposBalanceBefore, burnAmount), test.GetBalance(dpos.ContractAddress()))
 
