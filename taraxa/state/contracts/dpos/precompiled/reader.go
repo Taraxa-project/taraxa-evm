@@ -5,9 +5,11 @@ import (
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/rlp"
+	"github.com/holiman/uint256"
 
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -18,24 +20,26 @@ import (
 
 type Reader struct {
 	cfg             *chain_config.ChainConfig
-	storage         *storage.StorageReaderWrapper
+	delayed_block_n types.BlockNum
+	delayed_storage *storage.StorageReaderWrapper
 	slashing_reader *slashing.Reader
 }
 
 func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) storage.StorageReader) *Reader {
 	r.cfg = cfg
-	blk_n_actual := uint64(0)
+
+	r.delayed_block_n = uint64(0)
 	if uint64(r.cfg.DPOS.DelegationDelay) < blk_n {
-		blk_n_actual = blk_n - uint64(r.cfg.DPOS.DelegationDelay)
+		r.delayed_block_n = blk_n - uint64(r.cfg.DPOS.DelegationDelay)
 	}
 
-	r.storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(blk_n_actual))
+	r.delayed_storage = new(storage.StorageReaderWrapper).Init(dpos_contract_address, storage_factory(r.delayed_block_n))
 	r.slashing_reader = new(slashing.Reader).Init(cfg, blk_n, r, storage_factory)
 	return r
 }
 
 func (r Reader) TotalEligibleVoteCount() (ret uint64) {
-	r.storage.Get(storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		ret = bin.DEC_b_endian_compact_64(bytes)
 	})
 	for _, addr := range r.slashing_reader.GetJailedValidators() {
@@ -45,12 +49,12 @@ func (r Reader) TotalEligibleVoteCount() (ret uint64) {
 }
 
 func (r Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
-	return voteCount(r.GetStakingBalance(addr), r.cfg.DPOS.EligibilityBalanceThreshold, r.cfg.DPOS.VoteEligibilityBalanceStep)
+	return voteCount(r.GetStakingBalance(addr), r.cfg, r.delayed_block_n)
 }
 
 func (r Reader) TotalAmountDelegated() (ret *big.Int) {
 	ret = big.NewInt(0)
-	r.storage.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
 	return
@@ -62,7 +66,7 @@ func (r Reader) IsEligible(address *common.Address) bool {
 
 func (r Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	ret = big.NewInt(0)
-	r.storage.Get(storage.Stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_validators, validator_index, addr[:]), func(bytes []byte) {
 		validator := new(Validator)
 		validator.ValidatorV1 = new(ValidatorV1)
 
@@ -89,7 +93,7 @@ type ValidatorStake struct {
 
 func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 	reader := new(storage.AddressesIMapReader)
-	reader.Init(r.storage, append(field_validators, validator_list_index...))
+	reader.Init(r.delayed_storage, append(field_validators, validator_list_index...))
 
 	validators, _ := reader.GetAccounts(0, reader.GetCount())
 
@@ -101,8 +105,39 @@ func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 }
 
 func (r Reader) GetVrfKey(addr *common.Address) (ret []byte) {
-	r.storage.Get(storage.Stor_k_1(field_validators, validator_vrf_index, addr[:]), func(bytes []byte) {
+	r.delayed_storage.Get(storage.Stor_k_1(field_validators, validator_vrf_index, addr[:]), func(bytes []byte) {
 		ret = bytes
 	})
 	return
+}
+
+func (r Reader) GetYield() uint64 {
+	// Yield is saved & updated since Aspen hardfork
+	if !r.cfg.Hardforks.IsAspenHardforkPartTwo(r.delayed_block_n) {
+		return 0
+	}
+
+	yield := uint64(0)
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_yield), func(bytes []byte) {
+		rlp.MustDecodeBytes(bytes, &yield)
+	})
+
+	// To get percents -> yield / 10000
+	// To get fraction -> yield / 1000000 (YieldFractionDecimalPrecision)
+
+	return yield
+}
+
+func (r Reader) GetTotalSupply() *big.Int {
+	// Total supply is saved & updated since Aspen hardfork
+	if !r.cfg.Hardforks.IsAspenHardforkPartTwo(r.delayed_block_n) {
+		return big.NewInt(0)
+	}
+
+	total_supply := uint256.NewInt(0)
+	r.delayed_storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
+		total_supply.SetBytes(bytes)
+	})
+
+	return total_supply.ToBig()
 }
