@@ -943,7 +943,10 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
-		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+		state.RewardsPer1Stake = old_state.RewardsPer1Stake
+		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
+			state.RewardsPer1Stake.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+		}
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
@@ -1648,8 +1651,12 @@ func (self *Contract) getDelegations(args dpos_sol.GetDelegationsArgs) (delegati
 			// This should never happen
 			panic("getDelegations - unable to state data")
 		}
-		current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
-		reward_per_stake := bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
+
+		reward_per_stake := big.NewInt(0)
+		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
+			current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+			reward_per_stake = bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
+		}
 		////
 
 		delegation_data.Delegation.Rewards = self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
