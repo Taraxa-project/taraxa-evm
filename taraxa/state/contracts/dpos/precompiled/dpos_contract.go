@@ -2,6 +2,7 @@ package dpos
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -213,6 +214,44 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 		return false
 	}
 	return true
+}
+
+// GetOldClaimAllRewards returns the *old* ABI method for claiming all rewards in the DPOS contract.
+// It should be there, so we son't have a different result during the syncing. And it is hardcoded because we don't need it in the actual interface.
+// If the block number is part of the Aspen hardfork, it returns nil.
+// If the input matches the specified hex value, it returns the ABI method for claiming all rewards.
+func (self *Contract) GetOldClaimAllRewards(input []byte, blockNum types.BlockNum) *abi.Method {
+	if self.cfg.Hardforks.IsAspenHardforkPartOne(blockNum) {
+		return nil
+	}
+	if bytes.Equal(input[0:4], common.FromHex("0x09b72e00")) {
+		method := new(abi.Method)
+		err := json.Unmarshal([]byte(`{
+			"name": "claimAllRewards",
+			"stateMutability": "nonpayable",
+			"type": "function",
+			"inputs": [
+				{
+					"internalType": "uint32",
+					"name": "batch",
+					"type": "uint32"
+				}
+			],
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "end",
+					"type": "bool"
+				}
+			]
+		}`), method)
+
+		if err != nil {
+			return nil
+		}
+		return method
+	}
+	return nil
 }
 
 // Calculate required gas for call to this contract
@@ -473,8 +512,11 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
 			return nil, nil
+		} else if m := self.GetOldClaimAllRewards(ctx.Input, evm.GetBlock().Number); m != nil {
+			method = m
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	// First 4 bytes is method signature !!!!
