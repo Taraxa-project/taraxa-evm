@@ -79,6 +79,7 @@ var (
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
 	ErrExistentValidator            = util.ErrorString("Validator already exist")
 	ErrSameValidator                = util.ErrorString("From and to validators are the same")
+	ErrInvalidRedelegation          = util.ErrorString("Redelegation has to be more than 0")
 	ErrBrokenState                  = util.ErrorString("Fatal error state is broken")
 	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
 	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
@@ -1119,6 +1120,11 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	if self.cfg.Hardforks.FixRedelegateBlockNum < block {
 		if args.ValidatorFrom == args.ValidatorTo {
 			return ErrSameValidator
+		}
+	}
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(block) {
+		if args.Amount.Cmp(big.NewInt(0)) <= 0 {
+			return ErrInvalidRedelegation
 		}
 	}
 
