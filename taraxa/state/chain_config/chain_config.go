@@ -30,11 +30,11 @@ type AspenHfConfig struct {
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
-	FixClaimAllBlockNum          uint64
-	PhalaenopsisHfBlockNum       uint64
 	Redelegations                []Redelegation
 	RewardsDistributionFrequency map[uint64]uint32
 	MagnoliaHf                   MagnoliaHfConfig
+	PhalaenopsisHfBlockNum       uint64
+	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
 }
 
