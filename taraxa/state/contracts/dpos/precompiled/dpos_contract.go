@@ -2,7 +2,6 @@ package dpos
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -216,44 +215,6 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 	return true
 }
 
-// GetOldClaimAllRewards returns the *old* ABI method for claiming all rewards in the DPOS contract.
-// It should be there, so we son't have a different result during the syncing. And it is hardcoded because we don't need it in the actual interface.
-// If the block number is part of the Aspen hardfork, it returns nil.
-// If the input matches the specified hex value, it returns the ABI method for claiming all rewards.
-func (self *Contract) GetOldClaimAllRewards(input []byte, blockNum types.BlockNum) *abi.Method {
-	if self.cfg.Hardforks.IsAspenHardforkPartOne(blockNum) {
-		return nil
-	}
-	if bytes.Equal(input[0:4], common.FromHex("0x09b72e00")) {
-		method := new(abi.Method)
-		err := json.Unmarshal([]byte(`{
-			"name": "claimAllRewards",
-			"stateMutability": "nonpayable",
-			"type": "function",
-			"inputs": [
-				{
-					"internalType": "uint32",
-					"name": "batch",
-					"type": "uint32"
-				}
-			],
-			"outputs": [
-				{
-					"internalType": "bool",
-					"name": "end",
-					"type": "bool"
-				}
-			]
-		}`), method)
-
-		if err != nil {
-			return nil
-		}
-		return method
-	}
-	return nil
-}
-
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
@@ -262,9 +223,14 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
-			return TransferIntoDPoSContractGas
+			return 0
+		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(evm.GetBlock().Number) {
+			if method = self.GetOldClaimAllRewardsABI(ctx.Input, evm.GetBlock().Number); method == nil {
+				return 0
+			}
+		} else {
+			return 0
 		}
-		return 0
 	}
 
 	switch method.Name {
@@ -510,10 +476,12 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
-		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
+		if self.IsTransferIntoDPoSContract(ctx.Input, block_num) {
 			return nil, nil
-		} else if m := self.GetOldClaimAllRewards(ctx.Input, evm.GetBlock().Number); m != nil {
-			method = m
+		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(block_num) {
+			if method = self.GetOldClaimAllRewardsABI(ctx.Input, block_num); method == nil {
+				return nil, err
+			}
 		} else {
 			return nil, err
 		}
@@ -1143,29 +1111,6 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	return nil
 }
 
-func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
-	for _, redelegation := range self.cfg.Hardforks.Redelegations {
-		delegation := self.delegations.GetDelegation(&redelegation.Delegator, &redelegation.Validator)
-
-		val := self.validators.GetValidator(&redelegation.Validator)
-
-		fmt.Println("Applying HF on validator", redelegation.Validator.String(), "delegator", redelegation.Delegator.String())
-
-		state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(delegation.LastUpdated))
-		wrong_state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(val.LastUpdated))
-		if wrong_state != nil || state == nil {
-			panic("HF on wrong account")
-		}
-
-		fmt.Println("Fixing block from", val.LastUpdated, "to", delegation.LastUpdated)
-
-		// Corrected block num
-		val.LastUpdated = delegation.LastUpdated
-		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block_num), &redelegation.Validator, val)
-	}
-}
-
 // Moves delegated tokens from one delegator to another
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.RedelegateArgs) error {
 	if self.cfg.Hardforks.FixRedelegateBlockNum < block {
@@ -1360,25 +1305,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	self.state_put(&state_k, state)
 
 	return nil
-}
-
-// Pays off accumulated rewards back to delegator address from multiple validators at a time
-// NOTE this is old PRE-ASPEN HF version
-func (self *Contract) claimAllRewardsPreAspenHF(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
-	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
-	var tmp_claim_rewards_args dpos_sol.ValidatorAddressArgs
-	for _, validator_address := range delegator_validators_addresses {
-		tmp_claim_rewards_args.Validator = validator_address
-
-		tmp_err := self.claimRewards(ctx, block, tmp_claim_rewards_args)
-		if tmp_err != nil {
-			err = util.ErrorString(tmp_err.Error() + " -> validator: " + validator_address.String())
-			return
-		}
-	}
-
-	err = nil
-	return
 }
 
 // Pays off accumulated rewards back to delegator address from multiple validators at a time
