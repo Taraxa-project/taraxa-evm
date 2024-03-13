@@ -221,13 +221,14 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	if len(ctx.Input) < 4 {
 		return 0
 	}
+
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
 	self.lazy_init()
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
-			return 0
+			return TransferIntoDPoSContractGas
 		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(evm.GetBlock().Number) {
 			if method = self.GetOldClaimAllRewardsABI(ctx.Input, evm.GetBlock().Number); method == nil {
 				return 0
