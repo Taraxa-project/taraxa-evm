@@ -218,6 +218,9 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	if len(ctx.Input) < 4 {
+		return 0
+	}
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
 	self.lazy_init()
 
@@ -466,6 +469,10 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 // This is called on each call to contract
 // It translates call and tries to execute them
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
+	if len(ctx.Input) < 4 {
+		return nil, fmt.Errorf("data too short (% bytes) for abi method lookup", len(ctx.Input))
+	}
+
 	block_num := evm.GetBlock().Number
 
 	if self.cfg.Hardforks.FixRedelegateBlockNum > block_num {
