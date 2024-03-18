@@ -79,6 +79,7 @@ var (
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
 	ErrExistentValidator            = util.ErrorString("Validator already exist")
 	ErrSameValidator                = util.ErrorString("From and to validators are the same")
+	ErrInvalidRedelegation          = util.ErrorString("Redelegation has to be more than 0")
 	ErrBrokenState                  = util.ErrorString("Fatal error state is broken")
 	ErrValidatorsMaxStakeExceeded   = util.ErrorString("Validator's max stake exceeded")
 	ErrInsufficientDelegation       = util.ErrorString("Insufficient delegation")
@@ -217,6 +218,10 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
+	if len(ctx.Input) < 4 {
+		return 0
+	}
+
 	// Init abi and some of the structures required for calculating gas, e.g. self.validators for getValidators
 	self.lazy_init()
 
@@ -224,8 +229,13 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
 			return TransferIntoDPoSContractGas
+		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(evm.GetBlock().Number) {
+			if method = self.GetOldClaimAllRewardsABI(ctx.Input, evm.GetBlock().Number); method == nil {
+				return 0
+			}
+		} else {
+			return 0
 		}
-		return 0
 	}
 
 	switch method.Name {
@@ -460,6 +470,10 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 // This is called on each call to contract
 // It translates call and tries to execute them
 func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
+	if len(ctx.Input) < 4 {
+		return nil, fmt.Errorf("data too short (% bytes) for abi method lookup", len(ctx.Input))
+	}
+
 	block_num := evm.GetBlock().Number
 
 	if self.cfg.Hardforks.FixRedelegateBlockNum > block_num {
@@ -471,10 +485,15 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
-		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
+		if self.IsTransferIntoDPoSContract(ctx.Input, block_num) {
 			return nil, nil
+		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(block_num) {
+			if method = self.GetOldClaimAllRewardsABI(ctx.Input, block_num); method == nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	// First 4 bytes is method signature !!!!
@@ -933,7 +952,10 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	if state == nil {
 		old_state := self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		state = new(State)
-		state.RewardsPer1Stake = bigutil.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+		state.RewardsPer1Stake = old_state.RewardsPer1Stake
+		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
+			state.RewardsPer1Stake.Add(old_state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+		}
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
@@ -1101,34 +1123,16 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, a
 	return nil
 }
 
-func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
-	for _, redelegation := range self.cfg.Hardforks.Redelegations {
-		delegation := self.delegations.GetDelegation(&redelegation.Delegator, &redelegation.Validator)
-
-		val := self.validators.GetValidator(&redelegation.Validator)
-
-		fmt.Println("Applying HF on validator", redelegation.Validator.String(), "delegator", redelegation.Delegator.String())
-
-		state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(delegation.LastUpdated))
-		wrong_state, _ := self.state_get(redelegation.Validator[:], BlockToBytes(val.LastUpdated))
-		if wrong_state != nil || state == nil {
-			panic("HF on wrong account")
-		}
-
-		fmt.Println("Fixing block from", val.LastUpdated, "to", delegation.LastUpdated)
-
-		// Corrected block num
-		val.LastUpdated = delegation.LastUpdated
-		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block_num), &redelegation.Validator, val)
-	}
-}
-
 // Moves delegated tokens from one delegator to another
 func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.RedelegateArgs) error {
 	if self.cfg.Hardforks.FixRedelegateBlockNum < block {
 		if args.ValidatorFrom == args.ValidatorTo {
 			return ErrSameValidator
+		}
+	}
+	if self.cfg.Hardforks.IsAspenHardforkPartTwo(block) {
+		if args.Amount.Cmp(big.NewInt(0)) <= 0 {
+			return ErrInvalidRedelegation
 		}
 	}
 
@@ -1318,25 +1322,6 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 	self.state_put(&state_k, state)
 
 	return nil
-}
-
-// Pays off accumulated rewards back to delegator address from multiple validators at a time
-// NOTE this is old PRE-ASPEN HF version
-func (self *Contract) claimAllRewardsPreAspenHF(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ClaimAllRewardsArgs) (end bool, err error) {
-	delegator_validators_addresses, end := self.delegations.GetDelegatorValidatorsAddresses(ctx.CallerAccount.Address(), args.Batch, ClaimAllRewardsMaxCount)
-	var tmp_claim_rewards_args dpos_sol.ValidatorAddressArgs
-	for _, validator_address := range delegator_validators_addresses {
-		tmp_claim_rewards_args.Validator = validator_address
-
-		tmp_err := self.claimRewards(ctx, block, tmp_claim_rewards_args)
-		if tmp_err != nil {
-			err = util.ErrorString(tmp_err.Error() + " -> validator: " + validator_address.String())
-			return
-		}
-	}
-
-	err = nil
-	return
 }
 
 // Pays off accumulated rewards back to delegator address from multiple validators at a time
@@ -1680,8 +1665,12 @@ func (self *Contract) getDelegations(args dpos_sol.GetDelegationsArgs) (delegati
 			// This should never happen
 			panic("getDelegations - unable to state data")
 		}
-		current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
-		reward_per_stake := bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
+
+		reward_per_stake := big.NewInt(0)
+		if validator.TotalStake.Cmp(big.NewInt(0)) > 0 {
+			current_reward_per_stake := bigutil.Add(state.RewardsPer1Stake, self.calculateRewardPer1Stake(validator_rewards.RewardsPool, validator.TotalStake))
+			reward_per_stake = bigutil.Sub(current_reward_per_stake, old_state.RewardsPer1Stake)
+		}
 		////
 
 		delegation_data.Delegation.Rewards = self.calculateDelegatorReward(reward_per_stake, delegation.Stake)

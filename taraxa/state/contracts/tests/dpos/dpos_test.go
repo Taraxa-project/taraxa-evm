@@ -311,6 +311,9 @@ func TestRedelegate(t *testing.T) {
 	// Validator can not redelegate to same validator
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator1_addr, DefaultMinimumDeposit), dpos.ErrSameValidator, util.ErrorString(""))
 
+	// Check for negative and zero redelegation
+	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("reDelegate", validator1_addr, validator2_addr, big.NewInt(0)), dpos.ErrInvalidRedelegation, util.ErrorString(""))
+
 	test.CheckContractBalance(totalBalance)
 }
 
