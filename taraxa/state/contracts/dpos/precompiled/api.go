@@ -30,7 +30,7 @@ type GenesisTransfer = struct {
 	Value       *big.Int
 }
 
-func (self *API) Init(cfg chain_config.ChainConfig) *API {
+func (api *API) Init(cfg chain_config.ChainConfig) *API {
 	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.DPOS.DelegationLockingPeriod)
 
 	asserts.Holds(cfg.DPOS.EligibilityBalanceThreshold != nil)
@@ -74,56 +74,62 @@ func (self *API) Init(cfg chain_config.ChainConfig) *API {
 		fmt.Printf("! Warning: Starting yield is %d %%, which is > ideal yield (20 %%). To make the yield some specific number, adjust either GenesisBalances or Hardforks.AspenHf.MaxSupply as Yield = (MaxSupply - Sum of GenesisBalances) / Sum of GenesisBalances\n", new(uint256.Int).Div(yield, decimal_precision))
 	}
 
-	self.config = cfg
-	return self
+	api.config = cfg
+	return api
 }
 
-func (self *API) GetConfigByBlockNum(blk_n uint64) chain_config.ChainConfig {
-	for i, e := range self.config_by_block {
+func (api *API) GetConfigByBlockNum(blk_n uint64) chain_config.ChainConfig {
+	for i, e := range api.config_by_block {
 		// numeric_limits::max
 		next_block_num := ^uint64(0)
-		l_size := len(self.config_by_block)
+		l_size := len(api.config_by_block)
 		if i < l_size-1 {
-			next_block_num = self.config_by_block[i+1].Blk_n
+			next_block_num = api.config_by_block[i+1].Blk_n
 		}
 		if (e.Blk_n <= blk_n) && (next_block_num > blk_n) {
-			cfg := self.config
+			cfg := api.config
 			cfg.DPOS = e.DposConfig
 			return cfg
 		}
 	}
-	return self.config
+	return api.config
 }
 
-func (self *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
-	self.config_by_block = append(self.config_by_block, DposConfigWithBlock{cfg.DPOS, blk_n})
-	self.config = cfg
+func (api *API) UpdateConfig(blk_n types.BlockNum, cfg chain_config.ChainConfig) {
+	api.config_by_block = append(api.config_by_block, DposConfigWithBlock{cfg.DPOS, blk_n})
+	api.config = cfg
 }
 
-func (self *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
-	return new(Contract).Init(self.config, storage, reader, evm)
+func (api *API) NewContract(storage contract_storage.Storage, reader Reader, evm *vm.EVM) *Contract {
+	return new(Contract).Init(api.config, storage, reader, evm)
 }
 
-func (self *API) NewSlashingContract(storage contract_storage.Storage, reader slashing.Reader, evm *vm.EVM) *slashing.Contract {
-	return new(slashing.Contract).Init(self.config, storage, reader, evm)
+func (api *API) NewSlashingContract(storage contract_storage.Storage, reader slashing.Reader, evm *vm.EVM) *slashing.Contract {
+	return new(slashing.Contract).Init(api.config, storage, reader, evm)
 }
 
-func (self *API) InitAndRegisterAllContracts(storage contract_storage.Storage, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader, evm *vm.EVM, registry func(*common.Address, vm.PrecompiledContract)) {
-	new(Contract).Init(self.config, storage, self.NewReader(blk_n, storage_factory), evm).Register(registry)
-	if self.config.Hardforks.IsMagnoliaHardfork(blk_n) {
-		new(slashing.Contract).Init(self.config, storage, self.NewSlashingReader(blk_n, storage_factory), evm).Register(registry)
+func (api *API) InitAndRegisterAllContracts(storage contract_storage.Storage, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader, evm *vm.EVM, registry func(*common.Address, vm.PrecompiledContract)) {
+	new(Contract).Init(api.config, storage, api.NewDelayedReader(blk_n, storage_factory), evm).Register(registry)
+	if api.config.Hardforks.IsMagnoliaHardfork(blk_n) {
+		new(slashing.Contract).Init(api.config, storage, api.NewSlashingReader(blk_n, storage_factory), evm).Register(registry)
 	}
 }
 
-func (self *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
-	cfg := self.GetConfigByBlockNum(blk_n)
+func (api *API) NewDelayedReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
+	cfg := api.GetConfigByBlockNum(blk_n)
+	ret.InitDelayedReader(&cfg, blk_n, storage_factory)
+	return
+}
+
+func (api *API) NewReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret Reader) {
+	cfg := api.GetConfigByBlockNum(blk_n)
 	ret.Init(&cfg, blk_n, storage_factory)
 	return
 }
 
-func (self *API) NewSlashingReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret slashing.Reader) {
-	cfg := self.GetConfigByBlockNum(blk_n)
-	dpos_reader := self.NewReader(blk_n, storage_factory)
+func (api *API) NewSlashingReader(blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader) (ret slashing.Reader) {
+	cfg := api.GetConfigByBlockNum(blk_n)
+	dpos_reader := api.NewDelayedReader(blk_n, storage_factory)
 	ret.Init(&cfg, blk_n, dpos_reader, storage_factory)
 	return
 }
