@@ -299,7 +299,7 @@ func taraxa_evm_state_api_dpos_is_eligible(
 		return false
 	}
 
-	return state_API_instances[ptr].DPOSReader(params.BlkNum).IsEligible(&params.Addr)
+	return state_API_instances[ptr].DPOSDelayedReader(params.BlkNum).IsEligible(&params.Addr)
 }
 
 //export taraxa_evm_state_api_dpos_get_staking_balance
@@ -315,7 +315,7 @@ func taraxa_evm_state_api_dpos_get_staking_balance(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetStakingBalance(&params.Addr).Bytes(), cb)
+	call_bytes_cb(state_API_instances[ptr].DPOSDelayedReader(params.BlkNum).GetStakingBalance(&params.Addr).Bytes(), cb)
 }
 
 //export taraxa_evm_state_api_dpos_get_vrf_key
@@ -331,7 +331,7 @@ func taraxa_evm_state_api_dpos_get_vrf_key(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	call_bytes_cb(state_API_instances[ptr].DPOSReader(params.BlkNum).GetVrfKey(&params.Addr), cb)
+	call_bytes_cb(state_API_instances[ptr].DPOSDelayedReader(params.BlkNum).GetVrfKey(&params.Addr), cb)
 }
 
 //export taraxa_evm_state_api_dpos_total_amount_delegated
@@ -352,7 +352,7 @@ func taraxa_evm_state_api_dpos_eligible_vote_count(
 	cb_err C.taraxa_evm_BytesCallback,
 ) uint64 {
 	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).TotalEligibleVoteCount()
+	return state_API_instances[ptr].DPOSDelayedReader(blk_n).TotalEligibleVoteCount()
 }
 
 //export taraxa_evm_state_api_dpos_get_eligible_vote_count
@@ -367,7 +367,7 @@ func taraxa_evm_state_api_dpos_get_eligible_vote_count(
 		Addr   common.Address
 	}
 	dec_rlp(params_enc, &params)
-	return state_API_instances[ptr].DPOSReader(params.BlkNum).GetEligibleVoteCount(&params.Addr)
+	return state_API_instances[ptr].DPOSDelayedReader(params.BlkNum).GetEligibleVoteCount(&params.Addr)
 }
 
 //export taraxa_evm_state_api_db_snapshot
@@ -416,7 +416,7 @@ func taraxa_evm_state_api_dpos_yield(
 	cb_err C.taraxa_evm_BytesCallback,
 ) uint64 {
 	defer handle_err(cb_err)
-	return state_API_instances[ptr].DPOSReader(blk_n).GetYield()
+	return state_API_instances[ptr].DPOSDelayedReader(blk_n).GetYield()
 }
 
 //export taraxa_evm_state_api_dpos_total_supply
@@ -427,7 +427,7 @@ func taraxa_evm_state_api_dpos_total_supply(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).GetTotalSupply().Bytes(), cb)
+	call_bytes_cb(state_API_instances[ptr].DPOSDelayedReader(blk_n).GetTotalSupply().Bytes(), cb)
 }
 
 type state_API_ptr = byte
