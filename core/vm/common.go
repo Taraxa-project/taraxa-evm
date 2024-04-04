@@ -31,6 +31,21 @@ func calcMemSize(off, l *uint256.Int) *uint256.Int {
 	return new(uint256.Int).Add(off, l)
 }
 
+func calcMemSize64WithUint(off *uint256.Int, length64 uint64) (uint64, bool) {
+	// if length is zero, memsize is always zero, regardless of offset
+	if length64 == 0 {
+		return 0, false
+	}
+	// Check that offset doesn't overflow
+	offset64, overflow := off.Uint64WithOverflow()
+	if overflow {
+		return 0, true
+	}
+	val := offset64 + length64
+	// if value < either of it's parts, then it overflowed
+	return val, val < offset64
+}
+
 // getData returns a slice from the data based on the start and size and pads
 // up to size with zero's. This function is overflow safe.
 func getData(data []byte, start uint64, size uint64) []byte {

@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
@@ -87,15 +88,8 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 	return fork_start <= block_num
 }
 
-type Rules struct {
-	IsMagnolia     bool
-	IsAspenPartOne bool
-	IsAspenPartTwo bool
-	IsFicus        bool
-}
-
-func (c *HardforksConfig) Rules(num types.BlockNum) Rules {
-	return Rules{
+func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
+	return vm.Rules{
 		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
