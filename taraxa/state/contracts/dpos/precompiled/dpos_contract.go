@@ -433,10 +433,15 @@ func (self *Contract) EndBlockCall(block_num uint64) {
 		self.amount_delegated_orig = self.amount_delegated.Clone()
 	}
 
-	// Apply HF
+	// Apply HFs
 	if block_num == self.cfg.Hardforks.FixRedelegateBlockNum {
 		self.fixRedelegateBlockNumFunc(block_num)
 	}
+
+	// Keeping it here for next HF
+	// if block_num == self.cfg.Hardforks.BambooHf.BlockNum {
+	// 	self.bambooHFRedelegation(block_num)
+	// }
 }
 
 // Should be called on each block commit - updates delayedStorage
@@ -1037,6 +1042,10 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 			if validator.UndelegationsCount == 0 && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
 				self.validators.DeleteValidator(&args.Validator)
 				self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
+			} else {
+				if self.IsFicusHardfork(block) {
+					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+				}
 			}
 		}
 	}
@@ -1208,6 +1217,10 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			if !self.isMagnoliaHardfork(block) || validator_from.UndelegationsCount == 0 {
 				self.validators.DeleteValidator(&args.ValidatorFrom)
 				self.state_put(&state_k, nil)
+			} else {
+				if self.IsFicusHardfork(block) {
+					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
+				}
 			}
 		} else {
 			self.state_put(&state_k, state)
@@ -1780,6 +1793,10 @@ func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
 
 func (self *Contract) isPhalaenopsisHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsPhalaenopsisHardfork(block)
+}
+
+func (self *Contract) IsFicusHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsFicusHardfork(block)
 }
 
 func (self *Contract) saveTotalSupplyDb() {

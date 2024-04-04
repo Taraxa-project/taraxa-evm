@@ -35,6 +35,16 @@ type FicusHfConfig struct {
 	BridgeContractAddress   common.Address
 }
 
+// Leaving it here for next HF
+// type BambooRedelegation struct {
+// 	Validator common.Address
+// 	Amount    *big.Int
+// }
+// type BambooHfConfig struct {
+// 	BlockNum      uint64
+// 	Redelegations []BambooRedelegation
+// }
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
@@ -64,6 +74,10 @@ func (c *HardforksConfig) IsAspenHardforkPartOne(block types.BlockNum) bool {
 
 func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartTwo
+}
+
+func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
+	return block >= c.FicusHf.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
