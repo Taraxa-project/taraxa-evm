@@ -25,6 +25,16 @@ type Reader struct {
 	slashing_reader *slashing.Reader
 }
 
+type ValidatorStake struct {
+	Address    common.Address
+	TotalStake *big.Int
+}
+
+type ValidatorVoteCount struct {
+	Address   common.Address
+	VoteCount uint64
+}
+
 func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, storage_factory func(types.BlockNum) storage.StorageReader) *Reader {
 	r.cfg = cfg
 
@@ -86,11 +96,6 @@ func (r Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
 	return
 }
 
-type ValidatorStake struct {
-	Address    common.Address
-	TotalStake *big.Int
-}
-
 func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 	reader := new(storage.AddressesIMapReader)
 	reader.Init(r.delayed_storage, append(field_validators, validator_list_index...))
@@ -99,6 +104,19 @@ func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 
 	for _, addr := range validators {
 		ret = append(ret, ValidatorStake{Address: addr, TotalStake: r.GetStakingBalance(&addr)})
+	}
+
+	return
+}
+
+func (r Reader) GetValidatorsVoteCounts() (ret []ValidatorVoteCount) {
+	reader := new(storage.AddressesIMapReader)
+	reader.Init(r.delayed_storage, append(field_validators, validator_list_index...))
+
+	validators, _ := reader.GetAccounts(0, reader.GetCount())
+
+	for _, addr := range validators {
+		ret = append(ret, ValidatorVoteCount{Address: addr, VoteCount: voteCount(r.GetStakingBalance(&addr), r.cfg, r.delayed_block_n)})
 	}
 
 	return
