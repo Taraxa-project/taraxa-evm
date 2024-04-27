@@ -70,7 +70,7 @@ func (self *API) Init(db *state_db_rocksdb.DB, get_block_hash vm.GetHashFunc, ch
 		self.db.GetLatestState(),
 		get_block_hash,
 		self.dpos,
-		self.DPOSReader,
+		self.DPOSDelayedReader,
 		self.SlashingReader,
 		self.config,
 		state_transition.Opts{
@@ -142,6 +142,12 @@ func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {
 	return self.dpos.NewReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
+		return self.ReadBlock(blk_n)
+	})
+}
+
+func (self *API) DPOSDelayedReader(blk_n types.BlockNum) dpos.Reader {
+	return self.dpos.NewDelayedReader(blk_n, func(blk_n types.BlockNum) contract_storage.StorageReader {
 		return self.ReadBlock(blk_n)
 	})
 }

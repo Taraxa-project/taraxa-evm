@@ -123,7 +123,7 @@ func (self *ContractTest) GetNonce(account common.Address) *big.Int {
 }
 
 func (self *ContractTest) GetDPOSReader() dpos.Reader {
-	return self.SUT.DPOSReader(self.blk_n)
+	return self.SUT.DPOSDelayedReader(self.blk_n)
 }
 
 func (self *ContractTest) ExecuteAndCheck(from common.Address, value *big.Int, input []byte, exe_err, cons_err util.ErrorString) vm.ExecutionResult {
