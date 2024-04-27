@@ -6,7 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
-	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
+	//dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
@@ -108,12 +108,12 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if st.dpos_contract != nil && rules_changed {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
-		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
-			acc := st.evm_state.GetAccount(dpos.ContractAddress())
-			if acc.GetCodeSize() == 0 {
-				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
-			}
-		}
+// 		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
+// 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
+// 			if acc.GetCodeSize() == 0 {
+// 				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
+// 			}
+// 		}
 	}
 	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
 		st.slashing_contract.Register(st.evm.RegisterPrecompiledContract)

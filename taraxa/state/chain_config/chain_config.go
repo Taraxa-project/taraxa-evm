@@ -27,6 +27,13 @@ type AspenHfConfig struct {
 	GeneratedRewards *big.Int // Total number of generated rewards between block 0 and AspenHf BlockNum
 }
 
+type FicusHfConfig struct {
+	BlockNum                uint64
+	PillarBlockInterval     uint64 // [number of blocks]
+	PillarChainSyncInterval uint64 // [number of blocks]
+	PbftInclusionDelay      uint64 // [number of blocks]
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
@@ -35,6 +42,7 @@ type HardforksConfig struct {
 	PhalaenopsisHfBlockNum       uint64
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
+	FicusHf                      FicusHfConfig
 }
 
 func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
