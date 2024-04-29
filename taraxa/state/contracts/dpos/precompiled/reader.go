@@ -119,12 +119,12 @@ func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 
 func (r Reader) GetValidatorsVoteCounts() (ret []ValidatorVoteCount) {
 	reader := new(storage.AddressesIMapReader)
-	reader.Init(r.delayed_storage, append(field_validators, validator_list_index...))
+	reader.Init(r.storage, append(field_validators, validator_list_index...))
 
 	validators, _ := reader.GetAccounts(0, reader.GetCount())
 
 	for _, addr := range validators {
-		ret = append(ret, ValidatorVoteCount{Address: addr, VoteCount: voteCount(r.GetStakingBalance(&addr), r.cfg, r.delayed_block_n)})
+		ret = append(ret, ValidatorVoteCount{Address: addr, VoteCount: voteCount(r.GetStakingBalance(&addr), r.cfg, r.block_n)})
 	}
 
 	return
