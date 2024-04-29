@@ -417,7 +417,7 @@ func taraxa_evm_state_api_validators_vote_counts(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	ret := state_API_instances[ptr].DPOSReader(blk_n).GetValidatorsVoteCounts()
+	ret := state_API_instances[ptr].DPOSDelayedReader(blk_n).GetValidatorsVoteCounts()
 	enc_rlp(&ret, cb)
 }
 
