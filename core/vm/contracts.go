@@ -22,7 +22,6 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/consensys/gnark-crypto/ecc"
 	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fp"
@@ -80,30 +79,6 @@ var PrecompiledContractsFicus = Precompiles{
 	common.BytesToAddress([]byte{0x11}): &bls12381Pairing{},
 	common.BytesToAddress([]byte{0x12}): &bls12381MapG1{},
 	common.BytesToAddress([]byte{0x13}): &bls12381MapG2{},
-}
-
-var (
-	PrecompiledAddressesFicus        []common.Address
-	PrecompiledAddressesCalifornicum []common.Address
-)
-
-func init() {
-	for k := range PrecompiledContractsCalifornicum {
-		PrecompiledAddressesCalifornicum = append(PrecompiledAddressesCalifornicum, k)
-	}
-	for k := range PrecompiledContractsFicus {
-		PrecompiledAddressesFicus = append(PrecompiledAddressesFicus, k)
-	}
-}
-
-// ActivePrecompiles returns the precompiles enabled with the current configuration.
-func ActivePrecompiles(rules chain_config.Rules) []common.Address {
-	switch {
-	case rules.IsFicus:
-		return PrecompiledAddressesFicus
-	default:
-		return PrecompiledAddressesCalifornicum
-	}
 }
 
 // ECRECOVER implemented as a native contract.
