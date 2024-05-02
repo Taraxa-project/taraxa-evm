@@ -17,13 +17,12 @@
 package vm
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"math/big"
 
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/consensys/gnark-crypto/ecc"
 	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fp"
@@ -46,53 +45,65 @@ type PrecompiledContract interface {
 	Run(ctx CallFrame, evm *EVM) ([]byte, error)
 }
 
-type Precompiles [255]PrecompiledContract
-
-var PrecompiledContractAddrPrefix = make([]byte, common.AddressLength-1)
-
-func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) {
-	last_byte := address[common.AddressLength-1]
-	if last_byte == 0 {
-		return
-	}
-	ret = self[last_byte-1]
-	if ret != nil && !bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) {
-		ret = nil
-	}
-	return
-}
-
-func (self *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
-	asserts.Holds(bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix))
-	last_addr_byte := address[common.AddressLength-1]
-	asserts.Holds(last_addr_byte != 0)
-	pos := last_addr_byte - 1
-	asserts.Holds(self[pos] == nil)
-	self[pos] = contract
-}
+type Precompiles map[common.Address]PrecompiledContract
 
 // PrecompiledContractsCalifornicum contains the default set of pre-compiled Ethereum
 // contracts used in the Californicum release.
 var PrecompiledContractsCalifornicum = Precompiles{
-	ecrecover{},
-	sha256hash{},
-	ripemd160hash{},
-	dataCopy{},
-	bigModExp{},
-	bn256Add{},
-	bn256ScalarMul{},
-	bn256Pairing{},
-	//New once should be HF
-	blake2F{},
-	bls12381G1Add{},
-	bls12381G1Mul{},
-	bls12381G1MultiExp{},
-	bls12381G2Add{},
-	bls12381G2Mul{},
-	bls12381G2MultiExp{},
-	bls12381Pairing{},
-	bls12381MapG1{},
-	bls12381MapG2{},
+	common.BytesToAddress([]byte{0x01}): &ecrecover{},
+	common.BytesToAddress([]byte{0x02}): &sha256hash{},
+	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
+	common.BytesToAddress([]byte{0x04}): &dataCopy{},
+	common.BytesToAddress([]byte{0x05}): &bigModExp{},
+	common.BytesToAddress([]byte{0x06}): &bn256Add{},
+	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
+	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
+}
+
+var PrecompiledContractsFicus = Precompiles{
+	common.BytesToAddress([]byte{0x01}): &ecrecover{},
+	common.BytesToAddress([]byte{0x02}): &sha256hash{},
+	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
+	common.BytesToAddress([]byte{0x04}): &dataCopy{},
+	common.BytesToAddress([]byte{0x05}): &bigModExp{},
+	common.BytesToAddress([]byte{0x06}): &bn256Add{},
+	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
+	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
+	common.BytesToAddress([]byte{0x09}): &blake2F{},
+	// common.BytesToAddress([]byte{0x0a}): &kzgPointEvaluation{},
+	common.BytesToAddress([]byte{0x0b}): &bls12381G1Add{},
+	common.BytesToAddress([]byte{0x0c}): &bls12381G1Mul{},
+	common.BytesToAddress([]byte{0x0d}): &bls12381G1MultiExp{},
+	common.BytesToAddress([]byte{0x0e}): &bls12381G2Add{},
+	common.BytesToAddress([]byte{0x0f}): &bls12381G2Mul{},
+	common.BytesToAddress([]byte{0x10}): &bls12381G2MultiExp{},
+	common.BytesToAddress([]byte{0x11}): &bls12381Pairing{},
+	common.BytesToAddress([]byte{0x12}): &bls12381MapG1{},
+	common.BytesToAddress([]byte{0x13}): &bls12381MapG2{},
+}
+
+var (
+	PrecompiledAddressesFicus        []common.Address
+	PrecompiledAddressesCalifornicum []common.Address
+)
+
+func init() {
+	for k := range PrecompiledContractsCalifornicum {
+		PrecompiledAddressesCalifornicum = append(PrecompiledAddressesCalifornicum, k)
+	}
+	for k := range PrecompiledContractsFicus {
+		PrecompiledAddressesFicus = append(PrecompiledAddressesFicus, k)
+	}
+}
+
+// ActivePrecompiles returns the precompiles enabled with the current configuration.
+func ActivePrecompiles(rules chain_config.Rules) []common.Address {
+	switch {
+	case rules.IsFicus:
+		return PrecompiledAddressesFicus
+	default:
+		return PrecompiledAddressesCalifornicum
+	}
 }
 
 // ECRECOVER implemented as a native contract.

@@ -26,6 +26,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/params"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -55,7 +56,7 @@ type EVM struct {
 	// virtual machine configuration options used to initialize the evm
 	vmConfig          Config
 	chainConfig       params.ChainConfig
-	rules             Rules
+	rules             chain_config.Rules
 	rules_initialized bool
 	precompiles       Precompiles
 	instruction_set   InstructionSet
@@ -78,11 +79,6 @@ type Opts = struct {
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
 
-type Rules struct {
-	IsMagnolia     bool
-	IsAspenPartOne bool
-	IsAspenPartTwo bool
-}
 type Block struct {
 	Number types.BlockNum
 	BlockInfo
@@ -124,7 +120,7 @@ func (self *EVM) AddLog(log LogRecord) {
 	self.state.AddLog(log)
 }
 
-func (self *EVM) GetRules() Rules {
+func (self *EVM) GetRules() chain_config.Rules {
 	return self.rules
 }
 
@@ -136,7 +132,7 @@ func (self *EVM) GetBlock() Block {
 	return self.block
 }
 
-func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
+func (self *EVM) SetBlock(blk *Block, rules chain_config.Rules) (rules_changed bool) {
 	self.block = *blk
 	if self.rules_initialized {
 		if self.rules == rules {
@@ -145,22 +141,22 @@ func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	} else {
 		self.rules_initialized = true
 	}
-	// switch {
-	// case rules.IsTODO:
-	// 	self.precompiles = PrecompiledContractsHomestead
-	// 	self.instruction_set = homesteadInstructionSet
-	// 	self.gas_table = GasTableHomestead
-	// default:
-	self.precompiles = PrecompiledContractsCalifornicum
-	self.instruction_set = californicumInstructionSet
-	self.gas_table = GasTableCalifornicum
-	// }
+	switch {
+	case rules.IsFicus:
+		self.precompiles = PrecompiledContractsFicus
+		self.instruction_set = californicumInstructionSet
+		self.gas_table = GasTableCalifornicum
+	default:
+		self.precompiles = PrecompiledContractsCalifornicum
+		self.instruction_set = californicumInstructionSet
+		self.gas_table = GasTableCalifornicum
+	}
 	self.rules = rules
 	return true
 }
 
 func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract PrecompiledContract) {
-	self.precompiles.Put(address, contract)
+	self.precompiles[*address] = contract
 }
 
 func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.ErrorString) (ret ExecutionResult, err error) {
@@ -356,7 +352,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 
 	if typ == CALL {
 		if value.Sign() == 0 {
-			if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+			if !callee.IsNotNIL() && self.precompiles[*callee.Address()] == nil {
 				// Calling a non existing account, don't do anything, but ping the tracer
 				if self.vmConfig.Debug {
 					if self.depth == 0 {
@@ -381,7 +377,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 
 	gas_copy := gas
 	gas_left = gas
-	precompiled := self.precompiles.Get(callee.Address())
+	precompiled := self.precompiles[*callee.Address()]
 	code := callee.GetCode()
 	start := time.Now()
 
