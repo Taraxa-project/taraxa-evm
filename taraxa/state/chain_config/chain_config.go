@@ -84,7 +84,7 @@ func (c *HardforksConfig) Rules(num types.BlockNum) Rules {
 		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
-		// IsFicus: isForked(c..BlockNumPartTwo, num),
+		IsFicus:        isForked(c.FicusHf.BlockNum, num),
 	}
 }
 
