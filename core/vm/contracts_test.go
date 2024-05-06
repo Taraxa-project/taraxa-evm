@@ -69,7 +69,7 @@ var blake2FMalformedinputTests = []precompiledFailureTest{
 
 func testPrecompiled(addr string, test precompiledTest, t *testing.T) {
 	a := common.HexToAddress(addr)
-	p := allPrecompiles[a]
+	p := allPrecompiles.Get(&a)
 	in := common.Hex2Bytes(test.Input)
 	frame := CallFrame{Input: in}
 	t.Run(fmt.Sprintf("%s-Gas=%d", test.Name, p.RequiredGas(frame, nil)), func(t *testing.T) {
@@ -88,7 +88,7 @@ func testPrecompiled(addr string, test precompiledTest, t *testing.T) {
 
 func testPrecompiledOOG(addr string, test precompiledTest, t *testing.T) {
 	a := common.HexToAddress(addr)
-	p := allPrecompiles[a]
+	p := allPrecompiles.Get(&a)
 	in := common.Hex2Bytes(test.Input)
 	frame := CallFrame{Input: in}
 	reqGas := p.RequiredGas(frame, nil) - 1
@@ -108,7 +108,7 @@ func testPrecompiledOOG(addr string, test precompiledTest, t *testing.T) {
 
 func testPrecompiledFailure(addr string, test precompiledFailureTest, t *testing.T) {
 	a := common.HexToAddress(addr)
-	p := allPrecompiles[a]
+	p := allPrecompiles.Get(&a)
 	in := common.Hex2Bytes(test.Input)
 	frame := CallFrame{Input: in}
 	t.Run(test.Name, func(t *testing.T) {
@@ -129,7 +129,7 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 		return
 	}
 	a := common.HexToAddress(addr)
-	p := PrecompiledContractsCalifornicum[a]
+	p := PrecompiledContractsCalifornicum.Get(&a)
 	in := common.Hex2Bytes(test.Input)
 	frame := CallFrame{Input: in}
 	reqGas := p.RequiredGas(frame, nil)

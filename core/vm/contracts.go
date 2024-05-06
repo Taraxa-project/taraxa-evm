@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/crypto/bn256"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -44,41 +46,64 @@ type PrecompiledContract interface {
 	Run(ctx CallFrame, evm *EVM) ([]byte, error)
 }
 
-type Precompiles map[common.Address]PrecompiledContract
+type Precompiles [255]PrecompiledContract
+
+var PrecompiledContractAddrPrefix = make([]byte, common.AddressLength-1)
+
+func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) {
+	last_byte := address[common.AddressLength-1]
+	if last_byte == 0 {
+		return
+	}
+	ret = self[last_byte-1]
+	if ret != nil && !bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) {
+		ret = nil
+	}
+	return
+}
+
+func (self *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
+	asserts.Holds(bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix))
+	last_addr_byte := address[common.AddressLength-1]
+	asserts.Holds(last_addr_byte != 0)
+	pos := last_addr_byte - 1
+	asserts.Holds(self[pos] == nil)
+	self[pos] = contract
+}
 
 // PrecompiledContractsCalifornicum contains the default set of pre-compiled Ethereum
 // contracts used in the Californicum release.
 var PrecompiledContractsCalifornicum = Precompiles{
-	common.BytesToAddress([]byte{0x01}): &ecrecover{},
-	common.BytesToAddress([]byte{0x02}): &sha256hash{},
-	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
-	common.BytesToAddress([]byte{0x04}): &dataCopy{},
-	common.BytesToAddress([]byte{0x05}): &bigModExp{},
-	common.BytesToAddress([]byte{0x06}): &bn256Add{},
-	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
-	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
+	&ecrecover{},      // Position 1, address 0x01
+	&sha256hash{},     // Position 2, address 0x02
+	&ripemd160hash{},  // Position 3, address 0x03
+	&dataCopy{},       // Position 4, address 0x04
+	&bigModExp{},      // Position 5, address 0x05
+	&bn256Add{},       // Position 6, address 0x06
+	&bn256ScalarMul{}, // Position 7, address 0x07
+	&bn256Pairing{},   // Position 8, address 0x08
 }
 
 var PrecompiledContractsFicus = Precompiles{
-	common.BytesToAddress([]byte{0x01}): &ecrecover{},
-	common.BytesToAddress([]byte{0x02}): &sha256hash{},
-	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
-	common.BytesToAddress([]byte{0x04}): &dataCopy{},
-	common.BytesToAddress([]byte{0x05}): &bigModExp{},
-	common.BytesToAddress([]byte{0x06}): &bn256Add{},
-	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
-	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
-	common.BytesToAddress([]byte{0x09}): &blake2F{},
-	// common.BytesToAddress([]byte{0x0a}): &kzgPointEvaluation{},
-	common.BytesToAddress([]byte{0x0b}): &bls12381G1Add{},
-	common.BytesToAddress([]byte{0x0c}): &bls12381G1Mul{},
-	common.BytesToAddress([]byte{0x0d}): &bls12381G1MultiExp{},
-	common.BytesToAddress([]byte{0x0e}): &bls12381G2Add{},
-	common.BytesToAddress([]byte{0x0f}): &bls12381G2Mul{},
-	common.BytesToAddress([]byte{0x10}): &bls12381G2MultiExp{},
-	common.BytesToAddress([]byte{0x11}): &bls12381Pairing{},
-	common.BytesToAddress([]byte{0x12}): &bls12381MapG1{},
-	common.BytesToAddress([]byte{0x13}): &bls12381MapG2{},
+	&ecrecover{},          // Position 1, address 0x01
+	&sha256hash{},         // Position 2, address 0x02
+	&ripemd160hash{},      // Position 3, address 0x03
+	&dataCopy{},           // Position 4, address 0x04
+	&bigModExp{},          // Position 5, address 0x05
+	&bn256Add{},           // Position 6, address 0x06
+	&bn256ScalarMul{},     // Position 7, address 0x07
+	&bn256Pairing{},       // Position 8, address 0x08
+	&blake2F{},            // Position 9, address 0x09
+	nil,                   // Position 10, address 0x0a (&kzgPointEvaluation{})
+	&bls12381G1Add{},      // Position 11, address 0x0b
+	&bls12381G1Mul{},      // Position 12, address 0x0c
+	&bls12381G1MultiExp{}, // Position 13, address 0x0d
+	&bls12381G2Add{},      // Position 14, address 0x0e
+	&bls12381G2Mul{},      // Position 15, address 0x0f
+	&bls12381G2MultiExp{}, // Position 16, address 0x10
+	&bls12381Pairing{},    // Position 17, address 0x11
+	&bls12381MapG1{},      // Position 18, address 0x12
+	&bls12381MapG2{},      // Position 19, address 0x13
 }
 
 // ECRECOVER implemented as a native contract.

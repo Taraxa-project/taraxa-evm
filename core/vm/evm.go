@@ -156,7 +156,7 @@ func (self *EVM) SetBlock(blk *Block, rules chain_config.Rules) (rules_changed b
 }
 
 func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract PrecompiledContract) {
-	self.precompiles[*address] = contract
+	self.precompiles.Put(address, contract)
 }
 
 func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.ErrorString) (ret ExecutionResult, err error) {
@@ -352,7 +352,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 
 	if typ == CALL {
 		if value.Sign() == 0 {
-			if !callee.IsNotNIL() && self.precompiles[*callee.Address()] == nil {
+			if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
 				// Calling a non existing account, don't do anything, but ping the tracer
 				if self.vmConfig.Debug {
 					if self.depth == 0 {
@@ -377,7 +377,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 
 	gas_copy := gas
 	gas_left = gas
-	precompiled := self.precompiles[*callee.Address()]
+	precompiled := self.precompiles.Get(callee.Address())
 	code := callee.GetCode()
 	start := time.Now()
 

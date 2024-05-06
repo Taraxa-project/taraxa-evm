@@ -29,7 +29,7 @@ type AspenHfConfig struct {
 
 type FicusHfConfig struct {
 	BlockNum                uint64
-	PillarBlockInterval     uint64 // [number of blocks]
+	PillarBlocksInterval    uint64 // [number of blocks]
 	PillarChainSyncInterval uint64 // [number of blocks]
 	PbftInclusionDelay      uint64 // [number of blocks]
 }
