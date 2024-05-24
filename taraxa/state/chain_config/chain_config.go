@@ -32,6 +32,7 @@ type FicusHfConfig struct {
 	PillarBlocksInterval    uint64 // [number of blocks]
 	PillarChainSyncInterval uint64 // [number of blocks]
 	PbftInclusionDelay      uint64 // [number of blocks]
+	BridgeContractAddress   common.Address
 }
 
 type HardforksConfig struct {
