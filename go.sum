@@ -26,8 +26,8 @@ github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23/go.mod h1:J+Gs4SYgM6
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/linxGnu/grocksdb v1.9.1 h1:LmwuHzsWglxJrIES9jvS2O1xTPD2nnKYhAQDx5dIyRo=
-github.com/linxGnu/grocksdb v1.9.1/go.mod h1:QYiYypR2d4v63Wj1adOOfzglnoII0gLj3PNh4fZkcFA=
+github.com/linxGnu/grocksdb v1.8.4 h1:ZMsBpPpJNtRLHiKKp0mI7gW+NT4s7UgfD5xHxx1jVRo=
+github.com/linxGnu/grocksdb v1.8.4/go.mod h1:xZCIb5Muw+nhbDK4Y5UJuOrin5MceOuiXkVUR7vp4WY=
 github.com/mattn/go-isatty v0.0.12/go.mod h1:cbi8OIDigv2wuxKPP5vlRcQ1OAZbq2CE4Kysco4FUpU=
 github.com/mattn/go-runewidth v0.0.9 h1:Lm995f3rfxdpd6TSmuVCHVb/QhupuXlYr8sCI/QdE+0=
 github.com/mattn/go-runewidth v0.0.9/go.mod h1:H031xJmbD/WCDINGzjvQ9THkh0rPKHF+m2gUSrubnMI=

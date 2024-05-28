@@ -7,7 +7,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/dot v1.2.0
 	github.com/holiman/uint256 v1.2.1
-	github.com/linxGnu/grocksdb v1.9.1
+	github.com/linxGnu/grocksdb v1.8.4
 	github.com/otiai10/copy v1.9.0
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.9.0
