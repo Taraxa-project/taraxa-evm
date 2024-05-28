@@ -1,16 +1,16 @@
 module github.com/Taraxa-project/taraxa-evm
 
-go 1.18
+go 1.22
 
 require (
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/davecgh/go-spew v1.1.1
 	github.com/emicklei/dot v1.2.0
 	github.com/holiman/uint256 v1.2.1
-	github.com/linxGnu/grocksdb v1.8.4
+	github.com/linxGnu/grocksdb v1.9.1
 	github.com/otiai10/copy v1.9.0
 	github.com/schollz/progressbar/v3 v3.3.3
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.3.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sys v0.13.0
