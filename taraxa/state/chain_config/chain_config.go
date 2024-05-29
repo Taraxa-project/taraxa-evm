@@ -6,7 +6,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
@@ -28,6 +27,13 @@ type AspenHfConfig struct {
 	GeneratedRewards *big.Int // Total number of generated rewards between block 0 and AspenHf BlockNum
 }
 
+type FicusHfConfig struct {
+	BlockNum                uint64
+	PillarBlocksInterval    uint64 // [number of blocks]
+	PillarChainSyncInterval uint64 // [number of blocks]
+	PbftInclusionDelay      uint64 // [number of blocks]
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
@@ -36,6 +42,7 @@ type HardforksConfig struct {
 	PhalaenopsisHfBlockNum       uint64
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
+	FicusHf                      FicusHfConfig
 }
 
 func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
@@ -65,11 +72,19 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 	return fork_start <= block_num
 }
 
-func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
-	return vm.Rules{
+type Rules struct {
+	IsMagnolia     bool
+	IsAspenPartOne bool
+	IsAspenPartTwo bool
+	IsFicus        bool
+}
+
+func (c *HardforksConfig) Rules(num types.BlockNum) Rules {
+	return Rules{
 		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
+		IsFicus:        isForked(c.FicusHf.BlockNum, num),
 	}
 }
 
