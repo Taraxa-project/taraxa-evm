@@ -928,7 +928,9 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 // Removes delegation from specified validator and claims rewards
 // new undelegation object is created and moved to queue where after expiration can be claimed
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UndelegateArgs) error {
-	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+	if self.isMagnoliaHardfork()
+
+	if self.undelegations.PreCornusHfUndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrExistentUndelegation
 	}
 
@@ -1797,6 +1799,10 @@ func (self *Contract) isPhalaenopsisHardfork(block types.BlockNum) bool {
 
 func (self *Contract) IsFicusHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsFicusHardfork(block)
+}
+
+func (self *Contract) isCornusHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsCornusHardfork(block)
 }
 
 func (self *Contract) saveTotalSupplyDb() {

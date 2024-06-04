@@ -8,6 +8,9 @@ interface DposInterface {
     event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
+    event UndelegatedV2(address indexed delegator, address indexed validator, uint256 id, uint256 amount);
+    event UndelegateConfirmedV2(address indexed delegator, address indexed validator, uint256 id, uint256 amount);
+    event UndelegateCanceledV2(address indexed delegator, address indexed validator, uint256 id, uint256 amount);
     event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
     event RewardsClaimed(address indexed account, address indexed validator, uint256 amount);
     event CommissionRewardsClaimed(address indexed account, address indexed validator, uint256 amount);
@@ -40,14 +43,6 @@ interface DposInterface {
         ValidatorBasicInfo info;
     }
 
-    struct UndelegateRequest {
-        // Block num, during which UndelegateRequest can be confirmed - during creation it is
-        // set to block.number + STAKE_UNLOCK_PERIOD
-        uint256 eligible_block_num;
-        // Amount of tokens to be unstaked
-        uint256 amount;
-    }
-
     // Delegator data
     struct DelegatorInfo {
         // Number of tokens that were staked
@@ -74,6 +69,8 @@ interface DposInterface {
         address validator;
         // Flag if validator still exists - in case he has 0 stake and 0 rewards, validator is deleted from memory & db
         bool validator_exists;
+        // Undelegation id
+        uint256 undelegation_id;
     }
 
     // Delegates tokens to specified validator
@@ -83,10 +80,18 @@ interface DposInterface {
     function undelegate(address validator, uint256 amount) external;
 
     // Confirms undelegate request
+    // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function confirmUndelegate(address validator) external;
 
     // Cancel undelegate request
+    // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function cancelUndelegate(address validator) external;
+
+    // Confirms undelegate request with <undelegation_id> from <validator>
+    function confirmUndelegateV2(address validator, uint256 undelegation_id) external;
+
+    // Cancel undelegate request with <undelegation_id> from <validator>
+    function cancelUndelegateV2(address validator, uint256 undelegation_id) external;
 
     // Redelegates <amount> of tokens from one validator to the other
     function reDelegate(address validator_from, address validator_to, uint256 amount) external;
