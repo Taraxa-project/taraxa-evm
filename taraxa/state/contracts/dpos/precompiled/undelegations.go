@@ -10,7 +10,8 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/rlp"
 )
 
-type Undelegation struct {
+// Pre cornus hardfork - without undelegation Id
+type UndelegationV1 struct {
 	// Amount of TARA that accound should be able to get
 	Amount *big.Int
 
@@ -18,13 +19,28 @@ type Undelegation struct {
 	Block types.BlockNum
 }
 
+// Post cornus hardfork - with undelegation Id. Ids are used to support multiple undelegations at the same time
+// TODO: rename to Undelegation
+type UndelegationV2 struct {
+	ValidatorV1
+
+	// Undelegation id
+	// TODO: could be potenti
+	Id *big.Int
+}
+
 type Undelegations struct {
 	storage *contract_storage.StorageWrapper
-	// <delegator addres -> list of undelegations> as each delegator can undelegate multiple times
+	// <delegator address -> list of validators addresses> as each delegator can undelegate from multiple validators at the same time
 	undelegations_map map[common.Address]*contract_storage.AddressesIMap
 
-	undelegations_field           []byte
-	delegator_undelegations_field []byte
+	// <delegator's validator address -> list of undelegations ids> as each delegator can have multiple undelegations from the same validator at the same time
+	// Note: used for post corvus hardfork undelegations processing
+	undelegations_ids_map map[common.Address]*contract_storage.IdsIMap
+
+	undelegations_field               []byte
+	delegator_undelegations_field     []byte
+	delegator_undelegations_ids_field []byte
 }
 
 func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []byte) {
@@ -33,19 +49,28 @@ func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []
 	// Init Delegations storage fields keys - relative to the prefix
 	self.undelegations_field = append(prefix, []byte{0}...)
 	self.delegator_undelegations_field = append(prefix, []byte{1}...)
+	self.delegator_undelegations_ids_field = append(prefix, []byte{2}...)
 }
 
 // Returns true if for given values there is undelegation in queue
-func (self *Undelegations) UndelegationExists(delegator_address *common.Address, validator_address *common.Address) bool {
+func (self *Undelegations) PreCornusHfUndelegationExists(delegator_address *common.Address, validator_address *common.Address) bool {
 	delegator_undelegations := self.getDelegatorUndelegationsList(delegator_address)
-	return delegator_undelegations.AccountExists(validator_address)
+	if !delegator_undelegations.AccountExists(validator_address) {
+		return false
+	}
+
+	if self.GetPreCornusHfUndelegation(delegator_address, validator_address) == nil {
+		return false
+	}
+
+	return true
 }
 
 // Returns undelegation object from queue
-func (self *Undelegations) GetUndelegation(delegator_address *common.Address, validator_address *common.Address) (undelegation *Undelegation) {
+func (self *Undelegations) GetPreCornusHfUndelegation(delegator_address *common.Address, validator_address *common.Address) (undelegation *UndelegationV1) {
 	key := self.genUndelegationKey(delegator_address, validator_address)
 	self.storage.Get(key, func(bytes []byte) {
-		undelegation = new(Undelegation)
+		undelegation = new(UndelegationV1)
 		rlp.MustDecodeBytes(bytes, undelegation)
 	})
 
