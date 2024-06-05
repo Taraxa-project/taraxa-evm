@@ -127,57 +127,45 @@ func constGasFunc(gas uint64) gasFunc {
 	}
 }
 
-func gasCallDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	gas, err := memoryGasCost(mem, memorySize)
-	if err != nil {
-		return 0, err
-	}
+// memoryCopierGas creates the gas functions for the following opcodes, and takes
+// the stack position of the operand which determines the size of the data to copy
+// as argument:
+// CALLDATACOPY (stack position 2)
+// CODECOPY (stack position 2)
+// MCOPY (stack position 2)
+// RETURNDATACOPY (stack position 2)
+func memoryCopierGas(stackpos int, staticGas uint64) gasFunc {
+	return func(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
+		gas, err := memoryGasCost(mem, memorySize)
+		if err != nil {
+			return 0, err
+		}
 
-	var overflow bool
-	if gas, overflow = math.SafeAdd(gas, GasFastestStep); overflow {
-		return 0, errGasUintOverflow
-	}
+		var overflow bool
+		if gas, overflow = math.SafeAdd(gas, staticGas); overflow {
+			return 0, errGasUintOverflow
+		}
 
-	words, overflow := stack.Back(2).Uint64WithOverflow()
-	if overflow {
-		return 0, errGasUintOverflow
+		wordGas, overflow := stack.Back(stackpos).Uint64WithOverflow()
+		if overflow {
+			return 0, errGasUintOverflow
+		}
+		if wordGas, overflow = math.SafeMul(toWordSize(wordGas), CopyGas); overflow {
+			return 0, errGasUintOverflow
+		}
+		if gas, overflow = math.SafeAdd(gas, wordGas); overflow {
+			return 0, errGasUintOverflow
+		}
+		return gas, nil
 	}
-
-	if words, overflow = math.SafeMul(toWordSize(words), CopyGas); overflow {
-		return 0, errGasUintOverflow
-	}
-
-	if gas, overflow = math.SafeAdd(gas, words); overflow {
-		return 0, errGasUintOverflow
-	}
-	return gas, nil
 }
 
-func gasReturnDataCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	gas, err := memoryGasCost(mem, memorySize)
-	if err != nil {
-		return 0, err
-	}
-
-	var overflow bool
-	if gas, overflow = math.SafeAdd(gas, GasFastestStep); overflow {
-		return 0, errGasUintOverflow
-	}
-
-	words, overflow := stack.Back(2).Uint64WithOverflow()
-	if overflow {
-		return 0, errGasUintOverflow
-	}
-
-	if words, overflow = math.SafeMul(toWordSize(words), CopyGas); overflow {
-		return 0, errGasUintOverflow
-	}
-
-	if gas, overflow = math.SafeAdd(gas, words); overflow {
-		return 0, errGasUintOverflow
-	}
-	return gas, nil
-}
+var (
+	gasCallDataCopy   = memoryCopierGas(2, GasFastestStep)
+	gasCodeCopy       = memoryCopierGas(2, GasFastestStep)
+	gasMcopy          = memoryCopierGas(2, GasFastestStep)
+	gasReturnDataCopy = memoryCopierGas(2, GasFastestStep)
+)
 
 func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
@@ -276,30 +264,6 @@ func gasKeccak256(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memor
 		return 0, errGasUintOverflow
 	}
 	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), Keccak256WordGas); overflow {
-		return 0, errGasUintOverflow
-	}
-	if gas, overflow = math.SafeAdd(gas, wordGas); overflow {
-		return 0, errGasUintOverflow
-	}
-	return gas, nil
-}
-
-func gasCodeCopy(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	gas, err := memoryGasCost(mem, memorySize)
-	if err != nil {
-		return 0, err
-	}
-
-	var overflow bool
-	if gas, overflow = math.SafeAdd(gas, GasFastestStep); overflow {
-		return 0, errGasUintOverflow
-	}
-
-	wordGas, overflow := stack.Back(2).Uint64WithOverflow()
-	if overflow {
-		return 0, errGasUintOverflow
-	}
-	if wordGas, overflow = math.SafeMul(toWordSize(wordGas), CopyGas); overflow {
 		return 0, errGasUintOverflow
 	}
 	if gas, overflow = math.SafeAdd(gas, wordGas); overflow {

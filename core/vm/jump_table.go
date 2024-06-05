@@ -52,23 +52,16 @@ type operation struct {
 }
 
 var (
-	// todoInstructionSet      = newTODOInstructionSet()
+	ficusInstructionSet        = newFicusInstructionSet()
 	californicumInstructionSet = newCalifornicumInstructionSet()
 )
 
 // Example of new instruction after HF
-// func newTODOInstructionSet() InstructionSet {
-// 	instructionSet := newCalifornicumInstructionSet()
-//  instructionSet[TODO] = operation{
-// 		execute:       opDelegateCall,
-// 		gasCost:       gasDelegateCall,
-// 		validateStack: makeStackFunc(6, 1),
-// 		memorySize:    memoryDelegateCall,
-// 		valid:         true,
-// 		returns:       true,
-// 	}
-// 	return instructionSet
-// }
+func newFicusInstructionSet() InstructionSet {
+	instructionSet := newCalifornicumInstructionSet()
+	enable5656(&instructionSet) // EIP-5656 (MCOPY opcode)
+	return instructionSet
+}
 
 // NewCalifornicumInstructionSet returns the Californicum instructions
 // that can be executed during the Californicum phase.

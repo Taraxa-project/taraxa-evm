@@ -52,6 +52,18 @@ func memoryMStore(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(0), uint256.NewInt(32))
 }
 
+func memoryMcopy(stack *Stack) *uint256.Int {
+	mStart := stack.Back(0) // stack[0]: dest
+	if stack.Back(1).Gt(mStart) {
+		mStart = stack.Back(1) // stack[1]: source
+	}
+	size := calcMemSize(mStart, stack.Back(2)) // stack[2]: length
+	if size.IsUint64() {
+		return size
+	}
+	return uint256.NewInt(0)
+}
+
 func memoryCreate(stack *Stack) *uint256.Int {
 	return calcMemSize(stack.Back(1), stack.Back(2))
 }

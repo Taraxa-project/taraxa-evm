@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
+	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/params"
 )
 
@@ -34,6 +35,16 @@ type FicusHfConfig struct {
 	PbftInclusionDelay      uint64 // [number of blocks]
 	BridgeContractAddress   common.Address
 }
+
+// Leaving it here for next HF
+// type BambooRedelegation struct {
+// 	Validator common.Address
+// 	Amount    *big.Int
+// }
+// type BambooHfConfig struct {
+// 	BlockNum      uint64
+// 	Redelegations []BambooRedelegation
+// }
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
@@ -66,6 +77,10 @@ func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartTwo
 }
 
+func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
+	return block >= c.FicusHf.BlockNum
+}
+
 func isForked(fork_start, block_num types.BlockNum) bool {
 	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
 		return false
@@ -73,15 +88,8 @@ func isForked(fork_start, block_num types.BlockNum) bool {
 	return fork_start <= block_num
 }
 
-type Rules struct {
-	IsMagnolia     bool
-	IsAspenPartOne bool
-	IsAspenPartTwo bool
-	IsFicus        bool
-}
-
-func (c *HardforksConfig) Rules(num types.BlockNum) Rules {
-	return Rules{
+func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
+	return vm.Rules{
 		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),

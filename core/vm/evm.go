@@ -26,7 +26,6 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/types"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/params"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
@@ -56,7 +55,7 @@ type EVM struct {
 	// virtual machine configuration options used to initialize the evm
 	vmConfig          Config
 	chainConfig       params.ChainConfig
-	rules             chain_config.Rules
+	rules             Rules
 	rules_initialized bool
 	precompiles       Precompiles
 	instruction_set   InstructionSet
@@ -78,6 +77,13 @@ type Opts = struct {
 	PreallocatedMem uint64
 }
 type GetHashFunc = func(types.BlockNum) *big.Int
+
+type Rules struct {
+	IsMagnolia     bool
+	IsAspenPartOne bool
+	IsAspenPartTwo bool
+	IsFicus        bool
+}
 
 type Block struct {
 	Number types.BlockNum
@@ -120,7 +126,7 @@ func (self *EVM) AddLog(log LogRecord) {
 	self.state.AddLog(log)
 }
 
-func (self *EVM) GetRules() chain_config.Rules {
+func (self *EVM) GetRules() Rules {
 	return self.rules
 }
 
@@ -132,7 +138,7 @@ func (self *EVM) GetBlock() Block {
 	return self.block
 }
 
-func (self *EVM) SetBlock(blk *Block, rules chain_config.Rules) (rules_changed bool) {
+func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	self.block = *blk
 	if self.rules_initialized {
 		if self.rules == rules {
@@ -144,7 +150,7 @@ func (self *EVM) SetBlock(blk *Block, rules chain_config.Rules) (rules_changed b
 	switch {
 	case rules.IsFicus:
 		self.precompiles = PrecompiledContractsFicus
-		self.instruction_set = californicumInstructionSet
+		self.instruction_set = ficusInstructionSet
 		self.gas_table = GasTableCalifornicum
 	default:
 		self.precompiles = PrecompiledContractsCalifornicum
