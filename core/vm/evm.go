@@ -82,7 +82,9 @@ type Rules struct {
 	IsMagnolia     bool
 	IsAspenPartOne bool
 	IsAspenPartTwo bool
+	IsFicus        bool
 }
+
 type Block struct {
 	Number types.BlockNum
 	BlockInfo
@@ -145,16 +147,16 @@ func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	} else {
 		self.rules_initialized = true
 	}
-	// switch {
-	// case rules.IsTODO:
-	// 	self.precompiles = PrecompiledContractsHomestead
-	// 	self.instruction_set = homesteadInstructionSet
-	// 	self.gas_table = GasTableHomestead
-	// default:
-	self.precompiles = PrecompiledContractsCalifornicum
-	self.instruction_set = californicumInstructionSet
-	self.gas_table = GasTableCalifornicum
-	// }
+	switch {
+	case rules.IsFicus:
+		self.precompiles = PrecompiledContractsFicus
+		self.instruction_set = ficusInstructionSet
+		self.gas_table = GasTableCalifornicum
+	default:
+		self.precompiles = PrecompiledContractsCalifornicum
+		self.instruction_set = californicumInstructionSet
+		self.gas_table = GasTableCalifornicum
+	}
 	self.rules = rules
 	return true
 }

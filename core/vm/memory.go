@@ -125,6 +125,13 @@ func (m *Memory) Len() uint64 {
 	return uint64(len(m.store))
 }
 
+func (m *Memory) Copy(dst, src, len uint64) {
+	if len == 0 {
+		return
+	}
+	copy(m.store[dst:], m.store[src:src+len])
+}
+
 // Print dumps the content of the memory.
 func (m *Memory) Print() {
 	fmt.Printf("### mem %d bytes ###\n", len(m.store))

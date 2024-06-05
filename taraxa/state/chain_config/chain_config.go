@@ -28,6 +28,24 @@ type AspenHfConfig struct {
 	GeneratedRewards *big.Int // Total number of generated rewards between block 0 and AspenHf BlockNum
 }
 
+type FicusHfConfig struct {
+	BlockNum                uint64
+	PillarBlocksInterval    uint64 // [number of blocks]
+	PillarChainSyncInterval uint64 // [number of blocks]
+	PbftInclusionDelay      uint64 // [number of blocks]
+	BridgeContractAddress   common.Address
+}
+
+// Leaving it here for next HF
+// type BambooRedelegation struct {
+// 	Validator common.Address
+// 	Amount    *big.Int
+// }
+// type BambooHfConfig struct {
+// 	BlockNum      uint64
+// 	Redelegations []BambooRedelegation
+// }
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
@@ -36,6 +54,7 @@ type HardforksConfig struct {
 	PhalaenopsisHfBlockNum       uint64
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
+	FicusHf                      FicusHfConfig
 }
 
 func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
@@ -58,6 +77,10 @@ func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartTwo
 }
 
+func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
+	return block >= c.FicusHf.BlockNum
+}
+
 func isForked(fork_start, block_num types.BlockNum) bool {
 	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
 		return false
@@ -70,6 +93,7 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 		IsMagnolia:     isForked(c.MagnoliaHf.BlockNum, num),
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
+		IsFicus:        isForked(c.FicusHf.BlockNum, num),
 	}
 }
 
