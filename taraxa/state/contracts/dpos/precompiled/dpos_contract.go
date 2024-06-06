@@ -77,6 +77,8 @@ var (
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
+	ErrUndelegateDeprecated         = util.ErrorString("Undelegate method is deprecated. Use UndelegateV2 instead")
+	ErrUndelegateV2NotSupported     = util.ErrorString("UndelegateV2 not yet supported. Use Undelegate instead")
 	ErrExistentValidator            = util.ErrorString("Validator already exist")
 	ErrSameValidator                = util.ErrorString("From and to validators are the same")
 	ErrInvalidRedelegation          = util.ErrorString("Redelegation has to be more than 0")
@@ -928,9 +930,9 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 // Removes delegation from specified validator and claims rewards
 // new undelegation object is created and moved to queue where after expiration can be claimed
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UndelegateArgs) error {
-	if self.isMagnoliaHardfork()
-
-	if self.undelegations.PreCornusHfUndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+	// Both before and after after cornus hardfork (multiple undelegations supported),
+	// the existing pre-cornus hf undelegation must be either confirmed or cancelled
+	if self.undelegations.UndelegationV1Exists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrExistentUndelegation
 	}
 
@@ -979,7 +981,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	}
 
 	// Creating undelegation request
-	self.undelegations.CreateUndelegation(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DPOS.DelegationLockingPeriod), args.Amount)
+	if self.isCornusHardfork(block) {
+		self.undelegations.CreateUndelegationV2(ctx.CallerAccount.Address(), &args.Validator, ctx.CallerAccount.GetNonce(), block+uint64(self.cfg.DPOS.DelegationLockingPeriod), args.Amount)
+	} else {
+		self.undelegations.CreateUndelegationV1(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DPOS.DelegationLockingPeriod), args.Amount)
+	}
+
 	delegation.Stake.Sub(delegation.Stake, args.Amount)
 	validator.TotalStake.Sub(validator.TotalStake, args.Amount)
 	validator.UndelegationsCount++
@@ -1019,7 +1026,7 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 // Removes undelegation from queue and moves staked tokens back to delegator
 // This only works after lock-up period expires
 func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.ValidatorAddressArgs) error {
-	if !self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+	if !self.undelegations.PreCornusHfUndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
 		return ErrNonExistentUndelegation
 	}
 
