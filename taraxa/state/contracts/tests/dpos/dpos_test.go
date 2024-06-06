@@ -925,8 +925,8 @@ func TestRewardsAndCommission(t *testing.T) {
 
 	// Vote bonus rewards - aka Author reward
 	max_votes_weigh := dpos.Max(tmp_rewards_stats.MaxVotesWeight, tmp_rewards_stats.TotalVotesWeight)
-	two_t_plus_one := max_votes_weigh*2/3 + 1
-	author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-two_t_plus_one))), big.NewInt(int64(max_votes_weigh-two_t_plus_one)))
+	threshold := max_votes_weigh*2/3 + 1
+	author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-threshold))), big.NewInt(int64(max_votes_weigh-threshold)))
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_trxs * blockReward) / total_trxs
@@ -2253,8 +2253,8 @@ func TestRedelegateHF(t *testing.T) {
 
 	// Vote bonus rewards - aka Author reward
 	max_votes_weigh := dpos.Max(tmp_rewards_stats.MaxVotesWeight, tmp_rewards_stats.TotalVotesWeight)
-	two_t_plus_one := max_votes_weigh*2/3 + 1
-	author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-two_t_plus_one))), big.NewInt(int64(max_votes_weigh-two_t_plus_one)))
+	threshold := max_votes_weigh*2/3 + 1
+	author_reward := bigutil.Div(bigutil.Mul(bonus_reward, big.NewInt(int64(tmp_rewards_stats.TotalVotesWeight-threshold))), big.NewInt(int64(max_votes_weigh-threshold)))
 
 	// Expected participants rewards
 	// validator1_rewards = (validator1_trxs * blockReward) / total_trxs
