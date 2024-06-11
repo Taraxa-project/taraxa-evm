@@ -439,7 +439,7 @@ func taraxa_evm_state_api_dpos_total_supply(
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	call_bytes_cb(state_API_instances[ptr].DPOSDelayedReader(blk_n).GetTotalSupply().Bytes(), cb)
+	call_bytes_cb(state_API_instances[ptr].DPOSReader(blk_n).GetTotalSupply().Bytes(), cb)
 }
 
 type state_API_ptr = byte
