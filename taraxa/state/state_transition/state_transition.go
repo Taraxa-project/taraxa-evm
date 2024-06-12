@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+
 	//dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
@@ -53,10 +54,7 @@ func (st *StateTransition) Init(
 	st.evm_state.Init(opts.EVMState)
 	st.get_dpos_reader = get_dpos_reader
 	st.get_slashing_reader = get_slashing_reader
-	st.evm.Init(get_block_hash, &st.evm_state, vm.Opts{
-		// 24MB total
-		PreallocatedMem: 8 * 1024 * 1024,
-	}, st.chain_config.EVMChainConfig, vm.Config{})
+	st.evm.Init(get_block_hash, &st.evm_state, vm.DefaultOpts(), st.chain_config.EVMChainConfig, vm.Config{})
 	state_desc := state.GetCommittedDescriptor()
 	st.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
@@ -108,12 +106,12 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if st.dpos_contract != nil && rules_changed {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
-// 		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
-// 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
-// 			if acc.GetCodeSize() == 0 {
-// 				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
-// 			}
-// 		}
+		// 		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
+		// 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
+		// 			if acc.GetCodeSize() == 0 {
+		// 				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
+		// 			}
+		// 		}
 	}
 	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
 		st.slashing_contract.Register(st.evm.RegisterPrecompiledContract)
