@@ -582,18 +582,24 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, &mem, stack)
+
+		// copy result from the memory
+		resCopy := make([]byte, len(res))
+		copy(resCopy, res)
+
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
-			self.last_retval = res
+			self.last_retval = resCopy
 		}
+
 		switch {
 		case err != nil:
 			return nil, err
 		case operation.reverts:
-			return res, ErrExecutionReverted
+			return resCopy, ErrExecutionReverted
 		case operation.halts:
-			return res, nil
+			return resCopy, nil
 		case !operation.jumps:
 			pc++
 		}
