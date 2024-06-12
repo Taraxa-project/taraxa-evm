@@ -106,6 +106,16 @@ type SetCommissionArgs struct {
 	Commission uint16
 }
 
+type ConfirmUndelegateV2Args struct {
+	Validator      common.Address
+	UndelegationId *big.Int
+}
+
+type CancelUndelegateV2Args struct {
+	Validator      common.Address
+	UndelegationId *big.Int
+}
+
 type ValidatorAddressArgs struct {
 	Validator common.Address
 }

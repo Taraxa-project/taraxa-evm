@@ -117,8 +117,8 @@ func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
 	self.IterableMapReader.Init(&stor.StorageReaderWrapper, prefix)
 }
 
-// Creates item from iterable map
-func (self *IterableMap) CreateItem(item []byte) bool {
+// Creates item from iterable map, return number of items in the iterbale map
+func (self *IterableMap) CreateItem(item []byte) uint32 {
 	if item_exists, _ := self.itemExists(item); item_exists {
 		panic("Item " + string(item) + " already exists")
 	}
@@ -138,9 +138,9 @@ func (self *IterableMap) CreateItem(item []byte) bool {
 	self.storage.Put(items_pos_k, uint32ToBytes(new_item_pos))
 
 	// Saves new items count
-	self.storage.Put(self.items_count_storage_key, uint32ToBytes(items_count+1))
+	self.storage.Put(self.items_count_storage_key, uint32ToBytes(new_item_pos))
 
-	return true
+	return new_item_pos
 }
 
 // Removes item from iterable map, returns number of left items in the iterbale map
