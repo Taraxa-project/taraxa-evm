@@ -58,7 +58,7 @@ func (self *AddressesIMap) Init(stor *StorageWrapper, prefix []byte) {
 }
 
 // Creates account from iterable map
-func (self *AddressesIMap) CreateAccount(account *common.Address) bool {
+func (self *AddressesIMap) CreateAccount(account *common.Address) uint32 {
 	return self.addresses.CreateItem(account.Bytes())
 }
 

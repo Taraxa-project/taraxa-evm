@@ -58,7 +58,7 @@ func (self *IdsIMap) Init(stor *StorageWrapper, prefix []byte) {
 }
 
 // Creates Id from iterable map
-func (self *IdsIMap) CreateId(id *big.Int) bool {
+func (self *IdsIMap) CreateId(id *big.Int) uint32 {
 	return self.Ids.CreateItem(id.Bytes())
 }
 
