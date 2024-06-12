@@ -76,6 +76,13 @@ type EVM struct {
 type Opts = struct {
 	PreallocatedMem uint64
 }
+
+func DefaultOpts() Opts {
+	return Opts{
+		PreallocatedMem: 8 * 1024 * 1024,
+	}
+}
+
 type GetHashFunc = func(types.BlockNum) *big.Int
 
 type Rules struct {
