@@ -1730,27 +1730,63 @@ func (self *Contract) getDelegations(args dpos_sol.GetDelegationsArgs) (delegati
 
 // Returns batch of undelegation from queue for given address
 func (self *Contract) getUndelegations(args dpos_sol.GetUndelegationsArgs) (undelegations []dpos_sol.DposInterfaceUndelegationData, end bool) {
-	undelegations_addresses, end := self.undelegations.GetDelegatorValidatorsAddresses(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
-
 	// Reserve slice capacity
-	undelegations = make([]dpos_sol.DposInterfaceUndelegationData, 0, len(undelegations_addresses))
+	undelegations = make([]dpos_sol.DposInterfaceUndelegationData, 0)
 
-	for _, validator_address := range undelegations_addresses {
-		undelegation := self.undelegations.GetUndelegation(&args.Delegator, &validator_address)
-		if undelegation == nil {
-			// This should never happen
-			panic("getUndelegations - unable to fetch undelegation data")
+	// to_skip_count := args.Batch * GetUndelegationsMaxCount
+	// current_skipped_count := uint32(0)
+	// processed_count := 0
+
+	// Get all V2 undelegations
+	v2_undelegations_validators, _ := self.undelegations.GetUndelegationsV2Validators(&args.Delegator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
+	for _, validator := range v2_undelegations_validators {
+		v2_undelegations_ids, _ := self.undelegations.GetUndelegationsV2Ids(&args.Delegator, &validator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
+		// if to_skip_count > current_skipped_count + uint32(len(v2_undelegations_ids)) {
+		// 	current_skipped_count += uint32(len(v2_undelegations_ids))
+		// 	continue
+		// }
+
+		for _, undelegation_id := range v2_undelegations_ids {
+			// if to_skip_count > current_skipped_count + 1 {
+			// 	current_skipped_count++
+			// 	continue
+			// }
+
+			undelegation_data := self.getUndelegation(&args.Delegator, &validator, undelegation_id)
+			undelegations = append(undelegations, undelegation_data)
+			// processed_count++
+
+			// if processed_count == GetUndelegationsMaxCount {
+			// 	return
+			// }
 		}
+	}
 
-		var undelegation_data dpos_sol.DposInterfaceUndelegationData
-		undelegation_data.Validator = validator_address
-		// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
-		undelegation_data.ValidatorExists = self.validators.ValidatorExists(&validator_address)
-		undelegation_data.Stake = undelegation.Amount
-		undelegation_data.Block = undelegation.Block
+	// Get all v1 undelegations
+	v1_undelegations_validators, _ := self.undelegations.GetUndelegationsV1Validators(&args.Delegator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
 
+	for _, validator := range v1_undelegations_validators {
+		undelegation_data := self.getUndelegation(&args.Delegator, &validator, nil)
 		undelegations = append(undelegations, undelegation_data)
 	}
+
+	end = true
+	return
+}
+
+func (self *Contract) getUndelegation(delegator *common.Address, validator *common.Address, undelegation_id *big.Int) (undelegation_data dpos_sol.DposInterfaceUndelegationData) {
+	undelegation := self.undelegations.GetUndelegationBaseObject(delegator, validator, undelegation_id)
+	if undelegation == nil {
+		// This should never happen
+		panic("getUndelegation - unable to fetch undelegation data")
+	}
+
+	undelegation_data.Validator = *validator
+	// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
+	undelegation_data.ValidatorExists = self.validators.ValidatorExists(validator)
+	undelegation_data.Stake = undelegation.Amount
+	undelegation_data.Block = undelegation.Block
+	undelegation_data.UndelegationId = undelegation_id
 
 	return
 }
