@@ -32,8 +32,11 @@ import (
 // This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
 var DelegatedEventHash = *keccak256.Hash([]byte("Delegated(address,address,uint256)"))
 var UndelegatedEventHash = *keccak256.Hash([]byte("Undelegated(address,address,uint256)"))
+var UndelegatedV2EventHash = *keccak256.Hash([]byte("UndelegatedV2(address,address,uint256,uint256)"))
 var UndelegateConfirmedEventHash = *keccak256.Hash([]byte("UndelegateConfirmed(address,address,uint256)"))
+var UndelegateConfirmedV2EventHash = *keccak256.Hash([]byte("UndelegateConfirmedV2(address,address,uint256,uint256)"))
 var UndelegateCanceledEventHash = *keccak256.Hash([]byte("UndelegateCanceled(address,address,uint256)"))
+var UndelegateCanceledV2EventHash = *keccak256.Hash([]byte("UndelegateCanceledV2(address,address,uint256,uint256)"))
 var RedelegatedEventHash = *keccak256.Hash([]byte("Redelegated(address,address,address,uint256)"))
 var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address,uint256)"))
 var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address,uint256)"))
@@ -2015,43 +2018,68 @@ func TestUndelegationsClass(t *testing.T) {
 	delegator1_addr := addr(3)
 
 	// Check getters to 0 values
-	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr))
+	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
+	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
 	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsCount(&delegator1_addr))
 
-	undelegations_ret, end := undelegations.GetDelegatorValidatorsAddresses(&delegator1_addr, 0, 10)
-	tc.Assert.Equal(0, len(undelegations_ret))
+	undelegations_v1_validators_ret, end := undelegations.GetUndelegationsV1Validators(&delegator1_addr, 0, 10)
+	tc.Assert.Equal(0, len(undelegations_v1_validators_ret))
 	tc.Assert.Equal(true, end)
 
-	undelegation_ret := undelegations.GetUndelegation(&delegator1_addr, &validator1_addr)
-	var undelegation_nil_ptr *dpos.Undelegation = nil
+	undelegations_v2_validators_ret, end := undelegations.GetUndelegationsV2Validators(&delegator1_addr, 0, 10)
+	tc.Assert.Equal(0, len(undelegations_v2_validators_ret))
+	tc.Assert.Equal(true, end)
+
+	undelegation_ret := undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
+	var undelegation_nil_ptr *dpos.UndelegationV1 = nil
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 
-	// Creates 2 delegations
-	undelegations.CreateUndelegation(&delegator1_addr, &validator1_addr, 0, big.NewInt(50))
-	undelegations.CreateUndelegation(&delegator1_addr, &validator2_addr, 0, big.NewInt(50))
+	// Creates 2 undelegations
+	undelegations.CreateUndelegation(&delegator1_addr, &validator1_addr, nil, 0, big.NewInt(50))
+	undelegations.CreateUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1), 0, big.NewInt(50))
 
 	// Check GetUndelegationsCount + UndelegationExists
 	tc.Assert.Equal(uint32(2), undelegations.GetUndelegationsCount(&delegator1_addr))
-	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr))
+	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
+	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator2_addr, big.NewInt(1)))
 
 	// Check GetUndelegations
-	undelegations_ret, end = undelegations.GetDelegatorValidatorsAddresses(&delegator1_addr, 0, 10)
-	tc.Assert.Equal(2, len(undelegations_ret))
+	undelegations_v1_ret, end := undelegations.GetUndelegationsV1Validators(&delegator1_addr, 0, 10)
+	tc.Assert.Equal(1, len(undelegations_v1_ret))
 	tc.Assert.Equal(true, end)
-	tc.Assert.Equal(validator1_addr, undelegations_ret[0])
-	tc.Assert.Equal(validator2_addr, undelegations_ret[1])
+	tc.Assert.Equal(validator1_addr, undelegations_v1_ret[0])
+
+	undelegations_v2_ret, end := undelegations.GetUndelegationsV2Validators(&delegator1_addr, 0, 10)
+	tc.Assert.Equal(1, len(undelegations_v2_ret))
+	tc.Assert.Equal(true, end)
+	tc.Assert.Equal(validator2_addr, undelegations_v2_ret[0])
 
 	// Check GetUndelegation
-	undelegation_ret = undelegations.GetUndelegation(&delegator1_addr, &validator1_addr)
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
 	tc.Assert.Equal(uint64(0), undelegation_ret.Block)
 	tc.Assert.Equal(big.NewInt(50), undelegation_ret.Amount)
 
+	undelegation_v1_ret := undelegations.GetUndelegationV1(&delegator1_addr, &validator1_addr)
+	tc.Assert.Equal(uint64(0), undelegation_v1_ret.Block)
+	tc.Assert.Equal(big.NewInt(50), undelegation_v1_ret.Amount)
+
+	undelegation_v2_ret := undelegations.GetUndelegationV2(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	tc.Assert.Equal(uint64(0), undelegation_v2_ret.Block)
+	tc.Assert.Equal(big.NewInt(50), undelegation_v2_ret.Amount)
+	tc.Assert.Equal(big.NewInt(1), undelegation_v2_ret.Id)
+
 	// Check RemoveDelegation
-	undelegations.RemoveUndelegation(&delegator1_addr, &validator1_addr)
-	undelegation_ret = undelegations.GetUndelegation(&delegator1_addr, &validator1_addr)
+	undelegations.RemoveUndelegation(&delegator1_addr, &validator1_addr, nil)
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsCount(&delegator1_addr))
-	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr))
+	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
+
+	undelegations.RemoveUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsCount(&delegator1_addr))
+	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
 }
 
 func TestMakeLogsCheckTopics(t *testing.T) {
@@ -2068,18 +2096,33 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 		count++
 	}
 	{
-		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, nil, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegatedEventHash)
 		count++
 	}
 	{
-		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		tc.Assert.Equal(log.Topics[0], UndelegatedV2EventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, nil, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegateConfirmedEventHash)
 		count++
 	}
 	{
-		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, amount)
+		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		tc.Assert.Equal(log.Topics[0], UndelegateConfirmedV2EventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, nil, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegateCanceledEventHash)
+		count++
+	}
+	{
+		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		tc.Assert.Equal(log.Topics[0], UndelegateCanceledV2EventHash)
 		count++
 	}
 	{

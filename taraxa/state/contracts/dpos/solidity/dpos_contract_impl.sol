@@ -28,19 +28,19 @@ contract DposDummyImpl {
     event UndelegatedV2(
         address indexed delegator, 
         address indexed validator, 
-        uint256 undelegation_id, 
+        uint256 indexed undelegation_id, 
         uint256 amount
     );
     event UndelegateConfirmedV2(
         address indexed delegator, 
         address indexed validator, 
-        uint256 undelegation_id, 
+        uint256 indexed undelegation_id, 
         uint256 amount
     );
     event UndelegateCanceledV2(
         address indexed delegator, 
         address indexed validator, 
-        uint256 undelegation_id, 
+        uint256 indexed undelegation_id, 
         uint256 amount
     );
     event Redelegated(

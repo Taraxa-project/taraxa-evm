@@ -20,7 +20,6 @@ type UndelegationV1 struct {
 }
 
 // Post cornus hardfork - with undelegation Id. Ids are used to support multiple undelegations at the same time
-// TODO: rename to Undelegation
 type UndelegationV2 struct {
 	UndelegationV1
 
@@ -32,7 +31,8 @@ type DelegatorV2Undelegations struct {
 	// list of validators addresses, from which delegator undelegated
 	Validators *contract_storage.AddressesIMap
 	// <validator address -> list of undelegations ids> as each delegator can have multiple undelegations from the same validator at the same time
-	// Note: used for post corvus hardfork undelegations processing
+	// Note 1: used for post corvus hardfork undelegations processing
+	// Note 2: Undelegations_ids_map should contain only validators addresses that are also in Validators struct member
 	Undelegations_ids_map map[common.Address]*contract_storage.IdsIMap
 }
 
@@ -72,7 +72,7 @@ func (self *Undelegations) UndelegationExists(delegator_address *common.Address,
 }
 
 func (self *Undelegations) undelegationV1Exists(delegator_address *common.Address, validator_address *common.Address) bool {
-	validators_map := self.getUndelegationsV1Map(delegator_address)
+	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	return validators_map.AccountExists(validator_address)
 }
 
@@ -84,16 +84,18 @@ func (self *Undelegations) undelegationV2Exists(delegator_address *common.Addres
 // Returns undelegation object from queue
 func (self *Undelegations) GetUndelegationBaseObject(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) (undelegation *UndelegationV1) {
 	if undelegation_id != nil {
-		undelegation_v2 := self.getUndelegationV2(delegator_address, validator_address, undelegation_id)
-		undelegation = &undelegation_v2.UndelegationV1
+		undelegation_v2 := self.GetUndelegationV2(delegator_address, validator_address, undelegation_id)
+		if undelegation_v2 != nil {
+			undelegation = &undelegation_v2.UndelegationV1
+		}
 	} else {
-		undelegation = self.getUndelegationV1(delegator_address, validator_address)
+		undelegation = self.GetUndelegationV1(delegator_address, validator_address)
 	}
 
 	return
 }
 
-func (self *Undelegations) getUndelegationV1(delegator_address *common.Address, validator_address *common.Address) (undelegation *UndelegationV1) {
+func (self *Undelegations) GetUndelegationV1(delegator_address *common.Address, validator_address *common.Address) (undelegation *UndelegationV1) {
 	key := self.genUndelegationKey(delegator_address, validator_address, nil)
 	self.storage.Get(key, func(bytes []byte) {
 		undelegation = new(UndelegationV1)
@@ -103,7 +105,7 @@ func (self *Undelegations) getUndelegationV1(delegator_address *common.Address, 
 	return
 }
 
-func (self *Undelegations) getUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) (undelegation *UndelegationV2) {
+func (self *Undelegations) GetUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) (undelegation *UndelegationV2) {
 	key := self.genUndelegationKey(delegator_address, validator_address, undelegation_id)
 	self.storage.Get(key, func(bytes []byte) {
 		undelegation = new(UndelegationV2)
@@ -114,10 +116,17 @@ func (self *Undelegations) getUndelegationV2(delegator_address *common.Address, 
 }
 
 // Returns number of undelegations for specified address
-// TODO: fix
 func (self *Undelegations) GetUndelegationsCount(delegator_address *common.Address) uint32 {
-	validators_map := self.getUndelegationsV1Map(delegator_address)
-	return validators_map.GetCount(1)
+	count := self.getUndelegationsV1ValidatorsMap(delegator_address).GetCount()
+
+	undelegations_v2_validators, _ := self.getUndelegationsV2Maps(delegator_address, nil)
+	for _, undelegations_v2_validator := range undelegations_v2_validators.GetAllAccounts() {
+		_, undelegations_v2_ids := self.getUndelegationsV2Maps(delegator_address, &undelegations_v2_validator)
+
+		count += undelegations_v2_ids.GetCount()
+	}
+
+	return count
 }
 
 // Creates undelegation object in storage
@@ -136,7 +145,7 @@ func (self *Undelegations) createUndelegationV1(delegator_address *common.Addres
 
 	self.saveUndelegationObject(delegator_address, validator_address, nil, rlp.MustEncodeToBytes(undelegation))
 
-	validators_map := self.getUndelegationsV1Map(delegator_address)
+	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	validators_map.CreateAccount(validator_address)
 }
 
@@ -171,7 +180,7 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 func (self *Undelegations) removeUndelegationV1(delegator_address *common.Address, validator_address *common.Address) {
 	self.removeUndelegationObject(delegator_address, validator_address, nil)
 
-	validators_map := self.getUndelegationsV1Map(delegator_address)
+	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	if validators_map.RemoveAccount(validator_address) == 0 {
 		delete(self.v1_undelegations_map, *delegator_address)
 	}
@@ -196,48 +205,66 @@ func (self *Undelegations) removeUndelegationObject(delegator_address *common.Ad
 }
 
 // Returns all addressess of validators, from which is delegator <delegator_address> currently undelegating
-func (self *Undelegations) GetDelegatorValidatorsAddresses(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
-	validators_map := self.getUndelegationsV1Map(delegator_address)
+func (self *Undelegations) GetUndelegationsV1Validators(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
+	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	return validators_map.GetAccounts(batch, count)
 }
 
-// Returns list of undelegations for given address
-func (self *Undelegations) getUndelegationsV1Map(delegator_address *common.Address) *contract_storage.AddressesIMap {
-	delegator_v1_undelegations, found := self.v1_undelegations_map[*delegator_address]
-	if !found {
-		delegator_v1_undelegations_prefix := append(self.delegator_v1_undelegations_field, delegator_address[:]...)
+func (self *Undelegations) GetUndelegationsV2Validators(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
+	validators_map, _ := self.getUndelegationsV2Maps(delegator_address, nil)
+	return validators_map.GetAccounts(batch, count)
+}
 
-		delegator_v1_undelegations = new(contract_storage.AddressesIMap)
-		delegator_v1_undelegations.Init(self.storage, delegator_v1_undelegations_prefix)
+func (self *Undelegations) GetUndelegationsV2Ids(delegator_address *common.Address, valitor_address *common.Address, batch uint32, count uint32) ([]*big.Int, bool) {
+	_, ids_map := self.getUndelegationsV2Maps(delegator_address, valitor_address)
+	return ids_map.GetIds(batch, count)
+}
+
+// Returns list of undelegations for given address
+func (self *Undelegations) getUndelegationsV1ValidatorsMap(delegator_address *common.Address) *contract_storage.AddressesIMap {
+	v1_undelegations_validators, found := self.v1_undelegations_map[*delegator_address]
+	if !found {
+		v1_undelegations_validators_prefix := append(self.delegator_v1_undelegations_field, delegator_address[:]...)
+
+		v1_undelegations_validators = new(contract_storage.AddressesIMap)
+		v1_undelegations_validators.Init(self.storage, v1_undelegations_validators_prefix)
 	}
 
-	return delegator_v1_undelegations
+	return v1_undelegations_validators
 }
 
 func (self *Undelegations) getUndelegationsV2Maps(delegator_address *common.Address, validator_address *common.Address) (validators_map *contract_storage.AddressesIMap, ids_map *contract_storage.IdsIMap) {
-	delegator_v2_undelegations, found := self.v2_undelegations_map[*delegator_address]
+	v2_undelegations_validators, found := self.v2_undelegations_map[*delegator_address]
 	if !found {
-		delegator_v2_undelegations = new(DelegatorV2Undelegations)
+		v2_undelegations_validators = new(DelegatorV2Undelegations)
 
-		delegator_v2_undelegations_prefix := append(self.delegator_v2_undelegations_field, delegator_address[:]...)
-		delegator_v2_undelegations.Validators = new(contract_storage.AddressesIMap)
-		delegator_v2_undelegations.Validators.Init(self.storage, delegator_v2_undelegations_prefix)
+		v2_undelegations_validators_prefix := append(self.delegator_v2_undelegations_field, delegator_address[:]...)
+		v2_undelegations_validators.Validators = new(contract_storage.AddressesIMap)
+		v2_undelegations_validators.Validators.Init(self.storage, v2_undelegations_validators_prefix)
 	}
+	validators_map = v2_undelegations_validators.Validators
 
-	v2_undelegations_ids, ids_found := delegator_v2_undelegations.Undelegations_ids_map[*validator_address]
-	if !ids_found {
-		v2_undelegations_ids_prefix := append(append(self.delegator_v2_undelegations_ids_field, delegator_address[:]...), validator_address[:]...)
-		v2_undelegations_ids = new(contract_storage.IdsIMap)
-		v2_undelegations_ids.Init(self.storage, v2_undelegations_ids_prefix)
+	if validator_address != nil {
+		v2_undelegations_ids, ids_found := v2_undelegations_validators.Undelegations_ids_map[*validator_address]
+		if !ids_found {
+			v2_undelegations_ids_prefix := append(append(self.delegator_v2_undelegations_ids_field, delegator_address[:]...), validator_address[:]...)
+			v2_undelegations_ids = new(contract_storage.IdsIMap)
+			v2_undelegations_ids.Init(self.storage, v2_undelegations_ids_prefix)
+		}
+
+		ids_map = v2_undelegations_ids
 	}
-
-	validators_map = delegator_v2_undelegations.Validators
-	ids_map = v2_undelegations_ids
 
 	return
 }
 
 // Return key to storage where undelegations is stored
-func (self *Undelegations) genUndelegationKey(delegator_address *common.Address, validator_address *common.Address) *common.Hash {
-	return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
+func (self *Undelegations) genUndelegationKey(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) *common.Hash {
+	// Pre-cornus hf undelegation key was created just from validator & delegator address
+	if undelegation_id == nil {
+		return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
+	}
+
+	// Post-cornus hf undelegation key is created from validator & delegator address and undelegation id
+	return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:], undelegation_id.Bytes())
 }
