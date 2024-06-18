@@ -77,7 +77,7 @@ func (self *Undelegations) undelegationV1Exists(delegator_address *common.Addres
 }
 
 func (self *Undelegations) undelegationV2Exists(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) bool {
-	_, ids_map := self.getUndelegationsV2Maps(delegator_address, validator_address)
+	_, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	return ids_map.IdExists(undelegation_id)
 }
 
@@ -115,13 +115,18 @@ func (self *Undelegations) GetUndelegationV2(delegator_address *common.Address, 
 	return
 }
 
-// Returns number of undelegations for specified address
-func (self *Undelegations) GetUndelegationsCount(delegator_address *common.Address) uint32 {
-	count := self.getUndelegationsV1ValidatorsMap(delegator_address).GetCount()
+// Returns number of V1 undelegations for specified address
+func (self *Undelegations) GetUndelegationsV1Count(delegator_address *common.Address) uint32 {
+	return self.getUndelegationsV1ValidatorsMap(delegator_address).GetCount()
+}
 
-	undelegations_v2_validators, _ := self.getUndelegationsV2Maps(delegator_address, nil)
+// Returns number of V2 undelegations for specified address
+func (self *Undelegations) GetUndelegationsV2Count(delegator_address *common.Address) uint32 {
+	count := uint32(0)
+
+	undelegations_v2_validators, _ := self.GetUndelegationsV2Maps(delegator_address, nil)
 	for _, undelegations_v2_validator := range undelegations_v2_validators.GetAllAccounts() {
-		_, undelegations_v2_ids := self.getUndelegationsV2Maps(delegator_address, &undelegations_v2_validator)
+		_, undelegations_v2_ids := self.GetUndelegationsV2Maps(delegator_address, &undelegations_v2_validator)
 
 		count += undelegations_v2_ids.GetCount()
 	}
@@ -157,7 +162,7 @@ func (self *Undelegations) createUndelegationV2(delegator_address *common.Addres
 
 	self.saveUndelegationObject(delegator_address, validator_address, undelegation_id, rlp.MustEncodeToBytes(undelegation))
 
-	validators_map, ids_map := self.getUndelegationsV2Maps(delegator_address, validator_address)
+	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	if ids_map.CreateId(undelegation_id) == 1 {
 		validators_map.CreateAccount(validator_address)
 	}
@@ -189,7 +194,7 @@ func (self *Undelegations) removeUndelegationV1(delegator_address *common.Addres
 func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) {
 	self.removeUndelegationObject(delegator_address, validator_address, undelegation_id)
 
-	validators_map, ids_map := self.getUndelegationsV2Maps(delegator_address, validator_address)
+	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	if ids_map.RemoveId(undelegation_id) == 0 {
 		if validators_map.RemoveAccount(validator_address) == 0 {
 			delete(self.v2_undelegations_map, *delegator_address)
@@ -204,20 +209,21 @@ func (self *Undelegations) removeUndelegationObject(delegator_address *common.Ad
 	self.storage.Put(undelegation_key, nil)
 }
 
-// Returns all addressess of validators, from which is delegator <delegator_address> currently undelegating
+// Returns all addressess of validators, from which is delegator <delegator_address> currently undelegating v1
 func (self *Undelegations) GetUndelegationsV1Validators(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
 	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	return validators_map.GetAccounts(batch, count)
 }
 
-func (self *Undelegations) GetUndelegationsV2Validators(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
-	validators_map, _ := self.getUndelegationsV2Maps(delegator_address, nil)
-	return validators_map.GetAccounts(batch, count)
-}
+// Returns validator by idx, from which is delegator <delegator_address> currently undelegating v2
+func (self *Undelegations) GetUndelegationsV2Validator(delegator_address *common.Address, validator_idx uint32) (*common.Address, bool) {
+	validators_map, _ := self.GetUndelegationsV2Maps(delegator_address, nil)
+	validators, end := validators_map.GetAccounts(validator_idx, 1)
+	if len(validators) > 0 {
+		return &validators[0], end
+	}
 
-func (self *Undelegations) GetUndelegationsV2Ids(delegator_address *common.Address, valitor_address *common.Address, batch uint32, count uint32) ([]*big.Int, bool) {
-	_, ids_map := self.getUndelegationsV2Maps(delegator_address, valitor_address)
-	return ids_map.GetIds(batch, count)
+	return nil, end
 }
 
 // Returns list of undelegations for given address
@@ -233,7 +239,7 @@ func (self *Undelegations) getUndelegationsV1ValidatorsMap(delegator_address *co
 	return v1_undelegations_validators
 }
 
-func (self *Undelegations) getUndelegationsV2Maps(delegator_address *common.Address, validator_address *common.Address) (validators_map *contract_storage.AddressesIMap, ids_map *contract_storage.IdsIMap) {
+func (self *Undelegations) GetUndelegationsV2Maps(delegator_address *common.Address, validator_address *common.Address) (validators_map *contract_storage.AddressesIMap, ids_map *contract_storage.IdsIMap) {
 	v2_undelegations_validators, found := self.v2_undelegations_map[*delegator_address]
 	if !found {
 		v2_undelegations_validators = new(DelegatorV2Undelegations)

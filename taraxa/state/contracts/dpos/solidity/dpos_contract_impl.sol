@@ -114,6 +114,12 @@ contract DposDummyImpl {
         address validator;
         // Flag if validator still exists - in case he has 0 stake and 0 rewards, validator is deleted from memory & db
         bool validator_exists;
+    }
+
+    // Retun value for getUndelegationsV2 method
+    struct UndelegationV2Data {
+        // Undelegation data
+        UndelegationData undelegation_data;
         // Undelegation id
         uint256 undelegation_id;
     }
@@ -254,9 +260,25 @@ contract DposDummyImpl {
      *
      * @return undelegations  Batch of N undelegations
      * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
-     **/
-    function getUndelegations(
-        address delegator,
-        uint32 batch
-    ) external returns (UndelegationData[] memory undelegations, bool end) {}
+     *
+     */
+    function getUndelegations(address delegator, uint32 batch)
+        external
+        view
+        returns (UndelegationData[] memory undelegations, bool end) {}
+
+   /**
+     * @notice Returns list of V2 undelegations for specified delegator
+     *
+     * @param delegator       delegator account address
+     * @param batch           Batch number to be fetched. If the list is too big it cannot return all undelegations in one call. Instead, users are fetching batches of 50 undelegations at a time
+     *
+     * @return undelegations  Batch of N V2 undelegations
+     * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
+     *
+     */
+    function getUndelegationsV2(address delegator, uint32 batch)
+        external
+        view
+        returns (UndelegationV2Data[] memory undelegations, bool end) {}
 }
