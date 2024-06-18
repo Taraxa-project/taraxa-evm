@@ -3,6 +3,7 @@ package dpos
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -344,12 +345,68 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 			return 0
 		}
 
-		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsCount(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
+		undelegations_count := self.batch_items_count(uint64(self.undelegations.GetUndelegationsV1Count(&args.Delegator)), uint64(args.Batch), GetUndelegationsMaxCount)
 		return undelegations_count * DposBatchGetMethodsGas
+
+	case "getUndelegationsV2":
+		// First 4 bytes is method signature !!!!
+		input := ctx.Input[4:]
+		var args dpos_sol.GetUndelegationsV2Args
+		if err := method.Inputs.Unpack(&args, input); err != nil {
+			// args parsing will fail also during Run() so the tx wont get executed
+			return 0
+		}
+
+		storage_reads_count := self.getUndelegationsV2StorageReadsCount(args, GetUndelegationsMaxCount)
+		log.Println("storage_reads_count: ", storage_reads_count)
+		return storage_reads_count * DposBatchGetMethodsGas
+
 	default:
 	}
 
 	return DefaultDposMethodGas
+}
+
+func (self *Contract) getUndelegationsV2StorageReadsCount(args dpos_sol.GetUndelegationsV2Args, max_batch_items_count uint64) uint64 {
+	to_skip_count := uint64(args.Batch) * max_batch_items_count
+	storage_reads_count := uint64(0)
+	processed_undelegations := uint64(0)
+
+	// Note: we always need to iterate over validators from idx == 0 as it is not known how many undelegations there is for each validator...
+	for validator_idx := uint32(0); ; validator_idx++ {
+		validator, _ := self.undelegations.GetUndelegationsV2Validator(&args.Delegator, validator_idx)
+		if validator == nil {
+			return storage_reads_count
+		}
+		storage_reads_count++
+
+		_, undelegations_ids_map := self.undelegations.GetUndelegationsV2Maps(&args.Delegator, validator)
+
+		undelegations_ids_count := uint64(undelegations_ids_map.GetCount())
+		storage_reads_count++
+
+		if undelegations_ids_count <= to_skip_count {
+			to_skip_count -= undelegations_ids_count
+			continue
+		}
+
+		// How many ids would be actually read from storage
+		to_be_processed := max_batch_items_count - processed_undelegations
+		undelegations_ids_left := undelegations_ids_count - to_skip_count
+		if undelegations_ids_left < to_be_processed {
+			to_be_processed = undelegations_ids_left
+		}
+		processed_undelegations += to_be_processed
+
+		// 2 * to_be_processed because we need to read undelegation id and then the actual undelegation object
+		storage_reads_count += 2 * to_be_processed
+
+		to_skip_count = 0
+
+		if processed_undelegations == max_batch_items_count {
+			return storage_reads_count
+		}
+	}
 }
 
 func (self *Contract) batch_items_count(actual_count uint64, batch uint64, max_batch_items_count uint64) uint64 {
@@ -693,6 +750,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegations(args))
+
+	case "getUndelegationsV2":
+		var args dpos_sol.GetUndelegationsV2Args
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getUndelegationsV2 input args: ", err)
+			return nil, err
+		}
+		return method.Outputs.Pack(self.getUndelegationsV2(args))
 	default:
 	}
 
@@ -949,19 +1014,11 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 // Removes delegation from specified validator and claims rewards
 // new undelegation object is created and moved to queue where after expiration can be claimed
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UndelegateArgs) error {
-	// // Both before and after after cornus hardfork (multiple undelegations supported),
-	// // the existing pre-cornus hf undelegation must be either confirmed or cancelled
-	// if self.undelegations.UndelegationV1Exists(ctx.CallerAccount.Address(), &args.Validator) {
-	// 	return ErrExistentUndelegation
-	// }
-
 	var undelegation_id *big.Int
 	if self.isCornusHardfork(block) {
 		undelegation_id = ctx.CallerAccount.GetNonce()
 	}
 
-	// TODO: this check might not be needed after cornus hf because undelegation_id == account nonce, which means it is probably not possible to have
-	// 		 2 undelegations with the same id
 	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator, undelegation_id) {
 		return ErrExistentUndelegation
 	}
@@ -1730,48 +1787,57 @@ func (self *Contract) getDelegations(args dpos_sol.GetDelegationsArgs) (delegati
 
 // Returns batch of undelegation from queue for given address
 func (self *Contract) getUndelegations(args dpos_sol.GetUndelegationsArgs) (undelegations []dpos_sol.DposInterfaceUndelegationData, end bool) {
+	v1_undelegations_validators, end := self.undelegations.GetUndelegationsV1Validators(&args.Delegator, args.Batch, GetUndelegationsMaxCount)
+
 	// Reserve slice capacity
-	undelegations = make([]dpos_sol.DposInterfaceUndelegationData, 0)
-
-	// to_skip_count := args.Batch * GetUndelegationsMaxCount
-	// current_skipped_count := uint32(0)
-	// processed_count := 0
-
-	// Get all V2 undelegations
-	v2_undelegations_validators, _ := self.undelegations.GetUndelegationsV2Validators(&args.Delegator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
-	for _, validator := range v2_undelegations_validators {
-		v2_undelegations_ids, _ := self.undelegations.GetUndelegationsV2Ids(&args.Delegator, &validator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
-		// if to_skip_count > current_skipped_count + uint32(len(v2_undelegations_ids)) {
-		// 	current_skipped_count += uint32(len(v2_undelegations_ids))
-		// 	continue
-		// }
-
-		for _, undelegation_id := range v2_undelegations_ids {
-			// if to_skip_count > current_skipped_count + 1 {
-			// 	current_skipped_count++
-			// 	continue
-			// }
-
-			undelegation_data := self.getUndelegation(&args.Delegator, &validator, undelegation_id)
-			undelegations = append(undelegations, undelegation_data)
-			// processed_count++
-
-			// if processed_count == GetUndelegationsMaxCount {
-			// 	return
-			// }
-		}
-	}
-
-	// Get all v1 undelegations
-	v1_undelegations_validators, _ := self.undelegations.GetUndelegationsV1Validators(&args.Delegator, 0 /*args.Batch*/, 1000 /*GetUndelegationsMaxCount*/)
+	undelegations = make([]dpos_sol.DposInterfaceUndelegationData, 0, len(v1_undelegations_validators))
 
 	for _, validator := range v1_undelegations_validators {
 		undelegation_data := self.getUndelegation(&args.Delegator, &validator, nil)
 		undelegations = append(undelegations, undelegation_data)
 	}
 
-	end = true
 	return
+}
+
+// Returns batch of undelegation from queue for given address
+func (self *Contract) getUndelegationsV2(args dpos_sol.GetUndelegationsV2Args) (undelegations []dpos_sol.DposInterfaceUndelegationV2Data, end bool) {
+	to_skip_count := args.Batch * GetUndelegationsMaxCount
+	end = true
+
+	// Note: we always need to iterate over validators from idx == 0 as it is not known how many undelegations there is for each validator...
+	for validator_idx := uint32(0); ; validator_idx++ {
+		validator, validators_end := self.undelegations.GetUndelegationsV2Validator(&args.Delegator, validator_idx)
+		if validator == nil {
+			return
+		}
+
+		_, undelegations_ids_map := self.undelegations.GetUndelegationsV2Maps(&args.Delegator, validator)
+
+		undelegations_ids_count := undelegations_ids_map.GetCount()
+		if undelegations_ids_count <= to_skip_count {
+			to_skip_count -= undelegations_ids_count
+			continue
+		}
+
+		v2_undelegations_ids, v2_undelegations_ids_end := undelegations_ids_map.GetIdsFromIdx(to_skip_count, GetUndelegationsMaxCount-uint32(len(undelegations)))
+		to_skip_count = 0
+
+		for _, undelegation_id := range v2_undelegations_ids {
+			undelegation_data := self.getUndelegation(&args.Delegator, validator, undelegation_id)
+			undelegation_v2_data := dpos_sol.DposInterfaceUndelegationV2Data{UndelegationData: undelegation_data, UndelegationId: undelegation_id}
+
+			undelegations = append(undelegations, undelegation_v2_data)
+		}
+
+		if uint32(len(undelegations)) == GetUndelegationsMaxCount {
+			if !validators_end || !v2_undelegations_ids_end {
+				end = false
+			}
+
+			return
+		}
+	}
 }
 
 func (self *Contract) getUndelegation(delegator *common.Address, validator *common.Address, undelegation_id *big.Int) (undelegation_data dpos_sol.DposInterfaceUndelegationData) {
@@ -1786,7 +1852,6 @@ func (self *Contract) getUndelegation(delegator *common.Address, validator *comm
 	undelegation_data.ValidatorExists = self.validators.ValidatorExists(validator)
 	undelegation_data.Stake = undelegation.Amount
 	undelegation_data.Block = undelegation.Block
-	undelegation_data.UndelegationId = undelegation_id
 
 	return
 }

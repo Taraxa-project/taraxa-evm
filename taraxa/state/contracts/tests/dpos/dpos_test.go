@@ -49,6 +49,11 @@ type GetUndelegationsRet struct {
 	End           bool
 }
 
+type GetUndelegationsV2Ret struct {
+	Undelegations []dpos_sol.DposInterfaceUndelegationV2Data
+	End           bool
+}
+
 type GetValidatorsRet struct {
 	Validators []dpos_sol.DposInterfaceValidatorData
 	End        bool
@@ -117,6 +122,7 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
+			CornusHfBlockNum: 1000,
 		},
 	}
 )
@@ -1514,7 +1520,7 @@ func TestGetDelegations(t *testing.T) {
 	tc.Assert.Equal(true, batch3_parsed_result.End)
 }
 
-func TestGetUndelegations(t *testing.T) {
+func TestGetUndelegationsV1(t *testing.T) {
 	type GenValidator struct {
 		address common.Address
 		proof   []byte
@@ -1629,6 +1635,103 @@ func TestGetUndelegations(t *testing.T) {
 	tc.Assert.Equal(false, undelegations2_parsed_result.End)
 	tc.Assert.Equal(len(undelegations1_parsed_result.Undelegations), len(undelegations2_parsed_result.Undelegations))
 	tc.Assert.Equal(false, undelegations2_parsed_result.Undelegations[0].ValidatorExists)
+}
+
+// TODO: adjust the test
+func TestGetUndelegationsV2(t *testing.T) {
+	type GenValidator struct {
+		address common.Address
+		proof   []byte
+		owner   common.Address
+	}
+
+	gen_validators_num := 4
+
+	// Generate gen_validators_num validators
+	var gen_validators []GenValidator
+	for i := 1; i <= gen_validators_num; i++ {
+		val_addr, val_proof := generateAddrAndProof()
+		val_owner := addr(uint64(i))
+
+		gen_validators = append(gen_validators, GenValidator{val_addr, val_proof, val_owner})
+	}
+
+	// Set some balance to validators
+	cfg := DefaultChainCfg
+	validator_balance := bigutil.Mul(big.NewInt(100000000), TaraPrecision)
+	for _, validator := range gen_validators {
+		cfg.GenesisBalances[validator.owner] = validator_balance
+	}
+
+	cfg.Hardforks.MagnoliaHf.BlockNum = 1000
+	cfg.Hardforks.CornusHfBlockNum = 0
+
+	// Create delegator with initial balance
+	delegator1_addr := addr(uint64(gen_validators_num + 1))
+	cfg.GenesisBalances[delegator1_addr] = validator_balance
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	// Register validators and delegate to them
+	for idx, validator := range gen_validators {
+		test.ExecuteAndCheck(validator.owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator.address, validator.proof, DefaultVrfKey, uint16(10), "validator_"+fmt.Sprint(idx+1)+"_description", "test_endpoint"), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator1_addr, DefaultEligibilityBalanceThreshold, test.Pack("delegate", validator.address), util.ErrorString(""), util.ErrorString(""))
+	}
+
+	// Create delegator undelegations
+	undelegations_count := 0
+	for validator_idx, validator := range gen_validators {
+		// Gen multiple undelegations
+		for undelegation_idx := 0; undelegation_idx < (validator_idx+1)*3; undelegation_idx++ {
+			test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.Pack("undelegate", validator.address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+			undelegations_count++
+		}
+	}
+
+	intristic_gas_batch0 := 21592
+	intristic_gas_batch1 := 21656
+
+	// Get first batch of delegator1 undelegations from contract
+	batch0_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("getUndelegationsV2", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch0_parsed_result := new(GetUndelegationsV2Ret)
+	test.Unpack(batch0_parsed_result, "getUndelegationsV2", batch0_result.CodeRetval)
+	// Checks used gas
+	batch0_expected_gas := (8+2*dpos.GetUndelegationsMaxCount)*dpos.DposBatchGetMethodsGas + uint64(intristic_gas_batch0)
+	tc.Assert.Equal(batch0_expected_gas, batch0_result.GasUsed)
+	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
+	tc.Assert.Equal(dpos.GetUndelegationsMaxCount, len(batch0_parsed_result.Undelegations))
+	tc.Assert.Equal(false, batch0_parsed_result.End)
+	// Checks if last returned undelegation in this batch is the right one based on validator address
+	for undelegation_idx, undelegation := range batch0_parsed_result.Undelegations {
+		var validator common.Address
+		if undelegation_idx < 3 {
+			validator = gen_validators[0].address
+		} else if undelegation_idx < 9 {
+			validator = gen_validators[1].address
+		} else if undelegation_idx < 18 {
+			validator = gen_validators[2].address
+		} else {
+			validator = gen_validators[3].address
+		}
+
+		tc.Assert.Equal(validator, undelegation.UndelegationData.Validator)
+	}
+
+	// Get second batch of delegator1 undelegations from contract
+	batch1_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("getUndelegationsV2", delegator1_addr, uint32(1) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	batch1_parsed_result := new(GetUndelegationsV2Ret)
+	test.Unpack(batch1_parsed_result, "getUndelegationsV2", batch1_result.CodeRetval)
+	// Checks used gas
+	batch1_expected_gas := (8+2*10)*dpos.DposBatchGetMethodsGas + uint64(intristic_gas_batch1)
+	tc.Assert.Equal(batch1_expected_gas, batch1_result.GasUsed)
+	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
+	tc.Assert.Equal(undelegations_count-dpos.GetUndelegationsMaxCount, len(batch1_parsed_result.Undelegations))
+	tc.Assert.Equal(true, batch1_parsed_result.End)
+	// Checks if last returned undelegation in this batch is the right one based on validator address
+	for _, undelegation := range batch1_parsed_result.Undelegations {
+		tc.Assert.Equal(gen_validators[3].address, undelegation.UndelegationData.Validator)
+	}
 }
 
 func TestGetValidator(t *testing.T) {
@@ -2020,44 +2123,54 @@ func TestUndelegationsClass(t *testing.T) {
 	// Check getters to 0 values
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
-	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsCount(&delegator1_addr))
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV1Count(&delegator1_addr))
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 
 	undelegations_v1_validators_ret, end := undelegations.GetUndelegationsV1Validators(&delegator1_addr, 0, 10)
 	tc.Assert.Equal(0, len(undelegations_v1_validators_ret))
 	tc.Assert.Equal(true, end)
 
-	undelegations_v2_validators_ret, end := undelegations.GetUndelegationsV2Validators(&delegator1_addr, 0, 10)
-	tc.Assert.Equal(0, len(undelegations_v2_validators_ret))
+	var empty_address *common.Address
+	undelegations_v2_validator_ret, end := undelegations.GetUndelegationsV2Validator(&delegator1_addr, 0)
+	tc.Assert.Equal(empty_address, undelegations_v2_validator_ret)
 	tc.Assert.Equal(true, end)
 
 	undelegation_ret := undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
 	var undelegation_nil_ptr *dpos.UndelegationV1 = nil
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 
-	// Creates 2 undelegations
+	// Creates 2 undelegations - V1 and V2 (with undelegation_id)
 	undelegations.CreateUndelegation(&delegator1_addr, &validator1_addr, nil, 0, big.NewInt(50))
-	undelegations.CreateUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1), 0, big.NewInt(50))
+	undelegations.CreateUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1), 0, big.NewInt(100))
 
 	// Check GetUndelegationsCount + UndelegationExists
-	tc.Assert.Equal(uint32(2), undelegations.GetUndelegationsCount(&delegator1_addr))
+	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV1Count(&delegator1_addr))
+	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
 	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator2_addr, big.NewInt(1)))
 
-	// Check GetUndelegations
+	// Check GetUndelegationsValidators
 	undelegations_v1_ret, end := undelegations.GetUndelegationsV1Validators(&delegator1_addr, 0, 10)
 	tc.Assert.Equal(1, len(undelegations_v1_ret))
 	tc.Assert.Equal(true, end)
 	tc.Assert.Equal(validator1_addr, undelegations_v1_ret[0])
 
-	undelegations_v2_ret, end := undelegations.GetUndelegationsV2Validators(&delegator1_addr, 0, 10)
-	tc.Assert.Equal(1, len(undelegations_v2_ret))
+	undelegations_v2_ret, end := undelegations.GetUndelegationsV2Validator(&delegator1_addr, 0)
 	tc.Assert.Equal(true, end)
-	tc.Assert.Equal(validator2_addr, undelegations_v2_ret[0])
+	tc.Assert.Equal(&validator2_addr, undelegations_v2_ret)
+
+	undelegations_v2_ret, end = undelegations.GetUndelegationsV2Validator(&delegator1_addr, 1)
+	tc.Assert.Equal(true, end)
+	tc.Assert.Equal(empty_address, undelegations_v2_ret)
 
 	// Check GetUndelegation
 	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
 	tc.Assert.Equal(uint64(0), undelegation_ret.Block)
 	tc.Assert.Equal(big.NewInt(50), undelegation_ret.Amount)
+
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	tc.Assert.Equal(uint64(0), undelegation_ret.Block)
+	tc.Assert.Equal(big.NewInt(100), undelegation_ret.Amount)
 
 	undelegation_v1_ret := undelegations.GetUndelegationV1(&delegator1_addr, &validator1_addr)
 	tc.Assert.Equal(uint64(0), undelegation_v1_ret.Block)
@@ -2065,20 +2178,22 @@ func TestUndelegationsClass(t *testing.T) {
 
 	undelegation_v2_ret := undelegations.GetUndelegationV2(&delegator1_addr, &validator2_addr, big.NewInt(1))
 	tc.Assert.Equal(uint64(0), undelegation_v2_ret.Block)
-	tc.Assert.Equal(big.NewInt(50), undelegation_v2_ret.Amount)
+	tc.Assert.Equal(big.NewInt(100), undelegation_v2_ret.Amount)
 	tc.Assert.Equal(big.NewInt(1), undelegation_v2_ret.Id)
 
 	// Check RemoveDelegation
 	undelegations.RemoveUndelegation(&delegator1_addr, &validator1_addr, nil)
 	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator1_addr, nil)
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
-	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsCount(&delegator1_addr))
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV1Count(&delegator1_addr))
+	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
 
 	undelegations.RemoveUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1))
 	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, big.NewInt(1))
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
-	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsCount(&delegator1_addr))
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV1Count(&delegator1_addr))
+	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
 }
 
