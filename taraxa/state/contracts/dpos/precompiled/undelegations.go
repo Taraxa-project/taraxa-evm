@@ -87,6 +87,8 @@ func (self *Undelegations) GetUndelegationBaseObject(delegator_address *common.A
 		undelegation_v2 := self.GetUndelegationV2(delegator_address, validator_address, undelegation_id)
 		if undelegation_v2 != nil {
 			undelegation = &undelegation_v2.UndelegationV1
+		} else {
+			undelegation = nil
 		}
 	} else {
 		undelegation = self.GetUndelegationV1(delegator_address, validator_address)

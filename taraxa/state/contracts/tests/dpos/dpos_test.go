@@ -535,6 +535,63 @@ func TestMagnoliaHardfork(t *testing.T) {
 	test.ExecuteAndCheck(validator1_owner, big.NewInt(0), test.Pack("getValidator", validator1_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
 
+func TestCornusHardfork(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.CornusHfBlockNum = 10
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultValidatorMaximumStake, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultValidatorMaximumStake)
+
+	// ErrMethodNotSupported
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_addr, uint32(0)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+
+	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(undelegate_res.Logs), 1)
+	tc.Assert.Equal(undelegate_res.Logs[0].Topics[0], UndelegatedEventHash)
+
+	// ErrExistentUndelegation
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrExistentUndelegation, util.ErrorString(""))
+
+	// Pass cornus hf block num
+	for test.BlockNumber() < cfg.Hardforks.CornusHfBlockNum {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	undelegate_v2_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(undelegate_v2_res.Logs), 1)
+	tc.Assert.Equal(undelegate_v2_res.Logs[0].Topics[0], UndelegatedV2EventHash)
+
+	// Confirm V1 undelegation
+	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(confirm_res.Logs), 1)
+	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
+
+	// Get undelegation's id
+	get_undelegations_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
+	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
+	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
+	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
+	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
+
+	// Advance 2 more rounds - delegation locking periods == 4
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+
+	// Confirm V2 undelegation
+	confirm_res = test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(confirm_res.Logs), 1)
+	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
+}
+
 func TestConfirmUndelegate(t *testing.T) {
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, CopyDefaultChainConfig())
 	defer test.End()
@@ -575,6 +632,65 @@ func TestConfirmUndelegate(t *testing.T) {
 	//test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
+
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getValidator", val_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
+}
+
+func TestConfirmUndelegateV2(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.CornusHfBlockNum = 0
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
+
+	// ErrNonExistentDelegation
+	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
+	totalBalance := DefaultMinimumDeposit
+	test.CheckContractBalance(totalBalance)
+
+	// ErrNonExistentUndelegation
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+
+	// Validator should not be deleted yet
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+
+	// Get undelegation's id
+	get_undelegations_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
+	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
+	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
+	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
+	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
+
+	// ErrLockedUndelegation
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), dpos.ErrLockedUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+
+	// Advance 2 more rounds - delegation locking periods == 4
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+
+	// ErrNonExistentUndelegation
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+
+	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+
+	// TODO: values are equal(0) but big.nat differs in underlying big.Int objects ???
+	// totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
+	//test.CheckContractBalance(totalBalance)
+	tc.Assert.Equal(len(confirm_res.Logs), 1)
+	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
 
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getValidator", val_addr), dpos.ErrNonExistentValidator, util.ErrorString(""))
 }
@@ -627,6 +743,68 @@ func TestCancelUndelegate(t *testing.T) {
 
 	// ErrNonExistentUndelegation
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegate", val_addr), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+}
+
+func TestCancelUndelegateV2(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.CornusHfBlockNum = 0
+
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	delegator_addr := addr(2)
+
+	test.AdvanceBlock(nil, nil)
+	test.AdvanceBlock(nil, nil)
+
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
+	// ErrNonExistentUndelegation
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.CheckContractBalance(DefaultMinimumDeposit)
+	// Undelegate and check if validator's total stake was increased
+	test.ExecuteAndCheck(delegator_addr, DefaultMinimumDeposit, test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit)
+	test.CheckContractBalance(totalBalance)
+	validator_raw := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator := new(GetValidatorRet)
+	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
+	tc.Assert.Equal(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit), validator.ValidatorInfo.TotalStake)
+
+	// Undelegate and check if validator's total stake was decreased
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator = new(GetValidatorRet)
+	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
+	tc.Assert.Equal(DefaultMinimumDeposit, validator.ValidatorInfo.TotalStake)
+
+	// Get undelegation's id
+	get_undelegations_v2_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getUndelegationsV2", delegator_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
+	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
+	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
+	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
+	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
+
+	// Cancel undelegate and check if validator's total stake was increased again
+	cancel_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(totalBalance)
+	tc.Assert.Equal(len(cancel_res.Logs), 1)
+	tc.Assert.Equal(cancel_res.Logs[0].Topics[0], UndelegateCanceledV2EventHash)
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
+	validator = new(GetValidatorRet)
+	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
+	tc.Assert.Equal(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit), validator.ValidatorInfo.TotalStake)
+
+	// ErrNonExistentUndelegation
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, undelegation_id), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 }
 
@@ -1637,7 +1815,6 @@ func TestGetUndelegationsV1(t *testing.T) {
 	tc.Assert.Equal(false, undelegations2_parsed_result.Undelegations[0].ValidatorExists)
 }
 
-// TODO: adjust the test
 func TestGetUndelegationsV2(t *testing.T) {
 	type GenValidator struct {
 		address common.Address
