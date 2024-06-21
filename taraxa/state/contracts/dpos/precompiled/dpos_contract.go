@@ -3,7 +3,6 @@ package dpos
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -78,8 +77,6 @@ var (
 	ErrExistentUndelegation         = util.ErrorString("Undelegation already exist")
 	ErrNonExistentUndelegation      = util.ErrorString("Undelegation does not exist")
 	ErrLockedUndelegation           = util.ErrorString("Undelegation is not yet ready to be withdrawn")
-	ErrUndelegateDeprecated         = util.ErrorString("Undelegate method is deprecated. Use UndelegateV2 instead")
-	ErrUndelegateV2NotSupported     = util.ErrorString("UndelegateV2 not yet supported. Use Undelegate instead")
 	ErrExistentValidator            = util.ErrorString("Validator already exist")
 	ErrSameValidator                = util.ErrorString("From and to validators are the same")
 	ErrInvalidRedelegation          = util.ErrorString("Redelegation has to be more than 0")
@@ -94,6 +91,7 @@ var (
 	ErrCommissionOverflow           = util.ErrorString("Commission is bigger than maximum value")
 	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
 	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
+	ErrMethodNotSupported           = util.ErrorString("Method not supported")
 )
 
 const (
@@ -247,10 +245,18 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "undelegate":
 		return UndelegateGas
 	case "confirmUndelegate":
+		return ConfirmUndelegateGas
 	case "confirmUndelegateV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return 0
+		}
 		return ConfirmUndelegateGas
 	case "cancelUndelegate":
+		return CancelUndelegateGas
 	case "cancelUndelegateV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return 0
+		}
 		return CancelUndelegateGas
 	case "reDelegate":
 		return ReDelegateGas
@@ -349,6 +355,10 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return undelegations_count * DposBatchGetMethodsGas
 
 	case "getUndelegationsV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return 0
+		}
+
 		// First 4 bytes is method signature !!!!
 		input := ctx.Input[4:]
 		var args dpos_sol.GetUndelegationsV2Args
@@ -358,7 +368,6 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		}
 
 		storage_reads_count := self.getUndelegationsV2StorageReadsCount(args, GetUndelegationsMaxCount)
-		log.Println("storage_reads_count: ", storage_reads_count)
 		return storage_reads_count * DposBatchGetMethodsGas
 
 	default:
@@ -591,6 +600,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.confirmUndelegate(ctx, block_num, args.Validator, nil)
 
 	case "confirmUndelegateV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return nil, ErrMethodNotSupported
+		}
+
 		var args dpos_sol.ConfirmUndelegateV2Args
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse confirmUndelegateV2 input args: ", err)
@@ -608,6 +621,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.cancelUndelegate(ctx, block_num, args.Validator, nil)
 
 	case "cancelUndelegateV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return nil, ErrMethodNotSupported
+		}
+
 		var args dpos_sol.CancelUndelegateV2Args
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse cancelUndelegateV2 input args: ", err)
@@ -752,6 +769,10 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.getUndelegations(args))
 
 	case "getUndelegationsV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return nil, ErrMethodNotSupported
+		}
+
 		var args dpos_sol.GetUndelegationsV2Args
 		if err = method.Inputs.Unpack(&args, input); err != nil {
 			fmt.Println("Unable to parse getUndelegationsV2 input args: ", err)
