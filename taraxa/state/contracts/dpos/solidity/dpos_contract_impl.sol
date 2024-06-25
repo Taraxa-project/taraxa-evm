@@ -128,21 +128,24 @@ contract DposDummyImpl {
     function delegate(address validator) external payable {}
 
     // Undelegates <amount> of tokens from specified validator - creates undelegate request
-    function undelegate(address validator, uint256 amount) external {}
+    // and returns unique undelegation_id per delefator
+    function undelegate(address validator, uint256 amount) external returns (uint256 undelegation_id) {}
 
     // Confirms undelegate request
     // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function confirmUndelegate(address validator) external {}
 
+    // Confirms undelegate request with <undelegation_id>
+    // Note: undelegation_id is unique per delegator
+    function confirmUndelegateV2(uint256 undelegation_id) external {}
+
     // Cancel undelegate request
     // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function cancelUndelegate(address validator) external {}
 
-    // Confirms undelegate request with <undelegation_id> from <validator>
-    function confirmUndelegateV2(address validator, uint256 undelegation_id) external {}
-
-    // Cancel undelegate request with <undelegation_id> from <validator>
-    function cancelUndelegateV2(address validator, uint256 undelegation_id) external {}
+    // Cancel undelegate request with <undelegation_id>
+    // Note: undelegation_id is unique per delegator
+    function cancelUndelegateV2(uint256 undelegation_id) external {}
 
     // Redelegates <amount> of tokens from one validator to the other
     function reDelegate(
@@ -281,4 +284,17 @@ contract DposDummyImpl {
         external
         view
         returns (UndelegationV2Data[] memory undelegations, bool end) {}
+
+     /**
+     * @notice Returns V2 undelegation for specified delegator & undelegation_id
+     *
+     * @param delegator        delegator account address
+     * @param undelegation_id  undelegation id (unique per delegator)
+     *
+     * @return undelegation
+     */
+    function getUndelegationV2(address delegator, uint256 undelegation_id)
+        external
+        view
+        returns (UndelegationV2Data memory) {}
 }

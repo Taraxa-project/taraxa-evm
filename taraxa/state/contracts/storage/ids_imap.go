@@ -18,8 +18,8 @@ func (self *IdsIMapReader) IdExists(id *big.Int) bool {
 	return self.ids.ItemExists(id.Bytes())
 }
 
-func (self *IdsIMapReader) GetIdsFromIdx(start_idx uint32, count uint32) (result []*big.Int, end bool) {
-	items, end := self.ids.GetItems(start_idx, count)
+func (self *IdsIMapReader) GetIds(batch uint32, count uint32) (result []*big.Int, end bool) {
+	items, end := self.ids.GetItems(batch*count, count)
 
 	result = make([]*big.Int, len(items))
 	for idx := 0; idx < len(items); idx++ {
