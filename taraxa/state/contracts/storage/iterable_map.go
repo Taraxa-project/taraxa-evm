@@ -32,7 +32,7 @@ func (self *IterableMapReader) ItemExists(item []byte) bool {
 	return item_exists
 }
 
-func (self *IterableMapReader) GetItems(batch uint32, count uint32) (result [][]byte, end bool) {
+func (self *IterableMapReader) GetItems(start_idx uint32, count uint32) (result [][]byte, end bool) {
 	// Gets items count
 	items_count := self.GetCount()
 
@@ -42,17 +42,16 @@ func (self *IterableMapReader) GetItems(batch uint32, count uint32) (result [][]
 		return
 	}
 
-	requested_idx_start := batch * count
-	requested_idx_end := (batch + 1) * count
+	end_idx := start_idx + count
 
 	// Invalid batch provided - there is not so many items in iterbale map
-	if requested_idx_start >= items_count {
+	if start_idx >= items_count {
 		end = true
 		return
 	}
 
-	if items_count <= requested_idx_end {
-		result = make([][]byte, items_count-requested_idx_start)
+	if items_count <= end_idx {
+		result = make([][]byte, items_count-start_idx)
 		end = true
 	} else {
 		result = make([][]byte, count)
@@ -60,8 +59,7 @@ func (self *IterableMapReader) GetItems(batch uint32, count uint32) (result [][]
 	}
 
 	// Start with index == 1, there is nothing saved on index == 0 as it is reserved to indicate non-existent item
-	var idx uint32
-	for idx = uint32(requested_idx_start + 1); idx <= requested_idx_end && idx <= items_count; idx++ {
+	for idx := uint32(start_idx + 1); idx <= end_idx && idx <= items_count; idx++ {
 		items_k := Stor_k_1(self.items_storage_prefix, uint32ToBytes(idx))
 
 		var item []byte
@@ -74,7 +72,7 @@ func (self *IterableMapReader) GetItems(batch uint32, count uint32) (result [][]
 			panic("Unable to find item " + string(item))
 		}
 
-		result[(idx-1)%count] = item
+		result[idx-start_idx-1] = item
 	}
 
 	return
@@ -117,8 +115,8 @@ func (self *IterableMap) Init(stor *StorageWrapper, prefix []byte) {
 	self.IterableMapReader.Init(&stor.StorageReaderWrapper, prefix)
 }
 
-// Creates item from iterable map
-func (self *IterableMap) CreateItem(item []byte) bool {
+// Creates item from iterable map, return number of items in the iterbale map
+func (self *IterableMap) CreateItem(item []byte) uint32 {
 	if item_exists, _ := self.itemExists(item); item_exists {
 		panic("Item " + string(item) + " already exists")
 	}
@@ -138,9 +136,9 @@ func (self *IterableMap) CreateItem(item []byte) bool {
 	self.storage.Put(items_pos_k, uint32ToBytes(new_item_pos))
 
 	// Saves new items count
-	self.storage.Put(self.items_count_storage_key, uint32ToBytes(items_count+1))
+	self.storage.Put(self.items_count_storage_key, uint32ToBytes(new_item_pos))
 
-	return true
+	return new_item_pos
 }
 
 // Removes item from iterable map, returns number of left items in the iterbale map

@@ -55,6 +55,7 @@ type HardforksConfig struct {
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
+	CornusHfBlockNum             uint64
 }
 
 func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
@@ -79,6 +80,10 @@ func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
 
 func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
 	return block >= c.FicusHf.BlockNum
+}
+
+func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
+	return block >= c.CornusHfBlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {

@@ -19,7 +19,7 @@ func (self *AddressesIMapReader) AccountExists(account *common.Address) bool {
 }
 
 func (self *AddressesIMapReader) GetAccounts(batch uint32, count uint32) (result []common.Address, end bool) {
-	items, end := self.addresses.GetItems(batch, count)
+	items, end := self.addresses.GetItems(batch*count, count)
 
 	result = make([]common.Address, len(items))
 	for idx := 0; idx < len(items); idx++ {
@@ -58,7 +58,7 @@ func (self *AddressesIMap) Init(stor *StorageWrapper, prefix []byte) {
 }
 
 // Creates account from iterable map
-func (self *AddressesIMap) CreateAccount(account *common.Address) bool {
+func (self *AddressesIMap) CreateAccount(account *common.Address) uint32 {
 	return self.addresses.CreateItem(account.Bytes())
 }
 
