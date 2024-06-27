@@ -3,6 +3,7 @@ package dpos
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -369,6 +370,13 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 
 		storage_reads_count := self.getUndelegationsV2StorageReadsCount(args, GetUndelegationsMaxCount)
 		return storage_reads_count * DposBatchGetMethodsGas
+
+	case "getUndelegationV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return 0
+		}
+
+		return DposGetMethodsGas
 
 	default:
 	}
@@ -779,6 +787,25 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			return nil, err
 		}
 		return method.Outputs.Pack(self.getUndelegationsV2(args))
+
+	case "getUndelegationV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return nil, ErrMethodNotSupported
+		}
+
+		var args dpos_sol.GetUndelegationV2Args
+		if err = method.Inputs.Unpack(&args, input); err != nil {
+			fmt.Println("Unable to parse getUndelegationV2 input args: ", err)
+			return nil, err
+		}
+
+		undelegation := self.getUndelegationV2(&args.Delegator, &args.Validator, args.UndelegationId)
+		if undelegation == nil {
+			return nil, err
+		}
+
+		return method.Outputs.Pack(*undelegation)
+
 	default:
 	}
 
@@ -1814,8 +1841,14 @@ func (self *Contract) getUndelegations(args dpos_sol.GetUndelegationsArgs) (unde
 	undelegations = make([]dpos_sol.DposInterfaceUndelegationData, 0, len(v1_undelegations_validators))
 
 	for _, validator := range v1_undelegations_validators {
-		undelegation_data := self.getUndelegation(&args.Delegator, &validator, nil)
-		undelegations = append(undelegations, undelegation_data)
+		undelegation_data := self.getUndelegationV1(&args.Delegator, &validator)
+		// This should never happen
+		if undelegation_data == nil {
+			log.Printf("Error: Unable to fetch undelegation V1 for delegator %s, validator %s", &args.Delegator, validator)
+			continue
+		}
+
+		undelegations = append(undelegations, *undelegation_data)
 	}
 
 	return
@@ -1846,13 +1879,13 @@ func (self *Contract) getUndelegationsV2(args dpos_sol.GetUndelegationsV2Args) (
 
 		for _, undelegation_id := range v2_undelegations_ids {
 			undelegation_data := self.getUndelegationV2(&args.Delegator, validator, undelegation_id)
+			// This should never happen
 			if undelegation_data == nil {
-
+				log.Printf("Error: Unable to fetch undelegation V2 for delegator %s, validator %s, undelegation id %d", &args.Delegator, validator, undelegation_id)
 				continue
 			}
-			undelegation_v2_data := dpos_sol.DposInterfaceUndelegationV2Data{UndelegationData: undelegation_data, UndelegationId: undelegation_id}
 
-			undelegations = append(undelegations, undelegation_v2_data)
+			undelegations = append(undelegations, *undelegation_data)
 		}
 
 		if uint32(len(undelegations)) == GetUndelegationsMaxCount {
@@ -1866,13 +1899,14 @@ func (self *Contract) getUndelegationsV2(args dpos_sol.GetUndelegationsV2Args) (
 }
 
 // Returns specified undelegation
-func (self *Contract) getUndelegationV2(delegator *common.Address, validator *common.Address, undelegation_id *big.Int) (undelegation_data dpos_sol.DposInterfaceUndelegationV2Data) {
+func (self *Contract) getUndelegationV2(delegator *common.Address, validator *common.Address, undelegation_id *big.Int) (undelegation_data *dpos_sol.DposInterfaceUndelegationV2Data) {
 	//&args.Delegator, &args.Validator, args.UndelegationId
 	undelegation := self.undelegations.GetUndelegationV2(delegator, validator, undelegation_id)
 	if undelegation == nil {
 		return
 	}
 
+	undelegation_data = new(dpos_sol.DposInterfaceUndelegationV2Data)
 	undelegation_data.UndelegationData.Validator = *validator
 	// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
 	undelegation_data.UndelegationData.ValidatorExists = self.validators.ValidatorExists(validator)
@@ -1883,12 +1917,13 @@ func (self *Contract) getUndelegationV2(delegator *common.Address, validator *co
 	return
 }
 
-func (self *Contract) getUndelegationV1(delegator *common.Address, validator *common.Address) (undelegation_data dpos_sol.DposInterfaceUndelegationData) {
+func (self *Contract) getUndelegationV1(delegator *common.Address, validator *common.Address) (undelegation_data *dpos_sol.DposInterfaceUndelegationData) {
 	undelegation := self.undelegations.GetUndelegationV1(delegator, validator)
 	if undelegation == nil {
 		return
 	}
 
+	undelegation_data = new(dpos_sol.DposInterfaceUndelegationData)
 	undelegation_data.Validator = *validator
 	// Validator can be already deleted before confirming undelegation if he had 0 rewards and stake balances
 	undelegation_data.ValidatorExists = self.validators.ValidatorExists(validator)
