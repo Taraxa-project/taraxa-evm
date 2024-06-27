@@ -127,8 +127,8 @@ contract DposDummyImpl {
     // Delegates tokens to specified validator
     function delegate(address validator) external payable {}
 
-    // Undelegates <amount> of tokens from specified validator - creates undelegate request
-    function undelegate(address validator, uint256 amount) external {}
+    // Undelegates <amount> of tokens from specified validator - creates undelegate request and returns undelegation_id
+    function undelegate(address validator, uint256 amount) external returns (uint256 undelegation_id) {}
 
     // Confirms undelegate request
     // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
@@ -281,4 +281,18 @@ contract DposDummyImpl {
         external
         view
         returns (UndelegationV2Data[] memory undelegations, bool end) {}
+
+     /**
+     * @notice Returns V2 undelegation for specified delegator, validator and undelegation_id
+     *
+     * @param delegator        delegator account address
+     * @param validator        validator account address
+     * @param undelegation_id  undelegation id
+     *
+     * @return undelegation
+     */
+    function getUndelegationV2(address delegator, address validator, uint256 undelegation_id)
+        external
+        view
+        returns (UndelegationV2Data memory) {}
 }
