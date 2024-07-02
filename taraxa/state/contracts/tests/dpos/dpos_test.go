@@ -32,11 +32,11 @@ import (
 // This strings should correspond to event signatures in ../solidity/dpos_contract_interface.sol file
 var DelegatedEventHash = *keccak256.Hash([]byte("Delegated(address,address,uint256)"))
 var UndelegatedEventHash = *keccak256.Hash([]byte("Undelegated(address,address,uint256)"))
-var UndelegatedV2EventHash = *keccak256.Hash([]byte("UndelegatedV2(address,address,uint256,uint256)"))
+var UndelegatedV2EventHash = *keccak256.Hash([]byte("UndelegatedV2(address,address,uint64,uint256)"))
 var UndelegateConfirmedEventHash = *keccak256.Hash([]byte("UndelegateConfirmed(address,address,uint256)"))
-var UndelegateConfirmedV2EventHash = *keccak256.Hash([]byte("UndelegateConfirmedV2(address,address,uint256,uint256)"))
+var UndelegateConfirmedV2EventHash = *keccak256.Hash([]byte("UndelegateConfirmedV2(address,address,uint64,uint256)"))
 var UndelegateCanceledEventHash = *keccak256.Hash([]byte("UndelegateCanceled(address,address,uint256)"))
-var UndelegateCanceledV2EventHash = *keccak256.Hash([]byte("UndelegateCanceledV2(address,address,uint256,uint256)"))
+var UndelegateCanceledV2EventHash = *keccak256.Hash([]byte("UndelegateCanceledV2(address,address,uint64,uint256)"))
 var RedelegatedEventHash = *keccak256.Hash([]byte("Redelegated(address,address,address,uint256)"))
 var RewardsClaimedEventHash = *keccak256.Hash([]byte("RewardsClaimed(address,address,uint256)"))
 var CommissionRewardsClaimedEventHash = *keccak256.Hash([]byte("CommissionRewardsClaimed(address,address,uint256)"))
@@ -50,8 +50,12 @@ type GetUndelegationsRet struct {
 }
 
 type GetUndelegationsV2Ret struct {
-	Undelegations []dpos_sol.DposInterfaceUndelegationV2Data
-	End           bool
+	UndelegationsV2 []dpos_sol.DposInterfaceUndelegationV2Data
+	End             bool
+}
+
+type GetUndelegationV2Ret struct {
+	UndelegationV2 dpos_sol.DposInterfaceUndelegationV2Data
 }
 
 type GetValidatorsRet struct {
@@ -397,6 +401,57 @@ func TestUndelegate(t *testing.T) {
 	test.CheckContractBalance(totalBalance)
 }
 
+func TestUndelegateV2(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.CornusHfBlockNum = 0
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultValidatorMaximumStake, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := DefaultValidatorMaximumStake
+	test.CheckContractBalance(totalBalance)
+
+	// Create 4 undelegations from the same validator
+	var undelegations_blocks []uint64
+	for idx := uint64(1); idx <= 4; idx++ {
+		undelegate_v2_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+		undelegations_blocks = append(undelegations_blocks, test.BlockNumber()+uint64(cfg.DPOS.DelegationLockingPeriod))
+
+		tc.Assert.Equal(len(undelegate_v2_res.Logs), 1)
+		tc.Assert.Equal(undelegate_v2_res.Logs[0].Topics[0], UndelegatedV2EventHash)
+		test.CheckContractBalance(totalBalance)
+
+		undelegation_id_parsed := new(uint64)
+		test.Unpack(undelegation_id_parsed, "undelegateV2", undelegate_v2_res.CodeRetval)
+		tc.Assert.Equal(idx, *undelegation_id_parsed)
+	}
+
+	// Cancel undelegation with id == 2
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, uint64(2)), util.ErrorString(""), util.ErrorString(""))
+
+	// Confirm undelegation with id == 3
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, uint64(3)), util.ErrorString(""), util.ErrorString(""))
+
+	// Get undelegations one by one
+	for idx := uint64(1); idx <= 4; idx++ {
+		if idx == 2 || idx == 3 {
+			test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, uint64(10)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+			continue
+		}
+
+		get_undelegation_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, idx), util.ErrorString(""), util.ErrorString(""))
+		get_undelegation_v2_parsed_result := new(GetUndelegationV2Ret)
+		test.Unpack(get_undelegation_v2_parsed_result, "getUndelegationV2", get_undelegation_v2_result.CodeRetval)
+
+		tc.Assert.Equal(idx, get_undelegation_v2_parsed_result.UndelegationV2.UndelegationId)
+		tc.Assert.Equal(DefaultMinimumDeposit, get_undelegation_v2_parsed_result.UndelegationV2.UndelegationData.Stake)
+		tc.Assert.Equal(val_addr, get_undelegation_v2_parsed_result.UndelegationV2.UndelegationData.Validator)
+		tc.Assert.Equal(undelegations_blocks[idx-1], get_undelegation_v2_parsed_result.UndelegationV2.UndelegationData.Block)
+	}
+}
+
 // In pre magnolia hardfork code, validator was deleted if his total_stake & rewards_pool == 0
 // In post magnolia hardfork code, validator was deleted if his total_stake & rewards_pool & ongoing undelegations_count == 0
 func TestPreMagnoliaHfUndelegate(t *testing.T) {
@@ -549,8 +604,9 @@ func TestCornusHardfork(t *testing.T) {
 	test.CheckContractBalance(DefaultValidatorMaximumStake)
 
 	// ErrMethodNotSupported
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, uint64(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, uint64(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), dpos.ErrMethodNotSupported, util.ErrorString(""))
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_addr, uint32(0)), dpos.ErrMethodNotSupported, util.ErrorString(""))
 
 	undelegate_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
@@ -565,22 +621,26 @@ func TestCornusHardfork(t *testing.T) {
 		test.AdvanceBlock(nil, nil)
 	}
 
-	undelegate_v2_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate_v2_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(undelegate_v2_res.Logs), 1)
 	tc.Assert.Equal(undelegate_v2_res.Logs[0].Topics[0], UndelegatedV2EventHash)
+	undelegation_id_parsed := new(uint64)
+	test.Unpack(undelegation_id_parsed, "undelegateV2", undelegate_v2_res.CodeRetval)
+	tc.Assert.Equal(uint64(1), *undelegation_id_parsed)
 
 	// Confirm V1 undelegation
 	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedEventHash)
 
-	// Get undelegation's id
+	// Get undelegation's id through getUndelegationsV2
 	get_undelegations_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
 	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
-	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
+	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.UndelegationsV2))
 	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
-	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
+	undelegation_id := get_undelegations_v2_result_parsed.UndelegationsV2[0].UndelegationId
+	tc.Assert.Equal(*undelegation_id_parsed, undelegation_id)
 
 	// Advance 2 more rounds - delegation locking periods == 4
 	test.AdvanceBlock(nil, nil)
@@ -650,30 +710,25 @@ func TestConfirmUndelegateV2(t *testing.T) {
 	test.CheckContractBalance(DefaultMinimumDeposit)
 
 	// ErrNonExistentDelegation
-	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(addr(2), big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), dpos.ErrNonExistentDelegation, util.ErrorString(""))
 	totalBalance := DefaultMinimumDeposit
 	test.CheckContractBalance(totalBalance)
 
 	// ErrNonExistentUndelegation
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, uint64(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate_v2_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
+	undelegation_id_parsed := new(uint64)
+	test.Unpack(undelegation_id_parsed, "undelegateV2", undelegate_v2_res.CodeRetval)
+	tc.Assert.Equal(uint64(1), *undelegation_id_parsed)
 
 	// Validator should not be deleted yet
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 
-	// Get undelegation's id
-	get_undelegations_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
-	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
-	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
-	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
-	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
-
 	// ErrLockedUndelegation
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), dpos.ErrLockedUndelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, *undelegation_id_parsed), dpos.ErrLockedUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 
 	// Advance 2 more rounds - delegation locking periods == 4
@@ -681,10 +736,10 @@ func TestConfirmUndelegateV2(t *testing.T) {
 	test.AdvanceBlock(nil, nil)
 
 	// ErrNonExistentUndelegation
-	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, *undelegation_id_parsed+uint64(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 
-	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, *undelegation_id_parsed), util.ErrorString(""), util.ErrorString(""))
 
 	// TODO: values are equal(0) but big.nat differs in underlying big.Int objects ???
 	// totalBalance = bigutil.Sub(totalBalance, DefaultMinimumDeposit)
@@ -764,7 +819,7 @@ func TestCancelUndelegateV2(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// ErrNonExistentUndelegation
-	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, big.NewInt(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, uint64(1)), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(DefaultMinimumDeposit)
 	// Undelegate and check if validator's total stake was increased
 	test.ExecuteAndCheck(delegator_addr, DefaultMinimumDeposit, test.Pack("delegate", val_addr), util.ErrorString(""), util.ErrorString(""))
@@ -776,24 +831,20 @@ func TestCancelUndelegateV2(t *testing.T) {
 	tc.Assert.Equal(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit), validator.ValidatorInfo.TotalStake)
 
 	// Undelegate and check if validator's total stake was decreased
-	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate_v2_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
+	undelegation_id_parsed := new(uint64)
+	test.Unpack(undelegation_id_parsed, "undelegateV2", undelegate_v2_res.CodeRetval)
+	tc.Assert.Equal(uint64(1), *undelegation_id_parsed)
+
 	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator_raw = test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getValidator", val_addr), util.ErrorString(""), util.ErrorString(""))
 	validator = new(GetValidatorRet)
 	test.Unpack(validator, "getValidator", validator_raw.CodeRetval)
 	tc.Assert.Equal(DefaultMinimumDeposit, validator.ValidatorInfo.TotalStake)
 
-	// Get undelegation's id
-	get_undelegations_v2_result := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("getUndelegationsV2", delegator_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
-	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
-	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
-	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.Undelegations))
-	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
-	undelegation_id := get_undelegations_v2_result_parsed.Undelegations[0].UndelegationId
-
 	// Cancel undelegate and check if validator's total stake was increased again
-	cancel_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+	cancel_res := test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, *undelegation_id_parsed), util.ErrorString(""), util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 	tc.Assert.Equal(len(cancel_res.Logs), 1)
 	tc.Assert.Equal(cancel_res.Logs[0].Topics[0], UndelegateCanceledV2EventHash)
@@ -804,7 +855,7 @@ func TestCancelUndelegateV2(t *testing.T) {
 	tc.Assert.Equal(bigutil.Add(DefaultMinimumDeposit, DefaultMinimumDeposit), validator.ValidatorInfo.TotalStake)
 
 	// ErrNonExistentUndelegation
-	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, undelegation_id), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
+	test.ExecuteAndCheck(delegator_addr, big.NewInt(0), test.Pack("cancelUndelegateV2", val_addr, *undelegation_id_parsed), dpos.ErrNonExistentUndelegation, util.ErrorString(""))
 	test.CheckContractBalance(totalBalance)
 }
 
@@ -1861,7 +1912,7 @@ func TestGetUndelegationsV2(t *testing.T) {
 	for validator_idx, validator := range gen_validators {
 		// Gen multiple undelegations
 		for undelegation_idx := 0; undelegation_idx < (validator_idx+1)*3; undelegation_idx++ {
-			test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.Pack("undelegate", validator.address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+			test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.Pack("undelegateV2", validator.address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 			undelegations_count++
 		}
 	}
@@ -1877,10 +1928,10 @@ func TestGetUndelegationsV2(t *testing.T) {
 	batch0_expected_gas := (8+2*dpos.GetUndelegationsMaxCount)*dpos.DposBatchGetMethodsGas + uint64(intristic_gas_batch0)
 	tc.Assert.Equal(batch0_expected_gas, batch0_result.GasUsed)
 	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
-	tc.Assert.Equal(dpos.GetUndelegationsMaxCount, len(batch0_parsed_result.Undelegations))
+	tc.Assert.Equal(dpos.GetUndelegationsMaxCount, len(batch0_parsed_result.UndelegationsV2))
 	tc.Assert.Equal(false, batch0_parsed_result.End)
 	// Checks if last returned undelegation in this batch is the right one based on validator address
-	for undelegation_idx, undelegation := range batch0_parsed_result.Undelegations {
+	for undelegation_idx, undelegation := range batch0_parsed_result.UndelegationsV2 {
 		var validator common.Address
 		if undelegation_idx < 3 {
 			validator = gen_validators[0].address
@@ -1903,10 +1954,10 @@ func TestGetUndelegationsV2(t *testing.T) {
 	batch1_expected_gas := (8+2*10)*dpos.DposBatchGetMethodsGas + uint64(intristic_gas_batch1)
 	tc.Assert.Equal(batch1_expected_gas, batch1_result.GasUsed)
 	// Checks if number of returned undelegations is == dpos.GetUndelegationsMaxCount
-	tc.Assert.Equal(undelegations_count-dpos.GetUndelegationsMaxCount, len(batch1_parsed_result.Undelegations))
+	tc.Assert.Equal(undelegations_count-dpos.GetUndelegationsMaxCount, len(batch1_parsed_result.UndelegationsV2))
 	tc.Assert.Equal(true, batch1_parsed_result.End)
 	// Checks if last returned undelegation in this batch is the right one based on validator address
-	for _, undelegation := range batch1_parsed_result.Undelegations {
+	for _, undelegation := range batch1_parsed_result.UndelegationsV2 {
 		tc.Assert.Equal(gen_validators[3].address, undelegation.UndelegationData.Validator)
 	}
 }
@@ -2298,8 +2349,8 @@ func TestUndelegationsClass(t *testing.T) {
 	delegator1_addr := addr(3)
 
 	// Check getters to 0 values
+
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
-	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
 	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV1Count(&delegator1_addr))
 	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 
@@ -2317,14 +2368,14 @@ func TestUndelegationsClass(t *testing.T) {
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 
 	// Creates 2 undelegations - V1 and V2 (with undelegation_id)
-	undelegations.CreateUndelegation(&delegator1_addr, &validator1_addr, nil, 0, big.NewInt(50))
-	undelegations.CreateUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1), 0, big.NewInt(100))
+	undelegations.CreateUndelegationV1(&delegator1_addr, &validator1_addr, 0, big.NewInt(50))
+	undelegation_id := undelegations.CreateUndelegationV2(&delegator1_addr, &validator2_addr, 0, big.NewInt(100))
 
 	// Check GetUndelegationsCount + UndelegationExists
 	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV1Count(&delegator1_addr))
 	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
-	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator2_addr, big.NewInt(1)))
+	tc.Assert.Equal(true, undelegations.UndelegationExists(&delegator1_addr, &validator2_addr, &undelegation_id))
 
 	// Check GetUndelegationsValidators
 	undelegations_v1_ret, end := undelegations.GetUndelegationsV1Validators(&delegator1_addr, 0, 10)
@@ -2345,7 +2396,7 @@ func TestUndelegationsClass(t *testing.T) {
 	tc.Assert.Equal(uint64(0), undelegation_ret.Block)
 	tc.Assert.Equal(big.NewInt(50), undelegation_ret.Amount)
 
-	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, &undelegation_id)
 	tc.Assert.Equal(uint64(0), undelegation_ret.Block)
 	tc.Assert.Equal(big.NewInt(100), undelegation_ret.Amount)
 
@@ -2353,10 +2404,10 @@ func TestUndelegationsClass(t *testing.T) {
 	tc.Assert.Equal(uint64(0), undelegation_v1_ret.Block)
 	tc.Assert.Equal(big.NewInt(50), undelegation_v1_ret.Amount)
 
-	undelegation_v2_ret := undelegations.GetUndelegationV2(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	undelegation_v2_ret := undelegations.GetUndelegationV2(&delegator1_addr, &validator2_addr, undelegation_id)
 	tc.Assert.Equal(uint64(0), undelegation_v2_ret.Block)
 	tc.Assert.Equal(big.NewInt(100), undelegation_v2_ret.Amount)
-	tc.Assert.Equal(big.NewInt(1), undelegation_v2_ret.Id)
+	tc.Assert.Equal(undelegation_id, undelegation_v2_ret.Id)
 
 	// Check RemoveDelegation
 	undelegations.RemoveUndelegation(&delegator1_addr, &validator1_addr, nil)
@@ -2366,12 +2417,12 @@ func TestUndelegationsClass(t *testing.T) {
 	tc.Assert.Equal(uint32(1), undelegations.GetUndelegationsV2Count(&delegator1_addr))
 	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, nil))
 
-	undelegations.RemoveUndelegation(&delegator1_addr, &validator2_addr, big.NewInt(1))
-	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, big.NewInt(1))
+	undelegations.RemoveUndelegation(&delegator1_addr, &validator2_addr, &undelegation_id)
+	undelegation_ret = undelegations.GetUndelegationBaseObject(&delegator1_addr, &validator2_addr, &undelegation_id)
 	tc.Assert.Equal(undelegation_nil_ptr, undelegation_ret)
 	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV1Count(&delegator1_addr))
 	tc.Assert.Equal(uint32(0), undelegations.GetUndelegationsV2Count(&delegator1_addr))
-	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, big.NewInt(1)))
+	tc.Assert.Equal(false, undelegations.UndelegationExists(&delegator1_addr, &validator1_addr, &undelegation_id))
 }
 
 func TestMakeLogsCheckTopics(t *testing.T) {
@@ -2381,6 +2432,7 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 	Abi, _ := abi.JSON(strings.NewReader(dpos_sol.TaraxaDposClientMetaData))
 	logs := *new(dpos.Logs).Init(Abi.Events)
 
+	undelegation_id := uint64(1)
 	count := 0
 	{
 		log := logs.MakeDelegatedLog(&common.ZeroAddress, &common.ZeroAddress, amount)
@@ -2388,12 +2440,12 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 		count++
 	}
 	{
-		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, nil, amount)
+		log := logs.MakeUndelegatedV1Log(&common.ZeroAddress, &common.ZeroAddress, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegatedEventHash)
 		count++
 	}
 	{
-		log := logs.MakeUndelegatedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		log := logs.MakeUndelegatedV2Log(&common.ZeroAddress, &common.ZeroAddress, 1, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegatedV2EventHash)
 		count++
 	}
@@ -2403,7 +2455,7 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 		count++
 	}
 	{
-		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		log := logs.MakeUndelegateConfirmedLog(&common.ZeroAddress, &common.ZeroAddress, &undelegation_id, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegateConfirmedV2EventHash)
 		count++
 	}
@@ -2413,7 +2465,7 @@ func TestMakeLogsCheckTopics(t *testing.T) {
 		count++
 	}
 	{
-		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, big.NewInt(1), amount)
+		log := logs.MakeUndelegateCanceledLog(&common.ZeroAddress, &common.ZeroAddress, &undelegation_id, amount)
 		tc.Assert.Equal(log.Topics[0], UndelegateCanceledV2EventHash)
 		count++
 	}

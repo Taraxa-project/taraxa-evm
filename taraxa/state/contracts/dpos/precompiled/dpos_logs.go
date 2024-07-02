@@ -36,31 +36,23 @@ func (self *Logs) MakeDelegatedLog(delegator, validator *common.Address, amount 
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, amount))
 }
 
-func (self *Logs) MakeUndelegatedLog(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
-	if undelegation_id != nil {
-		return self.makeUndelegatedV2Log(delegator, validator, undelegation_id, amount)
-	}
-
-	return self.makeUndelegatedV1Log(delegator, validator, amount)
-}
-
 // event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
-func (self *Logs) makeUndelegatedV1Log(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
+func (self *Logs) MakeUndelegatedV1Log(delegator, validator *common.Address, amount *big.Int) vm.LogRecord {
 	event := self.Events["Undelegated"]
 
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, amount))
 }
 
-// event UndelegatedV2(address indexed delegator, address indexed validator, uint256 undelegation_id, uint256 amount);
-func (self *Logs) makeUndelegatedV2Log(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
+// event UndelegatedV2(address indexed delegator, address indexed validator, uint64 undelegation_id, uint256 amount);
+func (self *Logs) MakeUndelegatedV2Log(delegator, validator *common.Address, undelegation_id uint64, amount *big.Int) vm.LogRecord {
 	event := self.Events["UndelegatedV2"]
 
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, undelegation_id, amount))
 }
 
-func (self *Logs) MakeUndelegateConfirmedLog(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
+func (self *Logs) MakeUndelegateConfirmedLog(delegator, validator *common.Address, undelegation_id *uint64, amount *big.Int) vm.LogRecord {
 	if undelegation_id != nil {
-		return self.makeUndelegateConfirmedV2Log(delegator, validator, undelegation_id, amount)
+		return self.makeUndelegateConfirmedV2Log(delegator, validator, *undelegation_id, amount)
 	}
 
 	return self.makeUndelegateConfirmedV1Log(delegator, validator, amount)
@@ -73,16 +65,16 @@ func (self *Logs) makeUndelegateConfirmedV1Log(delegator, validator *common.Addr
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, amount))
 }
 
-// event UndelegateConfirmedV2(address indexed delegator, address indexed validator, uint256 undelegation_id, uint256 amount);
-func (self *Logs) makeUndelegateConfirmedV2Log(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
+// event UndelegateConfirmedV2(address indexed delegator, address indexed validator, uint64 undelegation_id, uint256 amount);
+func (self *Logs) makeUndelegateConfirmedV2Log(delegator, validator *common.Address, undelegation_id uint64, amount *big.Int) vm.LogRecord {
 	event := self.Events["UndelegateConfirmedV2"]
 
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, undelegation_id, amount))
 }
 
-func (self *Logs) MakeUndelegateCanceledLog(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
+func (self *Logs) MakeUndelegateCanceledLog(delegator, validator *common.Address, undelegation_id *uint64, amount *big.Int) vm.LogRecord {
 	if undelegation_id != nil {
-		return self.makeUndelegateCanceledV2Log(delegator, validator, undelegation_id, amount)
+		return self.makeUndelegateCanceledV2Log(delegator, validator, *undelegation_id, amount)
 	}
 
 	return self.makeUndelegateCanceledV1Log(delegator, validator, amount)
@@ -95,8 +87,8 @@ func (self *Logs) makeUndelegateCanceledV1Log(delegator, validator *common.Addre
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, amount))
 }
 
-// event UndelegateCanceledV2(address indexed delegator, address indexed validator, uint256 undelegation_id, uint256 amount);
-func (self *Logs) makeUndelegateCanceledV2Log(delegator, validator *common.Address, undelegation_id *big.Int, amount *big.Int) vm.LogRecord {
+// event UndelegateCanceledV2(address indexed delegator, address indexed validator, uint64 undelegation_id, uint256 amount);
+func (self *Logs) makeUndelegateCanceledV2Log(delegator, validator *common.Address, undelegation_id uint64, amount *big.Int) vm.LogRecord {
 	event := self.Events["UndelegateCanceledV2"]
 
 	return *checkError(event.MakeLog(dpos_contract_address, delegator, validator, undelegation_id, amount))

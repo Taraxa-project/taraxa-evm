@@ -23,8 +23,8 @@ type UndelegationV1 struct {
 type UndelegationV2 struct {
 	UndelegationV1
 
-	// Undelegation id
-	Id *big.Int
+	// Undelegation id (unique per delegator address)
+	Id uint64
 }
 
 type DelegatorV2Undelegations struct {
@@ -46,10 +46,11 @@ type Undelegations struct {
 	// <delegator address -> DelegatorV2Undelegations object>
 	v2_undelegations_map map[common.Address]*DelegatorV2Undelegations
 
-	undelegations_field                  []byte
-	delegator_v1_undelegations_field     []byte
-	delegator_v2_undelegations_field     []byte
-	delegator_v2_undelegations_ids_field []byte
+	undelegations_field                            []byte
+	delegator_v1_undelegations_field               []byte
+	delegator_v2_undelegations_field               []byte
+	delegator_v2_undelegations_ids_field           []byte
+	delegator_v2_undelegations_last_uniqe_id_field []byte
 }
 
 func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []byte) {
@@ -60,31 +61,32 @@ func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []
 	self.delegator_v1_undelegations_field = append(prefix, []byte{1}...)
 	self.delegator_v2_undelegations_field = append(prefix, []byte{2}...)
 	self.delegator_v2_undelegations_ids_field = append(prefix, []byte{3}...)
+	self.delegator_v2_undelegations_last_uniqe_id_field = append(prefix, []byte{4}...)
 }
 
 // Returns true if for given values there is undelegation in queue
-func (self *Undelegations) UndelegationExists(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) bool {
+func (self *Undelegations) UndelegationExists(delegator_address *common.Address, validator_address *common.Address, undelegation_id *uint64) bool {
 	if undelegation_id != nil {
-		return self.undelegationV2Exists(delegator_address, validator_address, undelegation_id)
+		return self.undelegationV2Exists(delegator_address, validator_address, *undelegation_id)
 	}
 
-	return self.undelegationV1Exists(delegator_address, validator_address)
+	return self.UndelegationV1Exists(delegator_address, validator_address)
 }
 
-func (self *Undelegations) undelegationV1Exists(delegator_address *common.Address, validator_address *common.Address) bool {
+func (self *Undelegations) UndelegationV1Exists(delegator_address *common.Address, validator_address *common.Address) bool {
 	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	return validators_map.AccountExists(validator_address)
 }
 
-func (self *Undelegations) undelegationV2Exists(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) bool {
+func (self *Undelegations) undelegationV2Exists(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) bool {
 	_, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	return ids_map.IdExists(undelegation_id)
 }
 
 // Returns undelegation object from queue
-func (self *Undelegations) GetUndelegationBaseObject(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) (undelegation *UndelegationV1) {
+func (self *Undelegations) GetUndelegationBaseObject(delegator_address *common.Address, validator_address *common.Address, undelegation_id *uint64) (undelegation *UndelegationV1) {
 	if undelegation_id != nil {
-		undelegation_v2 := self.GetUndelegationV2(delegator_address, validator_address, undelegation_id)
+		undelegation_v2 := self.GetUndelegationV2(delegator_address, validator_address, *undelegation_id)
 		if undelegation_v2 != nil {
 			undelegation = &undelegation_v2.UndelegationV1
 		} else {
@@ -98,7 +100,7 @@ func (self *Undelegations) GetUndelegationBaseObject(delegator_address *common.A
 }
 
 func (self *Undelegations) GetUndelegationV1(delegator_address *common.Address, validator_address *common.Address) (undelegation *UndelegationV1) {
-	key := self.genUndelegationKey(delegator_address, validator_address, nil)
+	key := self.genUndelegationV1Key(delegator_address, validator_address)
 	self.storage.Get(key, func(bytes []byte) {
 		undelegation = new(UndelegationV1)
 		rlp.MustDecodeBytes(bytes, undelegation)
@@ -107,8 +109,8 @@ func (self *Undelegations) GetUndelegationV1(delegator_address *common.Address, 
 	return
 }
 
-func (self *Undelegations) GetUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) (undelegation *UndelegationV2) {
-	key := self.genUndelegationKey(delegator_address, validator_address, undelegation_id)
+func (self *Undelegations) GetUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) (undelegation *UndelegationV2) {
+	key := self.genUndelegationV2Key(delegator_address, validator_address, undelegation_id)
 	self.storage.Get(key, func(bytes []byte) {
 		undelegation = new(UndelegationV2)
 		rlp.MustDecodeBytes(bytes, undelegation)
@@ -136,56 +138,57 @@ func (self *Undelegations) GetUndelegationsV2Count(delegator_address *common.Add
 	return count
 }
 
-// Creates undelegation object in storage
-func (self *Undelegations) CreateUndelegation(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int, block types.BlockNum, amount *big.Int) {
-	if undelegation_id != nil {
-		self.createUndelegationV2(delegator_address, validator_address, undelegation_id, block, amount)
-	} else {
-		self.createUndelegationV1(delegator_address, validator_address, block, amount)
-	}
-}
-
-func (self *Undelegations) createUndelegationV1(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) {
+func (self *Undelegations) CreateUndelegationV1(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) {
 	undelegation := new(UndelegationV1)
 	undelegation.Amount = amount
 	undelegation.Block = block
-
-	self.saveUndelegationObject(delegator_address, validator_address, nil, rlp.MustEncodeToBytes(undelegation))
+	self.saveUndelegationObject(self.genUndelegationV1Key(delegator_address, validator_address), rlp.MustEncodeToBytes(undelegation))
 
 	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	validators_map.CreateAccount(validator_address)
 }
 
-func (self *Undelegations) createUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int, block types.BlockNum, amount *big.Int) {
+func (self *Undelegations) CreateUndelegationV2(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) uint64 {
 	undelegation := new(UndelegationV2)
 	undelegation.Amount = amount
 	undelegation.Block = block
-	undelegation.Id = undelegation_id
+	undelegation.Id = self.genUniqueId(delegator_address)
 
-	self.saveUndelegationObject(delegator_address, validator_address, undelegation_id, rlp.MustEncodeToBytes(undelegation))
+	self.saveUndelegationObject(self.genUndelegationV2Key(delegator_address, validator_address, undelegation.Id), rlp.MustEncodeToBytes(undelegation))
 
 	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
-	if ids_map.CreateId(undelegation_id) == 1 {
+	if ids_map.CreateId(undelegation.Id) == 1 {
 		validators_map.CreateAccount(validator_address)
 	}
+
+	return undelegation.Id
 }
 
-func (self *Undelegations) saveUndelegationObject(delegator_address *common.Address, validator_address *common.Address, delegator_nonce *big.Int, undelegation_data []byte) {
-	undelegation_key := self.genUndelegationKey(delegator_address, validator_address, delegator_nonce)
-	self.storage.Put(undelegation_key, undelegation_data)
+func (self *Undelegations) genUniqueId(delegator_address *common.Address) uint64 {
+	key := contract_storage.Stor_k_1(self.delegator_v2_undelegations_last_uniqe_id_field, delegator_address[:])
+
+	unique_id := uint64(0)
+	self.storage.Get(key, func(bytes []byte) {
+		unique_id = contract_storage.BytesToUint64(bytes)
+	})
+
+	unique_id++
+	self.storage.Put(key, contract_storage.Uint64ToBytes(unique_id))
+
+	return unique_id
 }
 
 // Removes undelegation object from storage
-func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) {
+func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address, validator_address *common.Address, undelegation_id *uint64) {
 	if undelegation_id != nil {
-		self.removeUndelegationV2(delegator_address, validator_address, undelegation_id)
+		self.removeUndelegationV2(delegator_address, validator_address, *undelegation_id)
 	} else {
 		self.removeUndelegationV1(delegator_address, validator_address)
 	}
 }
 
 func (self *Undelegations) removeUndelegationV1(delegator_address *common.Address, validator_address *common.Address) {
-	self.removeUndelegationObject(delegator_address, validator_address, nil)
+	self.removeUndelegationObject(self.genUndelegationV1Key(delegator_address, validator_address))
 
 	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	if validators_map.RemoveAccount(validator_address) == 0 {
@@ -193,8 +196,8 @@ func (self *Undelegations) removeUndelegationV1(delegator_address *common.Addres
 	}
 }
 
-func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) {
-	self.removeUndelegationObject(delegator_address, validator_address, undelegation_id)
+func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) {
+	self.removeUndelegationObject(self.genUndelegationV2Key(delegator_address, validator_address, undelegation_id))
 
 	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	if ids_map.RemoveId(undelegation_id) == 0 {
@@ -206,9 +209,12 @@ func (self *Undelegations) removeUndelegationV2(delegator_address *common.Addres
 	}
 }
 
-func (self *Undelegations) removeUndelegationObject(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) {
-	undelegation_key := self.genUndelegationKey(delegator_address, validator_address, undelegation_id)
-	self.storage.Put(undelegation_key, nil)
+func (self *Undelegations) saveUndelegationObject(key *common.Hash, undelegation_data []byte) {
+	self.storage.Put(key, undelegation_data)
+}
+
+func (self *Undelegations) removeUndelegationObject(key *common.Hash) {
+	self.storage.Put(key, nil)
 }
 
 // Returns all addressess of validators, from which is delegator <delegator_address> currently undelegating v1
@@ -266,13 +272,14 @@ func (self *Undelegations) GetUndelegationsV2Maps(delegator_address *common.Addr
 	return
 }
 
-// Return key to storage where undelegations is stored
-func (self *Undelegations) genUndelegationKey(delegator_address *common.Address, validator_address *common.Address, undelegation_id *big.Int) *common.Hash {
-	// Pre-cornus hf undelegation key was created just from validator & delegator address
-	if undelegation_id == nil {
-		return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
-	}
+// Return key to storage where undelegations V1 is stored
+func (self *Undelegations) genUndelegationV1Key(delegator_address *common.Address, validator_address *common.Address) *common.Hash {
+	// Pre-cornus hf undelegation key is created from validator & delegator address
+	return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:])
+}
 
-	// Post-cornus hf undelegation key is created from validator & delegator address and undelegation id
-	return contract_storage.Stor_k_1(self.undelegations_field, validator_address[:], delegator_address[:], undelegation_id.Bytes())
+// Return key to storage where undelegations V2 is stored
+func (self *Undelegations) genUndelegationV2Key(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) *common.Hash {
+	// Post-cornus hf undelegation key is created from delegator address, validator address & and undelegation id
+	return contract_storage.Stor_k_1(self.undelegations_field, delegator_address[:], validator_address[:], contract_storage.Uint64ToBytes(undelegation_id))
 }
