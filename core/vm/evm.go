@@ -76,13 +76,22 @@ type EVM struct {
 type Opts = struct {
 	PreallocatedMem uint64
 }
+
+func DefaultOpts() Opts {
+	return Opts{
+		PreallocatedMem: 8 * 1024 * 1024,
+	}
+}
+
 type GetHashFunc = func(types.BlockNum) *big.Int
 
 type Rules struct {
 	IsMagnolia     bool
 	IsAspenPartOne bool
 	IsAspenPartTwo bool
+	IsFicus        bool
 }
+
 type Block struct {
 	Number types.BlockNum
 	BlockInfo
@@ -145,16 +154,16 @@ func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	} else {
 		self.rules_initialized = true
 	}
-	// switch {
-	// case rules.IsTODO:
-	// 	self.precompiles = PrecompiledContractsHomestead
-	// 	self.instruction_set = homesteadInstructionSet
-	// 	self.gas_table = GasTableHomestead
-	// default:
-	self.precompiles = PrecompiledContractsCalifornicum
-	self.instruction_set = californicumInstructionSet
-	self.gas_table = GasTableCalifornicum
-	// }
+	switch {
+	case rules.IsFicus:
+		self.precompiles = PrecompiledContractsFicus
+		self.instruction_set = ficusInstructionSet
+		self.gas_table = GasTableCalifornicum
+	default:
+		self.precompiles = PrecompiledContractsCalifornicum
+		self.instruction_set = californicumInstructionSet
+		self.gas_table = GasTableCalifornicum
+	}
 	self.rules = rules
 	return true
 }
@@ -573,18 +582,24 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 
 		// execute the operation
 		res, err = operation.execute(&pc, self, contract, &mem, stack)
+
+		// copy result from the memory
+		resCopy := make([]byte, len(res))
+		copy(resCopy, res)
+
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
 		if operation.returns {
-			self.last_retval = res
+			self.last_retval = resCopy
 		}
+
 		switch {
 		case err != nil:
 			return nil, err
 		case operation.reverts:
-			return res, ErrExecutionReverted
+			return resCopy, ErrExecutionReverted
 		case operation.halts:
-			return res, nil
+			return resCopy, nil
 		case !operation.jumps:
 			pc++
 		}

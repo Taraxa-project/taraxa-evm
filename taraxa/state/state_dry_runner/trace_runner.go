@@ -60,7 +60,7 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 			tracer = vm.NewStructLogger(nil)
 		}
 
-		evm.Init(self.get_block_hash, &evm_state, vm.Opts{}, self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
+		evm.Init(self.get_block_hash, &evm_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
 		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 		if self.dpos_api != nil {
 			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{&evm_state}, blk.Number, self.get_reader, &evm, evm.RegisterPrecompiledContract)

@@ -6,6 +6,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	slashing "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/slashing/precompiled"
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
@@ -53,10 +54,7 @@ func (st *StateTransition) Init(
 	st.evm_state.Init(opts.EVMState)
 	st.get_dpos_reader = get_dpos_reader
 	st.get_slashing_reader = get_slashing_reader
-	st.evm.Init(get_block_hash, &st.evm_state, vm.Opts{
-		// 24MB total
-		PreallocatedMem: 8 * 1024 * 1024,
-	}, st.chain_config.EVMChainConfig, vm.Config{})
+	st.evm.Init(get_block_hash, &st.evm_state, vm.DefaultOpts(), st.chain_config.EVMChainConfig, vm.Config{})
 	state_desc := state.GetCommittedDescriptor()
 	st.trie_sink.Init(&state_desc.StateRoot, opts.Trie)
 	if dpos_api != nil {
