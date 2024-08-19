@@ -29,11 +29,9 @@ type AspenHfConfig struct {
 }
 
 type FicusHfConfig struct {
-	BlockNum                uint64
-	PillarBlocksInterval    uint64 // [number of blocks]
-	PillarChainSyncInterval uint64 // [number of blocks]
-	PbftInclusionDelay      uint64 // [number of blocks]
-	BridgeContractAddress   common.Address
+	BlockNum              uint64
+	PillarBlocksInterval  uint64 // [number of blocks]
+	BridgeContractAddress common.Address
 }
 
 // Leaving it here for next HF
