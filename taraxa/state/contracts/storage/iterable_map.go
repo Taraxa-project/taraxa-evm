@@ -1,6 +1,8 @@
 package contract_storage
 
 import (
+	"log"
+
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
@@ -132,13 +134,16 @@ func (self *IterableMap) CreateItem(item []byte) bool {
 	// Saves new item into the items array with key -> self.items_storage_prefix + pos
 	items_k := Stor_k_1(self.items_storage_prefix, uint32ToBytes(new_item_pos))
 	self.storage.Put(items_k, item)
+	log.Println("items_k: ", items_k.String(), " -> ", item)
 
 	// Save position of ney item in items array into the items pos mapping
 	items_pos_k := Stor_k_1(self.items_pos_storage_prefix, item[:])
 	self.storage.Put(items_pos_k, uint32ToBytes(new_item_pos))
+	log.Println("items_pos_k: ", items_pos_k.String(), " -> ", uint32ToBytes(new_item_pos))
 
 	// Saves new items count
 	self.storage.Put(self.items_count_storage_key, uint32ToBytes(items_count+1))
+	log.Println("items_count_storage_key: ", self.items_count_storage_key.String(), " -> ", uint32ToBytes(items_count+1))
 
 	return true
 }

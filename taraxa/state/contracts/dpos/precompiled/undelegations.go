@@ -1,7 +1,6 @@
 package dpos
 
 import (
-	"fmt"
 	"log"
 	"math/big"
 
@@ -60,12 +59,6 @@ func (self *Undelegations) GetUndelegationsCount(delegator_address *common.Addre
 	return delegator_undelegations.GetCount()
 }
 
-func DbgMsg(block types.BlockNum, msg string) {
-	if block == 8413 {
-		log.Println(msg)
-	}
-}
-
 // Creates undelegation object in storage
 func (self *Undelegations) CreateUndelegation(delegator_address *common.Address, validator_address *common.Address, block types.BlockNum, amount *big.Int) {
 	undelegation := new(Undelegation)
@@ -73,9 +66,9 @@ func (self *Undelegations) CreateUndelegation(delegator_address *common.Address,
 	undelegation.Block = block
 
 	undelegation_key := self.genUndelegationKey(delegator_address, validator_address)
-	DbgMsg(block, fmt.Sprintf("CreateUndelegation key: %s", undelegation_key.String()))
+	log.Println("CreateUndelegation key: ", undelegation_key.String())
 	self.storage.Put(undelegation_key, rlp.MustEncodeToBytes(undelegation))
-	DbgMsg(block, fmt.Sprintf("CreateUndelegation value: %x", rlp.MustEncodeToBytes(undelegation)))
+	log.Println("CreateUndelegation value: ", rlp.MustEncodeToBytes(undelegation))
 
 	undelegations_list := self.getDelegatorUndelegationsList(delegator_address)
 	undelegations_list.CreateAccount(validator_address)
