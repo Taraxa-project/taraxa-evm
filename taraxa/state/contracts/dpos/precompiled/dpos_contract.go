@@ -2,7 +2,9 @@ package dpos
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -519,6 +521,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			fmt.Println("Unable to parse delegate input args: ", err)
 			return nil, err
 		}
+		log.Println("undelegate called block: ", block_num)
 		return nil, self.undelegate(ctx, block_num, args)
 
 	case "confirmUndelegate":
@@ -929,25 +932,30 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 // new undelegation object is created and moved to queue where after expiration can be claimed
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UndelegateArgs) error {
 	if self.undelegations.UndelegationExists(ctx.CallerAccount.Address(), &args.Validator) {
+		DbgMsg(block, "return ErrExistentUndelegation")
 		return ErrExistentUndelegation
 	}
 
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
+		DbgMsg(block, "return ErrNonExistentValidator")
 		return ErrNonExistentValidator
 	}
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
+		DbgMsg(block, "return ErrNonExistentDelegation")
 		return ErrNonExistentDelegation
 	}
 
 	if delegation.Stake.Cmp(args.Amount) == -1 {
+		DbgMsg(block, "return ErrInsufficientDelegation")
 		return ErrInsufficientDelegation
 	}
 
 	if delegation.Stake.Cmp(args.Amount) != 0 && self.cfg.DPOS.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+		DbgMsg(block, "return ErrInsufficientDelegation")
 		return ErrInsufficientDelegation
 	}
 
@@ -971,9 +979,13 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	reward_per_stake := bigutil.Sub(state.RewardsPer1Stake, old_state.RewardsPer1Stake)
 	// Reward needs to be add to callers accounts as only stake is locked
 	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
+	DbgMsg(block, fmt.Sprintf("reward: %d", reward))
 	if reward.Cmp(big.NewInt(0)) > 0 {
 		transferContractBalance(&ctx, reward)
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+		log := self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward)
+		log_str, _ := json.Marshal(log)
+		DbgMsg(block, fmt.Sprintf("MakeRewardsClaimedLog: %s", string(log_str)))
+		self.evm.AddLog(log)
 	}
 
 	// Creating undelegation request
@@ -1009,7 +1021,10 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
-	self.evm.AddLog(self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
+	undelegate_log := self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount)
+	self.evm.AddLog(undelegate_log)
+	undelegate_log_str, _ := json.Marshal(undelegate_log)
+	DbgMsg(block, fmt.Sprintf("MakeUndelegatedLog: %s", string(undelegate_log_str)))
 
 	return nil
 }
