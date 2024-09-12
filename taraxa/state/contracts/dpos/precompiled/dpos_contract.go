@@ -1026,9 +1026,15 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
-		log.Println("state_put: ", state)
-		log.Println("ModifyValidator: ", validator)
-		log.Println("ModifyValidatorRewards: ", validator_rewards)
+
+		state_str, _ := json.Marshal(state)
+		log.Println("state_put: ", state_str)
+
+		validator_str, _ := json.Marshal(validator)
+		log.Println("ModifyValidator: ", string(validator_str))
+
+		validator_rewards_str, _ := json.Marshal(validator_rewards)
+		log.Println("ModifyValidatorRewards: ", validator_rewards_str)
 	}
 	undelegate_log := self.logs.MakeUndelegatedLog(ctx.CallerAccount.Address(), &args.Validator, args.Amount)
 	self.evm.AddLog(undelegate_log)
