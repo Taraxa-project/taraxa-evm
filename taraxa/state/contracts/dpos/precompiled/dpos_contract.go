@@ -2,6 +2,7 @@ package dpos
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -583,6 +584,8 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	// First 4 bytes is method signature !!!!
 	input := ctx.Input[4:]
 
+	log.Println("Dpos method called: ", method.Name, ", block: ", block_num)
+
 	switch method.Name {
 	case "delegate":
 		var args dpos_sol.ValidatorAddressArgs
@@ -1085,25 +1088,30 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 // Return undelegation_id and error value
 func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dpos_sol.UndelegateArgs, v2 bool) (*uint64, error) {
 	if !v2 && self.undelegations.UndelegationV1Exists(ctx.CallerAccount.Address(), &args.Validator) {
+		log.Println("return ErrExistentUndelegation")
 		return nil, ErrExistentUndelegation
 	}
 
 	validator := self.validators.GetValidator(&args.Validator)
 	if validator == nil {
+		log.Println("return ErrNonExistentValidator")
 		return nil, ErrNonExistentValidator
 	}
 	validator_rewards := self.validators.GetValidatorRewards(&args.Validator)
 
 	delegation := self.delegations.GetDelegation(ctx.CallerAccount.Address(), &args.Validator)
 	if delegation == nil {
+		log.Println("return ErrNonExistentDelegation")
 		return nil, ErrNonExistentDelegation
 	}
 
 	if delegation.Stake.Cmp(args.Amount) == -1 {
+		log.Println("return ErrInsufficientDelegation")
 		return nil, ErrInsufficientDelegation
 	}
 
 	if delegation.Stake.Cmp(args.Amount) != 0 && self.cfg.DPOS.MinimumDeposit.Cmp(bigutil.Sub(delegation.Stake, args.Amount)) == 1 {
+		log.Println("return ErrInsufficientDelegation")
 		return nil, ErrInsufficientDelegation
 	}
 
@@ -1129,7 +1137,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	reward := self.calculateDelegatorReward(reward_per_stake, delegation.Stake)
 	if reward.Cmp(big.NewInt(0)) > 0 {
 		transferContractBalance(&ctx, reward)
-		self.evm.AddLog(self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward))
+
+		log.Println("transferContractBalance: ", reward)
+		log_rewards := self.logs.MakeRewardsClaimedLog(ctx.CallerAccount.Address(), &args.Validator, reward)
+		log_rewards_str, _ := json.Marshal(log_rewards)
+		log.Println("MakeRewardsClaimedLog: ", string(log_rewards_str))
+		self.evm.AddLog(log_rewards)
 	}
 
 	delegation.Stake.Sub(delegation.Stake, args.Amount)
@@ -1138,10 +1151,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 
 	if delegation.Stake.Cmp(big.NewInt(0)) == 0 {
 		self.delegations.RemoveDelegation(ctx.CallerAccount.Address(), &args.Validator)
+		log.Println("RemoveDelegation: ")
 	} else {
 		delegation.LastUpdated = block
 		state.Count++
 		self.delegations.ModifyDelegation(ctx.CallerAccount.Address(), &args.Validator, delegation)
+		log.Println("ModifyDelegation: ", delegation)
 	}
 
 	a, _ := uint256.FromBig(args.Amount)
@@ -1152,16 +1167,27 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	if prev_vote_count != new_vote_count {
 		self.eligible_vote_count -= prev_vote_count
 		self.eligible_vote_count = add64p(self.eligible_vote_count, new_vote_count)
+		log.Println("self.eligible_vote_count: ", self.eligible_vote_count)
 	}
 
 	// We can delete validator object as it doesn't have any stake anymore (only before the magnolia hardfork)
 	if !self.isMagnoliaHardfork(block) && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_put(&state_k, nil)
+		log.Println("DeleteValidator: ")
 	} else {
 		self.state_put(&state_k, state)
 		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
+
+		state_str, _ := json.Marshal(state)
+		log.Println("state_put: ", state_str)
+
+		validator_str, _ := json.Marshal(validator)
+		log.Println("ModifyValidator: ", string(validator_str))
+
+		validator_rewards_str, _ := json.Marshal(validator_rewards)
+		log.Println("ModifyValidatorRewards: ", validator_rewards_str)
 	}
 
 	// Create undelegation request
@@ -1171,7 +1197,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		self.evm.AddLog(self.logs.MakeUndelegatedV2Log(ctx.CallerAccount.Address(), &args.Validator, undelegation_id, args.Amount))
 	} else {
 		self.undelegations.CreateUndelegationV1(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DPOS.DelegationLockingPeriod), args.Amount)
-		self.evm.AddLog(self.logs.MakeUndelegatedV1Log(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
+		//self.evm.AddLog(self.logs.MakeUndelegatedV1Log(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
+
+		undelegate_log := self.logs.MakeUndelegatedV1Log(ctx.CallerAccount.Address(), &args.Validator, args.Amount)
+		self.evm.AddLog(undelegate_log)
+		undelegate_log_str, _ := json.Marshal(undelegate_log)
+		log.Println("MakeUndelegatedLog: ", string(undelegate_log_str))
 	}
 
 	return &undelegation_id, nil

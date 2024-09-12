@@ -1,6 +1,7 @@
 package dpos
 
 import (
+	"log"
 	"math/big"
 
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
@@ -143,7 +144,8 @@ func (self *Undelegations) CreateUndelegationV1(delegator_address *common.Addres
 	undelegation.Amount = amount
 	undelegation.Block = block
 	self.saveUndelegationObject(self.genUndelegationV1Key(delegator_address, validator_address), rlp.MustEncodeToBytes(undelegation))
-
+	log.Println("CreateUndelegation key: ", self.genUndelegationV1Key(delegator_address, validator_address).String())
+	log.Println("CreateUndelegation value: ", rlp.MustEncodeToBytes(undelegation))
 	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
 	validators_map.CreateAccount(validator_address)
 }
