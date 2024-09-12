@@ -275,8 +275,14 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "setValidatorInfo":
 		return SetValidatorInfoGas
 	case "isValidatorEligible":
+		// default specified as fallthrough was missing
+		return DefaultDposMethodGas
 	case "getTotalEligibleVotesCount":
+		// default specified as fallthrough was missing
+		return DefaultDposMethodGas
 	case "getValidatorEligibleVotesCount":
+		// default specified as fallthrough was missing
+		return DefaultDposMethodGas
 	case "getValidator":
 		return DposGetMethodsGas
 	case "claimRewards":
@@ -571,7 +577,6 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	}
 	self.lazy_init()
 
-	var err error
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, block_num) {
