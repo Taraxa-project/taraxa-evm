@@ -244,7 +244,11 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "delegate":
 		return DelegateGas
 	case "undelegate":
+		return UndelegateGas
 	case "undelegateV2":
+		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+			return 0
+		}
 		return UndelegateGas
 	case "confirmUndelegate":
 		return ConfirmUndelegateGas
@@ -567,6 +571,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	}
 	self.lazy_init()
 
+	var err error
 	method, err := self.Abi.MethodById(ctx.Input)
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, block_num) {
