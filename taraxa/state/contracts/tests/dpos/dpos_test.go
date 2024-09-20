@@ -600,8 +600,14 @@ func TestCornusHardfork(t *testing.T) {
 	val_owner := addr(1)
 	val_addr, proof := generateAddrAndProof()
 
-	test.ExecuteAndCheck(val_owner, DefaultValidatorMaximumStake, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
-	test.CheckContractBalance(DefaultValidatorMaximumStake)
+	val_owner2 := addr(2)
+	val_addr2, proof2 := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultEligibilityBalanceThreshold, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	test.CheckContractBalance(DefaultEligibilityBalanceThreshold)
+	test.ExecuteAndCheck(val_owner2, DefaultEligibilityBalanceThreshold, test.Pack("registerValidator", val_addr2, proof2, DefaultVrfKey, uint16(10), "test3", "test3"), util.ErrorString(""), util.ErrorString(""))
+
+	test.ExecuteAndCheck(val_owner, DefaultMinimumDeposit, test.Pack("delegate", val_addr2), util.ErrorString(""), util.ErrorString(""))
 
 	// ErrMethodNotSupported
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, uint64(1)), dpos.ErrMethodNotSupported, util.ErrorString(""))
@@ -628,6 +634,13 @@ func TestCornusHardfork(t *testing.T) {
 	test.Unpack(undelegation_id_parsed, "undelegateV2", undelegate_v2_res.CodeRetval)
 	tc.Assert.Equal(uint64(1), *undelegation_id_parsed)
 
+	undelegate_v2_res2 := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr2, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	tc.Assert.Equal(len(undelegate_v2_res2.Logs), 1)
+	tc.Assert.Equal(undelegate_v2_res2.Logs[0].Topics[0], UndelegatedV2EventHash)
+	undelegation_id_parsed2 := new(uint64)
+	test.Unpack(undelegation_id_parsed2, "undelegateV2", undelegate_v2_res2.CodeRetval)
+	tc.Assert.Equal(uint64(2), *undelegation_id_parsed2)
+
 	// Confirm V1 undelegation
 	confirm_res := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegate", val_addr), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
@@ -637,7 +650,7 @@ func TestCornusHardfork(t *testing.T) {
 	get_undelegations_v2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationsV2", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 	get_undelegations_v2_result_parsed := new(GetUndelegationsV2Ret)
 	test.Unpack(get_undelegations_v2_result_parsed, "getUndelegationsV2", get_undelegations_v2_result.CodeRetval)
-	tc.Assert.Equal(1, len(get_undelegations_v2_result_parsed.UndelegationsV2))
+	tc.Assert.Equal(2, len(get_undelegations_v2_result_parsed.UndelegationsV2))
 	tc.Assert.Equal(true, get_undelegations_v2_result_parsed.End)
 	undelegation_id := get_undelegations_v2_result_parsed.UndelegationsV2[0].UndelegationId
 	tc.Assert.Equal(*undelegation_id_parsed, undelegation_id)
@@ -648,8 +661,11 @@ func TestCornusHardfork(t *testing.T) {
 
 	// Confirm V2 undelegation
 	confirm_res = test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr, undelegation_id), util.ErrorString(""), util.ErrorString(""))
+	confirm_res2 := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("confirmUndelegateV2", val_addr2, undelegation_id_parsed2), util.ErrorString(""), util.ErrorString(""))
 	tc.Assert.Equal(len(confirm_res.Logs), 1)
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
+	tc.Assert.Equal(len(confirm_res2.Logs), 1)
+	tc.Assert.Equal(confirm_res2.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
 }
 
 func TestConfirmUndelegate(t *testing.T) {
