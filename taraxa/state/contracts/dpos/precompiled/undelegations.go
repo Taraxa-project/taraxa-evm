@@ -62,6 +62,8 @@ func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []
 	self.delegator_v2_undelegations_field = append(prefix, []byte{2}...)
 	self.delegator_v2_undelegations_ids_field = append(prefix, []byte{3}...)
 	self.delegator_v2_undelegations_last_uniqe_id_field = append(prefix, []byte{4}...)
+	self.v1_undelegations_map = make(map[common.Address]*contract_storage.AddressesIMap)
+	self.v2_undelegations_map = make(map[common.Address]*DelegatorV2Undelegations)
 }
 
 // Returns true if for given values there is undelegation in queue
@@ -198,7 +200,6 @@ func (self *Undelegations) removeUndelegationV1(delegator_address *common.Addres
 
 func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) {
 	self.removeUndelegationObject(self.genUndelegationV2Key(delegator_address, validator_address, undelegation_id))
-
 	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
 	if ids_map.RemoveId(undelegation_id) == 0 {
 		if validators_map.RemoveAccount(validator_address) == 0 {
@@ -242,6 +243,7 @@ func (self *Undelegations) getUndelegationsV1ValidatorsMap(delegator_address *co
 
 		v1_undelegations_validators = new(contract_storage.AddressesIMap)
 		v1_undelegations_validators.Init(self.storage, v1_undelegations_validators_prefix)
+		self.v1_undelegations_map[*delegator_address] = v1_undelegations_validators
 	}
 
 	return v1_undelegations_validators
@@ -255,6 +257,7 @@ func (self *Undelegations) GetUndelegationsV2Maps(delegator_address *common.Addr
 		v2_undelegations_validators_prefix := append(self.delegator_v2_undelegations_field, delegator_address[:]...)
 		v2_undelegations_validators.Validators = new(contract_storage.AddressesIMap)
 		v2_undelegations_validators.Validators.Init(self.storage, v2_undelegations_validators_prefix)
+		self.v2_undelegations_map[*delegator_address] = v2_undelegations_validators
 	}
 	validators_map = v2_undelegations_validators.Validators
 
