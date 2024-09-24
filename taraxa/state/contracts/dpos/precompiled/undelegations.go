@@ -182,10 +182,17 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 
 func (self *Undelegations) removeUndelegationV1(delegator_address *common.Address, validator_address *common.Address) {
 	self.removeUndelegationObject(self.genUndelegationV1Key(delegator_address, validator_address))
+
+	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
+	validators_map.RemoveAccount(validator_address)
 }
 
 func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) {
 	self.removeUndelegationObject(self.genUndelegationV2Key(delegator_address, validator_address, undelegation_id))
+	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
+	if ids_map.RemoveId(undelegation_id) == 0 {
+		validators_map.RemoveAccount(validator_address)
+	}
 }
 
 func (self *Undelegations) saveUndelegationObject(key *common.Hash, undelegation_data []byte) {
