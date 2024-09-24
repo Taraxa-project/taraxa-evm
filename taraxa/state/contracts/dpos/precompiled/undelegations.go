@@ -38,13 +38,6 @@ type DelegatorV2Undelegations struct {
 
 type Undelegations struct {
 	storage *contract_storage.StorageWrapper
-	// V1 - pre cornus hardfork undelegations
-	// <delegator address -> list of validators addresses> as each delegator can undelegate from multiple validators at the same time
-	v1_undelegations_map map[common.Address]*contract_storage.AddressesIMap
-
-	// V2 - post cornus hardfork undelegations
-	// <delegator address -> DelegatorV2Undelegations object>
-	v2_undelegations_map map[common.Address]*DelegatorV2Undelegations
 
 	undelegations_field                            []byte
 	delegator_v1_undelegations_field               []byte
@@ -62,8 +55,6 @@ func (self *Undelegations) Init(stor *contract_storage.StorageWrapper, prefix []
 	self.delegator_v2_undelegations_field = append(prefix, []byte{2}...)
 	self.delegator_v2_undelegations_ids_field = append(prefix, []byte{3}...)
 	self.delegator_v2_undelegations_last_uniqe_id_field = append(prefix, []byte{4}...)
-	self.v1_undelegations_map = make(map[common.Address]*contract_storage.AddressesIMap)
-	self.v2_undelegations_map = make(map[common.Address]*DelegatorV2Undelegations)
 }
 
 // Returns true if for given values there is undelegation in queue
@@ -191,23 +182,10 @@ func (self *Undelegations) RemoveUndelegation(delegator_address *common.Address,
 
 func (self *Undelegations) removeUndelegationV1(delegator_address *common.Address, validator_address *common.Address) {
 	self.removeUndelegationObject(self.genUndelegationV1Key(delegator_address, validator_address))
-
-	validators_map := self.getUndelegationsV1ValidatorsMap(delegator_address)
-	if validators_map.RemoveAccount(validator_address) == 0 {
-		delete(self.v1_undelegations_map, *delegator_address)
-	}
 }
 
 func (self *Undelegations) removeUndelegationV2(delegator_address *common.Address, validator_address *common.Address, undelegation_id uint64) {
 	self.removeUndelegationObject(self.genUndelegationV2Key(delegator_address, validator_address, undelegation_id))
-	validators_map, ids_map := self.GetUndelegationsV2Maps(delegator_address, validator_address)
-	if ids_map.RemoveId(undelegation_id) == 0 {
-		if validators_map.RemoveAccount(validator_address) == 0 {
-			delete(self.v2_undelegations_map, *delegator_address)
-		} else {
-			delete(self.v2_undelegations_map[*delegator_address].Undelegations_ids_map, *validator_address)
-		}
-	}
 }
 
 func (self *Undelegations) saveUndelegationObject(key *common.Hash, undelegation_data []byte) {
@@ -237,28 +215,19 @@ func (self *Undelegations) GetUndelegationsV2Validator(delegator_address *common
 
 // Returns list of undelegations for given address
 func (self *Undelegations) getUndelegationsV1ValidatorsMap(delegator_address *common.Address) *contract_storage.AddressesIMap {
-	v1_undelegations_validators, found := self.v1_undelegations_map[*delegator_address]
-	if !found {
-		v1_undelegations_validators_prefix := append(self.delegator_v1_undelegations_field, delegator_address[:]...)
-
-		v1_undelegations_validators = new(contract_storage.AddressesIMap)
-		v1_undelegations_validators.Init(self.storage, v1_undelegations_validators_prefix)
-		self.v1_undelegations_map[*delegator_address] = v1_undelegations_validators
-	}
+	v1_undelegations_validators_prefix := append(self.delegator_v1_undelegations_field, delegator_address[:]...)
+	v1_undelegations_validators := new(contract_storage.AddressesIMap)
+	v1_undelegations_validators.Init(self.storage, v1_undelegations_validators_prefix)
 
 	return v1_undelegations_validators
 }
 
 func (self *Undelegations) GetUndelegationsV2Maps(delegator_address *common.Address, validator_address *common.Address) (validators_map *contract_storage.AddressesIMap, ids_map *contract_storage.IdsIMap) {
-	v2_undelegations_validators, found := self.v2_undelegations_map[*delegator_address]
-	if !found {
-		v2_undelegations_validators = new(DelegatorV2Undelegations)
+	v2_undelegations_validators := new(DelegatorV2Undelegations)
+	v2_undelegations_validators_prefix := append(self.delegator_v2_undelegations_field, delegator_address[:]...)
+	v2_undelegations_validators.Validators = new(contract_storage.AddressesIMap)
+	v2_undelegations_validators.Validators.Init(self.storage, v2_undelegations_validators_prefix)
 
-		v2_undelegations_validators_prefix := append(self.delegator_v2_undelegations_field, delegator_address[:]...)
-		v2_undelegations_validators.Validators = new(contract_storage.AddressesIMap)
-		v2_undelegations_validators.Validators.Init(self.storage, v2_undelegations_validators_prefix)
-		self.v2_undelegations_map[*delegator_address] = v2_undelegations_validators
-	}
 	validators_map = v2_undelegations_validators.Validators
 
 	if validator_address != nil {
