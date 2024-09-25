@@ -22,8 +22,6 @@ type Delegation struct {
 // think about all implementation details, but just calls functions on Delegations type
 type Delegations struct {
 	storage *contract_storage.StorageWrapper
-	// <delegator addres -> list of validators> as each delegator can delegate to multiple validators
-	delegators_validators map[common.Address]*contract_storage.AddressesIMap
 
 	delegations_field                  []byte
 	delegators_validators_field_prefix []byte
@@ -96,12 +94,7 @@ func (self *Delegations) RemoveDelegation(delegator_address *common.Address, val
 
 	// Removes validator from delegator's validators list
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
-	remaining_validators_count := delegator_validators.RemoveAccount(validator_address)
-
-	// If delegator does not delegate to anyone else, remove also his validators list
-	if remaining_validators_count == 0 {
-		self.removeDelegatorValidatorsList(delegator_address)
-	}
+	delegator_validators.RemoveAccount(validator_address)
 }
 
 func (self *Delegations) GetDelegatorValidatorsAddresses(delegator_address *common.Address, batch uint32, count uint32) ([]common.Address, bool) {
@@ -110,12 +103,9 @@ func (self *Delegations) GetDelegatorValidatorsAddresses(delegator_address *comm
 }
 
 func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Address) *contract_storage.AddressesIMap {
-	delegator_validators, found := self.delegators_validators[*delegator_address]
-	if found == false {
-		delegator_validators = new(contract_storage.AddressesIMap)
-		delegator_validators_field := append(self.delegators_validators_field_prefix, delegator_address[:]...)
-		delegator_validators.Init(self.storage, delegator_validators_field)
-	}
+	delegator_validators := new(contract_storage.AddressesIMap)
+	delegator_validators_field := append(self.delegators_validators_field_prefix, delegator_address[:]...)
+	delegator_validators.Init(self.storage, delegator_validators_field)
 
 	return delegator_validators
 }
@@ -123,10 +113,6 @@ func (self *Delegations) getDelegatorValidatorsList(delegator_address *common.Ad
 func (self *Delegations) GetAllDelegatorValidatorsAddresses(delegator_address *common.Address) []common.Address {
 	delegator_validators := self.getDelegatorValidatorsList(delegator_address)
 	return delegator_validators.GetAllAccounts()
-}
-
-func (self *Delegations) removeDelegatorValidatorsList(delegator_address *common.Address) {
-	delete(self.delegators_validators, *delegator_address)
 }
 
 func (self *Delegations) genDelegationKey(delegator_address *common.Address, validator_address *common.Address) common.Hash {
