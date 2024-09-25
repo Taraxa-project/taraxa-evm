@@ -2837,7 +2837,7 @@ func TestPhalaenopsisHF(t *testing.T) {
 
 func TestNonPayableMethods(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.PhalaenopsisHfBlockNum = 3
+	cfg.Hardforks.CornusHfBlockNum = 0
 	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
