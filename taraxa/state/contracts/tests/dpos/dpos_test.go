@@ -1812,7 +1812,7 @@ func TestGetUndelegationsV1(t *testing.T) {
 
 	// Create delegator undelegations
 	for i := 0; i < gen_delegator1_delegations; i++ {
-		test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.Pack("undelegate", gen_validators[i].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+		test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("undelegate", gen_validators[i].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	}
 
 	intristic_gas_batch0 := 21592
@@ -1873,7 +1873,7 @@ func TestGetUndelegationsV1(t *testing.T) {
 	tc.Assert.Equal(false, undelegations1_parsed_result.End)
 	tc.Assert.Equal(true, undelegations1_parsed_result.Undelegations[0].ValidatorExists)
 	// Last delegator undelegates from gen_validators[0].address
-	test.ExecuteAndCheck(gen_validators[0].owner, DefaultMinimumDeposit, test.Pack("undelegate", gen_validators[0].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	test.ExecuteAndCheck(gen_validators[0].owner, big.NewInt(0), test.Pack("undelegate", gen_validators[0].address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 	undelegations2_result := test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("getUndelegations", delegator1_addr, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
 	undelegations2_parsed_result := new(GetUndelegationsRet)
 	test.Unpack(undelegations2_parsed_result, "getUndelegations", undelegations2_result.CodeRetval)
@@ -1928,7 +1928,7 @@ func TestGetUndelegationsV2(t *testing.T) {
 	for validator_idx, validator := range gen_validators {
 		// Gen multiple undelegations
 		for undelegation_idx := 0; undelegation_idx < (validator_idx+1)*3; undelegation_idx++ {
-			test.ExecuteAndCheck(delegator1_addr, DefaultMinimumDeposit, test.Pack("undelegateV2", validator.address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+			test.ExecuteAndCheck(delegator1_addr, big.NewInt(0), test.Pack("undelegateV2", validator.address, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
 			undelegations_count++
 		}
 	}
@@ -2833,4 +2833,18 @@ func TestPhalaenopsisHF(t *testing.T) {
 
 	// totalBalance := bigutil.Add(total_stake, reward)
 
+}
+
+func TestNonPayableMethods(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.PhalaenopsisHfBlockNum = 3
+	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	nonPayableMethods := []string{"undelegate", "undelegateV2", "confirmUndelegate", "confirmUndelegateV2", "cancelUndelegate", "cancelUndelegateV2", "reDelegate", "claimCommissionRewards", "setCommission", "setValidatorInfo", "isValidatorEligible", "getTotalEligibleVotesCount", "getValidatorEligibleVotesCount", "getValidator", "claimRewards", "claimAllRewards", "getValidators", "getValidatorsFor", "getTotalDelegation", "getDelegations", "getUndelegations", "getUndelegationsV2", "getUndelegationV2"}
+
+	caller := addr(1)
+	for _, method := range nonPayableMethods {
+		test.ExecuteAndCheck(caller, big.NewInt(1), test.MethodId(method), dpos.ErrNonPayableMethod, util.ErrorString(""))
+	}
 }

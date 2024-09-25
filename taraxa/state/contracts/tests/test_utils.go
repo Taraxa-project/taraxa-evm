@@ -158,6 +158,10 @@ func (self *ContractTest) Pack(name string, args ...interface{}) []byte {
 	return packed
 }
 
+func (self *ContractTest) MethodId(name string) []byte {
+	return self.abi.Methods[name].Id()
+}
+
 func (self *ContractTest) Unpack(v interface{}, name string, output []byte) error {
 	err := self.abi.Unpack(v, name, output)
 	if err != nil {
