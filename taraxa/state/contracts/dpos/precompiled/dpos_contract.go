@@ -24,7 +24,6 @@ import (
 
 	chain_config "github.com/Taraxa-project/taraxa-evm/taraxa/state/chain_config"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
-	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 )
@@ -93,6 +92,7 @@ var (
 	ErrMaxEndpointLengthExceeded    = util.ErrorString("Max endpoint length exceeded")
 	ErrMaxDescriptionLengthExceeded = util.ErrorString("Max description length exceeded")
 	ErrMethodNotSupported           = util.ErrorString("Method not supported")
+	ErrNonPayableMethod             = util.ErrorString("Method is not payable")
 )
 
 const (
@@ -149,7 +149,7 @@ type State struct {
 type Contract struct {
 	cfg chain_config.ChainConfig
 	// current storage
-	storage contract_storage.StorageWrapper
+	storage storage.StorageWrapper
 	// delayed storage for PBFT
 	delayedStorage Reader
 	// ABI of the contract
@@ -218,6 +218,17 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 	return true
 }
 
+func isPayableMethod(method string) bool {
+	switch method {
+	case "registerValidator":
+		return true
+	case "delegate":
+		return true
+	default:
+		return false
+	}
+}
+
 // Calculate required gas for call to this contract
 func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	if len(ctx.Input) < 4 {
@@ -237,6 +248,13 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 			}
 		} else {
 			return 0
+		}
+	}
+	if self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if ctx.Value.Sign() > 0 {
+			if !isPayableMethod(method.Name) {
+				return 0
+			}
 		}
 	}
 
@@ -480,26 +498,26 @@ func (self *Contract) lazy_init() {
 	self.dag_proposers_reward = uint256.NewInt(uint64(self.cfg.DPOS.DagProposersReward))
 	self.max_block_author_reward = uint256.NewInt(uint64(self.cfg.DPOS.MaxBlockAuthorReward))
 
-	self.storage.Get(contract_storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_eligible_vote_count), func(bytes []byte) {
 		self.eligible_vote_count_orig = bin.DEC_b_endian_compact_64(bytes)
 	})
 	self.eligible_vote_count = self.eligible_vote_count_orig
 
 	self.amount_delegated_orig = uint256.NewInt(0)
-	self.storage.Get(contract_storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_amount_delegated), func(bytes []byte) {
 		self.amount_delegated_orig = new(uint256.Int).SetBytes(bytes)
 	})
 	self.amount_delegated = self.amount_delegated_orig.Clone()
 
 	// Do not set self.total_supply default value to uint256.NewInt(0). Default value should be nil pointer as it is checked in code
-	self.storage.Get(contract_storage.Stor_k_1(field_total_supply), func(bytes []byte) {
+	self.storage.Get(storage.Stor_k_1(field_total_supply), func(bytes []byte) {
 		self.total_supply = new(uint256.Int).SetBytes(bytes)
 	})
 
 	self.minted_tokens = uint256.NewInt(0)
 	// minted_tokens are no longer needed in case total_supply was already saved in db
 	if self.total_supply == nil {
-		self.storage.Get(contract_storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
+		self.storage.Get(storage.Stor_k_1(field_minted_tokens), func(bytes []byte) {
 			self.minted_tokens = new(uint256.Int).SetBytes(bytes)
 		})
 	}
@@ -514,11 +532,11 @@ func (self *Contract) EndBlockCall(block_num uint64) {
 	}
 	// Update values
 	if self.eligible_vote_count_orig != self.eligible_vote_count {
-		self.storage.Put(contract_storage.Stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
+		self.storage.Put(storage.Stor_k_1(field_eligible_vote_count), bin.ENC_b_endian_compact_64_1(self.eligible_vote_count))
 		self.eligible_vote_count_orig = self.eligible_vote_count
 	}
 	if self.amount_delegated_orig.Cmp(self.amount_delegated) != 0 {
-		self.storage.Put(contract_storage.Stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
+		self.storage.Put(storage.Stor_k_1(field_amount_delegated), self.amount_delegated.Bytes())
 		self.amount_delegated_orig = self.amount_delegated.Clone()
 	}
 
@@ -587,6 +605,14 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 			}
 		} else {
 			return nil, err
+		}
+	}
+
+	if self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if ctx.Value.Sign() > 0 {
+			if !isPayableMethod(method.Name) {
+				return nil, ErrNonPayableMethod
+			}
 		}
 	}
 
@@ -1966,7 +1992,7 @@ func (self *Contract) getUndelegationV1(delegator *common.Address, validator *co
 }
 
 func (self *Contract) state_get(validator_addr, block []byte) (state *State, key common.Hash) {
-	key = contract_storage.Stor_k_2(field_state, validator_addr, block)
+	key = storage.Stor_k_2(field_state, validator_addr, block)
 	self.storage.Get(&key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
@@ -1977,7 +2003,7 @@ func (self *Contract) state_get(validator_addr, block []byte) (state *State, key
 // Gets state object from storage and decrements it's count
 // if number of references is 0 it also removes object from storage
 func (self *Contract) state_get_and_decrement(validator_addr, block []byte) (state *State) {
-	key := contract_storage.Stor_k_1(field_state, validator_addr, block)
+	key := storage.Stor_k_1(field_state, validator_addr, block)
 	self.storage.Get(key, func(bytes []byte) {
 		state = new(State)
 		rlp.MustDecodeBytes(bytes, state)
@@ -2050,19 +2076,19 @@ func (self *Contract) isCornusHardfork(block types.BlockNum) bool {
 }
 
 func (self *Contract) saveTotalSupplyDb() {
-	self.storage.Put(contract_storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
+	self.storage.Put(storage.Stor_k_1(field_total_supply), self.total_supply.Bytes())
 }
 
 func (self *Contract) saveMintedTokensDb() {
-	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
+	self.storage.Put(storage.Stor_k_1(field_minted_tokens), self.minted_tokens.Bytes())
 }
 
 func (self *Contract) eraseMintedTokensDb() {
-	self.storage.Put(contract_storage.Stor_k_1(field_minted_tokens), nil)
+	self.storage.Put(storage.Stor_k_1(field_minted_tokens), nil)
 }
 
 func (self *Contract) saveYieldDb(yield uint64) {
-	yield_key := contract_storage.Stor_k_1(field_yield)
+	yield_key := storage.Stor_k_1(field_yield)
 	self.storage.Put(yield_key, rlp.MustEncodeToBytes(yield))
 }
 
