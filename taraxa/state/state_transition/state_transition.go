@@ -109,8 +109,12 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
 			if acc.GetCodeSize() == 0 {
-				acc.SetCode(dpos_sol.TaraxaDposImplBytecode)
+				acc.SetCode(dpos_sol.AspenDposImplBytecode)
 			}
+		}
+		if st.chain_config.Hardforks.IsCornusHardfork(blk_n) {
+			acc := st.evm_state.GetAccount(dpos.ContractAddress())
+			acc.SetCode(dpos_sol.CornusDposImplBytecode)
 		}
 	}
 	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {

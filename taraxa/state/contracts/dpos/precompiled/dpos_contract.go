@@ -250,7 +250,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 			return 0
 		}
 	}
-	if self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+	if self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 		if ctx.Value.Sign() > 0 {
 			if !isPayableMethod(method.Name) {
 				return 0
@@ -264,21 +264,21 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "undelegate":
 		return UndelegateGas
 	case "undelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return 0
 		}
 		return UndelegateGas
 	case "confirmUndelegate":
 		return ConfirmUndelegateGas
 	case "confirmUndelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return 0
 		}
 		return ConfirmUndelegateGas
 	case "cancelUndelegate":
 		return CancelUndelegateGas
 	case "cancelUndelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return 0
 		}
 		return CancelUndelegateGas
@@ -385,7 +385,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return undelegations_count * DposBatchGetMethodsGas
 
 	case "getUndelegationsV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return 0
 		}
 
@@ -401,7 +401,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 		return storage_reads_count * DposBatchGetMethodsGas
 
 	case "getUndelegationV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return 0
 		}
 
@@ -608,7 +608,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		}
 	}
 
-	if self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+	if self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 		if ctx.Value.Sign() > 0 {
 			if !isPayableMethod(method.Name) {
 				return nil, ErrNonPayableMethod
@@ -639,7 +639,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, err
 
 	case "undelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return nil, ErrMethodNotSupported
 		}
 
@@ -665,7 +665,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.confirmUndelegate(ctx, block_num, args.Validator, nil)
 
 	case "confirmUndelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return nil, ErrMethodNotSupported
 		}
 
@@ -686,7 +686,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.cancelUndelegate(ctx, block_num, args.Validator, nil)
 
 	case "cancelUndelegateV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return nil, ErrMethodNotSupported
 		}
 
@@ -834,7 +834,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.getUndelegations(args))
 
 	case "getUndelegationsV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return nil, ErrMethodNotSupported
 		}
 
@@ -846,7 +846,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return method.Outputs.Pack(self.getUndelegationsV2(args))
 
 	case "getUndelegationV2":
-		if !self.cfg.Hardforks.IsCornusHardfork(evm.GetBlock().Number) {
+		if !self.cfg.Hardforks.IsOnCornusHardfork(evm.GetBlock().Number) {
 			return nil, ErrMethodNotSupported
 		}
 
@@ -2071,8 +2071,8 @@ func (self *Contract) IsFicusHardfork(block types.BlockNum) bool {
 	return self.cfg.Hardforks.IsFicusHardfork(block)
 }
 
-func (self *Contract) isCornusHardfork(block types.BlockNum) bool {
-	return self.cfg.Hardforks.IsCornusHardfork(block)
+func (self *Contract) isOnCornusHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsOnCornusHardfork(block)
 }
 
 func (self *Contract) saveTotalSupplyDb() {
