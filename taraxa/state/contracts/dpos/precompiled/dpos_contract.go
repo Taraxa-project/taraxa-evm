@@ -212,7 +212,7 @@ func (self *Contract) IsTransferIntoDPoSContract(input []byte, blockNum types.Bl
 	if !bytes.Equal(input, TransferIntoDPoSContractMethod) {
 		return false
 	}
-	if !self.isPhalaenopsisHardfork(blockNum) {
+	if !self.isOnPhalaenopsisHardfork(blockNum) {
 		return false
 	}
 	return true
@@ -242,7 +242,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, evm.GetBlock().Number) {
 			return TransferIntoDPoSContractGas
-		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(evm.GetBlock().Number) {
+		} else if !self.cfg.Hardforks.IsOnFixClaimAllHardfork(evm.GetBlock().Number) {
 			if method = self.GetOldClaimAllRewardsABI(ctx.Input, evm.GetBlock().Number); method == nil {
 				return 0
 			}
@@ -306,7 +306,7 @@ func (self *Contract) RequiredGas(ctx vm.CallFrame, evm *vm.EVM) uint64 {
 	case "claimRewards":
 		return ClaimRewardsGas
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardforkPartOne(evm.GetBlock().Number) {
+		if self.cfg.Hardforks.IsOnAspenHardforkPartOne(evm.GetBlock().Number) {
 			delegations_count := uint64(self.delegations.GetDelegationsCount(ctx.CallerAccount.Address()))
 			return delegations_count * (DposBatchGetMethodsGas + ClaimRewardsGas)
 		} else {
@@ -599,7 +599,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 	if err != nil {
 		if self.IsTransferIntoDPoSContract(ctx.Input, block_num) {
 			return nil, nil
-		} else if !self.cfg.Hardforks.IsFixClaimAllHardfork(block_num) {
+		} else if !self.cfg.Hardforks.IsOnFixClaimAllHardfork(block_num) {
 			if method = self.GetOldClaimAllRewardsABI(ctx.Input, block_num); method == nil {
 				return nil, err
 			}
@@ -715,7 +715,7 @@ func (self *Contract) Run(ctx vm.CallFrame, evm *vm.EVM) ([]byte, error) {
 		return nil, self.claimRewards(ctx, block_num, args)
 
 	case "claimAllRewards":
-		if self.cfg.Hardforks.IsAspenHardforkPartOne(block_num) {
+		if self.cfg.Hardforks.IsOnAspenHardforkPartOne(block_num) {
 			return nil, self.claimAllRewards(ctx, block_num)
 		} else {
 			var args dpos_sol.ClaimAllRewardsArgs
@@ -890,7 +890,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
-	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
+	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(current_block_num) {
 		if self.total_supply == nil {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
 			self.saveTotalSupplyDb()
@@ -1030,10 +1030,10 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 
 	self.storage.AddBalance(dpos_contract_address, totalReward.ToBig())
 
-	if self.cfg.Hardforks.IsAspenHardforkPartTwo(current_block_num) {
+	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(current_block_num) {
 		self.total_supply.Add(self.total_supply, newMintedRewards)
 		self.saveTotalSupplyDb()
-	} else if self.cfg.Hardforks.IsAspenHardforkPartOne(current_block_num) {
+	} else if self.cfg.Hardforks.IsOnAspenHardforkPartOne(current_block_num) {
 		self.minted_tokens.Add(self.minted_tokens, newMintedRewards)
 		self.saveMintedTokensDb()
 	}
@@ -1109,7 +1109,7 @@ func (self *Contract) delegate(ctx vm.CallFrame, block types.BlockNum, args dpos
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+	self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.Validator, validator)
 	self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	self.evm.AddLog(self.logs.MakeDelegatedLog(ctx.CallerAccount.Address(), &args.Validator, ctx.Value))
 
@@ -1191,12 +1191,12 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 	}
 
 	// We can delete validator object as it doesn't have any stake anymore (only before the magnolia hardfork)
-	if !self.isMagnoliaHardfork(block) && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
+	if !self.isOnMagnoliaHardfork(block) && validator.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
 		self.validators.DeleteValidator(&args.Validator)
 		self.state_put(&state_k, nil)
 	} else {
 		self.state_put(&state_k, state)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+		self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1227,7 +1227,7 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 
 	self.undelegations.RemoveUndelegation(ctx.CallerAccount.Address(), &validator_addr, undelegation_id)
 
-	if self.isMagnoliaHardfork(block) {
+	if self.isOnMagnoliaHardfork(block) {
 		validator := self.validators.GetValidator(&validator_addr)
 		// Validator might be already deleted if all delegators undelegated from the validator before magnolia hardfork
 		if validator != nil {
@@ -1242,8 +1242,8 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 				self.validators.DeleteValidator(&validator_addr)
 				self.state_get_and_decrement(validator_addr[:], BlockToBytes(validator.LastUpdated))
 			} else {
-				if self.IsFicusHardfork(block) {
-					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &validator_addr, validator)
+				if self.isOnFicusHardfork(block) {
+					self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &validator_addr, validator)
 				}
 			}
 		}
@@ -1324,7 +1324,7 @@ func (self *Contract) cancelUndelegate(ctx vm.CallFrame, block types.BlockNum, v
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &validator_addr, validator)
+	self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &validator_addr, validator)
 	self.validators.ModifyValidatorRewards(&validator_addr, validator_rewards)
 	self.evm.AddLog(self.logs.MakeUndelegateCanceledLog(ctx.CallerAccount.Address(), &validator_addr, undelegation_id, undelegation.Amount))
 
@@ -1338,7 +1338,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			return ErrSameValidator
 		}
 	}
-	if self.cfg.Hardforks.IsAspenHardforkPartTwo(block) {
+	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(block) {
 		if args.Amount.Cmp(big.NewInt(0)) <= 0 {
 			return ErrInvalidRedelegation
 		}
@@ -1413,17 +1413,17 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 		}
 
 		if validator_from.TotalStake.Cmp(big.NewInt(0)) == 0 && validator_rewards_from.CommissionRewardsPool.Cmp(big.NewInt(0)) == 0 {
-			if !self.isMagnoliaHardfork(block) || validator_from.UndelegationsCount == 0 {
+			if !self.isOnMagnoliaHardfork(block) || validator_from.UndelegationsCount == 0 {
 				self.validators.DeleteValidator(&args.ValidatorFrom)
 				self.state_put(&state_k, nil)
 			} else {
-				if self.IsFicusHardfork(block) {
-					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
+				if self.isOnFicusHardfork(block) {
+					self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
 				}
 			}
 		} else {
 			self.state_put(&state_k, state)
-			self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
+			self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
 			self.validators.ModifyValidatorRewards(&args.ValidatorFrom, validator_rewards_from)
 		}
 
@@ -1481,7 +1481,7 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 
 	state.Count++
 	self.state_put(&state_k, state)
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorTo, validator_to)
+	self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.ValidatorTo, validator_to)
 	self.validators.ModifyValidatorRewards(&args.ValidatorTo, validator_rewards_to)
 	self.evm.AddLog(self.logs.MakeRedelegatedLog(ctx.CallerAccount.Address(), &args.ValidatorFrom, &args.ValidatorTo, args.Amount))
 	return nil
@@ -1514,7 +1514,7 @@ func (self *Contract) claimRewards(ctx vm.CallFrame, block types.BlockNum, args 
 		validator_rewards.RewardsPool = big.NewInt(0)
 		validator.LastUpdated = block
 		state.Count++
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+		self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.Validator, validator)
 		self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 	}
 
@@ -1570,11 +1570,11 @@ func (self *Contract) claimCommissionRewards(ctx vm.CallFrame, block types.Block
 	validator_rewards.CommissionRewardsPool = big.NewInt(0)
 
 	if validator.TotalStake.Cmp(big.NewInt(0)) == 0 {
-		if !self.isMagnoliaHardfork(block) || validator.UndelegationsCount == 0 {
+		if !self.isOnMagnoliaHardfork(block) || validator.UndelegationsCount == 0 {
 			self.validators.DeleteValidator(&args.Validator)
 			self.state_get_and_decrement(args.Validator[:], BlockToBytes(validator.LastUpdated))
 		} else {
-			if self.isPhalaenopsisHardfork(block) {
+			if self.isOnPhalaenopsisHardfork(block) {
 				self.validators.ModifyValidatorRewards(&args.Validator, validator_rewards)
 			}
 		}
@@ -1644,7 +1644,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 	state.RewardsPer1Stake = big.NewInt(0)
 
 	// Creates validator related objects in storage
-	validator := self.validators.CreateValidator(self.isMagnoliaHardfork(block), owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
+	validator := self.validators.CreateValidator(self.isOnMagnoliaHardfork(block), owner_address, &args.Validator, args.VrfKey, block, args.Commission, args.Description, args.Endpoint)
 	state.Count++
 	self.evm.AddLog(self.logs.MakeValidatorRegisteredLog(&args.Validator))
 
@@ -1652,7 +1652,7 @@ func (self *Contract) registerValidatorWithoutChecks(ctx vm.CallFrame, block typ
 		self.evm.AddLog(self.logs.MakeDelegatedLog(owner_address, &args.Validator, ctx.Value))
 		self.delegations.CreateDelegation(owner_address, &args.Validator, block, ctx.Value)
 		self.delegate_update_values(ctx, validator, 0)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+		self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.Validator, validator)
 		state.Count++
 	}
 
@@ -1726,7 +1726,7 @@ func (self *Contract) setCommission(ctx vm.CallFrame, block types.BlockNum, args
 
 	validator.Commission = args.Commission
 	validator.LastCommissionChange = block
-	self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+	self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block), &args.Validator, validator)
 	self.evm.AddLog(self.logs.MakeCommissionSetLog(&args.Validator, args.Commission))
 
 	return nil
@@ -2059,16 +2059,16 @@ func (self *Contract) calculateDelegatorReward(rewardPer1Stake *big.Int, stake *
 	return bigutil.Div(bigutil.Mul(rewardPer1Stake, stake), self.cfg.DPOS.ValidatorMaximumStake)
 }
 
-func (self *Contract) isMagnoliaHardfork(block types.BlockNum) bool {
-	return self.cfg.Hardforks.IsMagnoliaHardfork(block)
+func (self *Contract) isOnMagnoliaHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsOnMagnoliaHardfork(block)
 }
 
-func (self *Contract) isPhalaenopsisHardfork(block types.BlockNum) bool {
-	return self.cfg.Hardforks.IsPhalaenopsisHardfork(block)
+func (self *Contract) isOnPhalaenopsisHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsOnPhalaenopsisHardfork(block)
 }
 
-func (self *Contract) IsFicusHardfork(block types.BlockNum) bool {
-	return self.cfg.Hardforks.IsFicusHardfork(block)
+func (self *Contract) isOnFicusHardfork(block types.BlockNum) bool {
+	return self.cfg.Hardforks.IsOnFicusHardfork(block)
 }
 
 func (self *Contract) isOnCornusHardfork(block types.BlockNum) bool {
@@ -2112,7 +2112,7 @@ func BlockToBytes(number types.BlockNum) []byte {
 
 func voteCount(staking_balance *big.Int, cfg *chain_config.ChainConfig, block types.BlockNum) uint64 {
 	tmp := big.NewInt(0)
-	if cfg.Hardforks.IsAspenHardforkPartOne(block) {
+	if cfg.Hardforks.IsOnAspenHardforkPartOne(block) {
 		if staking_balance.Cmp(cfg.DPOS.ValidatorMaximumStake) >= 0 {
 			tmp.Div(cfg.DPOS.ValidatorMaximumStake, cfg.DPOS.VoteEligibilityBalanceStep)
 		}

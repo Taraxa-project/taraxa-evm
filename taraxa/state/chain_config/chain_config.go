@@ -56,27 +56,27 @@ type HardforksConfig struct {
 	CornusHfBlockNum             uint64
 }
 
-func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
 	return block >= c.FixClaimAllBlockNum
 }
 
-func (c *HardforksConfig) IsPhalaenopsisHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnPhalaenopsisHardfork(block types.BlockNum) bool {
 	return block >= c.PhalaenopsisHfBlockNum
 }
 
-func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= c.MagnoliaHf.BlockNum
 }
 
-func (c *HardforksConfig) IsAspenHardforkPartOne(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnAspenHardforkPartOne(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartOne
 }
 
-func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnAspenHardforkPartTwo(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartTwo
 }
 
-func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnFicusHardfork(block types.BlockNum) bool {
 	return block >= c.FicusHf.BlockNum
 }
 

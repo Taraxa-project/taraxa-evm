@@ -106,7 +106,7 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if st.dpos_contract != nil && rules_changed {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
-		if st.chain_config.Hardforks.IsAspenHardforkPartOne(blk_n) {
+		if st.chain_config.Hardforks.IsOnAspenHardforkPartOne(blk_n) {
 			acc := st.evm_state.GetAccount(dpos.ContractAddress())
 			if acc.GetCodeSize() == 0 {
 				acc.SetCode(dpos_sol.AspenDposImplBytecode)
@@ -117,7 +117,7 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 			acc.SetCode(dpos_sol.CornusDposImplBytecode)
 		}
 	}
-	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(blk_n) && rules_changed {
+	if st.slashing_contract != nil && st.chain_config.Hardforks.IsOnMagnoliaHardfork(blk_n) && rules_changed {
 		st.slashing_contract.Register(st.evm.RegisterPrecompiledContract)
 	}
 }
@@ -176,7 +176,7 @@ func (st *StateTransition) Commit() (state_root common.Hash) {
 	if st.dpos_contract != nil {
 		st.dpos_contract.CommitCall(st.get_dpos_reader(st.evm.GetBlock().Number))
 	}
-	if st.slashing_contract != nil && st.chain_config.Hardforks.IsMagnoliaHardfork(st.evm.GetBlock().Number) {
+	if st.slashing_contract != nil && st.chain_config.Hardforks.IsOnMagnoliaHardfork(st.evm.GetBlock().Number) {
 		st.slashing_contract.CommitCall(st.get_slashing_reader(st.evm.GetBlock().Number))
 	}
 	return

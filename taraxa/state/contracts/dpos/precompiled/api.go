@@ -110,7 +110,7 @@ func (api *API) NewSlashingContract(storage contract_storage.Storage, reader sla
 
 func (api *API) InitAndRegisterAllContracts(storage contract_storage.Storage, blk_n types.BlockNum, storage_factory func(types.BlockNum) contract_storage.StorageReader, evm *vm.EVM, registry func(*common.Address, vm.PrecompiledContract)) {
 	new(Contract).Init(api.config, storage, api.NewDelayedReader(blk_n, storage_factory), evm).Register(registry)
-	if api.config.Hardforks.IsMagnoliaHardfork(blk_n) {
+	if api.config.Hardforks.IsOnMagnoliaHardfork(blk_n) {
 		new(slashing.Contract).Init(api.config, storage, api.NewSlashingReader(blk_n, storage_factory), evm).Register(registry)
 	}
 }
