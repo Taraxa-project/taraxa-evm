@@ -200,7 +200,6 @@ func (self *Account) IncrementNonce() {
 
 func (self *Account) SetCode(code []byte) {
 	self.ensure_exists()
-	asserts.Holds(self.CodeSize == 0)
 	code_size := len(code)
 	if code_size == 0 {
 		return

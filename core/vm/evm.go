@@ -90,6 +90,7 @@ type Rules struct {
 	IsAspenPartOne bool
 	IsAspenPartTwo bool
 	IsFicus        bool
+	IsCornus       bool
 }
 
 type Block struct {

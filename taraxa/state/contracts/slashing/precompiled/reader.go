@@ -42,7 +42,7 @@ func (r *Reader) getJailBlock(addr *common.Address) (jailed bool, block types.Bl
 }
 
 func (r Reader) IsJailed(block types.BlockNum, addr *common.Address) bool {
-	if !r.cfg.Hardforks.IsMagnoliaHardfork(block) {
+	if !r.cfg.Hardforks.IsOnMagnoliaHardfork(block) {
 		return false
 	}
 

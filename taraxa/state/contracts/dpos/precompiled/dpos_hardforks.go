@@ -87,7 +87,7 @@ func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block_num), &redelegation.Validator, val)
+		self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block_num), &redelegation.Validator, val)
 	}
 }
 
