@@ -48,7 +48,12 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 	evm_state.Init(state_evm.Opts{
 		NumTransactionsToBuffer: uint64(len(*trxs)),
 	})
-	evm_state.SetInput(state_db.GetBlockState(self.db, blk.Number))
+	blk_n := blk.Number
+	// get state of previous block, so transactions from this block won't be applied yet
+	if blk_n > 0 {
+		blk_n -= 1
+	}
+	evm_state.SetInput(state_db.GetBlockState(self.db, blk_n))
 	output := make([]any, len(*trxs))
 	for index, trx := range *trxs {
 		var evm vm.EVM
