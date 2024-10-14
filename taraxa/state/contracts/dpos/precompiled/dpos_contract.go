@@ -573,6 +573,8 @@ func (self *Contract) ApplyGenesis(get_account func(*common.Address) vm.StateAcc
 		self.apply_genesis_entry(&entry, make_context)
 	}
 
+	self.setTotalSupply(0)
+
 	self.EndBlockCall(0)
 	self.storage.IncrementNonce(dpos_contract_address)
 
@@ -891,19 +893,7 @@ func (self *Contract) DistributeRewards(rewardsStats *rewards_stats.RewardsStats
 	current_block_num := self.evm.GetBlock().Number
 	// Aspen hf introduces dynamic yield curve, see https://github.com/Taraxa-project/TIP/blob/main/TIP-2/TIP-2%20-%20Cap%20TARA's%20Total%20Supply.md
 	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(current_block_num) {
-		if self.total_supply == nil {
-			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
-			self.saveTotalSupplyDb()
-
-			// Erase minted_tokens from db as it is no longer needed
-			self.eraseMintedTokensDb()
-		}
-
-		var yield *uint256.Int
-		blockReward, yield = self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
-
-		// Save current yield - it changes every block as total_supply is growing every block
-		self.saveYieldDb(yield.Uint64())
+		blockReward = self.setTotalSupply(current_block_num)
 	} else {
 		// Original fixed yield curve
 		blockReward.Mul(self.amount_delegated, self.yield_percentage)
