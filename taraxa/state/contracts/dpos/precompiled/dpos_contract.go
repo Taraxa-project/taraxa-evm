@@ -3,8 +3,10 @@ package dpos
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
+	"os"
 	"strconv"
 	"strings"
 
@@ -181,6 +183,8 @@ type Contract struct {
 	total_supply *uint256.Int
 
 	lazy_init_done bool
+
+	log io.Writer
 }
 
 // Initialize contract class
@@ -189,6 +193,11 @@ func (self *Contract) Init(cfg chain_config.ChainConfig, storage storage.Storage
 	self.storage.Init(dpos_contract_address, storage)
 	self.delayedStorage = readStorage
 	self.evm = evm
+	file, err := os.Create("taraxa.txt")
+	if err != nil {
+		log.Fatalf("failed creating file: %s", err)
+	}
+	self.log = file
 	return self
 }
 
