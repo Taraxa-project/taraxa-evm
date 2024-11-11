@@ -1055,6 +1055,8 @@ func (self *Contract) confirmUndelegate(ctx vm.CallFrame, block types.BlockNum, 
 			} else {
 				if self.IsFicusHardfork(block) {
 					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.Validator, validator)
+				} else {
+					fmt.Fprintln(self.log, "confirmUndelegate", args.Validator.String(), "undelegations count", validator.UndelegationsCount, "block", block)
 				}
 			}
 		}
@@ -1230,6 +1232,8 @@ func (self *Contract) redelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 			} else {
 				if self.IsFicusHardfork(block) {
 					self.validators.ModifyValidator(self.isMagnoliaHardfork(block), &args.ValidatorFrom, validator_from)
+				} else {
+					fmt.Fprintln(self.log, "redelegate", args.ValidatorFrom.String(), "block", block, "amount", args.Amount, args.Amount.Int64())
 				}
 			}
 		} else {
