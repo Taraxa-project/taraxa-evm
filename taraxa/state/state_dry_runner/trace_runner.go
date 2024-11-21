@@ -44,16 +44,13 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 	if trxs == nil || blk == nil {
 		return nil
 	}
-	var evm_state state_evm.EVMState
-	evm_state.Init(state_evm.Opts{
-		NumTransactionsToBuffer: uint64(len(*trxs)),
-	})
+
 	blk_n := blk.Number
 	// get state of previous block, so transactions from this block won't be applied yet
 	if blk_n > 0 {
 		blk_n -= 1
 	}
-	evm_state.SetInput(state_db.GetBlockState(self.db, blk_n))
+	block_state := state_evm.GetBlockState(self.db, blk_n, len(*trxs))
 	output := make([]any, len(*trxs))
 	for index, trx := range *trxs {
 		var evm vm.EVM
@@ -65,10 +62,10 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 			tracer = vm.NewStructLogger(nil)
 		}
 
-		evm.Init(self.get_block_hash, &evm_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
+		evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
 		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 		if self.dpos_api != nil {
-			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{&evm_state}, blk.Number, self.get_reader, &evm, evm.RegisterPrecompiledContract)
+			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, func(uint64) contract_storage.StorageReader { return block_state }, &evm, evm.RegisterPrecompiledContract)
 		}
 
 		ret, _ := evm.Main(&trx)

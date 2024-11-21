@@ -2139,9 +2139,8 @@ func TestIterableMapClass(t *testing.T) {
 	test.St.BeginBlock(&vm.BlockInfo{})
 
 	var storage contract_storage.StorageWrapper
-	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, test.GetEvmStateStorage())
 
 	iter_map_prefix := []byte{0}
 	iter_map := contract_storage.AddressesIMap{}
@@ -2210,9 +2209,8 @@ func TestValidatorsClass(t *testing.T) {
 	test.St.BeginBlock(&vm.BlockInfo{})
 
 	var storage contract_storage.StorageWrapper
-	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, test.GetEvmStateStorage())
 
 	validators := new(dpos.Validators).Init(&storage, []byte{})
 	field_validators := []byte{0}
@@ -2281,9 +2279,8 @@ func TestDelegationsClass(t *testing.T) {
 	test.St.BeginBlock(&vm.BlockInfo{})
 
 	var storage contract_storage.StorageWrapper
-	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, test.GetEvmStateStorage())
 
 	delegations := dpos.Delegations{}
 	field_delegations := []byte{2}
@@ -2351,9 +2348,8 @@ func TestUndelegationsClass(t *testing.T) {
 	test.St.BeginBlock(&vm.BlockInfo{})
 
 	var storage contract_storage.StorageWrapper
-	evm_state := test.St.GetEvmState()
 	dpos_contract_address := dpos.ContractAddress()
-	storage.Init(dpos_contract_address, contract_storage.EVMStateStorage{EVMState: evm_state})
+	storage.Init(dpos_contract_address, test.GetEvmStateStorage())
 
 	undelegations := dpos.Undelegations{}
 	field_undelegations := []byte{3}

@@ -113,7 +113,7 @@ type StateTransition interface {
 	ExecuteTransaction(*vm.Transaction) vm.ExecutionResult
 	AddTxFeeToBalance(account *common.Address, tx_fee *uint256.Int)
 	GetChainConfig() *chain_config.ChainConfig
-	GetEvmState() *state_evm.EVMState
+	GetEvmState() *state_evm.TransitionState
 	DistributeRewards(*rewards_stats.RewardsStats) *uint256.Int
 	EndBlock()
 	PrepareCommit() (state_root common.Hash)
@@ -137,7 +137,7 @@ func (self *API) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.TracingCo
 }
 
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
-	return state_db.GetBlockState(self.db, blk_n)
+	return state_db.GetBlockStateReader(self.db, blk_n)
 }
 
 func (self *API) DPOSReader(blk_n types.BlockNum) dpos.Reader {

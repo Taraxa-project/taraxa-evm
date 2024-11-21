@@ -9,7 +9,7 @@ import (
 )
 
 func TestStateDBTransientStorage(t *testing.T) {
-	var state state_evm.EVMState
+	var state state_evm.TransitionState
 	state.Init(state_evm.Opts{
 		NumTransactionsToBuffer: 1,
 	})

@@ -188,7 +188,7 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 }
 
 func (self *DB) recreateMainTrie(state_root_to_keep *[]common.Hash, blk_num types.BlockNum) {
-	current_block_state := state_db.GetBlockState(self, blk_num)
+	current_block_state := state_db.GetBlockStateReader(self, blk_num)
 	//Select nodes which are not to be deleted
 	nodes_to_keep := make(map[common.Hash][]byte)
 	for _, root_to_keep := range *state_root_to_keep {
@@ -210,7 +210,7 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 	//Select main trie values to prune/remove
 	set_value_to_prune := make([][]byte, 0)
 	set_storage_root_to_keep := make([]common.Hash, 0)
-	current_block_state := state_db.GetBlockState(self, blk_num)
+	current_block_state := state_db.GetBlockStateReader(self, blk_num)
 
 	//Iterate over all values and select which to keep
 	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_value])
@@ -318,7 +318,7 @@ func (self *DB) Close() {
 	self.db.Close()
 }
 
-func (self *DB) GetBlockState(num types.BlockNum) state_db.Reader {
+func (self *DB) GetBlockStateReader(num types.BlockNum) state_db.Reader {
 	return block_state_reader{self, num}
 }
 
