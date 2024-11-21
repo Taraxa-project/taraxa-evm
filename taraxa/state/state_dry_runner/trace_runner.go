@@ -40,7 +40,7 @@ func (self *TraceRunner) UpdateConfig(cfg *chain_config.ChainConfig) {
 	self.chain_config = cfg
 }
 
-func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.TracingConfig) []byte {
+func (self *TraceRunner) Trace(blk *vm.Block, state_trxs *[]vm.Transaction, trxs *[]vm.Transaction, conf *vm.TracingConfig) []byte {
 	if trxs == nil || blk == nil {
 		return nil
 	}
@@ -51,6 +51,17 @@ func (self *TraceRunner) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.T
 		blk_n -= 1
 	}
 	block_state := state_evm.GetBlockState(self.db, blk_n, len(*trxs))
+	for _, trx := range *state_trxs {
+		var evm vm.EVM
+		evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{})
+		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
+		if self.dpos_api != nil {
+			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, func(uint64) contract_storage.StorageReader { return block_state }, &evm, evm.RegisterPrecompiledContract)
+		}
+
+		evm.Main(&trx)
+	}
+
 	output := make([]any, len(*trxs))
 	for index, trx := range *trxs {
 		var evm vm.EVM

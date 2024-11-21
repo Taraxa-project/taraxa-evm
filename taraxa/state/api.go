@@ -132,8 +132,8 @@ func (self *API) DryRunTransaction(blk *vm.Block, trx *vm.Transaction) vm.Execut
 	return self.dry_runner.Apply(blk, trx)
 }
 
-func (self *API) Trace(blk *vm.Block, trxs *[]vm.Transaction, conf *vm.TracingConfig) []byte {
-	return self.trace_runner.Trace(blk, trxs, conf)
+func (self *API) Trace(blk *vm.Block, state_trxs *[]vm.Transaction, trxs *[]vm.Transaction, conf *vm.TracingConfig) []byte {
+	return self.trace_runner.Trace(blk, state_trxs, trxs, conf)
 }
 
 func (self *API) ReadBlock(blk_n types.BlockNum) state_db.ExtendedReader {
