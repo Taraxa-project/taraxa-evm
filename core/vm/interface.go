@@ -49,7 +49,7 @@ type StateAccount interface {
 	HasSuicided() bool
 	// Exist reports whether the given account exists in state.
 	// Notably this should also return true for suicided accounts.
-	IsNotNIL() bool
+	IsNIL() bool
 	// Empty returns whether the given account is empty. Empty
 	// is defined according to EIP161 (balance = nonce = code = 0).
 	IsEIP161Empty() bool

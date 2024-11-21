@@ -195,10 +195,10 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 	if self.trx.From != common.ZeroAddress && !BalanceGTE(caller, gas_fee) {
 		caller_balance := caller.GetBalance()
 		// Not Sub whole balance to have transaction sender balance difference match `gas_used * gas_price`. So balance after SubBalance should be smaller than gas_price
-		availiable_funds_gas := bigutil.Div(caller_balance, gas_price)
-		caller.SubBalance(bigutil.Mul(availiable_funds_gas, gas_price))
+		available_funds_gas := bigutil.Div(caller_balance, gas_price)
+		caller.SubBalance(bigutil.Mul(available_funds_gas, gas_price))
 
-		return consensusErr(ret, availiable_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
+		return consensusErr(ret, available_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 	}
 
 	caller.SubBalance(gas_fee)
@@ -366,7 +366,7 @@ func (self *EVM) call(typ OpCode, caller ContractRef, callee StateAccount, input
 
 	if typ == CALL {
 		if value.Sign() == 0 {
-			if !callee.IsNotNIL() && self.precompiles.Get(callee.Address()) == nil {
+			if callee.IsNIL() && self.precompiles.Get(callee.Address()) == nil {
 				// Calling a non existing account, don't do anything, but ping the tracer
 				if self.vmConfig.Debug {
 					if self.depth == 0 {

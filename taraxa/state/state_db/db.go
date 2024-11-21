@@ -21,18 +21,18 @@ const (
 
 // TODO a wrapper with common functionality. Delegate only the most low-level stuff to these interfaces
 type DB interface {
-	GetBlockState(types.BlockNum) Reader
+	GetBlockStateReader(types.BlockNum) Reader
 	GetLatestState() LatestState
 }
 
 type ErrFutureBlock util.ErrorString
 
-func GetBlockState(db DB, blk_n types.BlockNum) ExtendedReader {
+func GetBlockStateReader(db DB, blk_n types.BlockNum) ExtendedReader {
 	last_committed_blk_n := db.GetLatestState().GetCommittedDescriptor().BlockNum
 	if last_committed_blk_n < blk_n {
 		panic(ErrFutureBlock(fmt.Sprint("Requested blk num:", blk_n, ", last committed:", last_committed_blk_n)))
 	}
-	return ExtendedReader{db.GetBlockState(blk_n)}
+	return ExtendedReader{db.GetBlockStateReader(blk_n)}
 }
 
 type LatestState interface {

@@ -9,7 +9,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 )
 
-type EVMStateStorage struct{ *state_evm.EVMState }
+type EVMStateStorage struct{ state_evm.EVMStateFace }
 
 func (self EVMStateStorage) SubBalance(address *common.Address, b *big.Int) bool {
 	if acc := self.GetAccountConcrete(address); vm.BalanceGTE(acc, b) {
@@ -27,10 +27,6 @@ func (self EVMStateStorage) Put(address *common.Address, k *common.Hash, v []byt
 	self.GetAccountConcrete(address).SetStateRawIrreversibly(k, v)
 }
 
-func (self EVMStateStorage) GetAccountStorage(address *common.Address, k *common.Hash, cb func([]byte)) {
-	self.GetAccountStorageFromDB(address, k, cb)
-}
-
 func (self EVMStateStorage) IncrementNonce(address *common.Address) {
 	self.GetAccountConcrete(address).IncrementNonce()
 }
@@ -38,4 +34,3 @@ func (self EVMStateStorage) IncrementNonce(address *common.Address) {
 func (self EVMStateStorage) GetNonce(address *common.Address) *big.Int {
 	return self.GetAccountConcrete(address).GetNonce()
 }
-
