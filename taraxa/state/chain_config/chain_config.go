@@ -44,6 +44,11 @@ type FicusHfConfig struct {
 // 	Redelegations []BambooRedelegation
 // }
 
+type SequoiaHfConfig struct {
+	BlockNum                uint64
+	DelegationLockingPeriod uint32 // [number of blocks]
+}
+
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64
 	Redelegations                []Redelegation
@@ -54,6 +59,7 @@ type HardforksConfig struct {
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
 	CornusHfBlockNum             uint64
+	SequoiaHf                    SequoiaHfConfig
 }
 
 func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
@@ -86,6 +92,10 @@ func (c *HardforksConfig) IsOnCornusHardfork(block types.BlockNum) bool {
 
 func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
 	return block == c.CornusHfBlockNum
+}
+
+func (c *HardforksConfig) IsSequoiaHardfork(block types.BlockNum) bool {
+	return block >= c.SequoiaHf.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
