@@ -69,6 +69,7 @@ func (st *StateTransition) Init(
 		if st.dpos_contract != nil {
 			util.PanicIfNotNil(st.dpos_contract.ApplyGenesis(st.evm_state.GetAccount))
 		}
+		st.applyHFChanges()
 		st.evm_state_checkpoint()
 		st.Commit()
 	}
@@ -104,7 +105,7 @@ func (st *StateTransition) BeginBlock(blk_info *vm.BlockInfo) {
 	blk_n := st.BlockNumber()
 	rules_changed := st.evm.SetBlock(&vm.Block{Number: blk_n, BlockInfo: *blk_info}, st.chain_config.Hardforks.Rules(blk_n))
 	if rules_changed {
-		st.applyHFChanges(blk_info)
+		st.applyHFChanges()
 	}
 }
 
