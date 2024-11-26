@@ -1,13 +1,12 @@
 package state_transition
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/core/vm"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_transition/op_stack"
 )
 
-func (st *StateTransition) applyHFChanges(blk_info *vm.BlockInfo) {
+func (st *StateTransition) applyHFChanges() {
 	blk_n := st.BlockNumber()
 
 	if st.dpos_contract != nil {
