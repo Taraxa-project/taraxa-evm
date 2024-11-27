@@ -94,7 +94,7 @@ func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
 	return block == c.CornusHfBlockNum
 }
 
-func (c *HardforksConfig) IsSequoiaHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnSequoiaHardfork(block types.BlockNum) bool {
 	return block >= c.SequoiaHf.BlockNum
 }
 

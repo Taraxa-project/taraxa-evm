@@ -127,6 +127,10 @@ var (
 				GeneratedRewards: big.NewInt(0),
 			},
 			CornusHfBlockNum: 1000,
+			SequoiaHf: chain_config.SequoiaHfConfig{
+				BlockNum:                0,
+				DelegationLockingPeriod: 4,
+			},
 		},
 	}
 )
@@ -2843,4 +2847,48 @@ func TestNonPayableMethods(t *testing.T) {
 	for _, method := range nonPayableMethods {
 		test.ExecuteAndCheck(caller, big.NewInt(1), test.MethodId(method), dpos.ErrNonPayableMethod, util.ErrorString(""))
 	}
+}
+
+func TestSequoiaHardfork(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.SequoiaHf.BlockNum = 5
+	cfg.Hardforks.SequoiaHf.DelegationLockingPeriod = 100
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultValidatorMaximumStake, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := DefaultValidatorMaximumStake
+	test.CheckContractBalance(totalBalance)
+
+	// Create undelegation before sequoia hardfork
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate1_expected_id := uint64(1)
+	undelegate1_expected_lockup_block := test.BlockNumber() + uint64(cfg.DPOS.DelegationLockingPeriod)
+
+	get_undelegation1_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, undelegate1_expected_id), util.ErrorString(""), util.ErrorString(""))
+	get_undelegation1_parsed_result := new(GetUndelegationV2Ret)
+	test.Unpack(get_undelegation1_parsed_result, "getUndelegationV2", get_undelegation1_result.CodeRetval)
+	tc.Assert.Equal(undelegate1_expected_id, get_undelegation1_parsed_result.UndelegationV2.UndelegationId)
+	tc.Assert.Equal(undelegate1_expected_lockup_block, get_undelegation1_parsed_result.UndelegationV2.UndelegationData.Block)
+
+	// Pass sequoia hardfork
+	tc.Assert.Less(test.BlockNumber(), cfg.Hardforks.SequoiaHf.BlockNum)
+	for i := test.BlockNumber(); i < cfg.Hardforks.SequoiaHf.BlockNum; i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	// Create undelegation after sequoia hardfork
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate2_expected_id := uint64(2)
+	undelegate2_expected_lockup_block := test.BlockNumber() + uint64(cfg.Hardforks.SequoiaHf.DelegationLockingPeriod)
+
+	get_undelegation2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, undelegate2_expected_id), util.ErrorString(""), util.ErrorString(""))
+	get_undelegation2_parsed_result := new(GetUndelegationV2Ret)
+	test.Unpack(get_undelegation2_parsed_result, "getUndelegationV2", get_undelegation2_result.CodeRetval)
+	tc.Assert.Equal(undelegate2_expected_id, get_undelegation2_parsed_result.UndelegationV2.UndelegationId)
+	tc.Assert.Equal(undelegate2_expected_lockup_block, get_undelegation2_parsed_result.UndelegationV2.UndelegationData.Block)
 }

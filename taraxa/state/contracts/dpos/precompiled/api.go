@@ -32,6 +32,7 @@ type GenesisTransfer = struct {
 
 func (api *API) Init(cfg chain_config.ChainConfig) *API {
 	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.DPOS.DelegationLockingPeriod)
+	asserts.Holds(cfg.DPOS.DelegationDelay <= cfg.Hardforks.SequoiaHf.DelegationLockingPeriod)
 
 	asserts.Holds(cfg.DPOS.EligibilityBalanceThreshold != nil)
 	asserts.Holds(cfg.DPOS.VoteEligibilityBalanceStep != nil)
