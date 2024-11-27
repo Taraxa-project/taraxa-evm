@@ -37,7 +37,7 @@ func (account) GetCodeSize() uint64                 { return 0 }
 func (account) GetCommittedState(*big.Int) *big.Int { return nil }
 func (account) GetState(*big.Int) *big.Int          { return nil }
 func (account) HasSuicided() bool                   { return false }
-func (account) IsNotNIL() bool                      { return false }
+func (account) IsNIL() bool                         { return true }
 func (account) IsEIP161Empty() bool                 { return false }
 func (account) SetCode([]byte)                      {}
 func (account) AddBalance(*big.Int)                 {}

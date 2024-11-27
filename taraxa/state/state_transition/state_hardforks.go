@@ -12,13 +12,13 @@ func (st *StateTransition) applyHFChanges() {
 	if st.dpos_contract != nil {
 		st.dpos_contract.Register(st.evm.RegisterPrecompiledContract)
 		if st.chain_config.Hardforks.IsOnAspenHardforkPartOne(blk_n) {
-			acc := st.evm_state.GetAccount(dpos.ContractAddress())
+			acc := st.state.GetAccount(dpos.ContractAddress())
 			if acc.GetCodeSize() == 0 {
 				acc.SetCode(dpos_sol.AspenDposImplBytecode)
 			}
 		}
 		if st.chain_config.Hardforks.IsCornusHardfork(blk_n) {
-			acc := st.evm_state.GetAccount(dpos.ContractAddress())
+			acc := st.state.GetAccount(dpos.ContractAddress())
 			acc.SetCode(dpos_sol.CornusDposImplBytecode)
 		}
 	}
@@ -29,7 +29,7 @@ func (st *StateTransition) applyHFChanges() {
 
 	if st.chain_config.Hardforks.IsCornusHardfork(blk_n) {
 		for acc, byteCode := range op_stack.OpPrecompiles {
-			acc := st.evm_state.GetAccount(&acc)
+			acc := st.state.GetAccount(&acc)
 			acc.SetCode(byteCode)
 		}
 	}
