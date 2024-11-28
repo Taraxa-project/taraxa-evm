@@ -1202,17 +1202,11 @@ func (self *Contract) undelegate(ctx vm.CallFrame, block types.BlockNum, args dp
 
 	// Create undelegation request
 	undelegation_id := uint64(0)
-
-	delegationLockingPeriod := self.cfg.Hardforks.SequoiaHf.DelegationLockingPeriod
-	if !self.cfg.Hardforks.IsOnSequoiaHardfork(block) {
-		delegationLockingPeriod = self.cfg.DPOS.DelegationLockingPeriod
-	}
-
 	if v2 {
-		undelegation_id = self.undelegations.CreateUndelegationV2(ctx.CallerAccount.Address(), &args.Validator, block+uint64(delegationLockingPeriod), args.Amount)
+		undelegation_id = self.undelegations.CreateUndelegationV2(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.Hardforks.CornusHf.DelegationLockingPeriod), args.Amount)
 		self.evm.AddLog(self.logs.MakeUndelegatedV2Log(ctx.CallerAccount.Address(), &args.Validator, undelegation_id, args.Amount))
 	} else {
-		self.undelegations.CreateUndelegationV1(ctx.CallerAccount.Address(), &args.Validator, block+uint64(delegationLockingPeriod), args.Amount)
+		self.undelegations.CreateUndelegationV1(ctx.CallerAccount.Address(), &args.Validator, block+uint64(self.cfg.DPOS.DelegationLockingPeriod), args.Amount)
 		self.evm.AddLog(self.logs.MakeUndelegatedV1Log(ctx.CallerAccount.Address(), &args.Validator, args.Amount))
 	}
 

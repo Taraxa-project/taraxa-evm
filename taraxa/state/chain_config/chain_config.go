@@ -44,7 +44,7 @@ type FicusHfConfig struct {
 // 	Redelegations []BambooRedelegation
 // }
 
-type SequoiaHfConfig struct {
+type CornusHfConfig struct {
 	BlockNum                uint64
 	DelegationLockingPeriod uint32 // [number of blocks]
 }
@@ -58,8 +58,7 @@ type HardforksConfig struct {
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
-	CornusHfBlockNum             uint64
-	SequoiaHf                    SequoiaHfConfig
+	CornusHf                     CornusHfConfig
 }
 
 func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
@@ -87,15 +86,11 @@ func (c *HardforksConfig) IsOnFicusHardfork(block types.BlockNum) bool {
 }
 
 func (c *HardforksConfig) IsOnCornusHardfork(block types.BlockNum) bool {
-	return block >= c.CornusHfBlockNum
+	return block >= c.CornusHf.BlockNum
 }
 
 func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
-	return block == c.CornusHfBlockNum
-}
-
-func (c *HardforksConfig) IsOnSequoiaHardfork(block types.BlockNum) bool {
-	return block >= c.SequoiaHf.BlockNum
+	return block == c.CornusHf.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
@@ -111,7 +106,7 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
 		IsFicus:        isForked(c.FicusHf.BlockNum, num),
-		IsCornus:       isForked(c.CornusHfBlockNum, num),
+		IsCornus:       isForked(c.CornusHf.BlockNum, num),
 	}
 }
 
