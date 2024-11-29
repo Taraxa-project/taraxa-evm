@@ -34,6 +34,13 @@ type FicusHfConfig struct {
 	BridgeContractAddress common.Address
 }
 
+type CornusHfConfig struct {
+	BlockNum                uint64
+	DelegationLockingPeriod uint32 // [number of blocks]
+	DagGasLimit             uint64
+	PbftGasLimit            uint64
+}
+
 // Leaving it here for next HF
 // type BambooRedelegation struct {
 // 	Validator common.Address
@@ -43,11 +50,6 @@ type FicusHfConfig struct {
 // 	BlockNum      uint64
 // 	Redelegations []BambooRedelegation
 // }
-
-type CornusHfConfig struct {
-	BlockNum                uint64
-	DelegationLockingPeriod uint32 // [number of blocks]
-}
 
 type HardforksConfig struct {
 	FixRedelegateBlockNum        uint64

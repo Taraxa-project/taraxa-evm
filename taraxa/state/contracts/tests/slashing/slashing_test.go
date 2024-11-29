@@ -73,6 +73,8 @@ var (
 			CornusHf: chain_config.CornusHfConfig{
 				BlockNum:                0,
 				DelegationLockingPeriod: 4,
+				DagGasLimit:             100000,
+				PbftGasLimit:            1000000,
 			},
 		},
 	}
