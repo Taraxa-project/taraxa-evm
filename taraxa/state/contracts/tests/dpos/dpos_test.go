@@ -126,7 +126,10 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
-			CornusHfBlockNum: 1000,
+			CornusHf: chain_config.CornusHfConfig{
+				BlockNum:                1000,
+				DelegationLockingPeriod: 4,
+			},
 		},
 	}
 )
@@ -403,7 +406,7 @@ func TestUndelegate(t *testing.T) {
 
 func TestUndelegateV2(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.CornusHf.BlockNum = 0
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 	val_owner := addr(1)
@@ -592,7 +595,7 @@ func TestMagnoliaHardfork(t *testing.T) {
 
 func TestCornusHardfork(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.CornusHfBlockNum = 10
+	cfg.Hardforks.CornusHf.BlockNum = 10
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -623,7 +626,7 @@ func TestCornusHardfork(t *testing.T) {
 	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), dpos.ErrExistentUndelegation, util.ErrorString(""))
 
 	// Pass cornus hf block num
-	for test.BlockNumber() < cfg.Hardforks.CornusHfBlockNum {
+	for test.BlockNumber() < cfg.Hardforks.CornusHf.BlockNum {
 		test.AdvanceBlock(nil, nil)
 	}
 
@@ -666,6 +669,49 @@ func TestCornusHardfork(t *testing.T) {
 	tc.Assert.Equal(confirm_res.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
 	tc.Assert.Equal(len(confirm_res2.Logs), 1)
 	tc.Assert.Equal(confirm_res2.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
+}
+
+func TestCornusHardforkLockingPeriod(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	cfg.Hardforks.CornusHf.BlockNum = 5
+	cfg.Hardforks.CornusHf.DelegationLockingPeriod = 100
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	val_owner := addr(1)
+	val_addr, proof := generateAddrAndProof()
+
+	test.ExecuteAndCheck(val_owner, DefaultValidatorMaximumStake, test.Pack("registerValidator", val_addr, proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), util.ErrorString(""))
+	totalBalance := DefaultValidatorMaximumStake
+	test.CheckContractBalance(totalBalance)
+
+	// Create undelegation before cornus hardfork
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegate", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate1_expected_lockup_block := test.BlockNumber() + uint64(cfg.DPOS.DelegationLockingPeriod)
+
+	get_undelegations_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegations", val_owner, uint32(0) /* batch */), util.ErrorString(""), util.ErrorString(""))
+	get_undelegations_parsed_result := new(GetUndelegationsRet)
+	test.Unpack(get_undelegations_parsed_result, "getUndelegations", get_undelegations_result.CodeRetval)
+	tc.Assert.Equal(1, len(get_undelegations_parsed_result.Undelegations))
+	tc.Assert.Equal(true, get_undelegations_parsed_result.End)
+	tc.Assert.Equal(undelegate1_expected_lockup_block, get_undelegations_parsed_result.Undelegations[0].Block)
+
+	// Pass cornus hardfork
+	tc.Assert.Less(test.BlockNumber(), cfg.Hardforks.CornusHf.BlockNum)
+	for i := test.BlockNumber(); i < cfg.Hardforks.CornusHf.BlockNum; i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	// Create undelegation after cornus hardfork
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate2_expected_id := uint64(1)
+	undelegate2_expected_lockup_block := test.BlockNumber() + uint64(cfg.Hardforks.CornusHf.DelegationLockingPeriod)
+
+	get_undelegation2_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, undelegate2_expected_id), util.ErrorString(""), util.ErrorString(""))
+	get_undelegation2_parsed_result := new(GetUndelegationV2Ret)
+	test.Unpack(get_undelegation2_parsed_result, "getUndelegationV2", get_undelegation2_result.CodeRetval)
+	tc.Assert.Equal(undelegate2_expected_id, get_undelegation2_parsed_result.UndelegationV2.UndelegationId)
+	tc.Assert.Equal(undelegate2_expected_lockup_block, get_undelegation2_parsed_result.UndelegationV2.UndelegationData.Block)
 }
 
 func TestConfirmUndelegate(t *testing.T) {
@@ -714,7 +760,7 @@ func TestConfirmUndelegate(t *testing.T) {
 
 func TestConfirmUndelegateV2(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.CornusHf.BlockNum = 0
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -819,7 +865,7 @@ func TestCancelUndelegate(t *testing.T) {
 
 func TestCancelUndelegateV2(t *testing.T) {
 	cfg := DefaultChainCfg
-	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.CornusHf.BlockNum = 0
 
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
@@ -1908,7 +1954,7 @@ func TestGetUndelegationsV2(t *testing.T) {
 	}
 
 	cfg.Hardforks.MagnoliaHf.BlockNum = 1000
-	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.CornusHf.BlockNum = 0
 
 	// Create delegator with initial balance
 	delegator1_addr := addr(uint64(gen_validators_num + 1))
@@ -2833,7 +2879,7 @@ func TestPhalaenopsisHF(t *testing.T) {
 
 func TestNonPayableMethods(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
-	cfg.Hardforks.CornusHfBlockNum = 0
+	cfg.Hardforks.CornusHf.BlockNum = 0
 	_, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
