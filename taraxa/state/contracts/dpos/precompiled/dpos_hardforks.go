@@ -92,7 +92,7 @@ func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
 	}
 }
 
-func (self *Contract) setTotalSupply(block_num uint64) *uint256.Int {
+func (self *Contract) processBlockReward(block_num uint64) *uint256.Int {
 	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(block_num) {
 		if self.total_supply == nil {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
