@@ -130,6 +130,10 @@ func (self *EVM) Init(get_hash GetHashFunc, state State, opts Opts, chainConfig 
 	return self
 }
 
+func (self *EVM) UpdateVmConfig(vmConfig Config) {
+	self.vmConfig = vmConfig
+}
+
 func (self *EVM) AddLog(log LogRecord) {
 	self.state.AddLog(log)
 }

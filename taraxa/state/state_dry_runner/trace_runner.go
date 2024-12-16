@@ -51,20 +51,20 @@ func (self *TraceRunner) Trace(blk *vm.Block, state_trxs *[]vm.Transaction, trxs
 		blk_n -= 1
 	}
 	block_state := state_evm.GetBlockState(self.db, blk_n, len(*trxs))
-	for _, trx := range *state_trxs {
-		var evm vm.EVM
-		evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{})
-		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
-		if self.dpos_api != nil {
-			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, func(uint64) contract_storage.StorageReader { return block_state }, &evm, evm.RegisterPrecompiledContract)
-		}
 
+	var evm vm.EVM
+	evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{})
+	evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
+	if self.dpos_api != nil {
+		self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, func(uint64) contract_storage.StorageReader { return block_state }, &evm, evm.RegisterPrecompiledContract)
+	}
+
+	for _, trx := range *state_trxs {
 		evm.Main(&trx)
 	}
 
 	output := make([]any, len(*trxs))
 	for index, trx := range *trxs {
-		var evm vm.EVM
 		var tracer vm.Tracer
 		if conf != nil {
 			tracer = vm.NewOeTracer(conf)
@@ -72,12 +72,7 @@ func (self *TraceRunner) Trace(blk *vm.Block, state_trxs *[]vm.Transaction, trxs
 			// tracer = vm.NewStructLogger(config.LogConfig)
 			tracer = vm.NewStructLogger(nil)
 		}
-
-		evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{Debug: true, Tracer: tracer})
-		evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
-		if self.dpos_api != nil {
-			self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, func(uint64) contract_storage.StorageReader { return block_state }, &evm, evm.RegisterPrecompiledContract)
-		}
+		evm.UpdateVmConfig(vm.Config{Debug: true, Tracer: tracer})
 
 		ret, _ := evm.Main(&trx)
 
