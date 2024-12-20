@@ -12,6 +12,7 @@ import (
 	dpos_sol "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/solidity"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
+	"github.com/holiman/uint256"
 )
 
 // GetOldClaimAllRewardsABI returns the *old* ABI method for claiming all rewards in the DPOS contract.
@@ -87,8 +88,27 @@ func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
 		// Corrected block num
 		val.LastUpdated = delegation.LastUpdated
 		val.TotalStake = bigutil.Sub(val.TotalStake, redelegation.Amount)
-		self.validators.ModifyValidator(self.isMagnoliaHardfork(block_num), &redelegation.Validator, val)
+		self.validators.ModifyValidator(self.isOnMagnoliaHardfork(block_num), &redelegation.Validator, val)
 	}
+}
+
+func (self *Contract) processBlockReward(block_num uint64) *uint256.Int {
+	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(block_num) {
+		if self.total_supply == nil {
+			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
+			self.saveTotalSupplyDb()
+
+			// Erase minted_tokens from db as it is no longer needed
+			self.eraseMintedTokensDb()
+		}
+
+		blockReward, yield := self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
+
+		// Save current yield - it changes every block as total_supply is growing every block
+		self.saveYieldDb(yield.Uint64())
+		return blockReward
+	}
+	return nil
 }
 
 // func (self *Contract) bambooHFRedelegation(block_num uint64) {

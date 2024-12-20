@@ -10,6 +10,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/accounts/abi"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state"
 	dpos "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/dpos/precompiled"
+	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/rewards_stats"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/state/state_db"
 
@@ -41,6 +42,10 @@ func Init_test(contract_addr *common.Address, contract_abi string, t *testing.T,
 	tc = tests.NewTestCtx(t)
 	test.init(*contract_addr, contract_abi, &tc, cfg)
 	return
+}
+
+func (self *ContractTest) GetEvmStateStorage() *contract_storage.EVMStateStorage {
+	return &contract_storage.EVMStateStorage{self.St.GetEvmState()}
 }
 
 func (self *ContractTest) init(contract_addr common.Address, contract_abi string, t *tests.TestCtx, cfg chain_config.ChainConfig) {
@@ -156,6 +161,10 @@ func (self *ContractTest) Pack(name string, args ...interface{}) []byte {
 		self.tc.FailNow()
 	}
 	return packed
+}
+
+func (self *ContractTest) MethodId(name string) []byte {
+	return self.abi.Methods[name].Id()
 }
 
 func (self *ContractTest) Unpack(v interface{}, name string, output []byte) error {

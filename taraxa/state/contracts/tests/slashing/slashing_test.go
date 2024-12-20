@@ -70,6 +70,12 @@ var (
 				MaxSupply:        new(big.Int).Mul(big.NewInt(12e+9), big.NewInt(1e+18)),
 				GeneratedRewards: big.NewInt(0),
 			},
+			CornusHf: chain_config.CornusHfConfig{
+				BlockNum:                0,
+				DelegationLockingPeriod: 4,
+				DagGasLimit:             100000,
+				PbftGasLimit:            1000000,
+			},
 		},
 	}
 )

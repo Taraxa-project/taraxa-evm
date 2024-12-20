@@ -34,6 +34,13 @@ type FicusHfConfig struct {
 	BridgeContractAddress common.Address
 }
 
+type CornusHfConfig struct {
+	BlockNum                uint64
+	DelegationLockingPeriod uint32 // [number of blocks]
+	DagGasLimit             uint64
+	PbftGasLimit            uint64
+}
+
 // Leaving it here for next HF
 // type BambooRedelegation struct {
 // 	Validator common.Address
@@ -53,30 +60,39 @@ type HardforksConfig struct {
 	FixClaimAllBlockNum          uint64
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
+	CornusHf                     CornusHfConfig
 }
 
-func (c *HardforksConfig) IsFixClaimAllHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
 	return block >= c.FixClaimAllBlockNum
 }
 
-func (c *HardforksConfig) IsPhalaenopsisHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnPhalaenopsisHardfork(block types.BlockNum) bool {
 	return block >= c.PhalaenopsisHfBlockNum
 }
 
-func (c *HardforksConfig) IsMagnoliaHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnMagnoliaHardfork(block types.BlockNum) bool {
 	return block >= c.MagnoliaHf.BlockNum
 }
 
-func (c *HardforksConfig) IsAspenHardforkPartOne(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnAspenHardforkPartOne(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartOne
 }
 
-func (c *HardforksConfig) IsAspenHardforkPartTwo(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnAspenHardforkPartTwo(block types.BlockNum) bool {
 	return block >= c.AspenHf.BlockNumPartTwo
 }
 
-func (c *HardforksConfig) IsFicusHardfork(block types.BlockNum) bool {
+func (c *HardforksConfig) IsOnFicusHardfork(block types.BlockNum) bool {
 	return block >= c.FicusHf.BlockNum
+}
+
+func (c *HardforksConfig) IsOnCornusHardfork(block types.BlockNum) bool {
+	return block >= c.CornusHf.BlockNum
+}
+
+func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
+	return block == c.CornusHf.BlockNum
 }
 
 func isForked(fork_start, block_num types.BlockNum) bool {
@@ -92,6 +108,7 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 		IsAspenPartOne: isForked(c.AspenHf.BlockNumPartOne, num),
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
 		IsFicus:        isForked(c.FicusHf.BlockNum, num),
+		IsCornus:       isForked(c.CornusHf.BlockNum, num),
 	}
 }
 

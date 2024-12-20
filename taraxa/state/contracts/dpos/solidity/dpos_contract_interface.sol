@@ -8,6 +8,9 @@ interface DposInterface {
     event Undelegated(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateConfirmed(address indexed delegator, address indexed validator, uint256 amount);
     event UndelegateCanceled(address indexed delegator, address indexed validator, uint256 amount);
+    event UndelegatedV2(address indexed delegator, address indexed validator, uint64 indexed undelegation_id, uint256 amount);
+    event UndelegateConfirmedV2(address indexed delegator, address indexed validator, uint64 indexed undelegation_id, uint256 amount);
+    event UndelegateCanceledV2(address indexed delegator, address indexed validator, uint64 indexed undelegation_id, uint256 amount);
     event Redelegated(address indexed delegator, address indexed from, address indexed to, uint256 amount);
     event RewardsClaimed(address indexed account, address indexed validator, uint256 amount);
     event CommissionRewardsClaimed(address indexed account, address indexed validator, uint256 amount);
@@ -40,14 +43,6 @@ interface DposInterface {
         ValidatorBasicInfo info;
     }
 
-    struct UndelegateRequest {
-        // Block num, during which UndelegateRequest can be confirmed - during creation it is
-        // set to block.number + STAKE_UNLOCK_PERIOD
-        uint256 eligible_block_num;
-        // Amount of tokens to be unstaked
-        uint256 amount;
-    }
-
     // Delegator data
     struct DelegatorInfo {
         // Number of tokens that were staked
@@ -76,17 +71,37 @@ interface DposInterface {
         bool validator_exists;
     }
 
+    // Retun value for getUndelegationsV2 method
+    struct UndelegationV2Data {
+        // Undelegation data
+        UndelegationData undelegation_data;
+        // Undelegation id
+        uint64 undelegation_id;
+    }
+
     // Delegates tokens to specified validator
     function delegate(address validator) external payable;
 
     // Undelegates <amount> of tokens from specified validator - creates undelegate request
+    // Note: deprecated (pre cornus hardfork) - use undelegateV2 instead
     function undelegate(address validator, uint256 amount) external;
 
+    // Undelegates <amount> of tokens from specified validator - creates undelegate request and returns unique undelegation_id <per delegator>
+    function undelegateV2(address validator, uint256 amount) external returns (uint64 undelegation_id);
+
     // Confirms undelegate request
+    // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function confirmUndelegate(address validator) external;
 
+    // Confirms undelegate request with <undelegation_id> from <validator>
+    function confirmUndelegateV2(address validator, uint64 undelegation_id) external;
+
     // Cancel undelegate request
+    // Note: deprecated (pre cornus hardfork) - use confirmUndelegateV2 instead
     function cancelUndelegate(address validator) external;
+
+    // Cancel undelegate request with <undelegation_id> from <validator>
+    function cancelUndelegateV2(address validator, uint64 undelegation_id) external;
 
     // Redelegates <amount> of tokens from one validator to the other
     function reDelegate(address validator_from, address validator_to, uint256 amount) external;
@@ -196,4 +211,33 @@ interface DposInterface {
         external
         view
         returns (UndelegationData[] memory undelegations, bool end);
+
+   /**
+     * @notice Returns list of V2 undelegations for specified delegator
+     *
+     * @param delegator       delegator account address
+     * @param batch           Batch number to be fetched. If the list is too big it cannot return all undelegations in one call. Instead, users are fetching batches of 50 undelegations at a time
+     *
+     * @return undelegations_v2  Batch of N undelegations
+     * @return end            Flag if there are no more undelegations left. To get all undelegations, caller should fetch all batches until he sees end == true
+     *
+     */
+    function getUndelegationsV2(address delegator, uint32 batch)
+        external
+        view
+        returns (UndelegationV2Data[] memory undelegations_v2, bool end);
+
+     /**
+     * @notice Returns V2 undelegation for specified delegator, validator & and undelegation_id
+     *
+     * @param delegator        delegator account address
+     * @param validator        validator account address
+     * @param undelegation_id  undelegation id
+     *
+     * @return undelegation_v2
+     */
+    function getUndelegationV2(address delegator, address validator, uint64 undelegation_id)
+        external
+        view
+        returns (UndelegationV2Data memory undelegation_v2);
 }

@@ -43,18 +43,14 @@ func (self *DryRunner) UpdateConfig(cfg *chain_config.ChainConfig) {
 }
 
 func (self *DryRunner) Apply(blk *vm.Block, trx *vm.Transaction) vm.ExecutionResult {
-	var evm_state state_evm.EVMState
-	evm_state.Init(state_evm.Opts{
-		NumTransactionsToBuffer: 1,
-	})
-	evm_state.SetInput(state_db.GetBlockState(self.db, blk.Number))
+	block_state := state_evm.GetBlockState(self.db, blk.Number, 1)
 	// we don't need to specify nonce for eth_call. So set correct one
-	trx.Nonce = bigutil.Add(evm_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
+	trx.Nonce = bigutil.Add(block_state.GetAccount(&trx.From).GetNonce(), big.NewInt(1))
 	var evm vm.EVM
-	evm.Init(self.get_block_hash, &evm_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{})
+	evm.Init(self.get_block_hash, block_state, vm.DefaultOpts(), self.chain_config.EVMChainConfig, vm.Config{})
 	evm.SetBlock(blk, self.chain_config.Hardforks.Rules(blk.Number))
 	if self.dpos_api != nil {
-		self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{&evm_state}, blk.Number, self.get_reader, &evm, evm.RegisterPrecompiledContract)
+		self.dpos_api.InitAndRegisterAllContracts(contract_storage.EVMStateStorage{block_state}, blk.Number, self.get_reader, &evm, evm.RegisterPrecompiledContract)
 	}
 
 	ret, err := evm.Main(trx)

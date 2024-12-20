@@ -8,6 +8,7 @@ import (
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigconv"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/bigutil"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
@@ -16,6 +17,8 @@ type Account struct {
 	AccountMapEntryHeader
 	EVMStateAccountHeader
 	*AccountBody
+
+	bigconv bigconv.BigConv
 }
 type AccountBody struct {
 	AccountChange
@@ -31,8 +34,8 @@ func (self *Account) Address() *common.Address {
 }
 
 // TODO invert
-func (self *Account) IsNotNIL() bool {
-	return self.AccountBody != nil
+func (self *Account) IsNIL() bool {
+	return self.AccountBody == nil
 }
 
 func (self *Account) set_NIL() {
@@ -40,25 +43,25 @@ func (self *Account) set_NIL() {
 }
 
 func (self *Account) IsEIP161Empty() bool {
-	return !self.IsNotNIL() || self.Nonce.Sign() == 0 && self.Balance.Sign() == 0 && self.CodeSize == 0
+	return self.IsNIL() || self.Nonce.Sign() == 0 && self.Balance.Sign() == 0 && self.CodeSize == 0
 }
 
 func (self *Account) GetBalance() *big.Int {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return big.NewInt(0)
 	}
 	return self.Balance
 }
 
 func (self *Account) GetNonce() *big.Int {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return big.NewInt(0)
 	}
 	return self.Nonce
 }
 
 func (self *Account) GetCodeHash() *common.Hash {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return nil
 	}
 	if self.CodeSize != 0 {
@@ -68,27 +71,27 @@ func (self *Account) GetCodeHash() *common.Hash {
 }
 
 func (self *Account) GetCode() []byte {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return nil
 	}
 	if self.CodeSize == 0 {
 		return nil
 	}
 	if self.Code == nil {
-		self.Code = self.host.in.GetCode(self.CodeHash)
+		self.Code = self.host.In().GetCode(self.CodeHash)
 	}
 	return self.Code
 }
 
 func (self *Account) GetCodeSize() uint64 {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return 0
 	}
 	return self.CodeSize
 }
 
 func (self *Account) GetState(key *big.Int) (ret *big.Int) {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return big.NewInt(0)
 	}
 	key_b := bigutil.UnsafeUnsignedBytes(key)
@@ -96,6 +99,17 @@ func (self *Account) GetState(key *big.Int) (ret *big.Int) {
 		return value
 	}
 	return self.get_committed_state(key, key_b)
+}
+
+func (self *Account) GetRawState(key *common.Hash, cb func([]byte)) {
+	if self.IsNIL() {
+		return
+	}
+	if value, present := self.RawStorageDirty[*key]; present {
+		cb(value)
+		return
+	}
+	self.host.GetAccountStorageFromDB(&self.addr, key, cb)
 }
 
 func (self *Account) GetCommittedState(key *big.Int) (ret *big.Int) {
@@ -119,7 +133,7 @@ func (self *Account) SetState(key, value *big.Int) {
 }
 
 func (self *Account) get_committed_state(key *big.Int, key_b bigutil.UnsignedBytes) *big.Int {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return big.NewInt(0)
 	}
 	if self.storage_origin == nil {
@@ -129,7 +143,7 @@ func (self *Account) get_committed_state(key *big.Int, key_b bigutil.UnsignedByt
 	} else if ret, present := self.storage_origin[bigutil.UnsignedStr(key_b)]; present {
 		return ret
 	}
-	ret, key_h := big.NewInt(0), self.host.bigconv.ToHash(key)
+	ret, key_h := big.NewInt(0), self.bigconv.ToHash(key)
 	self.host.GetAccountStorageFromDB(self.Address(), key_h, func(bytes []byte) {
 		ret = bigutil.FromBytes(bytes)
 	})
@@ -141,7 +155,7 @@ func (self *Account) get_committed_state(key *big.Int, key_b bigutil.UnsignedByt
 }
 
 func (self *Account) HasSuicided() bool {
-	return self.IsNotNIL() && self.suicided
+	return self.IsNIL() && self.suicided
 }
 
 var ripemd_addr = common.BytesToAddress([]byte{3})
@@ -200,7 +214,6 @@ func (self *Account) IncrementNonce() {
 
 func (self *Account) SetCode(code []byte) {
 	self.ensure_exists()
-	asserts.Holds(self.CodeSize == 0)
 	code_size := len(code)
 	if code_size == 0 {
 		return
@@ -222,7 +235,7 @@ func (self *Account) SetStateRawIrreversibly(key *common.Hash, value []byte) {
 
 func (self *Account) Suicide(newAddr *common.Address) {
 	new_acc := self.host.GetAccountConcrete(newAddr)
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		new_acc.AddBalance(big.NewInt(0))
 		return
 	}
@@ -235,7 +248,7 @@ func (self *Account) Suicide(newAddr *common.Address) {
 }
 
 func (self *Account) ensure_exists() {
-	if self.IsNotNIL() {
+	if !self.IsNIL() {
 		return
 	}
 	self.AccountBody = new(AccountBody)
@@ -254,7 +267,7 @@ func (self *Account) register_change(revert func()) {
 	if revert == nil {
 		return
 	}
-	self.host.register_change(func() {
+	self.host.RegisterChange(func() {
 		self.mod_count--
 		revert()
 	})
@@ -269,7 +282,7 @@ const (
 )
 
 func (self *Account) flush(out Output) acc_dirty_status {
-	if !self.IsNotNIL() {
+	if self.IsNIL() {
 		return unmodified
 	}
 	mod_count, times_touched := self.mod_count, self.times_touched
@@ -304,6 +317,6 @@ func (self *Account) flush(out Output) acc_dirty_status {
 }
 
 func (self *Account) unload() {
-	self.host.accounts.Delete(self)
+	self.host.DeleteAccount(self)
 	self.set_NIL()
 }
