@@ -202,6 +202,9 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 		available_funds_gas := bigutil.Div(caller_balance, gas_price)
 		caller.SubBalance(bigutil.Mul(available_funds_gas, gas_price))
 
+		if self.rules.IsCornus && self.trx.Nonce.Cmp(sender_nonce) >= 0 {
+			caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
+		}
 		return consensusErr(ret, available_funds_gas.Uint64(), ErrInsufficientBalanceForGas)
 	}
 
@@ -221,10 +224,16 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 
 	gas_intrinsic, err := IntrinsicGas(self.trx.Input, contract_creation)
 	if err != nil {
+		if self.rules.IsCornus {
+			caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
+		}
 		return consensusErr(ret, gas_cap, util.ErrorString(err.Error()))
 	}
 
 	if gas_cap < gas_intrinsic {
+		if self.rules.IsCornus {
+			caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
+		}
 		return consensusErr(ret, gas_cap, ErrIntrinsicGas)
 	}
 
