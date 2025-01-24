@@ -239,7 +239,7 @@ func TestRegisterValidator(t *testing.T) {
 	test.ExecuteAndCheck(validator2_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator1_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrExistentValidator, util.ErrorString(""))
 	// Try to register with not enough balance
-	test.ExecuteAndCheck(validator2_owner, bigutil.Add(DefaultBalance, big.NewInt(1)), test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), util.ErrorString(""), vm.ErrInsufficientBalanceForTransfer)
+	test.ExecuteAndCheck(validator2_owner, bigutil.Add(DefaultBalance, big.NewInt(1)), test.Pack("registerValidator", validator2_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"),  util.NewErrorString(vm.ErrInsufficientBalanceForTransfer), util.ErrorString(""))
 	// Try to register with wrong proof
 	test.ExecuteAndCheck(validator1_owner, DefaultMinimumDeposit, test.Pack("registerValidator", validator1_addr, validator2_proof, DefaultVrfKey, uint16(10), "test", "test"), dpos.ErrWrongProof, util.ErrorString(""))
 }

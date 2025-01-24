@@ -177,10 +177,10 @@ func (self *EVM) RegisterPrecompiledContract(address *common.Address, contract P
 	self.precompiles.Put(address, contract)
 }
 
-func consensusErr(result ExecutionResult, trxGas uint64, consensusErr util.ErrorString) (ret ExecutionResult, err error) {
+func consensusErr(result ExecutionResult, trxGas uint64, consensusErr error) (ret ExecutionResult, err error) {
 	ret = result
 	ret.GasUsed = trxGas
-	ret.ConsensusErr = consensusErr
+	ret.ConsensusErr = util.ErrorString(consensusErr.Error())
 	return
 }
 
@@ -227,7 +227,7 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 		if self.rules.IsCornus {
 			caller.SetNonce(bigutil.Add(self.trx.Nonce, big.NewInt(1)))
 		}
-		return consensusErr(ret, gas_cap, util.ErrorString(err.Error()))
+		return consensusErr(ret, gas_cap, err)
 	}
 
 	if gas_cap < gas_intrinsic {
@@ -324,7 +324,7 @@ func (self *EVM) create(
 
 	// Check whether the max code size has been exceeded, assign err if the case.
 	if err == nil && len(ret) > MaxCodeSize {
-		err = errMaxCodeSizeExceeded
+		err = ErrMaxCodeSizeExceeded
 	}
 
 	// if the contract creation ran successfully and no errors were returned
@@ -563,7 +563,7 @@ func (self *EVM) run(contract *Contract, readOnly bool) (ret []byte, err error) 
 			// account to the others means the state is modified and should also
 			// return with an error.
 			if operation.writes || (op == CALL && stack.Back(2).BitLen() > 0) {
-				return nil, errWriteProtection
+				return nil, ErrWriteProtection
 			}
 		}
 		var memorySize uint64

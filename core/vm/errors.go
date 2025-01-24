@@ -17,21 +17,24 @@
 package vm
 
 import (
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util"
+	"errors"
 )
 
 // TODO compress to error codes
 // List execution errors
 var (
-	ErrOutOfGas                       = util.ErrorString("out of gas")
-	ErrIntrinsicGas                   = util.ErrorString("intrinsic gas too low")
-	ErrCodeStoreOutOfGas              = util.ErrorString("contract creation code storage out of gas")
-	ErrDepth                          = util.ErrorString("max call depth exceeded")
-	ErrInsufficientBalanceForTransfer = util.ErrorString("insufficient balance for transfer")
-	ErrContractAddressCollision       = util.ErrorString("contract address collision")
-	ErrInsufficientBalanceForGas      = util.ErrorString("insufficient balance to pay for gas")
-	ErrNonceTooHigh                   = util.ErrorString("nonce too high")
-	ErrNonceTooLow                    = util.ErrorString("nonce too low")
-	ErrWriteProtection                = util.ErrorString("write protection")
-	ErrTraceLimitReached              = util.ErrorString("the number of logs reached the specified limit")
+	ErrOutOfGas                       = errors.New("out of gas")
+	ErrIntrinsicGas                   = errors.New("intrinsic gas too low")
+	ErrCodeStoreOutOfGas              = errors.New("contract creation code storage out of gas")
+	ErrDepth                          = errors.New("max call depth exceeded")
+	ErrInsufficientBalanceForTransfer = errors.New("insufficient balance for transfer")
+	ErrContractAddressCollision       = errors.New("contract address collision")
+	ErrInsufficientBalanceForGas      = errors.New("insufficient balance to pay for gas")
+	ErrNonceTooHigh                   = errors.New("nonce too high")
+	ErrNonceTooLow                    = errors.New("nonce too low")
+	ErrWriteProtection                = errors.New("write protection")
+	ErrTraceLimitReached              = errors.New("the number of logs reached the specified limit")
+	ErrReturnDataOutOfBounds          = errors.New("return data out of bounds")
+	ErrExecutionReverted              = errors.New("execution reverted")
+	ErrMaxCodeSizeExceeded            = errors.New("max code size exceeded")
 )

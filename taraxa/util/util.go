@@ -37,6 +37,10 @@ func Max(x, y int) int {
 
 type ErrorString string
 
+func NewErrorString(err error) ErrorString {
+	return ErrorString(err.Error())
+}
+
 func (this ErrorString) Error() string {
 	return string(this)
 }
