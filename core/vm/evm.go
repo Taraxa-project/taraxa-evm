@@ -250,10 +250,10 @@ func (self *EVM) Main(trx *Transaction) (ret ExecutionResult, execError error) {
 		ret.CodeRetval, gas_left, err = self.Call(ContractAccWrapper{caller}, acc_to, self.trx.Input, gas_left, self.trx.Value)
 	}
 	if err != nil {
-		if err_str := util.ErrorString(err.Error()); err_str == ErrInsufficientBalanceForTransfer {
-			return consensusErr(ret, gas_cap, err_str)
+		if err == ErrInsufficientBalanceForTransfer {
+			return consensusErr(ret, gas_cap, err)
 		} else {
-			ret.ExecutionErr = util.ErrorString(err.Error())
+			ret.ExecutionErr = util.NewErrorString(err)
 			execError = err
 		}
 	}
