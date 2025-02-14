@@ -9,7 +9,7 @@ require (
 	github.com/emicklei/dot v1.2.0
 	github.com/ethereum/go-ethereum v1.13.10
 	github.com/holiman/uint256 v1.2.4
-	github.com/linxGnu/grocksdb v1.9.2
+	github.com/linxGnu/grocksdb v1.9.7
 	github.com/otiai10/copy v1.9.0
 	github.com/schollz/progressbar/v3 v3.3.3
 	github.com/stretchr/testify v1.9.0
