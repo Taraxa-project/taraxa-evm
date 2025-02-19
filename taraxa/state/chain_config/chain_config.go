@@ -41,6 +41,17 @@ type CornusHfConfig struct {
 	PbftGasLimit            uint64
 }
 
+type CactiHfConfig struct {
+	BlockNum             uint64
+	LambdaMin            uint32 // [ms]
+	LambdaMax            uint32 // [ms]
+	LambdaDefault        uint32 // [ms]
+	LambdaChangeInterval uint32 // [number of blocks]
+	LambdaChange         uint32 // [ms]
+	BlockPropagationMin  uint32 // [ms]
+	BlockPropagationMax  uint32 // [ms]
+}
+
 // Leaving it here for next HF
 // type BambooRedelegation struct {
 // 	Validator common.Address
@@ -61,6 +72,7 @@ type HardforksConfig struct {
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
 	CornusHf                     CornusHfConfig
+	CactiHf                      CactiHfConfig
 }
 
 func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
