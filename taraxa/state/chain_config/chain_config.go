@@ -41,6 +41,12 @@ type CornusHfConfig struct {
 	PbftGasLimit            uint64
 }
 
+type SoleiroliaHfConfig struct {
+	BlockNum       uint64
+	TrxMinGasPrice uint64 // [wei]
+	TrxMaxGasLimit uint64
+}
+
 // Leaving it here for next HF
 // type BambooRedelegation struct {
 // 	Validator common.Address
@@ -61,6 +67,7 @@ type HardforksConfig struct {
 	AspenHf                      AspenHfConfig
 	FicusHf                      FicusHfConfig
 	CornusHf                     CornusHfConfig
+	SoleiroliaHf                 SoleiroliaHfConfig
 }
 
 func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {

@@ -76,6 +76,11 @@ var (
 				DagGasLimit:             100000,
 				PbftGasLimit:            1000000,
 			},
+			SoleiroliaHf: chain_config.SoleiroliaHfConfig{
+				BlockNum:       0,
+				TrxMinGasPrice: 1,
+				TrxMaxGasLimit: 1,
+			},
 		},
 	}
 )
