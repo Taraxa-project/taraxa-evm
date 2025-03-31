@@ -296,6 +296,8 @@ func taraxa_evm_state_api_dpos_is_eligible(
 	dec_rlp(params_enc, &params)
 
 	// If validator is jailed, return false
+	// !!! Note: do not remove this IsJailed check eventhough we do the same check inside "IsEligible" function
+	// because it is called only after cacti hardfork inside "IsEligible". Here it was called before cacti hardfork
 	if state_API_instances[ptr].SlashingReader(params.BlkNum).IsJailed(params.BlkNum, &params.Addr) {
 		return false
 	}
@@ -410,15 +412,15 @@ func taraxa_evm_state_api_validators_stakes(
 	enc_rlp(&ret, cb)
 }
 
-//export taraxa_evm_state_api_validators_vote_counts
-func taraxa_evm_state_api_validators_vote_counts(
+//export taraxa_evm_state_api_validators_eligible_vote_counts
+func taraxa_evm_state_api_validators_eligible_vote_counts(
 	ptr C.taraxa_evm_state_API_ptr,
 	blk_n uint64,
 	cb C.taraxa_evm_BytesCallback,
 	cb_err C.taraxa_evm_BytesCallback,
 ) {
 	defer handle_err(cb_err)
-	ret := state_API_instances[ptr].DPOSDelayedReader(blk_n).GetValidatorsVoteCounts()
+	ret := state_API_instances[ptr].DPOSDelayedReader(blk_n).GetValidatorsEligibleVoteCounts()
 	enc_rlp(&ret, cb)
 }
 

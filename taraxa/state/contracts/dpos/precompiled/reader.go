@@ -61,12 +61,34 @@ func (r Reader) TotalEligibleVoteCount() (ret uint64) {
 		ret = bin.DEC_b_endian_compact_64(bytes)
 	})
 	for _, addr := range r.slashing_reader.GetJailedValidators() {
-		ret -= r.GetEligibleVoteCount(&addr)
+		// Note: call getVoteCount instead of GetEligibleVoteCount as GetEligibleVoteCount returns 0 for jailed validators
+		ret -= r.getVoteCount(&addr)
 	}
 	return
 }
 
 func (r Reader) GetEligibleVoteCount(addr *common.Address) (ret uint64) {
+	if r.cfg.Hardforks.IsOnCactiHardfork(r.block_n) && r.slashing_reader.IsJailed(r.block_n, addr) {
+		return 0
+	}
+
+	return r.getVoteCount(addr)
+}
+
+func (r Reader) GetValidatorsEligibleVoteCounts() (ret []ValidatorVoteCount) {
+	reader := new(storage.AddressesIMapReader)
+	reader.Init(r.storage, append(field_validators, validator_list_index...))
+
+	validators, _ := reader.GetAccounts(0, reader.GetCount())
+
+	for _, addr := range validators {
+		ret = append(ret, ValidatorVoteCount{Address: addr, VoteCount: r.GetEligibleVoteCount(&addr)})
+	}
+
+	return
+}
+
+func (r Reader) getVoteCount(addr *common.Address) (ret uint64) {
 	return voteCount(r.GetStakingBalance(addr), r.cfg, r.block_n)
 }
 
@@ -78,8 +100,16 @@ func (r Reader) TotalAmountDelegated() (ret *big.Int) {
 	return
 }
 
-func (r Reader) IsEligible(address *common.Address) bool {
+func (r Reader) IsValidator(address *common.Address) bool {
 	return r.cfg.DPOS.EligibilityBalanceThreshold.Cmp(r.GetStakingBalance(address)) <= 0
+}
+
+func (r Reader) IsEligible(address *common.Address) bool {
+	if r.cfg.Hardforks.IsOnCactiHardfork(r.block_n) && r.slashing_reader.IsJailed(r.block_n, address) {
+		return false
+	}
+
+	return r.IsValidator(address)
 }
 
 func (r Reader) GetStakingBalance(addr *common.Address) (ret *big.Int) {
@@ -112,19 +142,6 @@ func (r Reader) GetValidatorsTotalStakes() (ret []ValidatorStake) {
 
 	for _, addr := range validators {
 		ret = append(ret, ValidatorStake{Address: addr, TotalStake: r.GetStakingBalance(&addr)})
-	}
-
-	return
-}
-
-func (r Reader) GetValidatorsVoteCounts() (ret []ValidatorVoteCount) {
-	reader := new(storage.AddressesIMapReader)
-	reader.Init(r.storage, append(field_validators, validator_list_index...))
-
-	validators, _ := reader.GetAccounts(0, reader.GetCount())
-
-	for _, addr := range validators {
-		ret = append(ret, ValidatorVoteCount{Address: addr, VoteCount: voteCount(r.GetStakingBalance(&addr), r.cfg, r.block_n)})
 	}
 
 	return

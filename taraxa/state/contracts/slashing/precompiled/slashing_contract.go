@@ -257,7 +257,7 @@ func (c *Contract) commitDoubleVotingProof(ctx vm.CallFrame, block types.BlockNu
 	}
 
 	// Check if validator is validator
-	if !c.delayedReader.IsEligible(vote_a_validator) {
+	if !c.delayedReader.IsValidator(vote_a_validator) {
 		return ErrNotAValidator
 	}
 

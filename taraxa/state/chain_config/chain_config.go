@@ -107,6 +107,10 @@ func (c *HardforksConfig) IsCornusHardfork(block types.BlockNum) bool {
 	return block == c.CornusHf.BlockNum
 }
 
+func (c *HardforksConfig) IsOnCactiHardfork(block types.BlockNum) bool {
+	return block >= c.CactiHf.BlockNum
+}
+
 func isForked(fork_start, block_num types.BlockNum) bool {
 	if fork_start == types.BlockNumberNIL || block_num == types.BlockNumberNIL {
 		return false
