@@ -8,17 +8,17 @@ import (
 	contract_storage "github.com/Taraxa-project/taraxa-evm/taraxa/state/contracts/storage"
 )
 
-type IsEligibleReader interface {
-	IsEligible(address *common.Address) bool
+type IsValidatorReader interface {
+	IsValidator(address *common.Address) bool
 }
 
 type Reader struct {
-	cfg            *chain_config.ChainConfig
-	storage        *contract_storage.StorageReaderWrapper
-	eligibleReader IsEligibleReader
+	cfg             *chain_config.ChainConfig
+	storage         *contract_storage.StorageReaderWrapper
+	validatorReader IsValidatorReader
 }
 
-func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, eligibleReader IsEligibleReader, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
+func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, validatorReader IsValidatorReader, storage_factory func(types.BlockNum) contract_storage.StorageReader) *Reader {
 	r.cfg = cfg
 
 	blk_n_actual := uint64(0)
@@ -27,7 +27,7 @@ func (r *Reader) Init(cfg *chain_config.ChainConfig, blk_n types.BlockNum, eligi
 	}
 
 	r.storage = new(contract_storage.StorageReaderWrapper).Init(slashing_contract_address, storage_factory(blk_n_actual))
-	r.eligibleReader = eligibleReader
+	r.validatorReader = validatorReader
 	return r
 }
 
@@ -69,9 +69,9 @@ func (r Reader) GetJailedValidators() (jailed_validators []common.Address) {
 	return
 }
 
-func (r Reader) IsEligible(address *common.Address) bool {
-	if r.eligibleReader == nil {
+func (r Reader) IsValidator(address *common.Address) bool {
+	if r.validatorReader == nil {
 		return false
 	}
-	return r.eligibleReader.IsEligible(address)
+	return r.validatorReader.IsValidator(address)
 }
