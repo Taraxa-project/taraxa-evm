@@ -9,10 +9,10 @@ require (
 	github.com/emicklei/dot v1.2.0
 	github.com/ethereum/go-ethereum v1.13.10
 	github.com/holiman/uint256 v1.2.4
-	github.com/linxGnu/grocksdb v1.9.7
+	github.com/linxGnu/grocksdb v1.9.8
 	github.com/otiai10/copy v1.9.0
 	github.com/schollz/progressbar/v3 v3.3.3
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.17.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	golang.org/x/sys v0.15.0
