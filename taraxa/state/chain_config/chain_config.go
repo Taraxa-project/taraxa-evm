@@ -58,6 +58,10 @@ type CactiHfConfig struct {
 	BlockPropagationMax  uint32 // [ms]
 }
 
+type FragariaHfConfig struct {
+	BlockNum uint64
+}
+
 // Leaving it here for next HF
 // type BambooRedelegation struct {
 // 	Validator common.Address
@@ -80,6 +84,7 @@ type HardforksConfig struct {
 	CornusHf                     CornusHfConfig
 	SoleiroliaHf                 SoleiroliaHfConfig
 	CactiHf                      CactiHfConfig
+	FragariaHf                   FragariaHfConfig
 }
 
 func (c *HardforksConfig) IsOnFixClaimAllHardfork(block types.BlockNum) bool {
