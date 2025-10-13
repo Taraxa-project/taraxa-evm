@@ -234,18 +234,18 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 	fmt.Printf("[prune] acc_trie_value: done. processed=%d deleted=%d took=%s\n", processed, deleted, time.Since(start))
 }
 
-func (self *DB) recreateMainTrie(state_root_to_keep *[]common.Hash, blk_num types.BlockNum) {
-	fmt.Printf("[prune] main_trie_node: collecting nodes for %d roots...\n", len(*state_root_to_keep))
+func (self *DB) pruneMainTrieNodes(state_root_to_keep *[]common.Hash, blk_num types.BlockNum) {
+	fmt.Printf("[prune] main_trie_node: building keep set for %d roots...\n", len(*state_root_to_keep))
+
+	// Build set of nodes to keep (just hashes, not full data)
 	workers := runtime.NumCPU()
 	if workers < 1 {
 		workers = 1
 	}
 	rootsCh := make(chan common.Hash, workers*2)
-	nodes_to_keep := make(map[common.Hash][]byte)
-	var nodesMu sync.Mutex
+	keepSet := make(map[common.Hash]struct{})
+	var keepMu sync.Mutex
 	var totalCollected uint64
-	const mergeThreshold = 100000
-	const logEvery = 1_000_000
 	var wg sync.WaitGroup
 
 	for w := 0; w < workers; w++ {
@@ -253,44 +253,100 @@ func (self *DB) recreateMainTrie(state_root_to_keep *[]common.Hash, blk_num type
 		go func() {
 			defer wg.Done()
 			reader := state_db.GetBlockStateReader(self, blk_num)
-			extReader := state_db.ExtendedReader{reader}
-			local := make(map[common.Hash][]byte)
-			lastLog := time.Now()
+			extReader := state_db.ExtendedReader{Reader: reader}
+			local := make(map[common.Hash]struct{})
+			const mergeThreshold = 500000 // Larger threshold since we're only storing hashes
+
 			merge := func() {
 				if len(local) == 0 {
 					return
 				}
-				nodesMu.Lock()
-				for k, v := range local {
-					nodes_to_keep[k] = v
+				keepMu.Lock()
+				for k := range local {
+					keepSet[k] = struct{}{}
 				}
-				nodesMu.Unlock()
-				local = make(map[common.Hash][]byte)
+				keepMu.Unlock()
+				atomic.AddUint64(&totalCollected, uint64(len(local)))
+				local = make(map[common.Hash]struct{})
 			}
+
 			for root := range rootsCh {
 				extReader.ForEachMainNodeHashByRoot(&root, func(h *common.Hash, b []byte) {
-					local[*h] = common.CopyBytes(b)
+					local[*h] = struct{}{} // Only store hash, not data
 					if len(local) >= mergeThreshold {
 						merge()
-					}
-					total := atomic.AddUint64(&totalCollected, 1)
-					if total%logEvery == 0 || time.Since(lastLog) > 10*time.Second {
-						fmt.Printf("[prune] main_trie_node: collected %d nodes so far...\n", total)
-						lastLog = time.Now()
 					}
 				})
 			}
 			merge()
 		}()
 	}
+
 	for _, root_to_keep := range *state_root_to_keep {
 		rootsCh <- root_to_keep
 	}
 	close(rootsCh)
 	wg.Wait()
-	fmt.Printf("[prune] main_trie_node: will keep %d nodes. Recreating column...\n", len(nodes_to_keep))
-	self.RecreateColumn(state_db.COL_main_trie_node, nodes_to_keep)
-	fmt.Printf("[prune] main_trie_node: column recreated.\n")
+
+	fmt.Printf("[prune] main_trie_node: keep set built (%d nodes). Scanning for deletions...\n", len(keepSet))
+
+	// Now iterate through existing nodes and delete those not in keep set
+	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_node])
+	defer itr.Close()
+	itr.SeekToFirst()
+
+	if !itr.Valid() {
+		fmt.Printf("[prune] main_trie_node: column empty, nothing to prune.\n")
+		return
+	}
+
+	start := time.Now()
+	processed := 0
+	deleted := 0
+	batch := grocksdb.NewWriteBatch()
+	defer batch.Destroy()
+
+	for ; itr.Valid(); itr.Next() {
+		kSlice := itr.Key()
+		var nodeHash common.Hash
+		copy(nodeHash[:], kSlice.Data())
+		kSlice.Free()
+
+		// If this node is not in our keep set, delete it
+		if _, shouldKeep := keepSet[nodeHash]; !shouldKeep {
+			batch.DeleteCF(self.cf_handles[state_db.COL_main_trie_node], nodeHash[:])
+			deleted++
+
+			// Flush batch periodically
+			if deleted%100000 == 0 {
+				util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+				batch.Clear()
+				fmt.Printf("[prune] main_trie_node: deleted %d nodes so far...\n", deleted)
+			}
+		}
+
+		processed++
+		if processed%1000000 == 0 {
+			elapsed := time.Since(start)
+			rate := float64(processed) / elapsed.Seconds()
+			fmt.Printf("[prune] main_trie_node: processed=%d deleted=%d rate=%.0f/sec elapsed=%s\n",
+				processed, deleted, rate, elapsed)
+		}
+	}
+
+	if err := itr.Err(); err != nil {
+		fmt.Printf("[prune] main_trie_node: iterator error: %v\n", err)
+	}
+
+	// Final batch write
+	if deleted%100000 != 0 {
+		util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+	}
+
+	elapsed := time.Since(start)
+	rate := float64(processed) / elapsed.Seconds()
+	fmt.Printf("[prune] main_trie_node: done. processed=%d deleted=%d rate=%.0f/sec took=%s\n",
+		processed, deleted, rate, elapsed)
 }
 
 func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
@@ -417,9 +473,10 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 					lastMerge = time.Now()
 				}
 				rdr := state_db.GetBlockStateReader(self, blk_num)
+				extRdr := state_db.ExtendedReader{Reader: rdr}
 				processed := 0
 				for root := range rootsCh {
-					state_db.ExtendedReader{rdr}.ForEachAccountNodeHashByRoot(&root, func(h *common.Hash, b []byte) {
+					extRdr.ForEachAccountNodeHashByRoot(&root, func(h *common.Hash, b []byte) {
 						local[*h] = struct{}{}
 						processed++
 						if processed%200000 == 0 || time.Since(lastMerge) > 10*time.Second {
@@ -500,12 +557,12 @@ func (self *DB) Prune(state_root_to_keep []common.Hash, blk_num types.BlockNum) 
 		self.deleteStateValues(blk_num)
 	}()
 
-	// Asynchronously recreate Main trie
+	// Asynchronously prune Main trie nodes
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fmt.Printf("[prune] Phase 2: recreate main_trie_node...\n")
-		self.recreateMainTrie(&state_root_to_keep, blk_num)
+		fmt.Printf("[prune] Phase 2: prune main_trie_node...\n")
+		self.pruneMainTrieNodes(&state_root_to_keep, blk_num)
 	}()
 
 	// Asynchronously delete state root and main trie values
