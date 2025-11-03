@@ -17,7 +17,6 @@
 package vm
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -28,13 +27,15 @@ import (
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fp"
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 	"github.com/ethereum/go-ethereum/crypto/blake2b"
+	"github.com/pornin/go-fn-dsa/fndsa"
+
 	"golang.org/x/crypto/ripemd160"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/common/math"
 	"github.com/Taraxa-project/taraxa-evm/crypto"
 	"github.com/Taraxa-project/taraxa-evm/crypto/bn256"
-	"github.com/Taraxa-project/taraxa-evm/taraxa/util/asserts"
+	"github.com/Taraxa-project/taraxa-evm/crypto/secp256r1"
 	"github.com/Taraxa-project/taraxa-evm/taraxa/util/keccak256"
 )
 
@@ -46,64 +47,73 @@ type PrecompiledContract interface {
 	Run(ctx CallFrame, evm *EVM) ([]byte, error)
 }
 
-type Precompiles [255]PrecompiledContract
+type Precompiles map[common.Address]PrecompiledContract
 
 var PrecompiledContractAddrPrefix = make([]byte, common.AddressLength-1)
 
-func (self *Precompiles) Get(address *common.Address) (ret PrecompiledContract) {
-	last_byte := address[common.AddressLength-1]
-	if last_byte == 0 {
-		return
-	}
-	ret = self[last_byte-1]
-	if ret != nil && !bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix) {
-		ret = nil
-	}
-	return
+func (p *Precompiles) Get(address *common.Address) PrecompiledContract {
+	return (*p)[*address]
 }
 
-func (self *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
-	asserts.Holds(bytes.Equal(address[:common.AddressLength-1], PrecompiledContractAddrPrefix))
-	last_addr_byte := address[common.AddressLength-1]
-	asserts.Holds(last_addr_byte != 0)
-	pos := last_addr_byte - 1
-	asserts.Holds(self[pos] == nil)
-	self[pos] = contract
+func (p *Precompiles) Put(address *common.Address, contract PrecompiledContract) {
+	(*p)[*address] = contract
 }
 
 // PrecompiledContractsCalifornicum contains the default set of pre-compiled Ethereum
 // contracts used in the Californicum release.
 var PrecompiledContractsCalifornicum = Precompiles{
-	&ecrecover{},      // Position 1, address 0x01
-	&sha256hash{},     // Position 2, address 0x02
-	&ripemd160hash{},  // Position 3, address 0x03
-	&dataCopy{},       // Position 4, address 0x04
-	&bigModExp{},      // Position 5, address 0x05
-	&bn256Add{},       // Position 6, address 0x06
-	&bn256ScalarMul{}, // Position 7, address 0x07
-	&bn256Pairing{},   // Position 8, address 0x08
+	common.BytesToAddress([]byte{0x01}): &ecrecover{},
+	common.BytesToAddress([]byte{0x02}): &sha256hash{},
+	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
+	common.BytesToAddress([]byte{0x04}): &dataCopy{},
+	common.BytesToAddress([]byte{0x05}): &bigModExp{},
+	common.BytesToAddress([]byte{0x06}): &bn256Add{},
+	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
+	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
 }
 
 var PrecompiledContractsFicus = Precompiles{
-	&ecrecover{},          // Position 1, address 0x01
-	&sha256hash{},         // Position 2, address 0x02
-	&ripemd160hash{},      // Position 3, address 0x03
-	&dataCopy{},           // Position 4, address 0x04
-	&bigModExp{},          // Position 5, address 0x05
-	&bn256Add{},           // Position 6, address 0x06
-	&bn256ScalarMul{},     // Position 7, address 0x07
-	&bn256Pairing{},       // Position 8, address 0x08
-	&blake2F{},            // Position 9, address 0x09
-	nil,                   // Position 10, address 0x0a (&kzgPointEvaluation{})
-	&bls12381G1Add{},      // Position 11, address 0x0b
-	&bls12381G1Mul{},      // Position 12, address 0x0c
-	&bls12381G1MultiExp{}, // Position 13, address 0x0d
-	&bls12381G2Add{},      // Position 14, address 0x0e
-	&bls12381G2Mul{},      // Position 15, address 0x0f
-	&bls12381G2MultiExp{}, // Position 16, address 0x10
-	&bls12381Pairing{},    // Position 17, address 0x11
-	&bls12381MapG1{},      // Position 18, address 0x12
-	&bls12381MapG2{},      // Position 19, address 0x13
+	common.BytesToAddress([]byte{0x01}): &ecrecover{},
+	common.BytesToAddress([]byte{0x02}): &sha256hash{},
+	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
+	common.BytesToAddress([]byte{0x04}): &dataCopy{},
+	common.BytesToAddress([]byte{0x05}): &bigModExp{},
+	common.BytesToAddress([]byte{0x06}): &bn256Add{},
+	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
+	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
+	common.BytesToAddress([]byte{0x09}): &blake2F{},
+	// common.BytesToAddress([]byte{0x0a}): &kzgPointEvaluation{},
+	common.BytesToAddress([]byte{0x0b}): &bls12381G1Add{},
+	common.BytesToAddress([]byte{0x0c}): &bls12381G1Mul{},
+	common.BytesToAddress([]byte{0x0d}): &bls12381G1MultiExp{},
+	common.BytesToAddress([]byte{0x0e}): &bls12381G2Add{},
+	common.BytesToAddress([]byte{0x0f}): &bls12381G2Mul{},
+	common.BytesToAddress([]byte{0x10}): &bls12381G2MultiExp{},
+	common.BytesToAddress([]byte{0x11}): &bls12381Pairing{},
+	common.BytesToAddress([]byte{0x12}): &bls12381MapG1{},
+	common.BytesToAddress([]byte{0x13}): &bls12381MapG2{},
+}
+
+var PrecompiledContractsCacti = Precompiles{
+	common.BytesToAddress([]byte{0x01}): &ecrecover{},
+	common.BytesToAddress([]byte{0x02}): &sha256hash{},
+	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
+	common.BytesToAddress([]byte{0x04}): &dataCopy{},
+	common.BytesToAddress([]byte{0x05}): &bigModExp{},
+	common.BytesToAddress([]byte{0x06}): &bn256Add{},
+	common.BytesToAddress([]byte{0x07}): &bn256ScalarMul{},
+	common.BytesToAddress([]byte{0x08}): &bn256Pairing{},
+	common.BytesToAddress([]byte{0x09}): &blake2F{},
+	//common.BytesToAddress([]byte{0x0a}):       &kzgPointEvaluation{},
+	common.BytesToAddress([]byte{0x0b}):       &bls12381G1Add{},
+	common.BytesToAddress([]byte{0x0c}):       &bls12381G1MultiExp{},
+	common.BytesToAddress([]byte{0x0d}):       &bls12381G2Add{},
+	common.BytesToAddress([]byte{0x0e}):       &bls12381G2MultiExp{},
+	common.BytesToAddress([]byte{0x0f}):       &bls12381Pairing{},
+	common.BytesToAddress([]byte{0x10}):       &bls12381MapG1{},
+	common.BytesToAddress([]byte{0x11}):       &bls12381MapG2{},
+	common.BytesToAddress([]byte{0x1, 0x00}):  &p256Verify{},
+	common.BytesToAddress([]byte{0xfa, 0x1c}): &falcon512{},
 }
 
 // ECRECOVER implemented as a native contract.
@@ -950,4 +960,128 @@ func (c bls12381MapG2) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
 
 	// Encode the G2 point to 256 bytes
 	return encodePointG2(&r), nil
+}
+
+// P256VERIFY (secp256r1 signature verification)
+// implemented as a native contract
+type p256Verify struct{}
+
+// RequiredGas returns the gas required to execute the precompiled contract
+func (c *p256Verify) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
+	return P256VerifyGas
+}
+
+// Run executes the precompiled contract with given 160 bytes of param, returning the output and the used gas
+func (c *p256Verify) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
+	input := ctx.Input
+	const p256VerifyInputLength = 160
+	if len(input) != p256VerifyInputLength {
+		return nil, nil
+	}
+
+	// Extract hash, r, s, x, y from the input.
+	hash := input[0:32]
+	r, s := new(big.Int).SetBytes(input[32:64]), new(big.Int).SetBytes(input[64:96])
+	x, y := new(big.Int).SetBytes(input[96:128]), new(big.Int).SetBytes(input[128:160])
+
+	// Verify the signature.
+	if secp256r1.Verify(hash, r, s, x, y) {
+		return true32Byte, nil
+	}
+	return nil, nil
+}
+
+// FALCON512 implementation precompile
+type falcon512 struct{}
+
+func (c *falcon512) RequiredGas(ctx CallFrame, evm *EVM) uint64 {
+	return uint64(len(ctx.Input)+31)/32*Falcon512PerWordGas + Falcon512BaseGas
+}
+
+const (
+	falcon512MethodSignature = 0xde8f50a1 // verify(bytes,bytes,bytes)
+)
+
+var (
+	// fndsa exposes fixed sizes per degree; compute them at init to avoid hardcoding.
+	falcon512LogN      uint = 9 // 2^9 = 512
+	falcon512SigLen         = fndsa.SignatureSize(falcon512LogN)
+	falcon512PubKeyLen      = fndsa.VerifyingKeySize(falcon512LogN)
+
+	errFalcon512InvalidMethodSignatureLength = errors.New("invalid input format")
+	errFalconInvalidMethodSignature          = errors.New("invalid method signature")
+)
+
+// returns bytes32(0) if signature is valid, bytes32(1) otherwise
+func (c *falcon512) Run(ctx CallFrame, evm *EVM) ([]byte, error) {
+	input := ctx.Input
+
+	// 32-byte digest per your convention: 0x...01 means invalid; 0x...00 means valid
+	digest := make([]byte, 32)
+	digest[31] = 1
+
+	if len(input) < 4 { // verifies method signature
+		return nil, errFalcon512InvalidMethodSignatureLength
+	}
+	if binary.BigEndian.Uint32(getData(input, 0, 4)) != uint32(falcon512MethodSignature) {
+		return nil, errFalconInvalidMethodSignature
+	}
+
+	input = getData(input, 4, uint64(len(input)))
+	if len(input) < 96 {
+		return digest, nil
+	}
+
+	signatureOffset := new(big.Int).SetBytes(getData(input, 0, 32)).Uint64()
+	pubKeyOffset := new(big.Int).SetBytes(getData(input, 32, 32)).Uint64()
+	dataOffset := new(big.Int).SetBytes(getData(input, 64, 32)).Uint64()
+
+	if signatureOffset == 0 || pubKeyOffset == 0 || dataOffset == 0 {
+		return digest, nil
+	}
+
+	// --- signature ---
+	if len(input) < int(signatureOffset)+32 {
+		return digest, nil
+	}
+	signatureLength := new(big.Int).SetBytes(getData(input, signatureOffset, 32)).Uint64()
+	if signatureLength == 0 || len(input) < int(signatureOffset)+32+int(signatureLength) {
+		return digest, nil
+	}
+	signatureSlice := getData(input, signatureOffset+32, signatureLength)
+	// Enforce fixed-size FN-DSA-512 signatures.
+	if int(signatureLength) != falcon512SigLen {
+		return digest, nil
+	}
+
+	// --- public key ---
+	if len(input) < int(pubKeyOffset)+32 {
+		return digest, nil
+	}
+	pubKeyLength := new(big.Int).SetBytes(getData(input, pubKeyOffset, 32)).Uint64()
+	if pubKeyLength == 0 || len(input) < int(pubKeyOffset)+32+int(pubKeyLength) {
+		return digest, nil
+	}
+	pubKeySlice := getData(input, pubKeyOffset+32, pubKeyLength)
+	// Enforce fixed-size FN-DSA-512 verifying key.
+	if int(pubKeyLength) != falcon512PubKeyLen {
+		return digest, nil
+	}
+
+	// --- message data (raw; no prehash) ---
+	if len(input) < int(dataOffset)+32 {
+		return digest, nil
+	}
+	dataLength := new(big.Int).SetBytes(getData(input, dataOffset, 32)).Uint64()
+	if dataLength == 0 || len(input) < int(dataOffset)+32+int(dataLength) {
+		return digest, nil
+	}
+	dataSlice := getData(input, dataOffset+32, dataLength)
+
+	// Pure-Go FN-DSA verify (ctx = NONE, id = 0 => raw message).
+	ok := fndsa.Verify(pubKeySlice, fndsa.DOMAIN_NONE, 0, dataSlice, signatureSlice)
+	if ok {
+		digest[31] = 0
+	}
+	return digest, nil
 }

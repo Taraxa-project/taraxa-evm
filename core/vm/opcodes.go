@@ -209,8 +209,11 @@ const (
 
 // 0xb0 range.
 const (
-	TLOAD  OpCode = 0xb3
-	TSTORE OpCode = 0xb4
+	TLOAD_OLD  OpCode = 0xb3
+	TSTORE_OLD OpCode = 0xb4
+
+	TLOAD  OpCode = 0x5c
+	TSTORE OpCode = 0x5d
 )
 
 // 0xf0 range - closures.
@@ -383,8 +386,10 @@ var opCodeToString = map[OpCode]string{
 	LOG4:   "LOG4",
 
 	// 0xb0 range.
-	TLOAD:  "TLOAD",
-	TSTORE: "TSTORE",
+	TLOAD_OLD:  "TLOAD",
+	TSTORE_OLD: "TSTORE",
+	TLOAD:      "TLOAD",
+	TSTORE:     "TSTORE",
 
 	// 0xf0 range.
 	CREATE:       "CREATE",

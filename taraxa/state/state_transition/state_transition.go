@@ -69,6 +69,9 @@ func (st *StateTransition) Init(
 		if st.dpos_contract != nil {
 			util.PanicIfNotNil(st.dpos_contract.ApplyGenesis(st.state.GetAccount))
 		}
+		// Initialize EVM rules and precompiles for genesis before applying HF changes
+		blkNum := st.BlockNumber()
+		st.evm.SetBlock(&vm.Block{Number: blkNum, BlockInfo: vm.BlockInfo{}}, st.chain_config.Hardforks.Rules(blkNum))
 		st.applyHFChanges()
 		st.evm_state_checkpoint()
 		st.Commit()

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Taraxa-project/taraxa-evm/common"
 	"github.com/Taraxa-project/taraxa-evm/core/types"
@@ -43,6 +44,14 @@ const (
 	db_prune_buffer_max_size = 500000
 )
 
+// Write batch flush size for column (re)creation operations
+const db_write_batch_max_size = 100000
+
+// Merge thresholds for in-memory aggregation during rebuilds
+const main_trie_merge_threshold = 100000
+const acc_trie_keep_merge_threshold = 200000
+const acc_trie_keep_merge_interval = 10 * time.Second
+
 var versioned_read_columns = []state_db.Column{state_db.COL_acc_trie_value, state_db.COL_main_trie_value}
 
 type Opts = struct {
@@ -60,8 +69,8 @@ func (self *DB) Init(opts Opts) *DB {
 		ret.SetCreateIfMissingColumnFamilies(true)
 		ret.IncreaseParallelism(runtime.NumCPU())
 		ret.SetMaxFileOpeningThreads(runtime.NumCPU())
-		ret.SetMaxOpenFiles(128) //Maybe even less
-		ret.SetMaxTotalWalSize(10 << 20) //10MB
+		ret.SetMaxOpenFiles(128)                         //Maybe even less
+		ret.SetMaxTotalWalSize(10 << 20)                 //10MB
 		ret.SetDbWriteBufferSize(1 * 1024 * 1024 * 1024) //1GB
 		//ret.SetEnablePipelinedWrite(true)
 		//ret.SetUseAdaptiveMutex(true)
@@ -139,9 +148,23 @@ func (self *DB) RecreateColumn(column state_db.Column, nodes map[common.Hash][]b
 	}
 	self.cf_handles[column] = acc_trie_handle
 
+	batch := grocksdb.NewWriteBatch()
+	count := 0
+	pending := 0 // number of put ops currently batched
 	for node_to_keep, b := range nodes {
-		self.db.PutCF(grocksdb.NewDefaultWriteOptions(), self.cf_handles[column], node_to_keep[:], b)
+		batch.PutCF(self.cf_handles[column], node_to_keep[:], b)
+		count++
+		pending++
+		if pending >= db_write_batch_max_size {
+			util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+			batch.Clear()
+			pending = 0
+		}
 	}
+	if pending > 0 {
+		util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+	}
+	batch.Destroy()
 	self.db.CompactRangeCF(self.cf_handles[column], range32)
 }
 
@@ -158,9 +181,15 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 	set_account_storage_value_to_prune := make([][]byte, 0)
 	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_acc_trie_value])
 	itr.SeekToFirst()
+	if !itr.Valid() {
+		itr.Close()
+		return
+	}
+
 	for {
-		copy(prev_key, itr.Key().Data())
-		itr.Key().Free()
+		k := itr.Key()
+		copy(prev_key, k.Data())
+		k.Free()
 		itr.Next()
 		if !itr.Valid() {
 			break
@@ -173,29 +202,73 @@ func (self *DB) deleteStateValues(blk_num types.BlockNum) {
 		}
 
 		if len(set_account_storage_value_to_prune) > db_prune_buffer_max_size {
+			batch := grocksdb.NewWriteBatch()
 			for _, value_to_remove := range set_account_storage_value_to_prune {
-				self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_value], value_to_remove)
+				batch.DeleteCF(self.cf_handles[state_db.COL_acc_trie_value], value_to_remove)
 			}
-			set_account_storage_value_to_prune = make([][]byte, 0)
+			util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+			batch.Destroy()
+			set_account_storage_value_to_prune = set_account_storage_value_to_prune[:0]
 		}
 	}
 	itr.Close()
 
-	for _, value_to_remove := range set_account_storage_value_to_prune {
-		self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_acc_trie_value], value_to_remove)
+	if len(set_account_storage_value_to_prune) > 0 {
+		batch := grocksdb.NewWriteBatch()
+		for _, value_to_remove := range set_account_storage_value_to_prune {
+			batch.DeleteCF(self.cf_handles[state_db.COL_acc_trie_value], value_to_remove)
+		}
+		util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+		batch.Destroy()
 	}
 	self.db.CompactRangeCF(self.cf_handles[state_db.COL_acc_trie_value], range40)
 }
 
 func (self *DB) recreateMainTrie(state_root_to_keep *[]common.Hash, blk_num types.BlockNum) {
-	current_block_state := state_db.GetBlockStateReader(self, blk_num)
-	//Select nodes which are not to be deleted
-	nodes_to_keep := make(map[common.Hash][]byte)
-	for _, root_to_keep := range *state_root_to_keep {
-		current_block_state.ForEachMainNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
-			nodes_to_keep[*h] = common.CopyBytes(b)
-		})
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
 	}
+	rootsCh := make(chan common.Hash, workers*2)
+	nodes_to_keep := make(map[common.Hash][]byte)
+	var nodesMu sync.Mutex
+	// use package-level main_trie_merge_threshold
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			reader := state_db.GetBlockStateReader(self, blk_num)
+			extReader := state_db.ExtendedReader{reader}
+			local := make(map[common.Hash][]byte)
+			merge := func() {
+				if len(local) == 0 {
+					return
+				}
+				nodesMu.Lock()
+				for k, v := range local {
+					nodes_to_keep[k] = v
+				}
+				nodesMu.Unlock()
+				local = make(map[common.Hash][]byte)
+			}
+			for root := range rootsCh {
+				extReader.ForEachMainNodeHashByRoot(&root, func(h *common.Hash, b []byte) {
+					local[*h] = common.CopyBytes(b)
+					if len(local) >= main_trie_merge_threshold {
+						merge()
+					}
+				})
+			}
+			merge()
+		}()
+	}
+	for _, root_to_keep := range *state_root_to_keep {
+		rootsCh <- root_to_keep
+	}
+	close(rootsCh)
+	wg.Wait()
 	self.RecreateColumn(state_db.COL_main_trie_node, nodes_to_keep)
 }
 
@@ -210,17 +283,22 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 	//Select main trie values to prune/remove
 	set_value_to_prune := make([][]byte, 0)
 	set_storage_root_to_keep := make([]common.Hash, 0)
-	current_block_state := state_db.GetBlockStateReader(self, blk_num)
 
 	//Iterate over all values and select which to keep
 	itr := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_main_trie_value])
 	itr.SeekToFirst()
+	if !itr.Valid() {
+		itr.Close()
+		return
+	}
 	prev_key := make([]byte, common.VersionedKeyLength)
 	for {
-		copy(prev_key, itr.Key().Data())
-		itr.Key().Free()
-		account := state_db.DecodeAccountFromTrie(itr.Value().Data())
-		itr.Value().Free()
+		k := itr.Key()
+		copy(prev_key, k.Data())
+		k.Free()
+		v := itr.Value()
+		account := state_db.DecodeAccountFromTrie(v.Data())
+		v.Free()
 		itr.Next()
 		if !itr.Valid() {
 			if account.StorageRootHash != nil {
@@ -245,10 +323,13 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 		}
 
 		if len(set_value_to_prune) > db_prune_buffer_max_size {
+			batch := grocksdb.NewWriteBatch()
 			for _, value_to_remove := range set_value_to_prune {
-				self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_main_trie_value], value_to_remove)
+				batch.DeleteCF(self.cf_handles[state_db.COL_main_trie_value], value_to_remove)
 			}
-			set_value_to_prune = make([][]byte, 0)
+			util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+			batch.Destroy()
+			set_value_to_prune = set_value_to_prune[:0]
 		}
 	}
 	itr.Close()
@@ -257,8 +338,13 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for _, value_to_remove := range set_value_to_prune {
-			self.db.DeleteCF(self.latest_state.opts_w, self.cf_handles[state_db.COL_main_trie_value], value_to_remove)
+		if len(set_value_to_prune) > 0 {
+			batch := grocksdb.NewWriteBatch()
+			for _, value_to_remove := range set_value_to_prune {
+				batch.DeleteCF(self.cf_handles[state_db.COL_main_trie_value], value_to_remove)
+			}
+			util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+			batch.Destroy()
 		}
 		self.db.CompactRangeCF(self.cf_handles[state_db.COL_main_trie_value], range40)
 	}()
@@ -266,14 +352,90 @@ func (self *DB) deleteStateRoot(blk_num types.BlockNum) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		//Select account nodes to prune
-		account_nodes_to_keep := make(map[common.Hash][]byte)
-		for _, root_to_keep := range set_storage_root_to_keep {
-			current_block_state.ForEachAccountNodeHashByRoot(&root_to_keep, func(h *common.Hash, b []byte) {
-				account_nodes_to_keep[*h] = common.CopyBytes(b)
-			})
+		workers := runtime.NumCPU()
+		if workers < 1 {
+			workers = 1
 		}
-		self.RecreateColumn(state_db.COL_acc_trie_node, account_nodes_to_keep)
+		rootsCh := make(chan common.Hash, workers*2)
+		keepSet := make(map[common.Hash]struct{})
+		var keepMu sync.Mutex
+		var wwg sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			wwg.Add(1)
+			go func() {
+				defer wwg.Done()
+				local := make(map[common.Hash]struct{})
+				lastMerge := time.Now()
+				merge := func() {
+					if len(local) == 0 {
+						return
+					}
+					keepMu.Lock()
+					for k := range local {
+						keepSet[k] = struct{}{}
+					}
+					keepMu.Unlock()
+					local = make(map[common.Hash]struct{})
+					lastMerge = time.Now()
+				}
+				rdr := state_db.GetBlockStateReader(self, blk_num)
+				processed := 0
+				for root := range rootsCh {
+					state_db.ExtendedReader{rdr}.ForEachAccountNodeHashByRoot(&root, func(h *common.Hash, b []byte) {
+						local[*h] = struct{}{}
+						processed++
+						if processed%acc_trie_keep_merge_threshold == 0 || time.Since(lastMerge) > acc_trie_keep_merge_interval {
+							merge()
+						}
+					})
+				}
+				merge()
+			}()
+		}
+		for _, r := range set_storage_root_to_keep {
+			rootsCh <- r
+		}
+		close(rootsCh)
+		wwg.Wait()
+
+		itr2 := self.db.NewIteratorCF(self.opts_r_itr, self.cf_handles[state_db.COL_acc_trie_node])
+		itr2.SeekToFirst()
+		if !itr2.Valid() {
+			itr2.Close()
+			return
+		}
+		deleted := 0
+		pending := 0 // number of delete ops currently batched
+		batch := grocksdb.NewWriteBatch()
+		for ; itr2.Valid(); itr2.Next() {
+			kSlice := itr2.Key()
+			var h common.Hash
+			copy(h[:], kSlice.Data())
+			kSlice.Free()
+			if _, ok := keepSet[h]; !ok {
+				batch.DeleteCF(self.cf_handles[state_db.COL_acc_trie_node], h[:])
+				deleted++
+				pending++
+				if pending >= db_prune_buffer_max_size {
+					util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+					batch.Clear()
+					pending = 0
+				}
+			}
+		}
+		itr2.Close()
+		if pending > 0 {
+			util.PanicIfNotNil(self.db.Write(self.latest_state.opts_w, batch))
+		}
+		batch.Destroy()
+		// Compact the full 32-byte keyspace
+		range_limit := [common.VersionedKeyLength]byte{255}
+		range32 := grocksdb.Range{
+			Start: make([]byte, common.HashLength),
+			Limit: make([]byte, common.HashLength),
+		}
+		copy(range32.Limit, range_limit[0:common.HashLength])
+		self.db.CompactRangeCF(self.cf_handles[state_db.COL_acc_trie_node], range32)
 	}()
 	wg.Wait()
 }

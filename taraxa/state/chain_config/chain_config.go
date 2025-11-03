@@ -132,6 +132,7 @@ func (c *HardforksConfig) Rules(num types.BlockNum) vm.Rules {
 		IsAspenPartTwo: isForked(c.AspenHf.BlockNumPartTwo, num),
 		IsFicus:        isForked(c.FicusHf.BlockNum, num),
 		IsCornus:       isForked(c.CornusHf.BlockNum, num),
+		IsCacti:        isForked(c.CactiHf.BlockNum, num),
 	}
 }
 

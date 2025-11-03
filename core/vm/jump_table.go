@@ -52,9 +52,17 @@ type operation struct {
 }
 
 var (
+	cactiInstructionSet        = newCactiInstructionSet()
 	ficusInstructionSet        = newFicusInstructionSet()
 	californicumInstructionSet = newCalifornicumInstructionSet()
 )
+
+// Example of new instruction after HF
+func newCactiInstructionSet() InstructionSet {
+	instructionSet := newFicusInstructionSet()
+	fixEIP1153(&instructionSet) // EIP-1153
+	return instructionSet
+}
 
 // Example of new instruction after HF
 func newFicusInstructionSet() InstructionSet {
@@ -784,12 +792,12 @@ func newCalifornicumInstructionSet() InstructionSet {
 			memorySize:    memoryLog,
 			writes:        true,
 		},
-		TLOAD: {
+		TLOAD_OLD: {
 			execute:       opTload,
 			gasCost:       gasTLoad,
 			validateStack: makeStackFunc(1, 1),
 		},
-		TSTORE: {
+		TSTORE_OLD: {
 			execute:       opTstore,
 			gasCost:       gasTLoad,
 			validateStack: makeStackFunc(2, 0),

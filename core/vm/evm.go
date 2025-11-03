@@ -91,6 +91,7 @@ type Rules struct {
 	IsAspenPartTwo bool
 	IsFicus        bool
 	IsCornus       bool
+	IsCacti        bool
 }
 
 type Block struct {
@@ -159,13 +160,27 @@ func (self *EVM) SetBlock(blk *Block, rules Rules) (rules_changed bool) {
 	} else {
 		self.rules_initialized = true
 	}
+	// Copy global precompile maps into an instance-specific map to avoid
+	// concurrent reads/writes across different EVM instances.
+	copyPrecompiles := func(src Precompiles) Precompiles {
+		dst := make(Precompiles, len(src))
+		for k, v := range src {
+			dst[k] = v
+		}
+		return dst
+	}
+
 	switch {
+	case rules.IsCacti:
+		self.precompiles = copyPrecompiles(PrecompiledContractsCacti)
+		self.instruction_set = cactiInstructionSet
+		self.gas_table = GasTableCalifornicum
 	case rules.IsFicus:
-		self.precompiles = PrecompiledContractsFicus
+		self.precompiles = copyPrecompiles(PrecompiledContractsFicus)
 		self.instruction_set = ficusInstructionSet
 		self.gas_table = GasTableCalifornicum
 	default:
-		self.precompiles = PrecompiledContractsCalifornicum
+		self.precompiles = copyPrecompiles(PrecompiledContractsCalifornicum)
 		self.instruction_set = californicumInstructionSet
 		self.gas_table = GasTableCalifornicum
 	}

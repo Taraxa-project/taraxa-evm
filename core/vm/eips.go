@@ -1,5 +1,21 @@
 package vm
 
+// fixEIP1153 fixes EIP-1153
+// https://eips.ethereum.org/EIPS/eip-1153
+func fixEIP1153(jt *InstructionSet) {
+	jt[TLOAD] = &operation{
+		execute:       opTload,
+		gasCost:       gasTLoad,
+		validateStack: makeStackFunc(1, 1),
+	}
+
+	jt[TSTORE] = &operation{
+			execute:       opTstore,
+			gasCost:       gasTLoad,
+			validateStack: makeStackFunc(2, 0),
+	}
+}
+
 // enable5656 enables EIP-5656 (MCOPY opcode)
 // https://eips.ethereum.org/EIPS/eip-5656
 func enable5656(jt *InstructionSet) {
