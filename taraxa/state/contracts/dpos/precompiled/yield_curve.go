@@ -35,10 +35,10 @@ func (self *YieldCurve) calculateCurrentYield(current_total_tara_supply *uint256
 	return current_yield
 }
 
-func (self *YieldCurve) CalculateBlockReward(current_total_delegation, current_total_tara_supply *uint256.Int) (block_reward *uint256.Int, yield *uint256.Int) {
+func (self *YieldCurve) CalculateBlockReward(blocks_per_year, current_total_delegation, current_total_tara_supply *uint256.Int) (block_reward *uint256.Int, yield *uint256.Int) {
 	yield = self.calculateCurrentYield(current_total_tara_supply)
 	block_reward = new(uint256.Int).Mul(current_total_delegation, yield)
-	block_reward.Div(block_reward, new(uint256.Int).Mul(YieldFractionDecimalPrecision, uint256.NewInt(uint64(self.cfg.DPOS.BlocksPerYear))))
+	block_reward.Div(block_reward, new(uint256.Int).Mul(YieldFractionDecimalPrecision, blocks_per_year))
 	return
 }
 

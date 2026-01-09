@@ -23,6 +23,9 @@ type RewardsStats struct {
 	// Pbft block author
 	BlockAuthor common.Address
 
+	// Expected number of blocks generated per year based on block's dynamic lambda
+	BlocksPerYear uint32
+
 	// Validator stats
 	ValidatorsStats map[common.Address]ValidatorStats
 

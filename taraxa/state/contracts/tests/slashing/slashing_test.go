@@ -81,6 +81,19 @@ var (
 				TrxMinGasPrice: 1,
 				TrxMaxGasLimit: 1,
 			},
+			CactiHf: chain_config.CactiHfConfig{
+				BlockNum:                2000,
+				LambdaMin:               500,
+				LambdaMax:               1500,
+				LambdaDefault:           2000,
+				LambdaChangeInterval:    300,
+				LambdaChange:            10,
+				BlockPropagationMin:     4000,
+				BlockPropagationMax:     17000,
+				ConsensusDelay:          400,
+				DelegationLockingPeriod: 5,
+				JailTime:                10,
+			},
 		},
 	}
 )
@@ -322,6 +335,36 @@ func TestGetJailBlock(t *testing.T) {
 	result_parsed = new(uint64)
 	test.Unpack(result_parsed, "getJailBlock", result.CodeRetval)
 	tc.Assert.Equal(1+2*uint64(test.Chain_cfg.DPOS.DelegationDelay)+DefaultChainCfg.Hardforks.MagnoliaHf.JailTime, *result_parsed)
+}
+
+func TestGetJailBlockCactiHf(t *testing.T) {
+	cfg := DefaultChainCfg
+	cfg.Hardforks.CactiHf.BlockNum = 0
+	cfg.Hardforks.CactiHf.JailTime = DefaultChainCfg.Hardforks.MagnoliaHf.JailTime + 5
+	privkey1, malicious_vote_author1 := addValidator(&cfg)
+	tc, test := test_utils.Init_test(slashing.ContractAddress(), slashing_sol.TaraxaSlashingClientMetaData, t, cfg)
+	defer test.End()
+
+	proof_author := addr(1)
+
+	vote_a := DefaultVote
+	signVote(&vote_a, privkey1)
+
+	vote_b := DefaultVote
+	vote_b.BlockHash = common.Hash{0x2}
+	signVote(&vote_b, privkey1)
+
+	test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("commitDoubleVotingProof", GetVoteRlp(&vote_a), GetVoteRlp(&vote_b)), util.ErrorString(""), util.ErrorString(""))
+
+	// Advance test.Chain_cfg.DPOS.DelegationDelay blocks
+	for i := 0; i < int(test.Chain_cfg.DPOS.DelegationDelay); i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	result := test.ExecuteAndCheck(proof_author, big.NewInt(0), test.Pack("getJailBlock", malicious_vote_author1), util.ErrorString(""), util.ErrorString(""))
+	result_parsed := new(uint64)
+	test.Unpack(result_parsed, "getJailBlock", result.CodeRetval)
+	tc.Assert.Equal(1+cfg.Hardforks.CactiHf.JailTime, *result_parsed)
 }
 
 func TestMakeLogsCheckTopics(t *testing.T) {

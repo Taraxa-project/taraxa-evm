@@ -48,14 +48,17 @@ type SoleiroliaHfConfig struct {
 }
 
 type CactiHfConfig struct {
-	BlockNum             uint64
-	LambdaMin            uint32 // [ms]
-	LambdaMax            uint32 // [ms]
-	LambdaDefault        uint32 // [ms]
-	LambdaChangeInterval uint32 // [number of blocks]
-	LambdaChange         uint32 // [ms]
-	BlockPropagationMin  uint32 // [ms]
-	BlockPropagationMax  uint32 // [ms]
+	BlockNum                uint64
+	LambdaMin               uint32 // [ms]
+	LambdaMax               uint32 // [ms]
+	LambdaDefault           uint32 // [ms]
+	LambdaChangeInterval    uint32 // [number of blocks]
+	LambdaChange            uint32 // [ms]
+	BlockPropagationMin     uint32 // [ms]
+	BlockPropagationMax     uint32 // [ms]
+	ConsensusDelay          uint32 // [ms]
+	DelegationLockingPeriod uint32 // [number of blocks]
+	JailTime                uint64 // [number of blocks]
 }
 
 // Leaving it here for next HF

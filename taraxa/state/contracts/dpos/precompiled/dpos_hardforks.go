@@ -92,7 +92,7 @@ func (self *Contract) fixRedelegateBlockNumFunc(block_num uint64) {
 	}
 }
 
-func (self *Contract) processBlockReward(block_num uint64) *uint256.Int {
+func (self *Contract) processBlockReward(block_num uint64, blocks_per_year *uint256.Int) *uint256.Int {
 	if self.cfg.Hardforks.IsOnAspenHardforkPartTwo(block_num) {
 		if self.total_supply == nil {
 			self.total_supply = self.yield_curve.CalculateTotalSupply(self.minted_tokens)
@@ -102,7 +102,7 @@ func (self *Contract) processBlockReward(block_num uint64) *uint256.Int {
 			self.eraseMintedTokensDb()
 		}
 
-		blockReward, yield := self.yield_curve.CalculateBlockReward(self.amount_delegated, self.total_supply)
+		blockReward, yield := self.yield_curve.CalculateBlockReward(blocks_per_year, self.amount_delegated, self.total_supply)
 
 		// Save current yield - it changes every block as total_supply is growing every block
 		self.saveYieldDb(yield.Uint64())

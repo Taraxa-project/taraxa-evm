@@ -137,6 +137,18 @@ var (
 				TrxMinGasPrice: 1,
 				TrxMaxGasLimit: 1,
 			},
+			CactiHf: chain_config.CactiHfConfig{
+				BlockNum:                2000,
+				LambdaMin:               500,
+				LambdaMax:               1500,
+				LambdaDefault:           2000,
+				LambdaChangeInterval:    300,
+				LambdaChange:            10,
+				BlockPropagationMin:     4000,
+				BlockPropagationMax:     17000,
+				ConsensusDelay:          400,
+				DelegationLockingPeriod: 5,
+			},
 		},
 	}
 )
@@ -207,6 +219,7 @@ func sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 func NewRewardsStats(author *common.Address) rewards_stats.RewardsStats {
 	rewardsStats := rewards_stats.RewardsStats{}
 	rewardsStats.BlockAuthor = *author
+	rewardsStats.BlocksPerYear = DefaultChainCfg.DPOS.BlocksPerYear
 	rewardsStats.ValidatorsStats = make(map[common.Address]rewards_stats.ValidatorStats)
 
 	return rewardsStats
@@ -678,10 +691,12 @@ func TestCornusHardfork(t *testing.T) {
 	tc.Assert.Equal(confirm_res2.Logs[0].Topics[0], UndelegateConfirmedV2EventHash)
 }
 
-func TestCornusHardforkLockingPeriod(t *testing.T) {
+func TestCornusAndCactiHardforkLockingPeriod(t *testing.T) {
 	cfg := CopyDefaultChainConfig()
 	cfg.Hardforks.CornusHf.BlockNum = 5
 	cfg.Hardforks.CornusHf.DelegationLockingPeriod = 100
+	cfg.Hardforks.CactiHf.BlockNum = 10
+	cfg.Hardforks.CactiHf.DelegationLockingPeriod = 50
 	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
 	defer test.End()
 
@@ -719,6 +734,23 @@ func TestCornusHardforkLockingPeriod(t *testing.T) {
 	test.Unpack(get_undelegation2_parsed_result, "getUndelegationV2", get_undelegation2_result.CodeRetval)
 	tc.Assert.Equal(undelegate2_expected_id, get_undelegation2_parsed_result.UndelegationV2.UndelegationId)
 	tc.Assert.Equal(undelegate2_expected_lockup_block, get_undelegation2_parsed_result.UndelegationV2.UndelegationData.Block)
+
+	// Pass cacti hardfork
+	tc.Assert.Less(test.BlockNumber(), cfg.Hardforks.CactiHf.BlockNum)
+	for i := test.BlockNumber(); i < cfg.Hardforks.CactiHf.BlockNum; i++ {
+		test.AdvanceBlock(nil, nil)
+	}
+
+	// Create undelegation after cacti hardfork
+	test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("undelegateV2", val_addr, DefaultMinimumDeposit), util.ErrorString(""), util.ErrorString(""))
+	undelegate3_expected_id := uint64(2)
+	undelegate3_expected_lockup_block := test.BlockNumber() + uint64(cfg.Hardforks.CactiHf.DelegationLockingPeriod)
+
+	get_undelegation3_result := test.ExecuteAndCheck(val_owner, big.NewInt(0), test.Pack("getUndelegationV2", val_owner, val_addr, undelegate3_expected_id), util.ErrorString(""), util.ErrorString(""))
+	get_undelegation3_parsed_result := new(GetUndelegationV2Ret)
+	test.Unpack(get_undelegation3_parsed_result, "getUndelegationV2", get_undelegation3_result.CodeRetval)
+	tc.Assert.Equal(undelegate3_expected_id, get_undelegation3_parsed_result.UndelegationV2.UndelegationId)
+	tc.Assert.Equal(undelegate3_expected_lockup_block, get_undelegation3_parsed_result.UndelegationV2.UndelegationData.Block)
 }
 
 func TestConfirmUndelegate(t *testing.T) {
@@ -958,7 +990,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_stake := new(uint256.Int).Mul(uint256.NewInt(1e+9), uint256.NewInt(1e+18))
 	expected_yield := uint256.NewInt(200000)
 	expected_block_reward := calculateExpectedBlockReward(total_stake, expected_yield, cfg)
-	block_reward, yield := yield_curve.CalculateBlockReward(total_stake, total_supply)
+	block_reward, yield := yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
 	tc.Assert.Equal(expected_yield, yield)
@@ -967,7 +999,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(11e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(90909)
 	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
-	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+	block_reward, yield = yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
 	tc.Assert.Equal(expected_yield, yield)
@@ -976,7 +1008,7 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(115e+8), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(43478)
 	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
-	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+	block_reward, yield = yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake, total_supply)
 
 	tc.Assert.Equal(expected_block_reward, block_reward)
 	tc.Assert.Equal(expected_yield, yield)
@@ -985,8 +1017,48 @@ func TestYieldCurveAspenHf(t *testing.T) {
 	total_supply = new(uint256.Int).Mul(uint256.NewInt(12e+9), uint256.NewInt(1e+18))
 	expected_yield = uint256.NewInt(0)
 	expected_block_reward = calculateExpectedBlockReward(total_stake, expected_yield, cfg)
-	block_reward, yield = yield_curve.CalculateBlockReward(total_stake, total_supply)
+	block_reward, yield = yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake, total_supply)
 
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+}
+
+// Cacti hf introduced dynamic lambda, which means dynamic blocks per year for rewards calculation
+func TestDynamicBlocksPerYearRewardsCactiHf(t *testing.T) {
+	cfg := CopyDefaultChainConfig()
+	tc, test := test_utils.Init_test(dpos.ContractAddress(), dpos_sol.TaraxaDposClientMetaData, t, cfg)
+	defer test.End()
+
+	var yield_curve dpos.YieldCurve
+	yield_curve.Init(cfg)
+
+	// yield = (max supply - total supply) / total supply
+	// block reward = yield * total stake / blocks per year
+
+	// max supply has hardcoded value of 12 Billion TARA
+	// total supply = 10 Billion, total stake = 1 Billion, expected yield == 20%
+	total_supply := new(uint256.Int).Mul(uint256.NewInt(10e+9), uint256.NewInt(1e+18))
+	total_stake := new(uint256.Int).Mul(uint256.NewInt(1e+9), uint256.NewInt(1e+18))
+	expected_yield := uint256.NewInt(200000)
+	blocks_per_year := uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear))
+
+	expected_block_reward := calculateExpectedBlockReward(total_stake, expected_yield, cfg)
+	block_reward, yield := yield_curve.CalculateBlockReward(blocks_per_year, total_stake, total_supply)
+
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+
+	// Double blocks per year, yield should stay the same and expected block rewards should be divided by /2
+	blocks_per_year.Mul(blocks_per_year, uint256.NewInt(2))
+	expected_block_reward.Div(expected_block_reward, uint256.NewInt(2))
+	block_reward, yield = yield_curve.CalculateBlockReward(blocks_per_year, total_stake, total_supply)
+	tc.Assert.Equal(expected_block_reward, block_reward)
+	tc.Assert.Equal(expected_yield, yield)
+
+	// Triple blocks per year, yield should stay the same and expected block rewards should be divided by 3
+	blocks_per_year.Mul(blocks_per_year, uint256.NewInt(3))
+	expected_block_reward.Div(expected_block_reward, uint256.NewInt(3))
+	block_reward, yield = yield_curve.CalculateBlockReward(blocks_per_year, total_stake, total_supply)
 	tc.Assert.Equal(expected_block_reward, block_reward)
 	tc.Assert.Equal(expected_yield, yield)
 }
@@ -1066,7 +1138,7 @@ func TestAspenHf(t *testing.T) {
 	for block_n := test.BlockNumber(); block_n < cfg.Hardforks.AspenHf.BlockNumPartTwo+20; block_n++ {
 		total_supply_uin256, _ := uint256.FromBig(total_supply)
 		total_stake_uin256, _ := uint256.FromBig(total_stake)
-		expected_reward_uint256, _ := yield_curve.CalculateBlockReward(total_stake_uin256, total_supply_uin256)
+		expected_reward_uint256, _ := yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake_uin256, total_supply_uin256)
 		expected_reward := expected_reward_uint256.ToBig()
 
 		reward := test.AdvanceBlock(&validator1_addr, &tmp_rewards_stats)
@@ -1218,7 +1290,7 @@ func TestRewardsAndCommission(t *testing.T) {
 	// Expected block reward
 	var yield_curve dpos.YieldCurve
 	yield_curve.Init(cfg)
-	expected_block_reward_uint256, _ := yield_curve.CalculateBlockReward(total_stake_uin256, total_supply_uin256)
+	expected_block_reward_uint256, _ := yield_curve.CalculateBlockReward(uint256.NewInt(uint64(cfg.DPOS.BlocksPerYear)), total_stake_uin256, total_supply_uin256)
 	expected_block_reward := expected_block_reward_uint256.ToBig()
 
 	// Splitting block rewards between votes and blocks
